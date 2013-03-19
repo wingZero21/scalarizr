@@ -239,7 +239,7 @@ class FileTransfer(BaseTransfer):
 						if self.multipart:
 							self._chunk_num += 1
 						chunk_num = self._chunk_num
-					LOG.debug("FileTransfer yield %s %s %s %s" % (src, dst, retry, chunk_num))
+					LOG.debug("FileTransfer yield %s %s %s %s", src, dst, retry, chunk_num)
 					yield src, dst, retry, chunk_num
 				except StopIteration:
 					no_more = True
@@ -283,7 +283,7 @@ class FileTransfer(BaseTransfer):
 						driver.multipart_put(self._upload_id, chunk_num, src)
 					else:
 						driver.put(src, dst, report_to=progress_report_cb)
-						LOG.debug("*** BENCH %s %s uploaded" % (int(time.time() - zero), os.path.basename(src)))
+						LOG.debug("*** BENCH %s %s uploaded", int(time.time() - zero), os.path.basename(src))
 					self._completed.append({
 							'src': src,
 							'dst': dst,
@@ -291,7 +291,7 @@ class FileTransfer(BaseTransfer):
 							'size': os.path.getsize(src)})
 				else:
 					driver.get(src, dst, report_to=progress_report_cb)
-					LOG.debug("*** BENCH %s %s downloaded" % (int(time.time() - zero), os.path.basename(src)))
+					LOG.debug("*** BENCH %s %s downloaded", int(time.time() - zero), os.path.basename(src))
 					self._completed.append({
 							'src': src,
 							'dst': dst,
@@ -374,24 +374,24 @@ class LargeTransfer(bases.Task):
 	LargeTransfer's main objective is to prepare incoming data (e.g. files,
 	process output) for storing on a cloud storage and to upload it (upload
 	scenario). The result of this is usually a url that points to a manifest
-	file (see Manifest).
+	file (see :class:`Manifest`).
 	LargeTransfer can download and rebuild stored data if provided with it's
 	manifest url.
 
 	Details:
-	Download and upload action is performed by FileTransfer, so LargeTransfer
-	creates source and destination generators that contain most of the logic
-	and passes them to a FileTransfer instance. 
+	Download and upload action is performed by :class:`FileTransfer`, so
+	LargeTransfer creates source and destination generators that contain most
+	of the logic and passes them to a :class:`FileTransfer` instance.
 	Destination generator simply repeats the destination path which is usually
 	a local dir or a cloudfs path prefix; it's implemented as generator
 	because at the time of writing, LargeTransfer was planned to be a more
 	generic tool.
 	Source generator is more comlpex, it handles compression and splitting of
-	incomning data before sending it to FileTransfer (upload scenario); or
-	reads chunk urls from the manifest and has FileTransfer download them to
-	a tmpfs dir (download scenario). Source generator also launches so called
-	restorer thread that uses the downloaded chunks to bring original data
-	back together.
+	incomning data before sending it to :class:`FileTransfer` (upload
+	scenario); or reads chunk urls from the manifest and has
+	:class:`FileTransfer` download them to a tmpfs dir (download scenario).
+	Source generator also launches so called restorer thread that uses the
+	downloaded chunks to bring original data back together.
 	'''
 
 	# python 2.7.2 @ ubuntu 11.10 subprocess hangs sometimes
@@ -412,19 +412,20 @@ class LargeTransfer(bases.Task):
 		'''
 		:param src: DL: manifest url. UL: str file or directory path,
 					file-like object to read from, generator of those
-		:param dst: DL: str local dir path. UL: url cloudfs path
+		:param dst: DL: local dir path. UL: cloudfs url
 		:param transfer_id: unique string appended to cloudfs path. If None,
 							generated automatically
-		:param streamer: "gzip" or services.mysql2.Exec instance. Else - no
-						  streaming. Ignored when uploading files or streams 
-		:param compressor: "gzip" or services.mysql2.Exec instance. Else - no
-						   compression.
+		:param streamer: "gzip" or :class:`services.mysql2.Exec` instance.
+						 Else - no streaming. Ignored when uploading files or
+						 streams 
+		:param compressor: "gzip" or :class:`services.mysql2.Exec` instance.
+						   Else - no compression
 		:param chunk_size: chunk size in megabytes
 		:param try_pigz: if compressor is "gzip", try pigz first 
 		:param manifest: manifest file basename
 		:param description: description to save in manifest
 		:param tags: tags to save in manifest
-		:param **kwds: additional kwargs for FileTransfer
+		:param **kwds: additional kwargs for :class:`FileTransfer`
 		'''
 		
 		url_re = re.compile(r'^[\w-]+://')
@@ -474,7 +475,6 @@ class LargeTransfer(bases.Task):
 			self.transfer_id = transfer_id
 		self.manifest_path = manifest
 		self.manifest = None
-		# TODO: start less workers on smaller transfers
 		self._transfer = FileTransfer(src=self._src_generator,
 								dst=self._dst_generator, **kwds)
 		self._tranzit_vol = storage2.volume(
@@ -497,14 +497,14 @@ class LargeTransfer(bases.Task):
 						pkgmgr.installed("pigz")
 					except:
 						LOG.debug("PIGZ install with epel failed, using gzip."\
-								  " Caught %s" % repr(sys.exc_info()[1]))
+								  " Caught %s", repr(sys.exc_info()[1]))
 					else:
 						return self.pigz_bin
 				else:
-					LOG.debug("PIGZ install failed, using gzip. Caught %s" %
+					LOG.debug("PIGZ install failed, using gzip. Caught %s",
 							  repr(sys.exc_info()[1]))
 			except:
-				LOG.debug("PIGZ install failed, using gzip. Caught %s" %
+				LOG.debug("PIGZ install failed, using gzip. Caught %s",
 						  repr(sys.exc_info()[1]))
 			else:
 				return self.pigz_bin
@@ -583,7 +583,6 @@ class LargeTransfer(bases.Task):
 										close_fds=True)
 						LOG.debug("LargeTransfer src_generator AFTER TAR")
 					elif hasattr(self.streamer, "popen"):
-						# TODO: not working yet
 						fileinfo["streamer"] = str(self.streamer)
 						prefix = os.path.join(prefix, name) + '.'
 
@@ -628,17 +627,17 @@ class LargeTransfer(bases.Task):
 
 				for filename, md5sum, size in self._split(stream, prefix):
 					fileinfo["chunks"].append((os.path.basename(filename), md5sum, size))
-					LOG.debug("LargeTransfer src_generator yield %s" % filename)
+					LOG.debug("LargeTransfer src_generator yield %s", filename)
 					yield filename
 				if cmd:
 					cmd.communicate()
 
 			# send manifest to file transfer
 			if not self.multipart:
-				LOG.debug("Manifest: %s" % self.manifest.data)
+				LOG.debug("Manifest: %s", self.manifest.data)
 				manifest_f = os.path.join(self._tranzit_vol.mpoint, self.manifest_path)
 				self.manifest.write(manifest_f)
-				LOG.debug("LargeTransfer yield %s" % manifest_f)
+				LOG.debug("LargeTransfer yield %s", manifest_f)
 				yield manifest_f
 
 		elif not self._up:
@@ -674,15 +673,15 @@ class LargeTransfer(bases.Task):
 			with self._chunks_events_access:
 				if not self._killed:
 					self.files = copy(manifest["files"])
-					for file in self.files:
-						file["chunks"] = OrderedDict([(
+					for file_ in self.files:
+						file_["chunks"] = OrderedDict([(
 							chunk[0], {
 								"md5sum": chunk[1],
 								"size": chunk[2] if len(chunk) > 2 else None,
 								"downloaded": InterruptibleEvent(),
 								"processed": InterruptibleEvent()
 							}
-						) for chunk in file["chunks"]])
+						) for chunk in file_["chunks"]])
 						# chunk is [basename, md5sum, size]
 
 			# launch restorer
@@ -693,16 +692,16 @@ class LargeTransfer(bases.Task):
 
 			def wait_chunk(src, dst, retry, chunk_num):
 				chunk_name = os.path.basename(src)
-				for file in self.files:
-					if chunk_name in file["chunks"]:
-						chunk = file["chunks"][chunk_name]
+				for file_ in self.files:
+					if chunk_name in file_["chunks"]:
+						chunk = file_["chunks"][chunk_name]
 				chunk["downloaded"].set()
 				chunk["processed"].wait()
 				os.remove(os.path.join(dst, chunk_name))
 			self._transfer.on(transfer_complete=wait_chunk)
 
-			for file in self.files:
-				for chunk in file["chunks"]:
+			for file_ in self.files:
+				for chunk in file_["chunks"]:
 					yield os.path.join(remote_path, chunk)
 
 
@@ -729,15 +728,16 @@ class LargeTransfer(bases.Task):
 			zero = int(time.time())
 			with open(chunk_name, 'w') as chunk:
 				while chunk_capacity:
-					bytes = stream.read(min(buf_size, chunk_capacity))
-					if not bytes:
+					bytes_ = stream.read(min(buf_size, chunk_capacity))
+					if not bytes_:
 						break
-					chunk.write(bytes)
-					chunk_capacity -= len(bytes)
-					chunk_md5.update(bytes)
+					chunk.write(bytes_)
+					chunk_capacity -= len(bytes_)
+					chunk_md5.update(bytes_)
 
 			if chunk_capacity != chunk_size:  # non-empty chunk
-				LOG.debug("*** BENCH %s %s created" % (int(time.time() - zero), os.path.basename(chunk_name)))
+				LOG.debug("*** BENCH %s %s created", int(time.time() - zero),
+						os.path.basename(chunk_name))
 				yield chunk_name, chunk_md5.hexdigest(), chunk_size - chunk_capacity
 			else:  # empty chunk
 				os.remove(chunk_name)
@@ -749,29 +749,29 @@ class LargeTransfer(bases.Task):
 	def _dl_restorer(self):
 		buf_size = 4096
 
-		for file in self.files:
+		for file_ in self.files:
 			dst = self.dst
 
 			LOG.debug("RESTORER start")
-			LOG.debug("RESTORER file %s to %s" % (file["name"], dst))
+			LOG.debug("RESTORER file %s to %s", file_["name"], dst)
 
 			# temporary fix for overriding download manifest settings with
 			# custom streamer
 			if hasattr(self.streamer, "popen"):
-				file["streamer"] = str(self.streamer)
+				file_["streamer"] = str(self.streamer)
 
 			# create 'cmd' and 'stream'
-			if not file["streamer"] and not file["compressor"]:
+			if not file_["streamer"] and not file_["compressor"]:
 				cmd = None
-				stream = open(os.path.join(dst, file["name"]), 'w')
+				stream = open(os.path.join(dst, file_["name"]), 'w')
 			else:
 				compressor_out = subprocess.PIPE
 
-				if file["compressor"]:
-					if not file["streamer"]:
-						compressor_out = open(os.path.join(dst, file["name"]), 'w')
+				if file_["compressor"]:
+					if not file_["streamer"]:
+						compressor_out = open(os.path.join(dst, file_["name"]), 'w')
 
-					if file["compressor"] == "gzip":
+					if file_["compressor"] == "gzip":
 						LOG.debug("RESTORER unzip popen")
 						cmd = subprocess.Popen([self._gzip_bin(), "-d"],
 							stdin=subprocess.PIPE,
@@ -785,11 +785,11 @@ class LargeTransfer(bases.Task):
 						LOG.debug("RESTORER after custom decompressor popen")
 					stream = cmd.stdin
 
-				if file["streamer"]:
-					if file["compressor"]:
+				if file_["streamer"]:
+					if file_["compressor"]:
 						compressor_out = cmd.stdout
 
-					if file["streamer"] == "tar":
+					if file_["streamer"] == "tar":
 						LOG.debug("RESTORER untar popen")
 						cmd = subprocess.Popen(['/bin/tar', '-x', '-C', dst],
 							stdin=compressor_out,
@@ -802,15 +802,15 @@ class LargeTransfer(bases.Task):
 						cmd = self.streamer.popen(stdin=compressor_out)
 						LOG.debug("RESTORER after custom decompressor popen")
 
-					if file["compressor"]:
+					if file_["compressor"]:
 						compressor_out.close()
 					else:
 						stream = cmd.stdin
 
 			try:
-				for chunk, info in file["chunks"].iteritems():
+				for chunk, info in file_["chunks"].iteritems():
 
-					LOG.debug("RESTORER before wait %s" % chunk)
+					LOG.debug("RESTORER before wait %s", chunk)
 					info["downloaded"].wait()
 					zero = int(time.time())
 
@@ -818,15 +818,17 @@ class LargeTransfer(bases.Task):
 					with open(location, 'rb') as fd:
 						while True:
 							try:							
-								bytes = fd.read(buf_size)
-								if not bytes:
-									LOG.debug("RESTORER break %s" % chunk)
-									LOG.debug("*** BENCH %s %s restored" % (int(time.time() - zero), chunk))
+								bytes_ = fd.read(buf_size)
+								if not bytes_:
+									LOG.debug("RESTORER break %s", chunk)
+									LOG.debug("*** BENCH %s %s restored", int(time.time() - zero),
+											chunk)
 									break
 
-								stream.write(bytes)
-							except Exception, e:
-								LOG.exception("Caught error in restore loop\ncmd.stderr: %s", cmd.stderr.read())
+								stream.write(bytes_)
+							except Exception:
+								LOG.exception("Caught error in restore loop\ncmd.stderr: %s",
+										cmd.stderr.read())
 								self.kill()
 								raise
 
@@ -885,8 +887,8 @@ class LargeTransfer(bases.Task):
 
 		with self._chunks_events_access:
 			if self.files:
-				for file in self.files:
-					for chunk, chunkinfo in file["chunks"].items():
+				for file_ in self.files:
+					for chunk, chunkinfo in file_["chunks"].items():
 						chunkinfo["downloaded"].interrupt()
 						chunkinfo["processed"].interrupt()
 
@@ -1035,6 +1037,9 @@ class Manifest(object):
 	def __iter__(self):
 		return self.data.__iter__()
 
+	def __len__(self):
+		return self.data.__len__()
+
 	def __contains__(self, value):
 		return self.data.__contains__(value)
 
@@ -1067,7 +1072,6 @@ class Manifest(object):
 			self.write(self.filename)
 
 	def delete(self, destroyers=4):
-		# TODO: delete only those uploaded by this particular LT instance
 		LOG.debug("Performing cloudfs clean up")
 		try:
 			path = os.path.dirname(self.cloudfs_path)
@@ -1106,6 +1110,7 @@ def cloudfs(fstype, **driver_kwds):
 
 
 class CloudFileSystem(object):
+	# TODO: move
 
 	features = {
 		'multipart': False
@@ -1160,25 +1165,3 @@ class CloudFileSystem(object):
 	def delete(self, path):
 		raise NotImplementedError()
 
-
-'''
-bak = backup.backup(
-		type='mysqldump', 
-		file_per_database=True, 
-		cloudfs_dir='glacier://Vault_1/')
-rst = buk.run()
-print rst
->>> {
-	type: mysqldump
-	files: [{
-		size: 14503104
-		path: glacier://Vault_1/?avail_zone=us-east-1&archive_id=NkbByEejwEggmBz2fTHgJrg0XBoDfjP4q6iu87-TjhqG6eGoOY9Z8i1_AUyUsuhPAdTqLHy8pTl5nfCFJmDl2yEZONi5L26Omw12vcs01MNGntHEQL8MBfGlqrEXAMPLEArchiveId
-	}]
-
-Inside LargeTransfer:
-
-pack into single tar | gzip | split | Transfer(generator, 'glacier://Vault_1/', multipart=True)
-
-
-
-'''
