@@ -132,6 +132,7 @@ class S3FileSystem(object):
 			raise cloudfs.DriverError, exc[1], exc[2]
 
 	def delete(self, remote_path):
+		LOG.info('Deleting %s from S3' % remote_path)
 		bucket_name, key_name = self.parse_url(remote_path)
 
 		try:
