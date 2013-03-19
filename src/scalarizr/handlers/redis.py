@@ -317,6 +317,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		"""
 
 		repl = 'master' if self.is_replication_master else 'slave'
+		message.redis = {}
 
 		if self.is_replication_master:
 			self._init_master(message)
