@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import shutil
+import errno
 
 from scalarizr.storage2 import cloudfs
 
@@ -88,7 +89,13 @@ class LocalFileSystem(object):
 		path = self._parse_url(url)
 
 		LOG.debug("Deleting %s", path)
-		return os.remove(path)
+		try:
+			return os.remove(path)
+		except OSError, e:
+			if e.errno == errno.ENOENT:
+				pass
+			else:
+				raise
 
 
 cloudfs.cloudfs_types["file"] = LocalFileSystem
