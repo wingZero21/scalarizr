@@ -335,7 +335,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 				for vol_info in volumes:
 					vol = storage2_volume(**vol_info)
 					vol.ensure()
-					if not vol.fscreated:
+					if not vol.is_fs_created():
 						vol.mkfs()
 					if vol.mpoint:
 						vol.mount()
