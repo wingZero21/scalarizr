@@ -331,6 +331,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		message.redis['ports'] = self.redis_instances.ports
 		message.redis['passwords'] = self.redis_instances.passwords
 		message.redis['num_processes'] = len(self.redis_instances.instances)
+		message.redis['volume_config'] = dict(__redis__['volume'])
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl, preset=self.initial_preset)
 
 

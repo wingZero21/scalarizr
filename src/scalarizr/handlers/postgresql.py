@@ -507,8 +507,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 		tx_complete = False
 
 		new_vol	= None
-		if postgresql.get(OPT_SNAPSHOT_CNF):
-			new_vol = storage2.volume(postgresql.get(OPT_SNAPSHOT_CNF))
+		if postgresql.get('volume_config'):
+			new_vol = storage2.volume(postgresql.get('volume_config'))
 
 		try:
 			self.postgresql.stop_replication()
