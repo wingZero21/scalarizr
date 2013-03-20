@@ -526,6 +526,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					raise HandlerError("%s is not a valid postgresql storage" % STORAGE_PATH)
 
 				__postgresql__['volume'] = new_vol
+				msg_data[BEHAVIOUR] = {'volume_config': dict(new_vol)}
 
 			slaves = [host.internal_ip for host in self._get_slave_hosts()]
 			self.postgresql.init_master(STORAGE_PATH, self.root_password, slaves)
@@ -534,8 +535,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 			if not new_vol or new_vol.type in ('eph', 'lvm'):
 				snap = self._create_snapshot()
 				__postgresql__['snapshot'] = snap
+				msg_data.update({OPT_SNAPSHOT_CNF : dict(snap)})
 
 			msg_data[OPT_CURRENT_XLOG_LOCATION] = None # useless but required by Scalr
+
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 
 			tx_complete = True

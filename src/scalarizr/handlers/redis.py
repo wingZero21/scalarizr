@@ -421,12 +421,12 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		old_vol 		= None
 		new_storage_vol	= None
 
-		try:
-			msg_data = dict(
-				db_type=BEHAVIOUR,
-				status="ok",
+		msg_data = dict(
+			db_type=BEHAVIOUR,
+			status="ok",
 			)
 
+		try:
 			if master_storage_conf and master_storage_conf['type'] != 'eph':
 
 				self.redis_instances.stop('Unplugging slave storage and then plugging master one')
@@ -439,6 +439,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 			self.redis_instances.init_as_masters(self._storage_path)
 			__redis__[OPT_REPLICATION_MASTER] = 1
+			msg_data[BEHAVIOUR] = {'volume_config': dict(__redis__['volume'])}
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 
 			tx_complete = True
