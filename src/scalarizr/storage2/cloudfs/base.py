@@ -93,15 +93,12 @@ class CloudFileSystem(object):
 		"""
 		:returns: bucket, key
 		"""
-		# TODO: test netloc instead of hostname
-		# override in local
+		# TODO: test netloc instead of hostname (gcs & s3)
 		o = urlparse.urlparse(url)
-		if o.scheme != self.schema:
-			raise DriverError('Wrong schema: %s' % o.scheme)
+		assert o.scheme == self.schema, 'Wrong schema: %s' % o.scheme
 		return o.netloc, o.path[1:]
 
 	def _format_url(self, bucket, key):
-		# override in local
 		return '%s://%s/%s' % (self.schema, bucket, key)
 
 	def exists(self, url):
@@ -118,10 +115,10 @@ class CloudFileSystem(object):
 		'''
 		raise NotImplementedError()
 
-	def put(self, src, url):
+	def put(self, src, url, report_to=None):
 		raise NotImplementedError()
 
-	def get(self, url, dst):
+	def get(self, url, dst, report_to=None):
 		raise NotImplementedError()
 
 	def delete(self, url):

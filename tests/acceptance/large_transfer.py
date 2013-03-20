@@ -118,10 +118,6 @@ class Swift(swift.SwiftFileSystem, ExistsMixin):
 	pass
 
 
-class Local(local.LocalFileSystem, ExistsMixin):
-	pass
-
-
 #
 # Logging
 #
@@ -154,7 +150,7 @@ STORAGES = {
 	},
 	"local": {
 		"url": "file:///tmp/cloudfs",
-		"driver": Local,
+		"driver": local.LocalFileSystem,
 	}
 }
 
