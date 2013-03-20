@@ -4,7 +4,7 @@ $AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY for s3
 $RS_USERNAME, $RS_API_KEY for swift (rackspace);
 $ENTER_IT_USERNAME, $ENTER_IT_API_KEY for swift enter.it
 
-default storage to test is s3; override with $LT_TEST_STORAGE
+default storage to test is local; override with $LT_TEST_STORAGE
 """
 __author__ = 'vladimir'
 
@@ -34,7 +34,7 @@ from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 this_feature_only = world.ThisFeatureOnly("Large transfer")
 
 
-STORAGE = "s3"
+STORAGE = "local"
 if "LT_TEST_STORAGE" in os.environ:
 	STORAGE = os.environ["LT_TEST_STORAGE"]
 
@@ -113,11 +113,6 @@ class S3(s3.S3FileSystem, ExistsMixin):
 class GCS(gcs.GCSFileSystem, ExistsMixin):
 	pass
 
-
-class Swift(swift.SwiftFileSystem, ExistsMixin):
-	pass
-
-
 #
 # Logging
 #
@@ -142,11 +137,11 @@ STORAGES = {
 	},
 	"swift": {
 		"url": "swift://vova-test",
-		"driver": Swift,
+		"driver": swift.SwiftFileSystem,
 	},
 	"swift-enter-it": {
 		"url": "swift://vova-test",
-		"driver": Swift,
+		"driver": swift.SwiftFileSystem,
 	},
 	"local": {
 		"url": "file:///tmp/cloudfs",
