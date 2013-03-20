@@ -466,7 +466,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					'db_type': BEHAVIOUR,
 					'status': 'ok',
 					'used_size' : '%.3f' % (float(used_size) / 1000,),
-					BEHAVIOUR: {OPT_SNAPSHOT_CNF: snap.config()}
+					BEHAVIOUR: {OPT_SNAPSHOT_CNF: dict(snap)}
 					}
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 

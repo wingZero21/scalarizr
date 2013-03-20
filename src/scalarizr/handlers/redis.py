@@ -383,6 +383,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 						used_size	= '%.3f' % (float(used_size) / 1000,),
 						status		= 'ok'
 					)
+					msg_data[BEHAVIOUR] = {'snapshot_config': dict(snap)}
+
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 			op.ok()
