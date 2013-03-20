@@ -32,14 +32,6 @@ from scalarizr.linux import coreutils, pkgmgr, LinuxError
 LOG = logging.getLogger(__name__)
 
 
-class Error(Exception):
-	pass
-
-
-class DriverError(Error):
-	pass
-
-
 ### to move
 
 class EventInterrupt(Exception):
@@ -66,7 +58,7 @@ class InterruptibleEvent(threading._Event):
 		self._exception = None
 
 	def interrupt(self, exc=None):
-		""" Raise exc or default EventInterrupt() in the waiting thread """
+		""" Raise *exc* or default :class:`EventInterrupt()` in the waiting thread """
 		self._exception = exc if exc else EventInterrupt()
 		return super(InterruptibleEvent, self).set()
 
@@ -120,6 +112,10 @@ class BaseTransfer(bases.Task):
 
 
 class FileTransfer(BaseTransfer):
+	"""
+	Placeholder
+	"""
+
 	# Drivers' get and put methods (multipart_put?) must
 	# support report_to arg, see progress_report_cb in _worker.
 
@@ -904,23 +900,23 @@ class LargeTransfer(bases.Task):
 
 class Manifest(object):
 	"""
-	manifest.json
-	-------------
 
-	{
-		version: 2.0,
-		description,
-		tags,
-		created_at,
-		files: [
-			{
-				name,
-				streamer,  # "tar" | python function | None
-				compressor,  # "gzip" | python function | None
-				chunks: [(basename001, md5sum, size_in_bytes)]
-			}
-		]
-	}
+	::
+
+		{
+			version: 2.0,
+			description,
+			tags,
+			created_at,
+			files: [
+				{
+					name,
+					streamer,  # "tar" | python function | None
+					compressor,  # "gzip" | python function | None
+					chunks: [(basename001, md5sum, size_in_bytes)]
+				}
+			]
+		}
 
 
 	Supports reading of old ini-manifests and represents their data in the
@@ -1107,61 +1103,4 @@ def cloudfs(fstype, **driver_kwds):
 	if fstype not in cloudfs_types:
 		__import__('scalarizr.storage2.cloudfs.%s' % fstype)
 	return cloudfs_types[fstype](**driver_kwds)
-
-
-class CloudFileSystem(object):
-	# TODO: move
-
-	features = {
-		'multipart': False
-	}
-
-	def parseurl(self, url):
-		"""
-		{
-			'bucket',
-			'path'
-
-		}
-		{
-			'container',
-			'object'
-
-		}
-		"""
-		raise NotImplementedError()
-
-	def ls(self, path):
-		raise NotImplementedError()
-
-	def stat(self, path):
-		'''
-		size in bytes
-		type = dir | file | container
-		'''
-		raise NotImplementedError()
-
-	def put(self, src, path):
-		raise NotImplementedError()
-
-	def multipart_init(self, path, part_size):
-		'''
-		Returns upload_id
-		'''
-		raise NotImplementedError()
-
-	def multipart_put(self, upload_id, src):
-		raise NotImplementedError()
-
-	def multipart_complete(self, upload_id):
-		raise NotImplementedError()
-
-	def multipart_abort(self, upload_id):
-		raise NotImplementedError()
-
-	def get(self, path, dst):
-		raise NotImplementedError()
-
-	def delete(self, path):
-		raise NotImplementedError()
 

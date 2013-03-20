@@ -9,6 +9,7 @@ import json
 from apiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from apiclient.errors import HttpError
 
+from scalarizr.storage2.cloudfs.base import DriverError
 from scalarizr.storage2 import cloudfs
 from scalarizr.bus import bus
 from scalarizr.node import __node__
@@ -72,7 +73,7 @@ class GCSFileSystem (object):
 		finally:
 			f.close()
 
-		LOG.debug("Finished downloading %s" % os.path.basename(local_path))
+		LOG.debug("Finished downloading %s", os.path.basename(local_path))
 		return local_path
 
 
@@ -107,12 +108,12 @@ class GCSFileSystem (object):
 						last_progress = percentage
 		finally:
 			fd.close()
-		LOG.debug("Finished uploading %s" % os.path.basename(local_path))
+		LOG.debug("Finished uploading %s", os.path.basename(local_path))
 		return 'gcs://%s' % os.path.join(bucket, name)
 
 
 	def delete(self, remote_path):
-		LOG.info('Deleting %s from GCS' % remote_path)
+		LOG.info('Deleting %s from GCS', remote_path)
 		bucket, obj = self._parse_path(remote_path)
 
 		req = self.cloudstorage.objects().delete(bucket=bucket, object=obj)
@@ -128,7 +129,7 @@ class GCSFileSystem (object):
 	def _parse_path(self, path):
 		o = urlparse.urlparse(path)
 		if o.scheme != self.schema:
-			raise cloudfs.DriverError('Wrong schema')
+			raise DriverError('Wrong schema')
 		return o.hostname, o.path[1:]
 
 

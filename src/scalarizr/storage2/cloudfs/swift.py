@@ -5,6 +5,7 @@ import os
 import sys
 import logging
 
+from scalarizr.storage2.cloudfs.base import DriverError
 from scalarizr.storage2 import cloudfs
 from scalarizr.node import __node__
 
@@ -48,7 +49,7 @@ class SwiftFileSystem(object):
 		o = urlparse.urlparse(path)
 		if o.scheme != self.schema:
 			# TODO: in all drivers
-			raise cloudfs.DriverError('Wrong schema: %s' % o.scheme)
+			raise DriverError('Wrong schema: %s' % o.scheme)
 		return o.netloc, o.path[1:]  # netloc instead of hostname, because
 									 # letter case matters on rackspace (and others?)
 
@@ -73,7 +74,7 @@ class SwiftFileSystem(object):
 					raise
 		except:  # TODO: catch specific exceptions
 			exc = sys.exc_info()
-			raise cloudfs.DriverError, exc[1], exc[2]
+			raise DriverError, exc[1], exc[2]
 		finally:
 			fd.close()
 
@@ -81,7 +82,7 @@ class SwiftFileSystem(object):
 
 
 	def get(self, remote_path, local_path, report_to=None):
-		LOG.info('Downloading %s from Swift to %s' % (remote_path, local_path))
+		LOG.info('Downloading %s from Swift to %s', remote_path, local_path)
 		container, object_ = self._parse_path(remote_path)
 		#? join only if local_path.endswith("/")
 		dest_path = os.path.join(local_path, os.path.basename(remote_path))
@@ -93,25 +94,25 @@ class SwiftFileSystem(object):
 			fd.write(res[1])
 		except:  #? see todo in put
 			exc = sys.exc_info()
-			raise cloudfs.DriverError, exc[1], exc[2]
+			raise DriverError, exc[1], exc[2]
 		finally:
 			fd.close()
 		return dest_path
 
 
 	def delete(self, remote_path):
-		LOG.info('Deleting %s from Swift' % remote_path)
-		container, object = self._parse_path(remote_path)
+		LOG.info('Deleting %s from Swift', remote_path)
+		container, object_ = self._parse_path(remote_path)
 
 		try:
 			conn = self._get_connection()
-			conn.delete_object(container, object)
+			conn.delete_object(container, object_)
 		except Exception, e:  #? see todo in put
 			if isinstance(e, swiftclient.client.ClientException) and \
 					e.http_reason == "Not Found":
 				return False
 			exc = sys.exc_info()
-			raise cloudfs.DriverError, exc[1], exc[2]
+			raise DriverError, exc[1], exc[2]
 
 
 cloudfs.cloudfs_types["swift"] = SwiftFileSystem

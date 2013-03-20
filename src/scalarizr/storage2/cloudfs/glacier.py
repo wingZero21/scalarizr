@@ -6,7 +6,7 @@ import hashlib
 from urlparse import urlparse
 from scalarizr.node import __node__
 from boto.glacier.writer import chunk_hashes, tree_hash, bytes_to_hex 
-from scalarizr.storage2.cloudfs import CloudFileSystem 
+from scalarizr.storage2.cloudfs.base import CloudFileSystem 
 
 
 class GlacierFilesystem(CloudFileSystem):

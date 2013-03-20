@@ -4,22 +4,11 @@ import sys
 import shutil
 import errno
 
+from scalarizr.storage2.cloudfs.base import DriverError, raises
 from scalarizr.storage2 import cloudfs
 
 
 LOG = logging.getLogger(__name__)
-
-
-def raises(exc_class):
-	def decorator(f):
-		def wrapper(*args, **kwargs):
-			try:
-				return f(*args, **kwargs)
-			except:
-				exc = sys.exc_info()
-				raise exc_class, exc[1], exc[2]
-		return wrapper
-	return decorator
 
 
 class LocalFileSystem(object):
@@ -46,7 +35,7 @@ class LocalFileSystem(object):
 	def _format_path(self, path):
 		return "%s://%s" % (self.schema, path)
 
-	@raises(cloudfs.DriverError)
+	@raises(DriverError)
 	def ls(self, url):
 		path = self._parse_url(url)
 
@@ -57,7 +46,7 @@ class LocalFileSystem(object):
 			 		   filenames)
 		return res
 
-	@raises(cloudfs.DriverError)
+	@raises(DriverError)
 	def put(self, src, url, report_to=None):
 		path = self._parse_url(url)
 
@@ -75,7 +64,7 @@ class LocalFileSystem(object):
 			res = os.path.join(res, os.path.basename(src))
 		return self._format_path(res)
 
-	@raises(cloudfs.DriverError)
+	@raises(DriverError)
 	def get(self, url, dst, report_to=None):
 		path = self._parse_url(url)
 		dst = os.path.join(dst, os.path.basename(path))
@@ -84,7 +73,7 @@ class LocalFileSystem(object):
 		shutil.copy(path, dst)
 		return dst
 
-	@raises(cloudfs.DriverError)
+	@raises(DriverError)
 	def delete(self, url):
 		path = self._parse_url(url)
 
