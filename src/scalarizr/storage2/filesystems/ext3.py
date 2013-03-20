@@ -27,8 +27,7 @@ class ExtFileSystem(filesystems.FileSystem):
 
 	def mkfs(self, device, *short_args):
 		short_args = list(short_args)
-		if not '-F' in short_args:
-			short_args.append('-F')
+		short_args += list(opt for opt in ('-F', '-q') if opt not in short_args)
 		super(ExtFileSystem, self).mkfs(device, *short_args)
 
 
