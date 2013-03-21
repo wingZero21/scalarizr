@@ -6,6 +6,7 @@ Created on Dec 04, 2011
 from __future__ import with_statement
 
 import threading
+import string
 
 from scalarizr import handlers, rpc, storage2
 from scalarizr.services import mysql as mysql_svc
@@ -79,7 +80,7 @@ class MySQLAPI(object):
     @rpc.service_method
     def replication_status(self):
         mysql_cli = mysql_svc.MySQLClient()
-        if int(__mysql__['replication_status']):
+        if int(__mysql__['replication_master']):
             master_status = mysql_cli.master_status()
             result = {'master': {'status': 'up',
                                  'log_file': master_status[0],
@@ -88,6 +89,8 @@ class MySQLAPI(object):
         else:
             try:
                 slave_status = mysql_cli.slave_status()
+                slave_status = dict(zip(map(string.lower, slave_status.keys()), 
+                                    slave_status.values()))
                 slave_status['status'] = 'up'
                 return {'slave': slave_status}
             except ServiceError:
