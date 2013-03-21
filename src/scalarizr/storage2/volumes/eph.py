@@ -77,8 +77,10 @@ class EphVolume(base.Volume):
 
 		if self.snap:
 			self.snap = storage2.snapshot(self.snap)
-			if not self.is_fs_created():
-				self.mkfs()
+			# umount device to allow filesystem re-creation
+			if self.mounted_to():
+				self.umount()
+			self.mkfs()
 
 			tmp_mpoint = not self.mpoint
 			if tmp_mpoint:

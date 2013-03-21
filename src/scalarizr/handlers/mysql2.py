@@ -866,12 +866,6 @@ class MysqlHandler(DBMSRHandler):
 					LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)',
 							restore.snapshot['id'], restore.log_file, restore.log_pos)
 					new_vol = restore.run()
-					self.mysql.service.stop('Swapping storages to reinitialize slave')
-
-					LOG.debug('Destroing old storage')
-					vol = storage2.volume(**__mysql__['volume'])
-					vol.destroy(remove_disks=True)
-					LOG.debug('Storage destoyed')
 				else:
 					restore.run()
 
