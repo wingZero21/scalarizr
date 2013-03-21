@@ -607,7 +607,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 						restore.snapshot['id'])
 					new_vol = restore.run()
 
-				self.postgresql.service.start()
+				#self.postgresql.service.start()
 
 			self.postgresql.init_slave(STORAGE_PATH, host, __postgresql__['port'], self.root_password)
 			LOG.debug("Replication switched")
