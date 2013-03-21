@@ -80,7 +80,7 @@ class EphVolume(base.Volume):
 			# umount device to allow filesystem re-creation
 			if self.mounted_to():
 				self.umount()
-			self.mkfs()
+			self.mkfs(force=True)
 
 			tmp_mpoint = not self.mpoint
 			if tmp_mpoint:

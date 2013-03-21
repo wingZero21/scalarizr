@@ -154,9 +154,9 @@ class Volume(Base):
 			return True
 
 
-	def mkfs(self):
+	def mkfs(self, force=False):
 		self._check()
-		if self.is_fs_created():
+		if not force and self.is_fs_created():
 			raise storage2.OperationError(
 							'Filesystem on device %s is already created' % self.device)
 
