@@ -499,10 +499,11 @@ class PostgreSqlHander(ServiceCtlHandler):
 		LOG.info('Starting Slave -> Master promotion')
 		bus.fire('before_slave_promote_to_master')
 
-		msg_data = dict(
-			db_type=BEHAVIOUR,
-			status="ok",
-		)
+		msg_data = {
+			'db_type' : BEHAVIOUR,
+			'status' : 'ok',
+		    BEHAVIOUR : {}
+		}
 
 		tx_complete = False
 
