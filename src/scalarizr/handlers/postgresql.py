@@ -428,7 +428,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				
 	def on_before_reboot_start(self, *args, **kwargs):
 		"""
-		Stop MySQL and unplug storage
+		Stop PostgreSQL and unplug storage
 		"""
 		self.postgresql.service.stop('rebooting')
 
@@ -585,7 +585,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				return
 
 			host = message.local_ip or message.remote_ip
-			LOG.info("Switching replication to a new MySQL master %s", host)
+			LOG.info("Switching replication to a new PostgreSQL master %s", host)
 			bus.fire('before_postgresql_change_master', host=host)
 
 			LOG.debug("__postgresql__['volume']: %s", __postgresql__['volume'])
@@ -605,7 +605,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					LOG.info('Reinitializing Slave from the new snapshot %s',
 						restore.snapshot['id'])
 					new_vol = restore.run()
-					self.mysql.service.stop('Swapping storages to reinitialize slave')
+					self.postgresql.service.stop('Swapping storages to reinitialize slave')
 
 					LOG.debug('Destroing old storage')
 					old_vol = storage2.volume(**__postgresql__['volume'])
@@ -635,7 +635,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def on_DbMsr_CreateBackup(self, message):
 		#TODO: Think how to move the most part of it into Postgresql class 
-		# Retrieve password for scalr mysql user
+		# Retrieve password for scalr pg user
 		tmpdir = backup_path = None
 		try:
 			# Get databases list
