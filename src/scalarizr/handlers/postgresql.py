@@ -599,19 +599,14 @@ class PostgreSqlHander(ServiceCtlHandler):
 						type='snap_postgresql',
 						volume=__postgresql__['volume'],
 						snapshot=postgresql_data[OPT_SNAPSHOT_CNF])
-				# XXX: ugly
+
 				if __postgresql__['volume'].type == 'eph':
 					self.postgresql.service.stop('Swapping storages to reinitialize slave')
 
 					LOG.info('Reinitializing Slave from the new snapshot %s',
 						restore.snapshot['id'])
 					new_vol = restore.run()
-					self.postgresql.service.stop('Swapping storages to reinitialize slave')
 
-					LOG.debug('Destroing old storage')
-					old_vol = storage2.volume(__postgresql__['volume'])
-					old_vol.destroy(remove_disks=True)
-					LOG.debug('Storage destoyed')
 				self.postgresql.service.start()
 
 			self.postgresql.init_slave(STORAGE_PATH, host, __postgresql__['port'], self.root_password)
