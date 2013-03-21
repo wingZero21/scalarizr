@@ -393,8 +393,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 								snapshot=postgresql_data.pop(OPT_SNAPSHOT_CNF),
 								volume=postgresql_data['volume'])
 
-						elif int(postgresql_data['replication_master']) and \
-								not postgresql_data['volume'].device:
+						elif int(postgresql_data['replication_master']):
 							postgresql_data['backup'] = backup.backup(
 								type='snap_postgresql',
 								volume=postgresql_data['volume'])
