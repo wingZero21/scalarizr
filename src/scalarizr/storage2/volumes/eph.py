@@ -124,12 +124,14 @@ class EphVolume(base.Volume):
 
 
 	def _destroy(self, force, **kwds):
-		self._lvm_volume.destroy(force=force)
+		if self._lvm_volume:
+			self._lvm_volume.destroy(force=force)
 		self.device = None
 
 
 	def _detach(self, force, **kwds):
-		self._lvm_volume.detach(force=force, **kwds)
+		if self._lvm_volume:
+			self._lvm_volume.detach(force=force, **kwds)
 
 
 class EphSnapshot(base.Snapshot):
