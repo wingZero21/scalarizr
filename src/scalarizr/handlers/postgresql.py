@@ -535,7 +535,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 			if not new_vol or new_vol.type in ('eph', 'lvm'):
 				snap = self._create_snapshot()
 				__postgresql__['snapshot'] = snap
-				msg_data.update({OPT_SNAPSHOT_CNF : dict(snap)})
+				msg_data[BEHAVIOUR].update({OPT_SNAPSHOT_CNF : dict(snap)})
 
 			msg_data[OPT_CURRENT_XLOG_LOCATION] = None # useless but required by Scalr
 
