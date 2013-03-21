@@ -609,7 +609,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					self.postgresql.service.stop('Swapping storages to reinitialize slave')
 
 					LOG.debug('Destroing old storage')
-					old_vol = storage2.volume(**__postgresql__['volume'])
+					old_vol = storage2.volume(__postgresql__['volume'])
 					old_vol.destroy(remove_disks=True)
 					LOG.debug('Storage destoyed')
 				self.postgresql.service.start()
