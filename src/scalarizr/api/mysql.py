@@ -79,7 +79,7 @@ class MySQLAPI(object):
     @rpc.service_method
     def replication_status(self):
         mysql_cli = mysql_svc.MySQLClient()
-        if int(__mysql__['replication_status']):
+        if int(__mysql__['replication_master']):
             master_status = mysql_cli.master_status()
             result = {'master': {'status': 'up',
                                  'log_file': master_status[0],
