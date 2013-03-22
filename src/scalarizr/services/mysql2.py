@@ -129,7 +129,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		backup.Backup.__init__(self,
 				backup_type=backup_type,
 				no_lock=no_lock,
-				from_lsn=int(from_lsn or 0),
+				from_lsn=from_lsn or 0,
 				compressor=compressor,
 				prev_cloudfs_source=prev_cloudfs_source,
 				cloudfs_target=cloudfs_target,
@@ -174,7 +174,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			for line in innodb_stat.splitlines():
 				m = self._re_lsn_innodb_stat.search(line)
 				if m:
-					current_lsn = int(m.group(1))
+					current_lsn = m.group(1)
 					break
 
 		if self.backup_type in ('incremental', 'auto'):
