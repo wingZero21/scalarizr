@@ -27,83 +27,99 @@ from boto import connect_s3
 import swiftclient
 
 from scalarizr.storage2.cloudfs import LargeTransfer, LOG
-from scalarizr.storage2.cloudfs import s3, gcs, swift
+from scalarizr.storage2.cloudfs import s3, gcs, swift, local
 from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 
 
-FEATURE = "Large transfer"
+this_feature_only = world.ThisFeatureOnly("Large transfer")
+
 
 STORAGE = "s3"
 if "LT_TEST_STORAGE" in os.environ:
 	STORAGE = os.environ["LT_TEST_STORAGE"]
 
 
+_RESTORE = []
+
 @before.each_feature
-def setup(feat):
-	# TODO: restore
-	if feat.name == FEATURE:
+@this_feature_only
+def setup_feature(feat):
+	# prevent ini parser from lowercasing params
+	_RESTORE.append((ConfigParser, "optionxform",
+					 ConfigParser.optionxform))
+	ConfigParser.optionxform = lambda self, x: x
 
-		# prevent ini parser from lowercasing params
-		ConfigParser.optionxform = lambda self, x: x
+	# make connections work
 
-		# make connections work
+	if STORAGE == "s3":
+		_RESTORE.append((s3.S3FileSystem, "_get_connection",
+						 s3.S3FileSystem._get_connection))
+		s3.S3FileSystem._get_connection = lambda self: connect_s3()
 
-		if STORAGE == "s3":
-			s3.S3FileSystem._get_connection = lambda self: connect_s3()
+	elif STORAGE == "gcs":
+		def get_pk(f="gcs_pk.p12"):  # TODO:
+			with open(f, "rb") as fd:
+				pk = fd.read()
+			return base64.b64encode(pk)
 
-		elif STORAGE == "gcs":
-			def get_pk(f="gcs_pk.p12"):  # TODO:
-				with open(f, "rb") as fd:
-					pk = fd.read()
-				return base64.b64encode(pk)
+		ACCESS_DATA = {
+			"service_account_name": '876103924605@developer.gserviceaccount.com',
+			"key": get_pk(),
+		}
 
-			ACCESS_DATA = {
-				"service_account_name": '876103924605@developer.gserviceaccount.com',
-				"key": get_pk(),
-			}
+		_RESTORE.append((gcs, "bus", gcs.bus))
+		gcs.bus = mock.MagicMock()
+		gcs.bus.platform.get_access_data = lambda k: ACCESS_DATA[k]
 
-			gcs.bus = mock.MagicMock()
-			gcs.bus.platform.get_access_data = lambda k: ACCESS_DATA[k]
+		gsm = GoogleServiceManager(gcs.bus.platform,
+			"storage", "v1beta1", STORAGE_FULL_SCOPE)
 
-			gsm = GoogleServiceManager(gcs.bus.platform,
-				"storage", "v1beta1", STORAGE_FULL_SCOPE)
+		gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
+		gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
 
-			gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
-			gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
+	elif STORAGE == "swift":
+		_RESTORE.append((swift.SwiftFileSystem, "_get_connection",
+						 swift.SwiftFileSystem._get_connection))
+		swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
+				"https://identity.api.rackspacecloud.com/v1.0",
+				os.environ["RS_USERNAME"], os.environ["RS_API_KEY"])
 
-		elif STORAGE == "swift":
-			swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
-					"https://identity.api.rackspacecloud.com/v1.0",
-					os.environ["RS_USERNAME"], os.environ["RS_API_KEY"])
-
-		elif STORAGE == "swift-enter-it":
-			swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
-				"http://folsom.enter.it:5000/v2.0",
-				os.environ["ENTER_IT_USERNAME"], os.environ["ENTER_IT_API_KEY"], auth_version="2")
+	elif STORAGE == "swift-enter-it":
+		_RESTORE.append((swift.SwiftFileSystem, "_get_connection",
+						 swift.SwiftFileSystem._get_connection))
+		swift.SwiftFileSystem._get_connection = lambda self: swiftclient.Connection(
+			"http://folsom.enter.it:5000/v2.0",
+			os.environ["ENTER_IT_USERNAME"], os.environ["ENTER_IT_API_KEY"], auth_version="2")
 
 
-class S3(s3.S3FileSystem):
+@after.each_feature
+@this_feature_only
+def teardown_feature(feat):
+	for args in _RESTORE:
+		setattr(*args)
 
-	def exists(self, remote_path):
-		parent = os.path.dirname(remote_path.rstrip('/'))
+
+class ExistsMixin(object):
+	def exists(self, url):
+		parent = os.path.dirname(url.rstrip('/'))
 		ls = self.ls(parent)
-		return remote_path in ls
+		return url in ls
 
 
-class GCS(gcs.GCSFileSystem):
-
-	def exists(self, remote_path):
-		parent = os.path.dirname(remote_path.rstrip('/'))
-		ls = self.ls(parent)
-		return remote_path in ls
+class S3(s3.S3FileSystem, ExistsMixin):
+	pass
 
 
-class Swift(swift.SwiftFileSystem):
+class GCS(gcs.GCSFileSystem, ExistsMixin):
+	pass
 
-	def exists(self, remote_path):
-		parent = os.path.dirname(remote_path.rstrip('/'))
-		ls = self.ls(parent)
-		return remote_path in ls
+
+class Swift(swift.SwiftFileSystem, ExistsMixin):
+	pass
+
+
+class Local(local.LocalFileSystem, ExistsMixin):
+	pass
 
 
 #
@@ -113,13 +129,6 @@ class Swift(swift.SwiftFileSystem):
 LOG.setLevel(logging.DEBUG)
 LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
 
-
-"""
-@before.all
-def global_setup():
-	subprocess.Popen(["strace", "-T", "-t", "-f", "-q", "-o", "strace_latest",
-					  "-p", str(os.getpid())], close_fds=True)
-"""
 
 #
 #
@@ -143,6 +152,10 @@ STORAGES = {
 		"url": "swift://vova-test",
 		"driver": Swift,
 	},
+	"local": {
+		"url": "file:///tmp/cloudfs",
+		"driver": Local,
+	}
 }
 
 assert STORAGE in STORAGES, "%s not in %s" % (STORAGE, STORAGES.keys())
@@ -163,7 +176,7 @@ def convert_manifest(json_manifest):
 	for chunk, md5sum, size in reversed(json_manifest["files"][0]["chunks"]):
 		parser.set("chunks", chunk, md5sum)
 
-	LOG.debug("CONVERT: %s" % parser.items("chunks"))
+	LOG.debug("CONVERT: %s", parser.items("chunks"))
 	return parser
 
 
@@ -183,7 +196,7 @@ def release_local_data():
 
 
 @before.each_scenario
-def setup(scenario):
+def setup_scenario(scenario):
 	world.basedir = tempfile.mkdtemp()
 	world.sources = []
 	world.destination = None
@@ -199,7 +212,7 @@ def setup(scenario):
 
 
 @after.each_scenario
-def teardown(scenario):
+def teardown_scenario(scenario):
 	shutil.rmtree(world.basedir)
 
 
@@ -236,7 +249,7 @@ def initialize_upload_variables(step):
 	world.items = {}
 
 
-@step("I have a (\d+) megabytes file (\w+)")
+@step(r"I have a (\d+) megabytes file (\w+)")
 def i_have_a_file(step, megabytes, filename):
 	world._for_size_test = int(megabytes) * 1024 * 1024
 
@@ -285,7 +298,7 @@ def all_chunks_are_uploaded(step):
 			chunk[0]))
 
 
-@step("I have a dir (\w+/?) with (\d+) megabytes file (\w+), with (\d+) megabytes file (\w+)")
+@step(r"I have a dir (\w+/?) with (\d+) megabytes file (\w+), with (\d+) megabytes file (\w+)")
 def i_have_dir_with_files(step, dirname, f1_size, f1_name, f2_size, f2_name):
 	dirname = os.path.join(world.basedir, dirname)
 	world.sources.append(dirname)
@@ -301,7 +314,7 @@ def i_have_dir_with_files(step, dirname, f1_size, f1_name, f2_size, f2_name):
 		world.items[os.path.basename(dirname)] = md5(dirname)
 
 
-@step("I have a list with (\d+) megabytes stream (\w+), with (\d+) megabytes stream (\w+)")
+@step(r"I have a list with (\d+) megabytes stream (\w+), with (\d+) megabytes stream (\w+)")
 def i_have_list_of_streams(step, s1_size, s1_name, s2_size, s2_name):
 	for name, size in [(s1_name, s1_size), (s2_name, s2_size)]:
 		abs_path = os.path.join(world.basedir, name)
@@ -367,7 +380,7 @@ def i_expect_failed_list_returned(step):
 	assert len(world.dl_result["failed"]) == 1
 
 
-@step("I have a (\d+) megabytes stream (\w+)")
+@step(r"I have a (\d+) megabytes stream (\w+)")
 def i_have_a_stream(step, megabytes, name):
 	abs_path = os.path.join(world.basedir, name)
 	stream_md5 = make_file(abs_path, megabytes)

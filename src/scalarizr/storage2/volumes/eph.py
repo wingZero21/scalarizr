@@ -6,6 +6,7 @@ import sys
 import logging
 import tempfile
 import urlparse
+import threading
 
 from scalarizr import storage2
 from scalarizr.libs import metaconf
@@ -13,34 +14,21 @@ from scalarizr.linux import coreutils
 from scalarizr.storage2 import cloudfs
 from scalarizr.storage2.volumes import base
 
-# until transfer will be ready
-from scalarizr.storage import eph as old_eph
-
 
 LOG = logging.getLogger(__name__)
 
 
 class EphVolume(base.Volume):
+	"""
+	Represents LVM layout over volumes of any type.
+	It differs from lvm volume in the way of making snapshot.
+	Ephemeral snapshot freezes lvm layout (creates pure LVM snapshot), then it uploads
+	all the data on this logical volume to cloud storage provider (whereas lvm volume
+	snapshots underlying disks)
+	"""
+
 	
-	def __init__(self, 
-				vg=None, 
-				disk=None, 
-				size=None, 
-				cloudfs_dir=None, 
-				**kwds):
-		'''
-		:type vg:
-		:param vg:
-
-		:type disk:
-		:param disk:
-
-		:type size:
-		:param size:
-
-		:type cloudfs_dir:
-		:param cloudfs_dir:
-		'''
+	def __init__(self, vg=None, disk=None, size=None, cloudfs_dir=None,	**kwds):
 		# Compatibility with 1.0
 		snap_backend = kwds.pop('snap_backend', None)
 		if snap_backend:
@@ -52,9 +40,8 @@ class EphVolume(base.Volume):
 		kwds.pop('lvm_group_cfg', None)
 
 		super(EphVolume, self).__init__(vg=vg, disk=disk, size=size,
-				cloudfs_dir=cloudfs_dir, **kwds)
+												cloudfs_dir=cloudfs_dir, **kwds)
 
-		self._transfer = None
 		self._lvm_volume = None
 
 
@@ -64,11 +51,20 @@ class EphVolume(base.Volume):
 		# Example: resync slave data
 
 		if not self._lvm_volume:
-			if isinstance(self.disk, basestring) and \
-					self.disk.startswith('/dev/sd'):
-				self.disk = storage2.volume(
-						type='ec2_ephemeral', 
-						name='ephemeral0')
+			# First of all, merge self config and snapshot config
+			self.snap = storage2.snapshot(self.snap) if self.snap else None
+
+			for attr in ('disk', 'fstype', 'size', 'vg', 'mpoint'):
+				if not getattr(self, attr, None):
+					if not self.snap or not getattr(self.snap, attr, None):
+						raise storage2.StorageError('Missing ephemeral volume'
+															' attribute "%s"' % attr)
+					setattr(self, attr, getattr(self.snap, attr))
+
+			self.disk = storage2.volume(self.disk)
+			if self.disk.device and self.disk.device.startswith('/dev/sd'):
+				self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
+
 			self._lvm_volume = storage2.volume(
 					type='lvm',
 					pvs=[self.disk],
@@ -84,23 +80,31 @@ class EphVolume(base.Volume):
 
 		if self.snap:
 			self.snap = storage2.snapshot(self.snap)
-			self.mkfs()
+			# umount device to allow filesystem re-creation
+			if self.mounted_to():
+				self.umount()
+			self.mkfs(force=True)
+
 			tmp_mpoint = not self.mpoint
 			if tmp_mpoint:
 				tmp_mpoint = tempfile.mkdtemp()
 				self.mpoint = tmp_mpoint
 
-			transfer = cloudfs.LargeTransfer(self.snap.path, self.mpoint + '/')
 			try:
+				transfer = cloudfs.LargeTransfer(self.snap.path, self.mpoint + '/')
 				self.mount()
-				if hasattr(self.snap, 'size'):
-					fs_free = coreutils.statvfs(self.mpoint)['free']
-					if fs_free < self.snap.size:
+				if hasattr(self.snap, 'data_size'):
+					fs_free = coreutils.statvfs(self.mpoint)['avail']
+					if fs_free < int(self.snap.data_size):
 						raise storage2.StorageError('Not enough free space'
 								' on device %s to restore snapshot.' %
 								self.device)
 
-				transfer.run()
+				result = transfer.run()
+				if result.get('failed'):
+					err = result['failed'][0]['exc_info'][1]
+					raise storage2.StorageError('Failed to download snapshot'
+												'data. %s' % err)
 			except:
 				e = sys.exc_info()[1]
 				raise storage2.StorageError("Snapshot restore error: %s" % e)
@@ -116,48 +120,37 @@ class EphVolume(base.Volume):
 
 
 	def _snapshot(self, description, tags, **kwds):
+		snap = storage2.snapshot(type='eph')
 		lvm_snap = self._lvm_volume.lvm_snapshot(size='100%FREE')
-		try:
-			snap = storage2.snapshot(type='eph')
-			snap.path = os.path.join(os.path.join(
-							self.cloudfs_dir, snap.id + '.manifest.ini'))
 
-			lvm_snap_vol = storage2.volume(
-							device=lvm_snap.device,
-							mpoint=tempfile.mkdtemp())
-			lvm_snap_vol.ensure(mount=True)
-
-			snap.size = coreutils.statvfs(lvm_snap_vol.mpoint)['used']
-
-			try:
-				transfer = cloudfs.LargeTransfer(
-								src=lvm_snap_vol.mpoint + '/',
-								dst=snap.path,
-								tar_it=True,
-								gzip_it=True,
-								tags=tags)
-				transfer.run()
-			finally:
-				lvm_snap_vol.umount()
-				os.rmdir(lvm_snap_vol.mpoint)
-		finally:
-			lvm_snap.destroy()
-
+		t = threading.Thread(target=snap.upload_lvm_snapshot, args=(lvm_snap, tags, self.cloudfs_dir))
+		t.start()
 		return snap
 
 
 	def _destroy(self, force, **kwds):
-		self._lvm_volume.destroy(force=force)
+		if self._lvm_volume:
+			self._lvm_volume.destroy(force=force)
 		self.device = None
 
 
 	def _detach(self, force, **kwds):
-		self._lvm_volume.detach(force=force, **kwds)
+		if self._lvm_volume:
+			self._lvm_volume.detach(force=force, **kwds)
 
 
 class EphSnapshot(base.Snapshot):
+	"""
+	Respresents snapshot of data on ephemeral volume, uploaded to cloud storage provider.
+	Contains all necessary info to restore functionall ephemeral storage.
+
+	"""
 
 	def _destroy(self):
+		"""
+		Reads chunks paths from manifest, then deletes manifest and chunks
+		from cloud storage.
+		"""
 		self._check_attr('path')
 		scheme = urlparse.urlparse(self.path).scheme
 		storage_drv = cloudfs.cloudfs(scheme)
@@ -180,9 +173,56 @@ class EphSnapshot(base.Snapshot):
 
 
 	def _status(self):
-		return self.UNKNOWN
+		"""
+		Represents current status of ephemeral snapshot.
+		Status updates exclusively in 'snapshot' method of ephemeral volume
+		"""
+		if hasattr(self, '_snap_status'):
+			return self._snap_status
+		else:
+			return self.UNKNOWN
 
 
+	def upload_lvm_snapshot(self, lvm_snap, tags, path):
+		"""
+		Method which uploads data from lvm snapshot to cloud storage and
+		updates snapshot status.
+
+		EphVolume runs this method in separate thread
+		"""
+
+		try:
+			self._snap_status = self.QUEUED
+
+			lvm_snap_vol = storage2.volume(
+				device=lvm_snap.device,
+				mpoint=tempfile.mkdtemp())
+			lvm_snap_vol.ensure(mount=True)
+			self.data_size = coreutils.statvfs(lvm_snap_vol.mpoint)['used']
+
+			try:
+				transfer = cloudfs.LargeTransfer(
+					src=lvm_snap_vol.mpoint + '/',
+					dst=path,
+					tar_it=True,
+					gzip_it=True,
+					tags=tags,
+					transfer_id=self.id)
+				self._snap_status = self.IN_PROGRESS
+				manifesto = transfer.run()
+				self.path = manifesto.cloudfs_path
+				self._snap_status = self.COMPLETED
+
+			finally:
+				lvm_snap_vol.umount()
+				os.rmdir(lvm_snap_vol.mpoint)
+
+		except:
+			self._snap_status = self.FAILED
+		finally:
+			lvm_snap.destroy()
+
+"""
 class EphVolumeAdapter(EphVolume):
 	
 	def __init__(self, **kwds):
@@ -199,11 +239,10 @@ class EphVolumeAdapter(EphVolume):
 					else self.snap.config()
 		else:	
 			config = self.config()
+
 		disk = storage2.volume(config['disk'])
 		if disk.device and disk.device.startswith('/dev/sd'):
-			disk = storage2.volume(
-					type='ec2_ephemeral', 
-					name='ephemeral0')
+			disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
 		disk.ensure()
 		self.disk = config['disk'] = disk
 
@@ -224,7 +263,7 @@ class EphVolumeAdapter(EphVolume):
 	def _snapshot(self, description, tags, **kwds):
 		conf = self._eph_vol.config()
 		del conf['id']
-		eph_snap = self._eph_pvd.snapshot_factory(description, **conf)		
+		eph_snap = self._eph_pvd.snapshot_factory(description, **conf)
 		eph_snap = self._eph_pvd.create_snapshot(self._eph_vol, eph_snap, **kwds)
 		
 		snap = storage2.snapshot(type='eph')
@@ -246,10 +285,10 @@ class EphSnapshotAdapter(base.Snapshot):
 	
 	def _status(self):
 		return self._eph_pvd.get_snapshot_state(self)
-		
+"""
 
-#storage2.volume_types['eph'] = EphVolume
-storage2.volume_types['eph'] = EphVolumeAdapter
-#storage2.snapshot_types['eph'] = EphSnapshot
-storage2.snapshot_types['eph'] = EphSnapshotAdapter
+storage2.volume_types['eph'] = EphVolume
+#storage2.volume_types['eph'] = EphVolumeAdapter
+storage2.snapshot_types['eph'] = EphSnapshot
+#storage2.snapshot_types['eph'] = EphSnapshotAdapter
 

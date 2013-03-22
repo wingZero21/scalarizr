@@ -19,7 +19,9 @@ filesystem_types = dict()
 
 
 def volume(*args, **kwds):
-	# raise BaseException('euoeuoeu')
+	"""
+	Takes volume configuration or volume instance, returns volume instance
+	"""
 	if args:
 		if isinstance(args[0], dict):
 			return volume(**args[0])
@@ -43,6 +45,9 @@ def volume(*args, **kwds):
 
 
 def snapshot(*args, **kwds):
+	"""
+    Takes snapshot configuration or snapshot instance, returns snapshot instance
+    """
 	if args:
 		if isinstance(args[0], dict):
 			return snapshot(**args[0])

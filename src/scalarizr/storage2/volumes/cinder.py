@@ -274,7 +274,7 @@ class CinderVolume(base.Volume):
         LOG.debug('Cinder device name %s is mapped to %s in operation system',
                   device_name, device)
         LOG.debug('Checking that device %s is available', device)
-        #TODO: uncomment next lines for true testing
+
         msg = 'Device %s is not available in operation system. ' \
               'Timeout reached (%s seconds)' % (
               device, self._global_timeout)

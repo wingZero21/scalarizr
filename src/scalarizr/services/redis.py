@@ -46,8 +46,8 @@ REDIS_CLI_PATH = '/usr/bin/redis-cli'
 DEFAULT_DIR_PATH = '/var/lib/redis'
 
 DEFAULT_PID_DIR = '/var/run/redis' if os.path.isdir('/var/run/redis') else '/var/run'
-CENTOS_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR,'redis.pid')
-UBUNTU_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR,'redis-server.pid')
+CENTOS_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR, 'redis.pid')
+UBUNTU_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR, 'redis-server.pid')
 DEFAULT_PIDFILE = UBUNTU_DEFAULT_PIDFILE if disttool.is_ubuntu() else CENTOS_DEFAULT_PIDFILE
 
 REDIS_USER = 'redis'
@@ -59,7 +59,7 @@ SNAP_TYPE = 'snapshotting'
 
 MAX_CUSTOM_PROCESSES = 16
 MAX_START_TIMEOUT = 30
-DEFAULT_PORT	= 6379
+DEFAULT_PORT = 6379
 PORTS_RANGE = range(DEFAULT_PORT, DEFAULT_PORT+MAX_CUSTOM_PROCESSES)
 
 LOG = logging.getLogger(__name__)
@@ -726,9 +726,9 @@ class RedisConf(BaseRedisConfig):
 	bind = property(_get_bind, _set_bind)
 	slaveof = property(_get_slaveof, _set_slaveof)
 	masterauth = property(_get_masterauth, _set_masterauth)
-	requirepass	 = property(_get_requirepass, _set_requirepass)
-	appendonly	 = property(_get_appendonly, _set_appendonly)
-	dbfilename	 = property(_get_dbfilename, _set_dbfilename)
+	requirepass = property(_get_requirepass, _set_requirepass)
+	appendonly = property(_get_appendonly, _set_appendonly)
+	dbfilename = property(_get_dbfilename, _set_dbfilename)
 	dbfilename_default = DB_FILENAME
 	appendfilename_default = AOF_FILENAME
 	port_default = DEFAULT_PORT
@@ -895,6 +895,7 @@ class RedisCLI(object):
 
 
 	def save(self):
+		LOG.info('Flushing redis data to disk (cli on port %s)', self.port)
 		self.bgrewriteaof() if self.aof_enabled else self.bgsave()
 
 
@@ -940,7 +941,7 @@ class RedisPresetProvider(PresetProvider):
 		LOG.debug('Getting list of redis preset providers')
 		for port in get_busy_ports():
 			service = Redisd(get_redis_conf_path(port), int(port))
-			config_mapping = {PRESET_FNAME:service.redis_conf}
+			config_mapping = {PRESET_FNAME: service.redis_conf}
 			providers.append(PresetProvider(service, config_mapping))
 		return providers
 
@@ -956,6 +957,7 @@ class RedisSnapBackup(backup.SnapBackup):
 		system2('sync', shell=True)
 		self._redis_instances.save_all()
 		system2('sync', shell=True)
+
 
 class RedisSnapRestore(backup.SnapRestore):
 	def __init__(self, **kwds):

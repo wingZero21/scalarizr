@@ -668,6 +668,7 @@ class DbMsrMessages:
 	'''
 	
 	DBMSR_CREATE_BACKUP = "DbMsr_CreateBackup"
+	DBMSR_CANCEL_BACKUP = "DbMsr_CancelBackup"
 	
 	DBMSR_CREATE_BACKUP_RESULT = "DbMsr_CreateBackupResult"
 	'''

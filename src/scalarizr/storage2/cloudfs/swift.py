@@ -100,6 +100,7 @@ class SwiftFileSystem(object):
 
 
 	def delete(self, remote_path):
+		LOG.info('Deleting %s from Swift' % remote_path)
 		container, object = self._parse_path(remote_path)
 
 		try:

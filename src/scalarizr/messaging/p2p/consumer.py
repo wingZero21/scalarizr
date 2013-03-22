@@ -97,8 +97,7 @@ class P2pMessageConsumer(MessageConsumer):
 
 				except (BaseException, Exception), e:
 					err = 'Message consumer protocol filter raises exception: %s' % str(e)
-					logger.error(err)
-					logger.exception(e)
+					logger.info(err)  # Downshift level, cause HTTP scanners do a lot of flood
 					self.send_response(400, str(e))
 					return
 				
@@ -115,8 +114,7 @@ class P2pMessageConsumer(MessageConsumer):
 
 				except (BaseException, Exception), e:
 					err = "Cannot decode message. error: %s; raw message: %s" % (str(e), rawmsg)
-					logger.error(err)
-					logger.exception(e)
+					logger.exception(err)
 					self.send_response(400, err)
 					return
 				

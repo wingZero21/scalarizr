@@ -92,6 +92,10 @@ class ChefHandler(Handler):
 							fp.write(CLIENT_CONF_TPL % self._chef_data)
 						os.chmod(self._client_conf_path, 0644)
 							
+						# Delete client.pem
+						if os.path.exists(self._client_key_path):
+							os.remove(self._client_key_path)
+
 						# Write validation cert
 						with open(self._validator_key_path, 'w+') as fp:
 							fp.write(self._chef_data['validator_key'])
@@ -136,7 +140,7 @@ class ChefHandler(Handler):
 		cmd = [self._chef_client_bin]
 		if first_run and self._with_json_attributes:
 			cmd += ['--json-attributes', self._json_attributes_path]
-		system2(cmd)
+		system2(cmd, close_fds=True, preexec_fn=os.setsid)
 
 
 	def get_node_name(self):
