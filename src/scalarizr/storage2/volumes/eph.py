@@ -77,8 +77,10 @@ class EphVolume(base.Volume):
 
 		if self.snap:
 			self.snap = storage2.snapshot(self.snap)
-			if not self.is_fs_created():
-				self.mkfs()
+			# umount device to allow filesystem re-creation
+			if self.mounted_to():
+				self.umount()
+			self.mkfs(force=True)
 
 			tmp_mpoint = not self.mpoint
 			if tmp_mpoint:
@@ -124,12 +126,14 @@ class EphVolume(base.Volume):
 
 
 	def _destroy(self, force, **kwds):
-		self._lvm_volume.destroy(force=force)
+		if self._lvm_volume:
+			self._lvm_volume.destroy(force=force)
 		self.device = None
 
 
 	def _detach(self, force, **kwds):
-		self._lvm_volume.detach(force=force, **kwds)
+		if self._lvm_volume:
+			self._lvm_volume.detach(force=force, **kwds)
 
 
 class EphSnapshot(base.Snapshot):

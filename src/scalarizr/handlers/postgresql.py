@@ -393,8 +393,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 								snapshot=postgresql_data.pop(OPT_SNAPSHOT_CNF),
 								volume=postgresql_data['volume'])
 
-						elif int(postgresql_data['replication_master']) and \
-								not postgresql_data['volume'].device:
+						if int(postgresql_data['replication_master']):
 							postgresql_data['backup'] = backup.backup(
 								type='snap_postgresql',
 								volume=postgresql_data['volume'])
@@ -428,7 +427,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				
 	def on_before_reboot_start(self, *args, **kwargs):
 		"""
-		Stop MySQL and unplug storage
+		Stop PostgreSQL and unplug storage
 		"""
 		self.postgresql.service.stop('rebooting')
 
@@ -466,7 +465,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					'db_type': BEHAVIOUR,
 					'status': 'ok',
 					'used_size' : '%.3f' % (float(used_size) / 1000,),
-					BEHAVIOUR: {OPT_SNAPSHOT_CNF: snap.config()}
+					BEHAVIOUR: {OPT_SNAPSHOT_CNF: dict(snap)}
 					}
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
@@ -499,16 +498,17 @@ class PostgreSqlHander(ServiceCtlHandler):
 		LOG.info('Starting Slave -> Master promotion')
 		bus.fire('before_slave_promote_to_master')
 
-		msg_data = dict(
-			db_type=BEHAVIOUR,
-			status="ok",
-		)
+		msg_data = {
+			'db_type' : BEHAVIOUR,
+			'status' : 'ok',
+		    BEHAVIOUR : {}
+		}
 
 		tx_complete = False
 
 		new_vol	= None
-		if postgresql.get(OPT_SNAPSHOT_CNF):
-			new_vol = storage2.volume(postgresql.get(OPT_SNAPSHOT_CNF))
+		if postgresql.get('volume_config'):
+			new_vol = storage2.volume(postgresql.get('volume_config'))
 
 		try:
 			self.postgresql.stop_replication()
@@ -526,6 +526,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 					raise HandlerError("%s is not a valid postgresql storage" % STORAGE_PATH)
 
 				__postgresql__['volume'] = new_vol
+				msg_data[BEHAVIOUR] = {'volume_config': dict(new_vol)}
 
 			slaves = [host.internal_ip for host in self._get_slave_hosts()]
 			self.postgresql.init_master(STORAGE_PATH, self.root_password, slaves)
@@ -534,8 +535,10 @@ class PostgreSqlHander(ServiceCtlHandler):
 			if not new_vol or new_vol.type in ('eph', 'lvm'):
 				snap = self._create_snapshot()
 				__postgresql__['snapshot'] = snap
+				msg_data[BEHAVIOUR].update({OPT_SNAPSHOT_CNF : dict(snap)})
 
 			msg_data[OPT_CURRENT_XLOG_LOCATION] = None # useless but required by Scalr
+
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 
 			tx_complete = True
@@ -582,7 +585,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 				return
 
 			host = message.local_ip or message.remote_ip
-			LOG.info("Switching replication to a new MySQL master %s", host)
+			LOG.info("Switching replication to a new PostgreSQL master %s", host)
 			bus.fire('before_postgresql_change_master', host=host)
 
 			LOG.debug("__postgresql__['volume']: %s", __postgresql__['volume'])
@@ -595,20 +598,15 @@ class PostgreSqlHander(ServiceCtlHandler):
 						type='snap_postgresql',
 						volume=__postgresql__['volume'],
 						snapshot=postgresql_data[OPT_SNAPSHOT_CNF])
-				# XXX: ugly
+
 				if __postgresql__['volume'].type == 'eph':
 					self.postgresql.service.stop('Swapping storages to reinitialize slave')
 
 					LOG.info('Reinitializing Slave from the new snapshot %s',
 						restore.snapshot['id'])
 					new_vol = restore.run()
-					self.mysql.service.stop('Swapping storages to reinitialize slave')
 
-					LOG.debug('Destroing old storage')
-					old_vol = storage2.volume(**__postgresql__['volume'])
-					old_vol.destroy(remove_disks=True)
-					LOG.debug('Storage destoyed')
-				self.postgresql.service.start()
+				#self.postgresql.service.start()
 
 			self.postgresql.init_slave(STORAGE_PATH, host, __postgresql__['port'], self.root_password)
 			LOG.debug("Replication switched")
@@ -632,7 +630,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 	def on_DbMsr_CreateBackup(self, message):
 		#TODO: Think how to move the most part of it into Postgresql class 
-		# Retrieve password for scalr mysql user
+		# Retrieve password for scalr pg user
 		tmpdir = backup_path = None
 		try:
 			# Get databases list

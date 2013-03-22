@@ -13,11 +13,11 @@ class GceEphemeralVolume(base.Volume):
 		self._check_attr('name')
 		if self.name.startswith('google-'):
 			self.name = self.name[7:]
-		device = '/dev/%s' % self.name
+		device = '/dev/disk/by-id/google-%s' % self.name
 		if not os.path.exists(device):
 			msg = "Device '%s' not found" % device
 			raise storage2.StorageError(msg)
-		self.device = device
+		self.device = os.path.realpath(device)
 
 
 storage2.volume_types['gce_ephemeral'] = GceEphemeralVolume

@@ -317,6 +317,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		"""
 
 		repl = 'master' if self.is_replication_master else 'slave'
+		message.redis = {}
 
 		if self.is_replication_master:
 			self._init_master(message)
@@ -330,6 +331,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		message.redis['ports'] = self.redis_instances.ports
 		message.redis['passwords'] = self.redis_instances.passwords
 		message.redis['num_processes'] = len(self.redis_instances.instances)
+		message.redis['volume_config'] = dict(__redis__['volume'])
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl, preset=self.initial_preset)
 
 
@@ -381,6 +383,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 						used_size	= '%.3f' % (float(used_size) / 1000,),
 						status		= 'ok'
 					)
+					msg_data[BEHAVIOUR] = {'snapshot_config': dict(snap)}
+
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 			op.ok()
@@ -417,12 +421,12 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		old_vol 		= None
 		new_storage_vol	= None
 
-		try:
-			msg_data = dict(
-				db_type=BEHAVIOUR,
-				status="ok",
+		msg_data = dict(
+			db_type=BEHAVIOUR,
+			status="ok",
 			)
 
+		try:
 			if master_storage_conf and master_storage_conf['type'] != 'eph':
 
 				self.redis_instances.stop('Unplugging slave storage and then plugging master one')
@@ -435,6 +439,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 			self.redis_instances.init_as_masters(self._storage_path)
 			__redis__[OPT_REPLICATION_MASTER] = 1
+			msg_data[BEHAVIOUR] = {'volume_config': dict(__redis__['volume'])}
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 
 			tx_complete = True

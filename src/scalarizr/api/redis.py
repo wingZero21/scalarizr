@@ -260,29 +260,45 @@ class RedisAPI(object):
 		LOG.debug('primary IP: %s' % host)
 		return host
 
+
 	@rpc.service_method
 	def reset_password(self, port=DEFAULT_PORT, new_password=None):
 		""" Reset auth for Redis process on port `port`. Return new password """
 		if not new_password:
 			new_password = pwgen(20)
+
 		redis_conf = redis_service.RedisConf.find(port=port)
 		redis_conf.requirepass = new_password
+
 		if redis_conf.slaveof:
 			redis_conf.masterauth = new_password
+
 		redis_wrapper = redis_service.Redis(port=port)
 		redis_wrapper.service.reload()
-		__redis__['master_password'] = new_password
+
+		if int(port) == DEFAULT_PORT:
+			__redis__['master_password'] = new_password
+
 		return new_password
+
 
 	@rpc.service_method
 	def replication_status(self):
-		redis_wrapper = redis_service.Redis()
-		if redis_wrapper.role is 'master':
-			return {'master': {'status': 'up'}}
-		result = {'slave': {}}
-		info = redis_wrapper.info
-		for key in info.keys():
-			if 'master' in key:
-				result['slave'][key] = info[key]
-		result['slave']['status'] = result['slave']['master_link_status']
-		return result
+		ri = redis_service.RedisInstances()
+
+		if ri.master:
+			masters = {}
+			for port in ri.ports:
+				masters[port] = 'up'
+			return {'masters': masters}
+
+		slaves = {}
+		for redis_process in ri.instances:
+			repl_data = {}
+			for key, val in redis_process.info.items():
+				if key.startswith('master'):
+					repl_data[key] = val
+			repl_data['status'] = repl_data['master_link_status']
+			slaves[redis_process.port] = repl_data
+
+		return {'slaves': slaves}
