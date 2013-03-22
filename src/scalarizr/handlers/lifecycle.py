@@ -161,7 +161,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if self._flag_exists(self.FLAG_REBOOT) or self._flag_exists(self.FLAG_HALT):
 			self._logger.info("Scalarizr resumed after reboot")
 			self._clear_flag(self.FLAG_REBOOT)
-			self._clear_flag(self.FLAG_HALT)	
+			self._clear_flag(self.FLAG_HALT)
+			self._check_control_ports()	
 			self._start_after_reboot()
 			
 		elif optparser.values.import_server:
@@ -177,6 +178,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			
 		else:
 			self._logger.info("Normal start")
+			self._check_control_ports()
 
 
 	def _start_after_reboot(self):
@@ -280,6 +282,19 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			t.start()
 
 
+	def _check_control_ports(self):
+		sn = bus.api_server.socket.getsockname()
+		if sn[1] != 8010 or STATE['global.api_port']:
+			# API on non-default port
+			self.send_message(Messages.UPDATE_CONTROL_PORTS, {
+				'api': sn[1],
+				'messaging': 8013,
+				'snmp': 8014
+			})
+			if sn[1] == 8010:
+				STATE['global.api_port'] = ''
+
+
 	def on_IntServerReboot(self, message):
 		# Scalarizr must detect that it was resumed after reboot
 		self._set_flag(self.FLAG_REBOOT)
@@ -306,6 +321,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		if bus.cnf.state == ScalarizrState.RUNNING:
 			self._logger.info("Ignoring 'HostInitResponse' message, cause state is '%s'", bus.cnf.state)
 			return
+
+		self._check_control_ports()
 
 		bus.initialization_op = operation(name='Initialization')
 		try:

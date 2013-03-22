@@ -355,9 +355,18 @@ def _init_services():
 	Storage.maintain_volume_table = True
 	
 	if not bus.api_server:
+		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		api_port = 8010
+		try:
+			sock.connect(('0.0.0.0', api_port))
+			STATE['global.api_port'] = api_port = 8009
+			sock.close()
+		except socket.error:
+			pass
+
 		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
 											cnf.key_path(cnf.DEFAULT_KEY))
-		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', 8010, api_app)
+		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app)
 
 
 def _start_services():
