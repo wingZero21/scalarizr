@@ -62,7 +62,8 @@ class EphVolume(base.Volume):
 					setattr(self, attr, getattr(self.snap, attr))
 
 			self.disk = storage2.volume(self.disk)
-			if self.disk.device and self.disk.device.startswith('/dev/sd'):
+			# Compatibility with storage v1
+			if self.disk.device and self.disk.type == 'base' and self.disk.device.startswith('/dev/sd'):
 				self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
 
 			self._lvm_volume = storage2.volume(
