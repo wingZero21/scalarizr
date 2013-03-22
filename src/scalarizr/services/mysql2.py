@@ -301,7 +301,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 
 		coreutils.clean_dir(__mysql__['data_dir'])
 
-		LOG.info('Downloading the base backup (LSN: 0..%d)', bak.to_lsn)
+		LOG.info('Downloading the base backup (LSN: 0..%s)', bak.to_lsn)
 		trn = cloudfs.LargeTransfer(
 				bak.cloudfs_source,
 				__mysql__['data_dir'],
@@ -324,7 +324,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
 				try:
 					os.makedirs(inc_dir)
 					inc = backup.restore(inc)
-					LOG.info('Downloading incremental backup #%d (LSN: %d..%d)', i,
+					LOG.info('Downloading incremental backup #%d (LSN: %s..%s)', i,
 							inc.from_lsn, inc.to_lsn)
 					trn = cloudfs.LargeTransfer(
 							inc.cloudfs_source,
