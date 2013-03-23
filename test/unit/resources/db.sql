@@ -1,1 +1,0 @@
-../../../etc/public.d/db.sql
