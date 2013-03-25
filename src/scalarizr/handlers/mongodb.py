@@ -1083,7 +1083,8 @@ class MongoDBHandler(ServiceCtlHandler):
 		self.mongodb.auth = True
 		self.mongodb.start_shardsvr()
 		self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-						
+		wait_until(lambda: self.mongodb.is_replication_master, sleep=5, logger=self._logger,
+		   					timeout=120, start_text='Wait until node becomes replication primary')
 		# Create snapshot
 		self.mongodb.cli.sync(lock=True)
 		try:
@@ -1391,7 +1392,7 @@ class MongoDBHandler(ServiceCtlHandler):
 		#TODO: check mongod journal option if service is running!
 		self._logger.info("Creating mongodb's storage snapshot")
 		try:
-			return __mongodb__['volume'].snapshot(tags=self.mongo_tags)
+			return __mongodb__['volume'].snapshot(tags=self.mongo_tags, nowait=True)
 		except storage2.StorageError, e:
 			self._logger.error("Cannot create %s data snapshot. %s", (BEHAVIOUR, e))
 			raise
