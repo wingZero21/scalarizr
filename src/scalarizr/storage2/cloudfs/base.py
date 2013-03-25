@@ -93,7 +93,6 @@ class CloudFileSystem(object):
 		"""
 		:returns: bucket, key
 		"""
-		# TODO: test netloc instead of hostname (gcs & s3)
 		o = urlparse.urlparse(url)
 		assert o.scheme == self.schema, 'Wrong schema: %s' % o.scheme
 		return o.netloc, o.path[1:]
@@ -103,6 +102,9 @@ class CloudFileSystem(object):
 
 	def exists(self, url):
 		parent = os.path.dirname(url.rstrip('/'))
+		# NOTE: s3 & gcs driver converts bucket names to lowercase while url
+		# arg in this method stays uncoverted -> url with uppercase bucket
+		# name will never be found
 		return url in self.ls(parent)
 
 	def ls(self, url):

@@ -9,8 +9,8 @@ import json
 from apiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from apiclient.errors import HttpError
 
-from scalarizr.storage2.cloudfs.base import DriverError
-from scalarizr.storage2 import cloudfs
+from scalarizr.storage2.cloudfs.base import CloudFileSystem
+from scalarizr.storage2.cloudfs import cloudfs_types
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 
@@ -21,7 +21,7 @@ from scalarizr.node import __node__
 LOG = logging.getLogger(__name__)
 
 
-class GCSFileSystem (object):
+class GCSFileSystem(CloudFileSystem):
 	# TODO: add amazon-style 0% and 100% callbacks ?
 
 	schema = 'gcs'
@@ -29,9 +29,13 @@ class GCSFileSystem (object):
 	chunk_size = 2*1024*1024
 	report_interval = 10  # percent; every <value> percent at most
 
+	def _parse_url(self, url):
+		bucket, key = super(GCSFileSystem, self)._parse_url(url)
+		return bucket.lower(), key
+
 
 	def ls(self, remote_path):
-		bucket, path = self._parse_path(remote_path)
+		bucket, path = self._parse_url(remote_path)
 
 		path = path.rstrip('/') + '/' if path else ''
 
@@ -39,18 +43,14 @@ class GCSFileSystem (object):
 			bucket=bucket, prefix=path)
 		resp = req.execute()
 
-		items = (self._format_path(bucket, x["name"])
+		items = (self._format_url(bucket, x["name"])
 				 for x in resp.setdefault("items", []))
 		return tuple(items)
 
 
-	def _format_path(self, bucket, key):
-		return "%s://%s/%s" % (self.schema, bucket, key)
-
-
 	def get(self, remote_path, local_path, report_to=None):
 		LOG.debug('Downloading %s from cloud storage (local path: %s)', remote_path, local_path)
-		bucket, name = self._parse_path(remote_path)
+		bucket, name = self._parse_url(remote_path)
 		local_path = os.path.join(local_path, os.path.basename(remote_path))
 
 		request = self.cloudstorage.objects().get_media(
@@ -80,7 +80,7 @@ class GCSFileSystem (object):
 	def put(self, local_path, remote_path, report_to=None):
 		LOG.debug('Uploading %s to cloud storage (remote path: %s)', local_path, remote_path)
 		filename = os.path.basename(local_path)
-		bucket, name = self._parse_path(remote_path)
+		bucket, name = self._parse_url(remote_path)
 		if name.endswith("/"):
 			name = os.path.join(name, filename)
 
@@ -109,12 +109,12 @@ class GCSFileSystem (object):
 		finally:
 			fd.close()
 		LOG.debug("Finished uploading %s", os.path.basename(local_path))
-		return 'gcs://%s' % os.path.join(bucket, name)
+		return self._format_url(bucket, name)
 
 
 	def delete(self, remote_path):
 		LOG.info('Deleting %s from GCS', remote_path)
-		bucket, obj = self._parse_path(remote_path)
+		bucket, obj = self._parse_url(remote_path)
 
 		req = self.cloudstorage.objects().delete(bucket=bucket, object=obj)
 		try:
@@ -124,14 +124,6 @@ class GCSFileSystem (object):
 				return False
 			else:
 				raise
-
-
-	def _parse_path(self, path):
-		o = urlparse.urlparse(path)
-		if o.scheme != self.schema:
-			raise DriverError('Wrong schema')
-		return o.hostname, o.path[1:]
-
 
 	def _list_buckets(self):
 		pl = bus.platform
@@ -165,4 +157,4 @@ class GCSFileSystem (object):
 		return pl.new_storage_client()
 
 
-cloudfs.cloudfs_types["gcs"] = GCSFileSystem
+cloudfs_types["gcs"] = GCSFileSystem

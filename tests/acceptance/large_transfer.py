@@ -99,20 +99,6 @@ def teardown_feature(feat):
 		setattr(*args)
 
 
-class ExistsMixin(object):
-	def exists(self, url):
-		parent = os.path.dirname(url.rstrip('/'))
-		ls = self.ls(parent)
-		return url in ls
-
-
-#class S3(s3.S3FileSystem, ExistsMixin):
-#	pass
-
-
-class GCS(gcs.GCSFileSystem, ExistsMixin):
-	pass
-
 #
 # Logging
 #
@@ -133,7 +119,7 @@ STORAGES = {
 	},
 	"gcs": {
 		"url": "gcs://vova-test",
-		"driver": GCS,
+		"driver": gcs.GCSFileSystem,
 	},
 	"swift": {
 		"url": "swift://vova-test",
