@@ -106,8 +106,8 @@ class ExistsMixin(object):
 		return url in ls
 
 
-class S3(s3.S3FileSystem, ExistsMixin):
-	pass
+#class S3(s3.S3FileSystem, ExistsMixin):
+#	pass
 
 
 class GCS(gcs.GCSFileSystem, ExistsMixin):
@@ -129,7 +129,7 @@ LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
 STORAGES = {
 	"s3": {
 		"url": "s3://scalr.test_bucket/vova_test",
-		"driver": S3,
+		"driver": s3.S3FileSystem,
 	},
 	"gcs": {
 		"url": "gcs://vova-test",
@@ -287,8 +287,8 @@ def i_expect_manifest_as_a_result(step):
 @step("all chunks are uploaded")
 def all_chunks_are_uploaded(step):
 	for chunk in world.result_chunks:
-		assert world.driver.exists(os.path.join(os.path.dirname(world.manifest_url),
-			chunk[0]))
+		chunk_url = os.path.join(os.path.dirname(world.manifest_url), chunk[0])
+		assert world.driver.exists(chunk_url), chunk_url
 
 
 @step(r"I have a dir (\w+/?) with (\d+) megabytes file (\w+), with (\d+) megabytes file (\w+)")

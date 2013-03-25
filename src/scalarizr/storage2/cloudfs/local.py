@@ -38,7 +38,6 @@ class LocalFileSystem(CloudFileSystem):
 		return "%s://%s" % (self.schema, path)
 
 	def ls(self, url):
-		raise Exception("lol")
 		path = self._parse_url(url)
 
 		LOG.debug("Trying to list %s", path)
