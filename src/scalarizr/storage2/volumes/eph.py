@@ -62,7 +62,8 @@ class EphVolume(base.Volume):
 					setattr(self, attr, getattr(self.snap, attr))
 
 			self.disk = storage2.volume(self.disk)
-			if self.disk.device and self.disk.device.startswith('/dev/sd'):
+			# Compatibility with storage v1
+			if self.disk.device and self.disk.type == 'base' and self.disk.device.startswith('/dev/sd'):
 				self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
 
 			self._lvm_volume = storage2.volume(
@@ -74,6 +75,9 @@ class EphVolume(base.Volume):
 
 		self._lvm_volume.ensure()
 		self.device = self._lvm_volume.device
+		# To allow ensure(mkfs=True, mount=True) after volume passed 
+		# scalarizr 1st initialization
+		self.fscreated = self.is_fs_created()
 
 		if self.snap:
 			self.snap = storage2.snapshot(self.snap)
@@ -252,6 +256,9 @@ class EphVolumeAdapter(EphVolume):
 			self._eph_vol = self._eph_pvd.create(**config)
 		
 		self.device = self._eph_vol.device
+		# To allow ensure(mkfs=True, mount=True) after volume passed 
+		# scalarizr 1st initialization
+		self.fscreated = self.is_fs_created()		
 		
 		
 	def _snapshot(self, description, tags, **kwds):
