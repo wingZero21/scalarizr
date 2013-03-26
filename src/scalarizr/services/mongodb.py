@@ -364,11 +364,11 @@ class MongoDB(BaseService):
 		if not disttool.is_ubuntu():
 			orig = None
 			with open(path, 'r') as fp:
-			    orig = fp.read()
+				orig = fp.read()
 			new = re.sub('Defaults\s+requiretty', '\n', orig)
 			if new != orig:
 				with open(path, 'w') as fp:
-				    fp.write(new)
+					fp.write(new)
 
 
 	def _get_mongod(self):
