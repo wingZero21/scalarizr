@@ -10,7 +10,7 @@ from scalarizr.bus import bus
 from scalarizr import config as szrconfig
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
-from scalarizr.util import parse_size, format_size, read_shebang, split_strip
+from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
 
@@ -212,9 +212,8 @@ class ScriptExecutor(Handler):
 						exec_timeout=s.exec_timeout, event_name=event_name, role_name=role_name) \
 						for s in queryenv_scripts]
 
-		if 'global_variables' in message.body:
-			gv = message.body.get('global_variables', [])
-			for kv in gv:
+		if 'global_variables' in message.body and message.global_variables:
+			for kv in message.global_variables:
 				os.environ[kv['name']] = kv['value']
 
 		LOG.debug('Fetched %d scripts', len(scripts))
@@ -404,11 +403,13 @@ class Script(object):
 	def _proc_kill(self):
 		self.logger.debug('Timeouted: %s seconds. Killing process %s (pid: %s)',
 							self.exec_timeout, self.interpreter, self.pid)
-		if self.proc and hasattr(self.proc, "kill"):
-			self.proc.kill()
-		else:
-			os.kill(self.pid, signal.SIGKILL)
-		return -9
+		if self.proc and self._proc_poll() is None:
+			os.kill(self.pid, signal.SIGTERM)
+			if not wait_until(lambda: self._proc_poll() is not None, 
+					timeout=2, sleep=.5, raise_exc=False):
+				os.kill(self.pid, signal.SIGKILL)
+				return -9
+			return self.proc.returncode
 
 	def _proc_complete(self):
 		if self.proc:

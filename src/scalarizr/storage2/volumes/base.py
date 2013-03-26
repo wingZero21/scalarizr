@@ -96,18 +96,23 @@ class Volume(Base):
 
 
 	def destroy(self, force=False, **kwds):
+		LOG.debug('Destroying volume %s', self.id)
 		if self.device:
 			self.detach(force, **kwds)
 		self._destroy(force, **kwds)
+		LOG.debug('Volume %s destroyed', self.id)
 
 
 	def detach(self, force=False, **kwds):
+		LOG.debug('Detaching volume %s', self.id)
 		if not self.device:
+			LOG.debug('Volume %s has no device, nothing to detach', self.id)
 			return
 		self.umount()
 		self._detach(force, **kwds)
 		if self.features['detach']:
 			self.device = None
+		LOG.debug('Volume %s detached', self.id)
 
 
 	def mount(self):
@@ -154,9 +159,9 @@ class Volume(Base):
 			return True
 
 
-	def mkfs(self):
+	def mkfs(self, force=False):
 		self._check()
-		if self.is_fs_created():
+		if not force and self.is_fs_created():
 			raise storage2.OperationError(
 							'Filesystem on device %s is already created' % self.device)
 

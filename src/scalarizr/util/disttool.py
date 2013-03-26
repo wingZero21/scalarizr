@@ -36,12 +36,14 @@ _is_win = os_name == "windows"
 _is_sun = os_name == "sunos"
 			
 if _is_linux:
+	_linux_dist = None
 	if os.path.exists("/etc/lsb-release"):
 		fp = open("/etc/lsb-release")
 		lsb = fp.readlines()
 		fp.close()
-		_linux_dist = tuple(map(lambda i: lsb[i].split('=')[1].strip(), range(3)))
-	elif hasattr(platform, "linux_distribution"):
+		if len(lsb) >= 3:
+			_linux_dist = tuple(map(lambda i: lsb[i].split('=')[1].strip(), range(3)))
+	if not _linux_dist and hasattr(platform, "linux_distribution"):
 		_linux_dist = platform.linux_distribution()
 	else:
 		_linux_dist = platform.dist()

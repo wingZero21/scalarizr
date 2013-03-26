@@ -257,11 +257,13 @@ class MySQLClient(object):
 		result = True if ret and len(ret)==2 and ret[0]==login and ret[1]==host else False
 		LOG.debug('user_exists query returned value: %s for user %s on host %s. User exists: %s' % (str(ret), login, host, str(result)))
 		return result
+
+	def set_user_password(self, username, host, password):
+		return self.fetchone("UPDATE mysql.user SET Password=PASSWORD('%s') WHERE User='%s' AND Host='%s';" % (password, username, host))
 		
 	def flush_privileges(self):
 		return self.fetchone("FLUSH PRIVILEGES")
 	
-			
 	def change_master_to(self, host, user, password, log_file, log_pos):
 		return self.fetchone('CHANGE MASTER TO MASTER_HOST="%(host)s", \
 						MASTER_USER="%(user)s", \
@@ -272,26 +274,12 @@ class MySQLClient(object):
 	
 	
 	def slave_status(self):
-		variables = dict(
-				Slave_IO_Running=None, 
-				Slave_SQL_Running=None,
-				Last_Error = None,
-				Last_Errno = None,
-				Exec_Master_Log_Pos = None,
-				Relay_Master_Log_File = None,
-				Master_Log_File = None,
-				Read_Master_Log_Pos = None
-				)
-					
-		out = self.fetchdict("SHOW SLAVE STATUS")
-		LOG.debug('slave status: %s' % str(out))
-		if out:
-			for name, value in out.items():
-				if name in variables.keys():
-					variables[name] = value
+		ret = self.fetchdict("SHOW SLAVE STATUS")
+		LOG.debug('slave status: %s' % str(ret))
+		if ret:
+			return ret
 		else:
 			raise ServiceError('SHOW SLAVE STATUS returned empty set. Slave is not started?')
-		return variables
 	
 	
 	def master_status(self):
@@ -681,7 +669,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.__init__(self, SERVICE_NAME, 
 				initd_script, pid_file, socks=[initdv2.SockParam(MYSQL_DEFAULT_PORT, timeout=3600)])
 
-	
+
 	def _start_stop_reload(self, action):
 		''' XXX: Temporary ugly hack (Ubuntu 1004 upstart problem - Job is already running)'''
 		try:
@@ -694,8 +682,13 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			if 'Job is already running' not in str(e):
 				raise InitdError("Popen failed with error %s" % (e,))
 
-		if action == 'restart' and err and 'stop: Job has already been stopped: mysql' in err:
-			return True
+		if action == 'restart':
+			if err and 'stop: Job has already been stopped: mysql' in err:
+				return True
+			else:
+				LOG.debug('waiting for mysql process')
+				wait_until(lambda: MYSQLD_PATH in system2(('ps', '-G', DEFAULT_OWNER, '-o', 'command', '--no-headers'))[0]
+					, timeout=10, sleep=1)
 
 		if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			try:

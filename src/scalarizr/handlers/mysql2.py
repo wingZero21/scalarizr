@@ -628,6 +628,7 @@ class MysqlHandler(DBMSRHandler):
 						if restore is None:
 							#? op.error?
 							#? 'canceled' msg to scalr?
+							#WTF: Shouldn't Scalr be notified anyway?(Dima)
 							return
 
 						# Notify scalr
@@ -687,10 +688,14 @@ class MysqlHandler(DBMSRHandler):
 		bus.fire('before_slave_promote_to_master')
 
 		__mysql__['compat_prior_backup_restore'] = mysql2.get('volume_config') or \
-													mysql2.get('snapshot_config')
+													mysql2.get('snapshot_config') or \
+													message.body.get('volume_config')
 		new_vol	= None
-		if mysql2.get('volume_config'):
+		if __node__['platform'] == 'idcf':
+			new_vol = None
+		elif mysql2.get('volume_config'):
 			new_vol = storage2.volume(mysql2.get('volume_config'))
+
 					
 		try:
 			if new_vol and new_vol.type not in ('eph', 'lvm'):
@@ -702,7 +707,10 @@ class MysqlHandler(DBMSRHandler):
 				# Unplug slave storage and plug master one
 				old_vol = storage2.volume(__mysql__['volume'])
 				try:
-					old_vol.umount()
+					if old_vol.type == 'raid':
+						old_vol.detach()
+					else:
+						old_vol.umount()
 					new_vol.mpoint = __mysql__['storage_dir']
 					new_vol.ensure(mount=True)				
 					# Continue if master storage is a valid MySQL storage
@@ -752,10 +760,12 @@ class MysqlHandler(DBMSRHandler):
 				except:
 					self.mysql.service.stop('Detaching new volume')
 					new_vol.detach()
-					old_vol.mount()
+					if old_vol.type == 'raid':
+						old_vol.ensure(mount=True)
+					else:
+						old_vol.mount()
 					raise
 			else:
-				# Set read_only option
 				self.mysql.my_cnf.read_only = False
 				self.mysql.service.start()
 
@@ -863,15 +873,9 @@ class MysqlHandler(DBMSRHandler):
 				if __mysql__['volume'].type == 'eph':
 					self.mysql.service.stop('Swapping storages to reinitialize slave')
 
-					LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)', 
+					LOG.info('Reinitializing Slave from the new snapshot %s (log_file: %s log_pos: %s)',
 							restore.snapshot['id'], restore.log_file, restore.log_pos)
 					new_vol = restore.run()
-					self.mysql.service.stop('Swapping storages to reinitialize slave')
-				
-					LOG.debug('Destroing old storage')
-					vol = storage2.volume(**__mysql__['volume'])
-					vol.destroy(remove_disks=True)
-					LOG.debug('Storage destoyed')
 				else:
 					restore.run()
 
@@ -1190,22 +1194,7 @@ class MysqlHandler(DBMSRHandler):
 		return mysql_svc.MySQLClient(
 					__mysql__['root_user'], 
 					__mysql__['root_password'])
-	
 
-	def _compat_storage_data(self, vol=None, snap=None):
-		ret = dict()
-		if bus.scalr_version >= (2, 2):
-			if vol:
-				ret['volume_config'] = vol.config() if not isinstance(vol, dict) else vol
-			if snap:
-				ret['snapshot_config'] = snap.config() if not isinstance(snap, dict) else snap
-		else:
-			if vol:
-				ret['volume_id'] = vol.config()['id'] if not isinstance(vol, dict) else vol['id']
-			if snap:
-				ret['snapshot_id'] = snap.config()['id'] if not isinstance(snap, dict) else snap['id']
-		return ret
-		
 
 	def _innodb_recovery(self, storage_path=None):
 		storage_path = storage_path or __mysql__['storage_dir']

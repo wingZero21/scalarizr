@@ -367,7 +367,7 @@ class NginxHandler(ServiceCtlHandler):
 					i = self._config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
 					self._config.comment('http/include[%d]' % (i+1,))
 					self._logger.debug('comment site-enabled include')
-				except ValueError, IndexError:
+				except (ValueError, IndexError):
 					self._logger.debug('site-enabled include already commented')
 			elif disttool.is_redhat_based():
 				def_host_path = '/etc/nginx/conf.d/default.conf'

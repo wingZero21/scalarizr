@@ -73,7 +73,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 	_cnf = None
 	''' @type _cnf: scalarizr.config.ScalarizrCnf '''
 	
-	storage_vol = None	
 	default_service = None
 		
 	@property
@@ -318,6 +317,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		"""
 
 		repl = 'master' if self.is_replication_master else 'slave'
+		message.redis = {}
 
 		if self.is_replication_master:
 			self._init_master(message)
@@ -331,6 +331,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		message.redis['ports'] = self.redis_instances.ports
 		message.redis['passwords'] = self.redis_instances.passwords
 		message.redis['num_processes'] = len(self.redis_instances.instances)
+		message.redis['volume_config'] = dict(__redis__['volume'])
 		bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl, preset=self.initial_preset)
 
 
@@ -382,7 +383,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 						used_size	= '%.3f' % (float(used_size) / 1000,),
 						status		= 'ok'
 					)
-					msg_data[BEHAVIOUR] = self._compat_storage_data(snap=snap)
+					msg_data[BEHAVIOUR] = {'snapshot_config': dict(snap)}
+
 					self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
 			op.ok()
@@ -419,17 +421,17 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 		old_vol 		= None
 		new_storage_vol	= None
 
-		try:
-			msg_data = dict(
-				db_type=BEHAVIOUR,
-				status="ok",
+		msg_data = dict(
+			db_type=BEHAVIOUR,
+			status="ok",
 			)
 
+		try:
 			if master_storage_conf and master_storage_conf['type'] != 'eph':
 
 				self.redis_instances.stop('Unplugging slave storage and then plugging master one')
 
-				old_vol = storage2.volume(__redis__['volume']) # ??????
+				old_vol = storage2.volume(__redis__['volume'])
 				old_vol.detach(force=True)
 				new_storage_vol = storage2.volume(master_storage_conf)
 				new_storage_vol.ensure(mount=True)
@@ -437,14 +439,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 			self.redis_instances.init_as_masters(self._storage_path)
 			__redis__[OPT_REPLICATION_MASTER] = 1
-			msg_data[BEHAVIOUR] = self._compat_storage_data(vol=__redis__['volume'])
-			"""
-			if not master_storage_conf or master_storage_conf['type'] == 'eph':
-
-				snap = self._create_snapshot()
-				Storage.backup_config(snap.config(), self._snapshot_config_path)
-				msg_data[BEHAVIOUR] = self._compat_storage_data(self.storage_vol, snap)
-			"""
+			msg_data[BEHAVIOUR] = {'volume_config': dict(__redis__['volume'])}
 			self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 
 			tx_complete = True
@@ -554,7 +549,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 				LOG.info("Initializing %s master" % BEHAVIOUR)
 
-				# Plug storage
+			# Plug storage
 			if 'restore' in __redis__ and \
 									__redis__['restore'].type == 'snap_redis':
 				__redis__['restore'].run()
@@ -575,15 +570,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 				msg_data = dict()
 				msg_data.update({OPT_REPLICATION_MASTER 		: 	'1',
 				                 OPT_MASTER_PASSWORD			:	password})
-			"""
-			with op.step(self._step_create_data_bundle):
-				# Create snapshot
-				snap = self._create_snapshot()
-				Storage.backup_config(snap.config(), self._snapshot_config_path)
-			"""
+
 			with op.step(self._step_collect_host_up_data):
 				# Update HostUp message 
-				msg_data.update(self._compat_storage_data(__redis__['volume']))
 
 				if msg_data:
 					message.db_type = BEHAVIOUR
@@ -659,7 +648,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 			with op.step(self._step_collect_host_up_data):
 				# Update HostUp message
-				message.redis = self._compat_storage_data(__redis__['volume'])
 				message.db_type = BEHAVIOUR
 
 
@@ -681,15 +669,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 								   tags=self.redis_tags)
 		restore = backup_obj.run()
 		return restore.snapshot
-
-
-	def _compat_storage_data(self, vol=None, snap=None):
-		ret = dict()
-		if vol:
-			ret['volume_config'] = vol.config()
-		if snap:
-			ret['snapshot_config'] = snap.config()
-		return ret
 
 
 class RedisCnfController(CnfController):

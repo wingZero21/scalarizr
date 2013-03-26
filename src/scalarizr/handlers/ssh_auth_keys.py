@@ -51,7 +51,7 @@ class SSHKeys(Handler):
 		variables = {
 			'RSAAuthentication' : 'yes',
 			'PubkeyAuthentication' : 'yes',
-			'AuthorizedKeysFile' :	'.ssh/authorized_keys'
+			'AuthorizedKeysFile' :	'%h/.ssh/authorized_keys'
 		}
 		regexps = {}
 		for key, value in variables.items():
