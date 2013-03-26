@@ -1,8 +1,10 @@
 from __future__ import with_statement
-from __future__ import with_statement
+
 import socket
-import os, re
+import os
+import re
 import logging
+import locale
 import threading
 import weakref
 import time
@@ -11,11 +13,11 @@ import signal
 import string
 import pkgutil
 import traceback
-import contextlib
+
 
 from scalarizr.bus import bus
 from scalarizr import exceptions
-import subprocess
+
 
 class UtilError(BaseException):
 	pass
@@ -246,11 +248,17 @@ def system2(*popenargs, **kwargs):
 		popenargs = list(popenargs)
 		popenargs[0] = tuple('%s' % arg for arg in popenargs[0])
 		
-	# Set en_US locale
+
 	if not 'env' in kwargs:
 		kwargs['env'] = os.environ
-	kwargs['env']['LANG'] = 'en_US'
-		
+	# Set en_US locale or C
+	if not kwargs['env'].get('LANG'):
+		default_locale = locale.getdefaultlocale()
+		if default_locale == ('en_US', 'UTF-8'):
+			kwargs['env']['LANG'] = 'en_US'
+		else:
+			kwargs['env']['LANG'] = 'C'
+
 	for k in ('logger', 'err2out', 'warn_stderr', 'raise_exc', 'raise_error', 'exc_class', 'error_text', 'silent'):
 		try:
 			del kwargs[k]
