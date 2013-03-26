@@ -970,8 +970,7 @@ class MysqlHandler(DBMSRHandler):
 		chcon = software.whereis('chcon')
 		if disttool.is_redhat_based() and chcon:
 			LOG.debug('Changing SELinux file security context for new mysql datadir')
-			system2((chcon[0], '-R', '-u', 'system_u', '-r',
-					'object_r', '-t', 'mysqld_db_t', 
+			system2((chcon[0], '-R', '-h', 'system_u:object_r:mysqld_db_t', 
 					os.path.dirname(__mysql__['storage_dir'])), raise_exc=False)
 	
 	def _fix_percona_debian_cnf(self):
