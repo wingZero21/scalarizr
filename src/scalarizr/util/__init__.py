@@ -276,7 +276,7 @@ def system2(*popenargs, **kwargs):
 
 
 
-def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, timeout=None, start_text=None, error_text=None):
+def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, timeout=None, start_text=None, error_text=None, raise_exc=True):
 	args = args or ()
 	kwargs = kwargs or {}
 	time_until = None
@@ -291,10 +291,14 @@ def wait_until(target, args=None, kwargs=None, sleep=5, logger=None, timeout=Non
 		if time_until and time.time() >= time_until:
 			msg = error_text + '. ' if error_text else ''
 			msg += 'Timeout: %d seconds reached' % (timeout, )
-			raise BaseException(msg)
+			if raise_exc:
+				raise BaseException(msg)
+			else:
+				return False
 		if logger:
 			logger.debug("Wait %.2f seconds before the next attempt", sleep)
 		time.sleep(sleep)
+	return True
 
 
 def xml_strip(el):

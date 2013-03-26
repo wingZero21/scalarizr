@@ -669,7 +669,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 		initdv2.ParametrizedInitScript.__init__(self, SERVICE_NAME, 
 				initd_script, pid_file, socks=[initdv2.SockParam(MYSQL_DEFAULT_PORT, timeout=3600)])
 
-	
+
 	def _start_stop_reload(self, action):
 		''' XXX: Temporary ugly hack (Ubuntu 1004 upstart problem - Job is already running)'''
 		try:
@@ -682,8 +682,13 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 			if 'Job is already running' not in str(e):
 				raise InitdError("Popen failed with error %s" % (e,))
 
-		if action == 'restart' and err and 'stop: Job has already been stopped: mysql' in err:
-			return True
+		if action == 'restart':
+			if err and 'stop: Job has already been stopped: mysql' in err:
+				return True
+			else:
+				LOG.debug('waiting for mysql process')
+				wait_until(lambda: MYSQLD_PATH in system2(('ps', '-G', DEFAULT_OWNER, '-o', 'command', '--no-headers'))[0]
+					, timeout=10, sleep=1)
 
 		if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
 			try:
