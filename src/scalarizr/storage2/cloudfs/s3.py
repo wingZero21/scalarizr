@@ -1,7 +1,6 @@
 from __future__ import with_statement
 __author__ = 'vladimir'
 
-import urlparse
 import logging
 import os
 import sys
@@ -18,8 +17,6 @@ LOG = logging.getLogger(__name__)
 
 
 class S3FileSystem(CloudFileSystem):
-	schema = 's3'
-	urlparse.uses_netloc.append(schema)  #?
 
 	acl = None
 

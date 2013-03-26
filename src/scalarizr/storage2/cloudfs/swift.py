@@ -1,6 +1,5 @@
 __author__ = 'vladimir'
 
-import urlparse
 import os
 import logging
 
@@ -17,10 +16,6 @@ LOG = logging.getLogger(__name__)
 
 
 class SwiftFileSystem(CloudFileSystem):
-
-	schema = "swift"
-	urlparse.uses_netloc.append(schema)
-
 
 	def _get_connection(self):
 		return __node__['openstack']['new_swift_connection']

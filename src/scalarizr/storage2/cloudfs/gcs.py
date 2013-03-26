@@ -1,7 +1,6 @@
 __author__ = 'vladimir'
 
 import logging
-import urlparse
 import os
 import sys
 import json
@@ -24,8 +23,6 @@ LOG = logging.getLogger(__name__)
 class GCSFileSystem(CloudFileSystem):
 	# TODO: add amazon-style 0% and 100% callbacks ?
 
-	schema = 'gcs'
-	urlparse.uses_netloc.append(schema)
 	chunk_size = 2*1024*1024
 	report_interval = 10  # percent; every <value> percent at most
 

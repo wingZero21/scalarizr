@@ -411,11 +411,11 @@ class LargeTransfer(bases.Task):
 		:param dst: DL: local dir path. UL: cloudfs url
 		:param transfer_id: unique string appended to cloudfs path. If None,
 							generated automatically
-		:param streamer: "gzip" or :class:`services.mysql2.Exec` instance.
-						 Else - no streaming. Ignored when uploading files or
-						 streams 
-		:param compressor: "gzip" or :class:`services.mysql2.Exec` instance.
-						   Else - no compression
+		:param streamer: "gzip" or :class:`.Exec<scalarizr.services.mysql2.Exec>`
+						 instance. Else - no streaming. Ignored when uploading
+						 files or streams 
+		:param compressor: "gzip" or :class:`.Exec<scalarizr.services.mysql2.Exec>`
+						   instance. Else - no compression
 		:param chunk_size: chunk size in megabytes
 		:param try_pigz: if compressor is "gzip", try pigz first 
 		:param manifest: manifest file basename
@@ -1096,7 +1096,15 @@ class Manifest(object):
 			map(lambda x: x.join(), threads)
 
 
-cloudfs_types = {}
+class _CloudfsTypes(dict):
+
+	def __setitem__(self, key, val):
+		val.schema = key
+		urlparse.uses_netloc.append(key)
+		return super(_CloudfsTypes, self).__setitem__(key, val)
+
+
+cloudfs_types = _CloudfsTypes()
 
 
 def cloudfs(fstype, **driver_kwds):

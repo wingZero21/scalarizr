@@ -24,8 +24,6 @@ class LocalFileSystem(CloudFileSystem):
 	dangerous since tests mostly run as root.
 	"""
 
-	schema = "file"
-
 	def _parse_url(self, url):
 		try:
 			schema, path = url.split("://")
