@@ -444,7 +444,7 @@ class EbsVolume(base.Volume, EbsMixin):
 		msg = 'EBS volume %s hangs in attaching state. ' \
 				'Timeout reached (%s seconds)' % (ebs.id, self._global_timeout)
 		util.wait_until(
-			lambda: ebs.update() and ebs.attachment_state() != 'attaching',
+			lambda: ebs.update() and ebs.attachment_state() not in ('attaching', 'detaching'),
 			logger=LOG, timeout=self._global_timeout,
 			error_text=msg
 		)
