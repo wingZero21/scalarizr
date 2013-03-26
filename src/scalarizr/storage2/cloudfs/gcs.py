@@ -31,7 +31,12 @@ class GCSFileSystem(CloudFileSystem):
 
 	def _parse_url(self, url):
 		bucket, key = super(GCSFileSystem, self)._parse_url(url)
-		return bucket.lower(), key
+		
+		bucket_lower = bucket.lower()
+		if bucket_lower != bucket:
+			LOG.debug("Using bucket %s instead of %s", bucket_lower, bucket)
+
+		return bucket_lower, key
 
 
 	def ls(self, remote_path):

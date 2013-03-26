@@ -34,7 +34,12 @@ class S3FileSystem(CloudFileSystem):
 		bucket, key = super(S3FileSystem, self)._parse_url(url)
 		# while S3 web interface allows having bucket names with uppercase,
 		# boto throws exceptions when trying to manipulate them
-		return bucket.lower(), key
+
+		bucket_lower = bucket.lower()
+		if bucket_lower != bucket:
+			LOG.debug("Using bucket %s instead of %s", bucket_lower, bucket)
+
+		return bucket_lower, key
 
 	def ls(self, remote_path):
 		bucket_name, key_name = self._parse_url(remote_path)
