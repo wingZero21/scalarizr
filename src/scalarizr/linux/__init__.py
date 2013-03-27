@@ -149,9 +149,15 @@ class __os(dict):
 				self['name'] = 'RedHat'
 		elif osmod.path.isfile('/etc/system-release'):
 			self['family'] = 'RedHat'
-			data = open('/etc/system-release', 'r').read()
+			data = open('/etc/system-release', 'r').read().strip()
 			if 'amazon' in data.lower():
 				self['name'] = 'Amazon'
+				code = data[-7:]
+				bases = {
+				'2012.09': '6.3'
+				}
+				self['release'] = bases.get(code, '6.3')
+				self['codename'] = code
 		elif osmod.path.isfile('/etc/SuSE-release'):
 			self['family'] = 'Suse'
 			data = open('/etc/SuSE-release', 'r').read()
@@ -166,8 +172,10 @@ class __os(dict):
 		name, release, codename = platform.dist()
 		if not 'name' in self:
 			self['name'] = name
-		self['release'] = Version(release)
-		self['codename'] = codename
+		if not 'release' in self:
+			self['release'] = Version(release)
+		if not 'codename' in self:
+			self['codename'] = codename
 
 		if not 'name' in self:
 			self['name'] = 'Unknown %s' % self['kernel']
