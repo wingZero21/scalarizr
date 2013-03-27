@@ -4,7 +4,7 @@ $AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY for s3
 $RS_USERNAME, $RS_API_KEY for swift (rackspace);
 $ENTER_IT_USERNAME, $ENTER_IT_API_KEY for swift enter.it
 
-default storage to test is s3; override with $LT_TEST_STORAGE
+default storage to test is local; override with $LT_TEST_STORAGE
 """
 __author__ = 'vladimir'
 
@@ -34,7 +34,7 @@ from scalarizr.platform.gce import STORAGE_FULL_SCOPE, GoogleServiceManager
 this_feature_only = world.ThisFeatureOnly("Large transfer")
 
 
-STORAGE = "s3"
+STORAGE = "local"
 if "LT_TEST_STORAGE" in os.environ:
 	STORAGE = os.environ["LT_TEST_STORAGE"]
 
@@ -99,29 +99,6 @@ def teardown_feature(feat):
 		setattr(*args)
 
 
-class ExistsMixin(object):
-	def exists(self, url):
-		parent = os.path.dirname(url.rstrip('/'))
-		ls = self.ls(parent)
-		return url in ls
-
-
-class S3(s3.S3FileSystem, ExistsMixin):
-	pass
-
-
-class GCS(gcs.GCSFileSystem, ExistsMixin):
-	pass
-
-
-class Swift(swift.SwiftFileSystem, ExistsMixin):
-	pass
-
-
-class Local(local.LocalFileSystem, ExistsMixin):
-	pass
-
-
 #
 # Logging
 #
@@ -138,23 +115,23 @@ LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
 STORAGES = {
 	"s3": {
 		"url": "s3://scalr.test_bucket/vova_test",
-		"driver": S3,
+		"driver": s3.S3FileSystem,
 	},
 	"gcs": {
 		"url": "gcs://vova-test",
-		"driver": GCS,
+		"driver": gcs.GCSFileSystem,
 	},
 	"swift": {
 		"url": "swift://vova-test",
-		"driver": Swift,
+		"driver": swift.SwiftFileSystem,
 	},
 	"swift-enter-it": {
 		"url": "swift://vova-test",
-		"driver": Swift,
+		"driver": swift.SwiftFileSystem,
 	},
 	"local": {
 		"url": "file:///tmp/cloudfs",
-		"driver": Local,
+		"driver": local.LocalFileSystem,
 	}
 }
 
@@ -196,6 +173,7 @@ def release_local_data():
 
 
 @before.each_scenario
+@this_feature_only
 def setup_scenario(scenario):
 	world.basedir = tempfile.mkdtemp()
 	world.sources = []
@@ -212,6 +190,7 @@ def setup_scenario(scenario):
 
 
 @after.each_scenario
+@this_feature_only
 def teardown_scenario(scenario):
 	shutil.rmtree(world.basedir)
 
@@ -294,8 +273,8 @@ def i_expect_manifest_as_a_result(step):
 @step("all chunks are uploaded")
 def all_chunks_are_uploaded(step):
 	for chunk in world.result_chunks:
-		assert world.driver.exists(os.path.join(os.path.dirname(world.manifest_url),
-			chunk[0]))
+		chunk_url = os.path.join(os.path.dirname(world.manifest_url), chunk[0])
+		assert world.driver.exists(chunk_url), chunk_url
 
 
 @step(r"I have a dir (\w+/?) with (\d+) megabytes file (\w+), with (\d+) megabytes file (\w+)")
