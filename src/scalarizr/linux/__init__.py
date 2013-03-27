@@ -156,7 +156,7 @@ class __os(dict):
 				bases = {
 				'2012.09': '6.3'
 				}
-				self['release'] = bases.get(code, '6.3')
+				self['release'] = Version(bases.get(code, '6.3'))
 				self['codename'] = code
 		elif osmod.path.isfile('/etc/SuSE-release'):
 			self['family'] = 'Suse'

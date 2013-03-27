@@ -76,7 +76,7 @@ def is_rhel(): return _is_rhel
 
 def uname(): return _uname
 def linux_dist(): return _linux_dist
-def version_info(): return tuple(map(int, linux.os['version'].split('.')))
+def version_info(): return tuple(map(int, str(linux.os['release']).split('.'))) #LooseVersion->tuple
 
 redhat = is_redhat_based() and version_info() or (0, 0)
 ubuntu = is_ubuntu() and version_info() or (0, 0)
