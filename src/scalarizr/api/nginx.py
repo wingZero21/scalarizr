@@ -11,94 +11,14 @@ CNF_SECTION = BuiltinBehaviours.WWW
 APP_INC_PATH = 'app_include_path'
 
 
-class DestinationType(object):
-    """DestinationType is enum-like class for destinations types"""
-    ROLE = 1
-    SERVER = 2
-        
+class NginxAPI(object):
 
-class Destination(object):
-    """Destination objects are used to form backends objects"""
-    def __init__(self,
-                 id_=None,
-                 type_=None,
-                 location=None,
-                 backup=False,
-                 port=None,
-                 max_fails=None,
-                 fail_timeout=None
-                 down=False):
-        self.id_ = id_  # role id or server ip
-        self.type_ = type_
-        self.location = location
-        self.backup = backup
-        self.port = port
-        self.max_fails = max_fails
-        self.fail_timeout = fail_timeout
-        self.down = down
-
-    @classmethod
-    def from_dict(cls, dict_):
-        dest = Destination()
-        if 'id' in dict_:
-            dest.id_ = dict_['id']
-            dest.type_ = DestinationType.ROLE
-        elif 'host' in dict_:
-            dest.id_ = dict_['host']
-            dest.type_ = DestinationType.SERVER
-        else:
-            raise BaseException('Unknown type of destination')
-
-        for k, v in dict_:
-            setattr(dest, k, v)
-
-        return dest
-
-
-class Backend(object):
-
-    def __init__(self, name=None, destinations=None):
-        self.name = name
-        self.destinations = destinations
-
-    def get_role_servers(self, role_id):  # Maybe move this method to other class/place
+    def _get_role_servers(self, role_id):  # Maybe move this method to other class/place
         """ Method is used to get role servers from scalr"""
         # TODO: finish this method
         return []
 
-    def get_backend_conf(self):
-        """Returns config for one upstream server"""
-        config = metaconf.Configuration('nginx')
-        config.add('upstream', self.name or 'backend')
-        config.add('upstream/iphash', '')  # Is it really needed?
-
-        for dest in self.destinations:
-            dest_servers = []
-            if dest.type_ == DestinationType.ROLE:
-                dest_servers = self.get_role_servers(dest.id_)
-            elif dest.type_ == DestinationType.SERVER:
-                dest_servers = [dest.id_]
-
-            for server in dest_servers:
-                if dest.port:
-                    server = '%s:%s' % (server, dest.port)
-                config.add('upstream/server', server)
-
-                if dest.backup:
-                    config.add('upstream/server', 'backup')
-                if dest.max_fails:
-                    config.add('upstream/server', 'max_fails=%i' % dest.max_fails)
-                if dest.fail_timeout:
-                    config.add('upstream/server', 'fail_timeout=%is' % dest.fail_timeout)
-                if dest.down:
-                    config.add('upstream/server', 'down')
-
-        return config
-
-
-class NginxAPI(object):
-
-    def parse_roles(self, roles):
+    def _parse_roles(self, roles):
         destinations = []
         for role in roles:
             if type(role) is int:
@@ -106,7 +26,8 @@ class NginxAPI(object):
             elif type(role) is str:
                 role = {'id': int(role)}
             # assuming that role is dict by default
-            destinations.append(Destination.from_dict(role))
+            role['servers'] = self.get_role_servers(role['id'])
+            destinations.append(role)
 
         return destinations
 
@@ -120,7 +41,30 @@ class NginxAPI(object):
         # TODO:
         return ['tst']
 
-    def extend_app_servers_config(self, destinations):
+    def _make_backend_conf(self, name, destinations):
+        """Returns config for one upstream server"""
+        config = metaconf.Configuration('nginx')
+        config.add('upstream', self.name or 'backend')
+        config.add('upstream/iphash', '')  # Is it really needed?
+
+        for dest in self.destinations:
+            for server in dest['servers']:
+                if dest.get('port'):
+                    server = '%s:%s' % (server, dest['port'])
+                config.add('upstream/server', server)
+
+                if dest.get('backup'):
+                    config.add('upstream/server', 'backup')
+                if dest.get('max_fails'):
+                    config.add('upstream/server', 'max_fails=%i' % dest['max_fails'])
+                if dest.get('fail_timeout'):
+                    config.add('upstream/server', 'fail_timeout=%is' % dest['fail_timeout'])
+                if dest.get('down'):
+                    config.add('upstream/server', 'down')
+
+        return config
+
+    def extend_app_servers_config(self, addr, destinations):
         ini = bus.cnf.rawini
         config_dir = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH))
         config_path = os.path.join(config_dir, 'app-servers.include')
@@ -128,20 +72,25 @@ class NginxAPI(object):
 
         config.read(config_path)
         sorted_destinations = sorted(destinations,
-                                     key=lambda x: x.location,
+                                     key=lambda x: x.get('location'),
                                      reverse=True)
 
-        # Making Backend instances from destinations with similar location
-        backends = [Backend('name', [sorted_destinations[0]])]  # TODO: set proper name
-        for i, dest in enumerate(sorted_destinations[1:]):
-            if backends[-1].destinations[0].location == dest.location:
-                backends[-1].destinations.append(dest)
+        # Making backend dicts from destinations with similar location
+        grouped_destinations = [sorted_destinations[0:1]]
+        if not grouped_destinations[0][0].get('location'):
+            grouped_destinations[0][0]['location'] = '/'
+        for dest in sorted_destinations[1:]:
+            if not dest.get('location'):
+                dest['location'] = '/'
+            if grouped_destinations[-1][0]['location'] == dest['location']:
+                grouped_destinations[-1].append(dest)
             else:
-                backends.append(Backend('name', [dest]))
+                grouped_destinations.append([dest])
 
-        for backend in backends:
+        for backend_destinations in grouped_destinations:
             # TODO: delete backends from initial config, that have similar name as new
-            config.extend(backend.get_backend_conf())
+            backend = self._make_backend_conf('%s_%s' % (addr, grouped_destinations[0]['location']), backend_destinations)
+            config.extend(backend)
 
 
     def extend_https_config(self, addr, destinations):
@@ -187,8 +136,8 @@ class NginxAPI(object):
         backend_max_fails=None,
         backend_fail_timeout=None):
         
-        destinations = self.parse_roles(roles)
-        destinations.extend(self.parse_servers(servers))
+        destinations = self._parse_roles(roles)
+        destinations.extend(self._parse_servers(servers))
 
         self.extend_app_servers_config(destinations)
         self.extend_https_config(addr, destinations)  # TODO: add other params
