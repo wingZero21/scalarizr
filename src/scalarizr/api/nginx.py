@@ -78,7 +78,22 @@ class Backend(object):
                 dest_servers = self.get_role_servers(dest.id_)
             elif dest.type_ == DestinationType.SERVER:
                 dest_servers = [dest.id_]
-            # TODO: finish method
+
+            for server in dest_servers:
+                if dest.port:
+                    server = '%s:%s' % (server, dest.port)
+                config.add('upstream/server', server)
+
+                if dest.backup:
+                    config.add('upstream/server', 'backup')
+                if dest.max_fails:
+                    config.add('upstream/server', 'max_fails=%i' % dest.max_fails)
+                if dest.fail_timeout:
+                    config.add('upstream/server', 'fail_timeout=%is' % dest.fail_timeout)
+                if dest.down:
+                    config.add('upstream/server', 'down')
+
+        return config
 
 
 class NginxAPI(object):
@@ -115,8 +130,18 @@ class NginxAPI(object):
         sorted_destinations = sorted(destinations,
                                      key=lambda x: x.location,
                                      reverse=True)
-        for dest in sorted_destinations:
-            dest ################
+
+        # Making Backend instances from destinations with similar location
+        backends = [Backend('name', [sorted_destinations[0]])]  # TODO: set proper name
+        for i, dest in enumerate(sorted_destinations[1:]):
+            if backends[-1].destinations[0].location == dest.location:
+                backends[-1].destinations.append(dest)
+            else:
+                backends.append(Backend('name', [dest]))
+
+        for backend in backends:
+            # TODO: delete backends from initial config, that have similar name as new
+            config.extend(backend.get_backend_conf())
 
 
     def extend_https_config(self, addr, destinations):
