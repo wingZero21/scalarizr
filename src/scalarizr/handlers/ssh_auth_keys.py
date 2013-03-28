@@ -12,6 +12,7 @@ import os
 import logging
 from scalarizr.util import disttool
 from scalarizr.util.initdv2 import ParametrizedInitScript
+from scalarizr import linux
 
 class UpdateSshAuthorizedKeysError(BaseException):
 	pass
@@ -51,8 +52,12 @@ class SSHKeys(Handler):
 		variables = {
 			'RSAAuthentication' : 'yes',
 			'PubkeyAuthentication' : 'yes',
-			'AuthorizedKeysFile' :	'%h/.ssh/authorized_keys'
+			'AuthorizedKeysFile' :	'%h/.ssh/authorized_keys',
 		}
+
+		if 'Amazon' == linux.os['name']:
+			variables.update({'PermitRootLogin'   :   'without-password'})
+
 		regexps = {}
 		for key, value in variables.items():
 			regexps[key] = re.compile(r'^%s\s+%s' % (key, value))
