@@ -256,6 +256,9 @@ class RebundleStratery:
 			if entry.fstype in NETWORK_FILESYSTEMS:
 				LOG.debug('Remove %s from fstab', entry.device)
 				del fstab[entry.device]
+
+		# Disable fsck on root filesystem
+		fstab['/'].fsck_order = 0
 		
 		# Ubuntu 10.04 mountall workaround
 		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
