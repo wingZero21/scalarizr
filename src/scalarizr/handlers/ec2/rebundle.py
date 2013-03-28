@@ -258,7 +258,10 @@ class RebundleStratery:
 				del fstab[entry.device]
 
 		# Disable fsck on root filesystem
-		fstab['/'].fsck_order = 0
+		root_entry = fstab['/']
+		del fstab['/']
+		fstab.add(root_entry.device, root_entry.mpoint, root_entry.fstype,
+				  root_entry.options, root_entry.dump, 0)
 		
 		# Ubuntu 10.04 mountall workaround
 		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
