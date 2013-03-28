@@ -13,7 +13,7 @@ APP_INC_PATH = 'app_include_path'
 
 class NginxAPI(object):
 
-    def _get_role_servers(self, role_id):  # Maybe move this method to other class/place
+    def _get_role_servers(self, role_id):
         """ Method is used to get role servers from scalr"""
         # TODO: finish this method
         return []
@@ -26,20 +26,21 @@ class NginxAPI(object):
             elif type(role) is str:
                 role = {'id': int(role)}
             # assuming that role is dict by default
-            role['servers'] = self.get_role_servers(role['id'])
+            role['servers'] = self._get_role_servers(role['id'])
             destinations.append(role)
 
         return destinations
 
-    def parse_servers(self, servers):
+    def _parse_servers(self, servers):
         destinations = []
         for server in servers:
-            pass  # TODO:
-        return destinations
+            if type(server) is str:
+                server = {'servers': [server]}
+            # assuming that server is dict by default
+            server['servers'] = [server['host']]
+            destinations.append(server)
 
-    def get_role_servers(self, role_id):
-        # TODO:
-        return ['tst']
+        return destinations
 
     def _make_backend_conf(self, name, destinations):
         """Returns config for one upstream server"""
@@ -64,21 +65,20 @@ class NginxAPI(object):
 
         return config
 
-    def extend_app_servers_config(self, addr, destinations):
-        ini = bus.cnf.rawini
-        config_dir = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH))
-        config_path = os.path.join(config_dir, 'app-servers.include')
-        config = metaconf.Configuration('nginx')
+    def add_backend(conf, backend_name, **kwds):
+        pass
 
-        config.read(config_path)
+    def _group_destinations(self, destinations):
         sorted_destinations = sorted(destinations,
                                      key=lambda x: x.get('location'),
                                      reverse=True)
 
         # Making backend dicts from destinations with similar location
-        grouped_destinations = [sorted_destinations[0:1]]
-        if not grouped_destinations[0][0].get('location'):
-            grouped_destinations[0][0]['location'] = '/'
+        first_dest = sorted_destinations[0]
+        if not first_dest.get('location'):
+            first_dest['location'] = '/'
+        grouped_destinations = [[first_dest]]
+        # Grouping destinations with similar location
         for dest in sorted_destinations[1:]:
             if not dest.get('location'):
                 dest['location'] = '/'
@@ -87,13 +87,34 @@ class NginxAPI(object):
             else:
                 grouped_destinations.append([dest])
 
+        return grouped_destinations
+
+    def extend_app_servers_config(self, addr, grouped_destinations):
+        ini = bus.cnf.rawini
+        config_dir = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH))
+        config_path = os.path.join(config_dir, 'app-servers.include')
+        config = metaconf.Configuration('nginx')
+
+        config.read(config_path)
+
+        # using tuple instead of dict because we need to keep order saved
+        location_and_backend_name = ()
+        # making backend configs for each group
         for backend_destinations in grouped_destinations:
             # TODO: delete backends from initial config, that have similar name as new
-            backend = self._make_backend_conf('%s_%s' % (addr, grouped_destinations[0]['location']), backend_destinations)
+            location = grouped_destinations[0]['location']
+            name = '%s_%s' % (addr, location)  # TODO: validate name
+
+            backend = self._make_backend_conf(name, backend_destinations)
             config.extend(backend)
 
+            location_and_backend_name = (location, name)
 
-    def extend_https_config(self, addr, destinations):
+        config.write(config_path)
+
+        return location_and_backend_name
+
+    def extend_https_config(self, addr, location_and_backend_name):
         ini = bus.cnf.rawini
         config_dir = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH))
         config_path = os.path.join(config_dir, 'https.include')
@@ -102,17 +123,18 @@ class NginxAPI(object):
         config.read(config_path)
         server_xpath = 'server[%i]' % len(config.get_list('server'))
         config.add('server', '')
-        config.add('%s/listen' % server_xpath, '80')  # TODO: we can have a custom port to listen
+        config.add('%s/listen' % server_xpath, '80')
+        config.add('%s/listen' % server_xpath, '443')  # TODO: we can have a custom port to listen
         config.add('%s/server_name' % server_xpath, addr)
         # TODO: add some typical server info MORE
 
         # TODO: for each destination create location block
-        for i, dest in enumerate(destinations):
+        for i, (location, backend_name) in location_and_backend_name:
             location_xpath = '%s/location' % server_xpath
-            config.add(location_xpath, dest.location)
+            config.add(location_xpath, location)
 
             location_xpath = '%s[%i]' % (location_xpath, i + 1)
-            config.add('%s/proxy_pass' % location_xpath, 'http://%s' % dest.id_)
+            config.add('%s/proxy_pass' % location_xpath, 'http://%s' % backend_name)  # TODO: take backend from somewhere instead of dest.id_
             config.add('%s/proxy_set_header' % location_xpath, 'Host $host')
             config.add('%s/proxy_set_header' % location_xpath, 'X-Real-IP $remote_addr')
             config.add('%s/proxy_set_header' % location_xpath, 'Host $host')
@@ -138,6 +160,6 @@ class NginxAPI(object):
         
         destinations = self._parse_roles(roles)
         destinations.extend(self._parse_servers(servers))
-
-        self.extend_app_servers_config(destinations)
-        self.extend_https_config(addr, destinations)  # TODO: add other params
+        grouped_destinations = self._group_destinations(destinations)
+        location_and_backend_name = self.extend_app_servers_config(grouped_destinations)
+        self.extend_https_config(addr, location_and_backend_name)  # TODO: add other params
