@@ -30,6 +30,9 @@ class _MMSAgent(object):
 
     @staticmethod
     def install():
+        """"
+        Download and install MMS agent
+        """
         if not os.path.exists('%s/mms-agent' % _MMSAgent.install_dir):
             _MMSAgent._download()
             out, err, returncode = util.system2(
@@ -37,7 +40,10 @@ class _MMSAgent(object):
 
 
     @staticmethod
-    def configure(api_key, secret_key):
+    def configure(mms_key, secret_key):
+        """
+        Set user, password, mms_key and secret_key
+        """
         user = 'scalr'
         password = __node__['mongodb']['password']
         
@@ -46,7 +52,7 @@ class _MMSAgent(object):
 
         for line in content.split('\n'):
             if line.startswith('mms_key ='):
-                content = content.replace(line, 'mms_key = "%s"' % api_key)
+                content = content.replace(line, 'mms_key = "%s"' % mms_key)
             if line.startswith('secret_key ='):
                 content = content.replace(line, 'secret_key = "%s"' % secret_key)
             if line.startswith('globalAuthUsername'):
@@ -60,6 +66,9 @@ class _MMSAgent(object):
 
     @staticmethod
     def start():
+        """
+        Start MMS
+        """
         if not _MMSAgent.ps:
             _MMSAgent.ps = subps.Popen(['python', '%s/mms-agent/agent.py' % _MMSAgent.install_dir],
                     close_fds=True, preexec_fn=os.setsid, stdout=None, stderr=None)
@@ -67,6 +76,9 @@ class _MMSAgent(object):
 
     @staticmethod
     def stop():
+        """
+        Stop MMS
+        """
         if _MMSAgent.ps:
             util.kill_childs(_MMSAgent.ps.pid)
             _MMSAgent.ps.terminate()
@@ -87,13 +99,13 @@ class MongoDBAPI:
 
 
     @rpc.service_method
-    def enable_mms(self, api_key, secret_key):
+    def enable_mms(self, mms_key, secret_key):
         status = 'OK'
         error = ''
 
         try:
             _MMSAgent.install()
-            _MMSAgent.configure(api_key, secret_key)
+            _MMSAgent.configure(mms_key, secret_key)
             _MMSAgent.start()
         except Exception, e:
             status = 'Fail'

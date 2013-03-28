@@ -392,14 +392,9 @@ class MongoDBHandler(ServiceCtlHandler):
                     with op.step(self._step_start_cfg_server):
                         self.mongodb.start_config_server()
 
-
                         # Enable MMS Agent
-                        #if 'mms' in __mongodb__:
-                        #    self.api.enable_mms(__mongodb__['mms']['api_key'], __mongodb__['mms']['secret_key'])
-                        api_key = 'd77fbef27ca2878f85a71e9861e05a3b'
-                        secret_key = 'b130e24ced4bfc7d71701a5f843ab213'
-                        self.api.enable_mms(api_key, secret_key)
-
+                        if 'mms' in __mongodb__:
+                            self.api.enable_mms(__mongodb__['mms']['mms_key'], __mongodb__['mms']['secret_key'])
 
                     hostup_msg.mongodb['config_server'] = 1
                 else:
@@ -642,26 +637,20 @@ class MongoDBHandler(ServiceCtlHandler):
             Hosts.set(message.local_ip, hostname)
 
 
-    def _on_host_up_mms_configure(self, new_host_shard_id, new_host_rs_id):
+    def _on_new_host_mms_configure(self, new_host_shard_id, new_host_rs_id):
         """
-        Configure MMS on HostUp
+        Configure MMS on new host up
         """
         if self.shard_index == 0 and self.rs_id == 0:
             up_node_host = HOSTNAME_TPL % (new_host_shard_id, new_host_rs_id)
-            self._logger.debug('Add hostname to MMS: %s:%s' % (up_node_host, mongo_svc.REPLICA_DEFAULT_PORT))
             self._add_host_to_mms(up_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
             if new_host_rs_id < 2:
-                self._logger.debug('Add hostname to MMS: %s:%s' % (up_node_host, mongo_svc.ROUTER_DEFAULT_PORT))
                 self._add_host_to_mms(up_node_host, mongo_svc.ROUTER_DEFAULT_PORT)
             if new_host_shard_id == 0 and new_host_rs_id == 0:
-                self._logger.debug('Add hostname to MMS: %s:%s' % (up_node_host, mongo_svc.CONFIG_SERVER_DEFAULT_PORT))
                 self._add_host_to_mms(up_node_host, mongo_svc.CONFIG_SERVER_DEFAULT_PORT)
             if len(self._get_shard_hosts(new_host_shard_id)) % 2 == 0:
-            #if len(self.mongodb.replicas) % 2 == 0:
-                self._logger.debug('Add hostname to MMS %s:%s' % (up_node_host, self.mongodb.arbiter.port))
                 self._add_host_to_mms(up_node_host, self.mongodb.arbiter.port)
             else:
-                self._logger.debug('Delete hostname from MMS %s:%s' % (up_node_host, self.mongodb.arbiter.port))
                 self._delete_host_from_mms(up_node_host, self.mongodb.arbiter.port)
 
 
@@ -703,8 +692,8 @@ class MongoDBHandler(ServiceCtlHandler):
                 if len(self.mongodb.replicas) % 2 != 0:
                     self.mongodb.stop_arbiter()
 
-        #if 'mms' in __mongodb__:
-        self._on_host_up_mms_configure(new_host_shard_idx, new_host_rs_id)
+        if 'mms' in __mongodb__:
+            self._on_new_host_mms_configure(new_host_shard_idx, new_host_rs_id)
 
 
     def update_shard(self):
@@ -846,35 +835,29 @@ class MongoDBHandler(ServiceCtlHandler):
         self.mongodb.mongod.stop('Rebooting instance')
 
                 
-    def _on_before_host_terminate_mms_configure(self, down_host_shard_id, down_host_rs_id):
+    def _on_host_terminate_mms_configure(self, down_host_shard_id, down_host_rs_id):
         """
-        Configure MMS before host terminate
+        Configure MMS on host terminate
         """
         if self.shard_index == 0 and self.rs_id == 0:
             down_node_host = HOSTNAME_TPL % (down_host_shard_id, down_host_rs_id)
-            self._logger.debug('Delete hostname from MMS %s:%s' % (down_node_host, mongo_svc.REPLICA_DEFAULT_PORT))
             self._delete_host_from_mms(down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
             if down_host_rs_id < 2:
-                self._logger.debug('Delete hostname from MMS %s:%s' % (down_node_host, mongo_svc.ROUTER_DEFAULT_PORT))
                 self._delete_host_from_mms(down_node_host, mongo_svc.ROUTER_DEFAULT_PORT)
             if down_host_shard_id == 0 and down_host_rs_id == 0:
-                self._logger.debug('Delete hostname from MMS %s:%s' % (down_node_host, self.mongodb.arbiter.port))
                 self._delete_host_from_mms(down_node_host, self.mongodb.arbiter.port)
-            #if len(self._get_shard_hosts(down_host_shard_id)) % 2 == 0:
             if STATE[CLUSTER_STATE_KEY] != MongoDBClusterStates.TERMINATING\
                     and len(self._get_shard_hosts(down_host_shard_id)) % 2 == 0:
-                self._logger.debug('Add hostname to MMS %s:%s' % (down_node_host, self.mongodb.arbiter.port))
                 self._add_host_to_mms(down_node_host, self.mongodb.arbiter.port)
             else:
-                self._logger.debug('Delete hostname from MMS %s:%s' % (down_node_host, self.mongodb.arbiter.port))
                 self._delete_host_from_mms(down_node_host, self.mongodb.arbiter.port)
 
             
     def on_BeforeHostTerminate(self, message):
-        #if 'mms' in __mongodb__:
+        if 'mms' in __mongodb__:
         down_host_shard_id = int(message.mongodb['shard_index'])
         down_host_rs_id = int(message.mongodb['replica_set_index'])
-        self._on_before_host_terminate_mms_configure(down_host_shard_id, down_host_rs_id)
+            self._on_host_terminate_mms_configure(down_host_shard_id, down_host_rs_id)
 
         if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
             return
@@ -1373,13 +1356,9 @@ class MongoDBHandler(ServiceCtlHandler):
             self.send_result_error_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT, 'Cluster terminate failed')
     
         # Delete mongodb-0-0 from MMS on terminate cluster
-        #if 'mms' in __mongodb__:
-        if self.shard_index == 0 and self.rs_id == 0:
-            self._logger.debug('Delete hostname from MMS %s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT))
+        if 'mms' in __mongodb__ and self.shard_index == 0 and self.rs_id == 0:
             self._delete_host_from_mms(self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
-            self._logger.debug('Delete hostname from MMS %s:%s' % (self.hostname, mongo_svc.ROUTER_DEFAULT_PORT))
             self._delete_host_from_mms(self.hostname, mongo_svc.ROUTER_DEFAULT_PORT)
-            self._logger.debug('Delete hostname from MMS %s:%s' % (self.hostname, mongo_svc.CONFIG_SERVER_DEFAULT_PORT))
             self._delete_host_from_mms(self.hostname, mongo_svc.CONFIG_SERVER_DEFAULT_PORT)
         
 
@@ -1529,15 +1508,8 @@ class MongoDBHandler(ServiceCtlHandler):
         Function to add host to MMS
         MMS api call https://mms.10gen.com/host/v1/addHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
         """
-        #requests = ['https://mms.10gen.com/host/v1/addHost/%s?%s'\
-        #        % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
-        #        for port in ports]
-        '''test'''
-        api_key = 'd77fbef27ca2878f85a71e9861e05a3b'
         req = 'https://mms.10gen.com/host/v1/addHost/%s?%s'\
-                % (api_key, urllib.urlencode({'hostname':host, 'port':port}))
-        '''/test'''
-
+            % (__mongodb__['mms']['mms_key'], urllib.urlencode({'hostname':host, 'port':port}))
         urllib2.urlopen(req)
 
 
@@ -1546,15 +1518,8 @@ class MongoDBHandler(ServiceCtlHandler):
         Function to delete host from MMS
         MMS api call https://mms.10gen.com/host/v1/deleteHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
         """
-        #requests = ['https://mms.10gen.com/host/v1/deleteHost/%s?%s'\
-        #        % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
-        #        for port in ports]
-        '''test'''
-        api_key = 'd77fbef27ca2878f85a71e9861e05a3b'
         req = 'https://mms.10gen.com/host/v1/deleteHost/%s?%s'\
-                % (api_key, urllib.urlencode({'hostname':host, 'port':port}))
-        '''/test'''
-
+            % (__mongodb__['mms']['mms_key'], urllib.urlencode({'hostname':host, 'port':port}))
         urllib2.urlopen(req)
         
             
