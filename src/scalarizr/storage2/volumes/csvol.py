@@ -12,7 +12,7 @@ import string
 import threading
 import glob
 
-from scalarizr import node
+from scalarizr import node, linux
 from scalarizr.util import wait_until
 from scalarizr.util import system2
 from scalarizr import storage2
@@ -23,14 +23,22 @@ __cloudstack__ = node.__node__['cloudstack']
 LOG = logging.getLogger(__name__)
 
 
+if linux.os['family'] == 'RedHat' and linux.os['release'] >= (6, 0) \
+    or linux.os['name'] == 'Ubuntu' and linux.os['release'] >= (11, 4):
+    _device_prefix = '/dev/xvd'
+else:
+    _device_prefix = '/dev/sd'
+
 def get_system_devname(letter):
-    return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda')
-                           else 's', letter)
+    return _device_prefix + letter
 
 
 def deviceid_to_devname(deviceid):
-    return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda')
-                           else 's', string.ascii_letters[deviceid])
+    for i in range(deviceid + 1):
+        device = _device_prefix + string.ascii_letters[i]
+        if not glob.glob(device + '*'):
+            return device
+    raise Exception('Cant find device for deviceid: %s' % deviceid)
 
 
 def devname_to_deviceid(devname):
@@ -194,8 +202,8 @@ class CSVolume(base.Volume):
                             disk_offering_id=self.disk_offering_id,
                             snap_id=snapshot_id)
                         self.id = self._native_vol.id
-                        self._attach(__cloudstack__['instance_id'],
-                                     devname_to_deviceid(devname))
+                        devname = self._attach(__cloudstack__['instance_id'],
+                                     devname_to_deviceid(devname))[1]
                         self._native_vol = self._conn.listVolumes(id=self.id)[0]
             except:
                 exc_type, exc_value, exc_trace = sys.exc_info()
