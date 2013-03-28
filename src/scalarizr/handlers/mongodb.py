@@ -394,7 +394,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
                         # Enable MMS Agent
                         if 'mms' in __mongodb__:
-                            self.api.enable_mms(__mongodb__['mms']['mms_key'], __mongodb__['mms']['secret_key'])
+                            self.api.enable_mms(__mongodb__['mms']['api_key'], __mongodb__['mms']['secret_key'])
 
                     hostup_msg.mongodb['config_server'] = 1
                 else:
@@ -1509,7 +1509,7 @@ class MongoDBHandler(ServiceCtlHandler):
         MMS api call https://mms.10gen.com/host/v1/addHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
         """
         req = 'https://mms.10gen.com/host/v1/addHost/%s?%s'\
-            % (__mongodb__['mms']['mms_key'], urllib.urlencode({'hostname':host, 'port':port}))
+            % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
         urllib2.urlopen(req)
 
 
@@ -1519,7 +1519,7 @@ class MongoDBHandler(ServiceCtlHandler):
         MMS api call https://mms.10gen.com/host/v1/deleteHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
         """
         req = 'https://mms.10gen.com/host/v1/deleteHost/%s?%s'\
-            % (__mongodb__['mms']['mms_key'], urllib.urlencode({'hostname':host, 'port':port}))
+            % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
         urllib2.urlopen(req)
         
             

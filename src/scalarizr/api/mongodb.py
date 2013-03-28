@@ -21,14 +21,12 @@ class _MMSAgent(object):
     install_dir = '/opt'
     ps = None
 
-    @staticmethod
     def _download():
         if not os.path.isfile('/tmp/10gen-mms-agent.tar.gz'):
             out, err, returncode = util.system2(
                     ['wget', '-O', '/tmp/10gen-mms-agent.tar.gz', _MMSAgent.url])
 
 
-    @staticmethod
     def install():
         """"
         Download and install MMS agent
@@ -39,10 +37,9 @@ class _MMSAgent(object):
                     ['tar', '-xf', '/tmp/10gen-mms-agent.tar.gz', '-C', _MMSAgent.install_dir])
 
 
-    @staticmethod
-    def configure(mms_key, secret_key):
+    def configure(api_key, secret_key):
         """
-        Set user, password, mms_key and secret_key
+        Set user, password, api_key and secret_key
         """
         user = 'scalr'
         password = __node__['mongodb']['password']
@@ -52,7 +49,7 @@ class _MMSAgent(object):
 
         for line in content.split('\n'):
             if line.startswith('mms_key ='):
-                content = content.replace(line, 'mms_key = "%s"' % mms_key)
+                content = content.replace(line, 'mms_key = "%s"' % api_key)
             if line.startswith('secret_key ='):
                 content = content.replace(line, 'secret_key = "%s"' % secret_key)
             if line.startswith('globalAuthUsername'):
@@ -64,7 +61,6 @@ class _MMSAgent(object):
             f.write(content)
 
 
-    @staticmethod
     def start():
         """
         Start MMS
@@ -74,7 +70,6 @@ class _MMSAgent(object):
                     close_fds=True, preexec_fn=os.setsid, stdout=None, stderr=None)
 
 
-    @staticmethod
     def stop():
         """
         Stop MMS
@@ -99,14 +94,15 @@ class MongoDBAPI:
 
 
     @rpc.service_method
-    def enable_mms(self, mms_key, secret_key):
+    def enable_mms(self, api_key, secret_key):
         status = 'OK'
         error = ''
 
+        mms_agent = _MMSAgent()
         try:
-            _MMSAgent.install()
-            _MMSAgent.configure(mms_key, secret_key)
-            _MMSAgent.start()
+            mms_agent.install()
+            mms_agent.configure(api_key, secret_key)
+            mms_agent.start()
         except Exception, e:
             status = 'Fail'
             error = str(e)
@@ -119,8 +115,9 @@ class MongoDBAPI:
         status = 'OK'
         error = ''
 
+        mms_agent = _MMSAgent()
         try:
-            _MMSAgent.stop()
+            mms_agent.stop()
         except Exception, e:
             status = 'Fail'
             error = str(e)
