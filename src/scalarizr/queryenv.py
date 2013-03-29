@@ -63,7 +63,7 @@ class QueryEnvService(object):
 			# http://bugs.centos.org/view.php?id=4814 
 			os.chmod('/etc/resolv.conf', 0755)
 		except OSError:
-			LOG.debug('Cant chmod /etc/resolv.conf: %s', sys.exc_info()[1])				
+			self._logger.debug('Cant chmod /etc/resolv.conf: %s', sys.exc_info()[1])				
 
 		post_data = urllib.urlencode(request_body)
 		headers = {
