@@ -18,6 +18,13 @@ from scalarizr.services import mongodb as mongo_svc
 
 
 class _MMSAgent(object):
+    """
+    Private class for mms-agent
+
+    .. _a link: http://www.10gen.com/products/mongodb-monitoring-service
+    """
+
+
     url = 'https://mms.10gen.com/settings/10gen-mms-agent.tar.gz'
     install_dir = '/opt'
     ps = None
@@ -91,6 +98,9 @@ class _MMSAgent(object):
 
 
 class MongoDBAPI:
+    """
+    MongoDB API class
+    """
 
     @rpc.service_method
     def reset_password(self):

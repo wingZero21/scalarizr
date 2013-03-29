@@ -647,6 +647,7 @@ class MongoDBHandler(ServiceCtlHandler):
         :type new_host_rs_id: int
         :param new_host_rs_id: New server replica set index
         """
+
         if self.shard_index == 0 and self.rs_id == 0:
             up_node_host = HOSTNAME_TPL % (new_host_shard_id, new_host_rs_id)
             self._add_host_to_mms(up_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
@@ -851,6 +852,7 @@ class MongoDBHandler(ServiceCtlHandler):
         :type down_host_rs_id: int
         :param down_host_rs_id: Terminated server replica set index
         """
+
         if self.shard_index == 0 and self.rs_id == 0:
             down_node_host = HOSTNAME_TPL % (down_host_shard_id, down_host_rs_id)
             self._delete_host_from_mms(down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
@@ -1526,6 +1528,7 @@ class MongoDBHandler(ServiceCtlHandler):
         :type port: string or int
         :param port: MongoDB instance port
         """
+
         req = 'https://mms.10gen.com/host/v1/addHost/%s?%s'\
             % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
         urllib2.urlopen(req)
@@ -1542,6 +1545,7 @@ class MongoDBHandler(ServiceCtlHandler):
         :type port: string or int
         :param port: MongoDB instance port
         """
+
         req = 'https://mms.10gen.com/host/v1/deleteHost/%s?%s'\
             % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
         urllib2.urlopen(req)
