@@ -7,6 +7,7 @@ Created on Feb 25, 2011
 from __future__ import with_statement
 
 import os
+import re
 import subprocess as subps
 
 from scalarizr import rpc
@@ -21,59 +22,68 @@ class _MMSAgent(object):
     install_dir = '/opt'
     ps = None
 
-    def _download():
+    def _download(self):
         if not os.path.isfile('/tmp/10gen-mms-agent.tar.gz'):
             out, err, returncode = util.system2(
                     ['wget', '-O', '/tmp/10gen-mms-agent.tar.gz', _MMSAgent.url])
 
 
-    def install():
+    def install(self):
         """"
         Download and install MMS agent
         """
+
         if not os.path.exists('%s/mms-agent' % _MMSAgent.install_dir):
             _MMSAgent._download()
             out, err, returncode = util.system2(
                     ['tar', '-xf', '/tmp/10gen-mms-agent.tar.gz', '-C', _MMSAgent.install_dir])
 
 
-    def configure(api_key, secret_key):
+    def configure(self, api_key, secret_key):
         """
         Set user, password, api_key and secret_key
+
+        :type api_key: string
+        :param api_key: MMS api key
+
+        :type secret_key: string
+        :param secret_key: MMS secret key
         """
+
         user = 'scalr'
         password = __node__['mongodb']['password']
         
         with open('%s/mms-agent/settings.py' % _MMSAgent.install_dir, 'r') as f:
             content = f.read()
 
-        for line in content.split('\n'):
-            if line.startswith('mms_key ='):
-                content = content.replace(line, 'mms_key = "%s"' % api_key)
-            if line.startswith('secret_key ='):
-                content = content.replace(line, 'secret_key = "%s"' % secret_key)
-            if line.startswith('globalAuthUsername'):
-                content = content.replace(line, 'globalAuthUsername = """%s"""' % user)
-            if line.startswith('globalAuthPassword'):
-                content = content.replace(line, 'globalAuthPassword = """%s"""' % password)
+        content = re.sub(r'\nmms_key\b[ ]*=[ ]*".*"', '\nmms_key = "%s"'\
+                % api_key, content)
+        content = re.sub(r'\nsecret_key\b[ ]*=[ ]*".*"', '\nsecret_key = "%s"'\
+                % secret_key, content)
+        content = re.sub(r'\nglobalAuthUsername\b[ ]*=[ ]*".*"', '\nglobalAuthUsername = """%s"""'\
+                % user, content)
+        content = re.sub(r'\nglobalAuthPassword\b[ ]*=[ ]*".*"', '\nglobalAuthPassword = """%s"""'\
+                % password, content)
 
         with open('%s/mms-agent/settings.py' % _MMSAgent.install_dir, 'w+') as f:
             f.write(content)
 
 
-    def start():
+    def start(self):
         """
-        Start MMS
+        Start MMS agent
         """
+
         if not _MMSAgent.ps:
             _MMSAgent.ps = subps.Popen(['python', '%s/mms-agent/agent.py' % _MMSAgent.install_dir],
                     close_fds=True, preexec_fn=os.setsid, stdout=None, stderr=None)
 
 
-    def stop():
+    def stop(self):
         """
-        Stop MMS
+        Stop MMS agent
         """
+
         if _MMSAgent.ps:
             util.kill_childs(_MMSAgent.ps.pid)
             _MMSAgent.ps.terminate()
@@ -95,7 +105,18 @@ class MongoDBAPI:
 
     @rpc.service_method
     def enable_mms(self, api_key, secret_key):
-        status = 'OK'
+        """
+        :type api_key: string
+        :param api_key: MMS api key
+
+        :type secret_key: string
+        :param secret_key: MMS secret key
+
+        rtype: dict
+        returns: dictionary {'status':Ok|Fail, 'error':ErrorString}
+        """
+
+        status = 'Ok'
         error = ''
 
         mms_agent = _MMSAgent()
@@ -112,7 +133,12 @@ class MongoDBAPI:
 
     @rpc.service_method
     def disable_mms(self):
-        status = 'OK'
+        """
+        rtype: dict
+        returns: dictionary {'status':Ok|Fail, 'error':ErrorString}
+        """
+
+        status = 'Ok'
         error = ''
 
         mms_agent = _MMSAgent()
