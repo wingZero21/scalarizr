@@ -131,7 +131,8 @@ class P2pMessageConsumer(MessageConsumer):
 					self.send_response(500, str(e))
 					return
 				
-				self.send_response(201)
+				self.send_response(201, 'Created')
+				self.end_headers()
 				
 				
 			def log_message(self, format, *args):
