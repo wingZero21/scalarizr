@@ -338,6 +338,17 @@ EOF
 fi
 
 
+if [ ! -f "$pub_cnf_dir/nat.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/nat.ini"
+[nat]
+
+[handlers]
+
+nat = scalarizr.handlers.nat
+EOF
+fi
+
+
 if [ ! -f "$pub_cnf_dir/nimbula.ini" ]; then
         cat <<EOF > "$pub_cnf_dir/nimbula.ini"
 [nimbula]
