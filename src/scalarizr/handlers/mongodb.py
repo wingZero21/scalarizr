@@ -649,9 +649,9 @@ class MongoDBHandler(ServiceCtlHandler):
             if new_host_shard_id == 0 and new_host_rs_id == 0:
                 self._add_host_to_mms(up_node_host, mongo_svc.CONFIG_SERVER_DEFAULT_PORT)
             if len(self._get_shard_hosts(new_host_shard_id)) % 2 == 0:
-                self._add_host_to_mms(up_node_host, self.mongodb.arbiter.port)
+                self._add_host_to_mms(HOSTNAME_TPL % (new_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
             else:
-                self._delete_host_from_mms(up_node_host, self.mongodb.arbiter.port)
+                self._delete_host_from_mms(HOSTNAME_TPL % (new_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
 
 
     def on_HostUp(self, message):
@@ -848,9 +848,9 @@ class MongoDBHandler(ServiceCtlHandler):
                 self._delete_host_from_mms(down_node_host, self.mongodb.arbiter.port)
             if STATE[CLUSTER_STATE_KEY] != MongoDBClusterStates.TERMINATING\
                     and len(self._get_shard_hosts(down_host_shard_id)) % 2 == 0:
-                self._add_host_to_mms(down_node_host, self.mongodb.arbiter.port)
+                self._add_host_to_mms(HOSTNAME_TPL % (down_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
             else:
-                self._delete_host_from_mms(down_node_host, self.mongodb.arbiter.port)
+                self._delete_host_from_mms(HOSTNAME_TPL % (down_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
 
             
     def on_BeforeHostTerminate(self, message):
