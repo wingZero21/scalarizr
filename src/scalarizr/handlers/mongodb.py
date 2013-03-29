@@ -640,6 +640,12 @@ class MongoDBHandler(ServiceCtlHandler):
     def _on_new_host_mms_configure(self, new_host_shard_id, new_host_rs_id):
         """
         Configure MMS on new host up
+
+        :type new_host_shard_id: int
+        :param new_host_shard_id: New server shard index
+
+        :type new_host_rs_id: int
+        :param new_host_rs_id: New server replica set index
         """
         if self.shard_index == 0 and self.rs_id == 0:
             up_node_host = HOSTNAME_TPL % (new_host_shard_id, new_host_rs_id)
@@ -838,6 +844,12 @@ class MongoDBHandler(ServiceCtlHandler):
     def _on_host_terminate_mms_configure(self, down_host_shard_id, down_host_rs_id):
         """
         Configure MMS on host terminate
+
+        :type down_host_shard_id: int
+        :param down_host_shard_id: Terminated server shard index
+
+        :type down_host_rs_id: int
+        :param down_host_rs_id: Terminated server replica set index
         """
         if self.shard_index == 0 and self.rs_id == 0:
             down_node_host = HOSTNAME_TPL % (down_host_shard_id, down_host_rs_id)
@@ -1507,6 +1519,12 @@ class MongoDBHandler(ServiceCtlHandler):
         """
         Function to add host to MMS
         MMS api call https://mms.10gen.com/host/v1/addHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
+
+        :type host: string
+        :param host: hostname
+
+        :type port: string or int
+        :param port: MongoDB instance port
         """
         req = 'https://mms.10gen.com/host/v1/addHost/%s?%s'\
             % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
@@ -1517,6 +1535,12 @@ class MongoDBHandler(ServiceCtlHandler):
         """
         Function to delete host from MMS
         MMS api call https://mms.10gen.com/host/v1/deleteHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
+
+        :type host: string
+        :param host: hostname
+
+        :type port: string or int
+        :param port: MongoDB instance port
         """
         req = 'https://mms.10gen.com/host/v1/deleteHost/%s?%s'\
             % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
