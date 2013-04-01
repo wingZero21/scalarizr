@@ -6,6 +6,7 @@ Created on Sep 30, 2011
 '''
 import re
 import os
+import sys
 import time
 import glob
 import shutil
@@ -237,7 +238,16 @@ class MongoDB(BaseService):
 		self.stop_default_init_script()
 		Mongos.set_keyfile(self.keyfile.path)
 		Mongos.verbose = verbose
-		Mongos.start()
+		try:
+			Mongos.start()
+		except:
+			# XXX: Ugly workaround for those cases when for some reason mongos can't connect to mongo config server
+			# and dies without trying to reconnect again (it's normal behaviour). Restart usually helps
+			e = sys.exc_info()[1]
+			if 'Timeout' in str(e) and not Mongos.is_running():
+				Mongos.start()
+			else:
+				raise
 		
 	
 	def stop_router(self):
@@ -650,7 +660,7 @@ class ConfigServerConf(MongoDBConfig):
 
 	
 class Mongod(object):	
-	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=2):
+	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=1):
 		self._logger = logging.getLogger(__name__)
 		self.configpath = configpath
 		self.dbpath = dbpath
