@@ -14,8 +14,8 @@ from scalarizr import rpc
 import logging
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
-        'timeout': {'check':'3s'},
-        'default-server': {'inter': '30s', 'fall': 2, 'rise': 10}
+                'timeout': {'check':'3s'},
+                'default-server': {'inter': '30s', 'fall': 2, 'rise': 10}
 }
 
 _rule_protocol = validate.rule(choises=['tcp', 'http', 'TCP', 'HTTP'])
@@ -24,17 +24,91 @@ _rule_hc_target = validate.rule(re='^[tcp|http]+:\d+$')
 
 
 class HAProxyAPI(object):
+    """
+    Placeholder
+    """
 
     def __init__(self, path=None):
         self.path_cfg = path
         self.cfg = haproxy.HAProxyCfg(path)
-        self.svs = haproxy.HAProxyInitScript(path)
+        self.svc = haproxy.HAProxyInitScript(path)
 
     def _server_name(self, ipaddr):
         '''@rtype: str'''
         if ':' in ipaddr:
             ipaddr = ipaddr.strip().split(':')[0]
         return ipaddr.replace('.', '-')
+
+
+    def add_proxy(self, **kwargs):
+        """
+
+        :param port: listener port
+        :type port: int
+        :param roles: role ids (ints) or dicts with "id" key
+        :type roles: list
+        :param servers: server ips
+        :type servers: list
+        :param backend_port: port for backend server to listen?
+        :type backend_port: int
+
+        """
+
+        """
+        listener_name(port)
+        backend_name(port)
+
+
+
+        listener_obj(port, backend_name)
+
+
+        backend_obj(a lot of params)
+
+
+        save(listener_name, listener_obj)
+        save(backend_name, backend_obj)
+        svc_reload()
+        """
+
+        #params_map
+
+
+        port = kwargs["port"]
+
+        listener_name = haproxy.naming('listen', "tcp", port)
+        backend_name = haproxy.naming('backend', "tcp", port)
+
+        # check for duplicate listener
+
+
+        listener = {
+            'mode': "tcp",
+            'balance': 'roundrobin',
+            'bind': '*:%s' % port,
+            'default_backend': backend_name,
+        }
+
+        backend = {}
+        backend.update({'mode': backend_protocol})
+        backend.update(HEALTHCHECK_DEFAULTS)
+
+
+        assert kwargs["port"]
+        kwargs.setdefault("backend_port", kwargs["port"])
+
+        # tcp proxy to the roles
+        if {"port", "roles"} == kwds:
+            pass
+            # backends for each role or one backend?
+            # listener on port for the backend
+        elif {"port", "roles", "servers", "backend_port"} == kwds:
+            pass
+            # create new backend or append server to existing?
+            # listener on port for the backend
+        elif True:
+            pass
+
 
 
     @rpc.service_method
@@ -50,6 +124,7 @@ class HAProxyAPI(object):
             protocol = protocol.lower()
         ln = haproxy.naming('listen', protocol, port)
         bnd = haproxy.naming('backend', server_protocol or protocol, server_port or port, backend=backend)
+        return ln, bnd
         listener = backend = None
         LOG.debug('HAProxyAPI.create_listener: listener = `%s`, backend = `%s`', ln, bnd)
 
@@ -88,7 +163,7 @@ class HAProxyAPI(object):
         backend.update(HEALTHCHECK_DEFAULTS)
 
         # apply changes
-        #with self.svs.trans(exit='running'):
+        #with self.svc.trans(exit='running'):
         #       with self.cfg.trans(enter='reload', exit='working'):
         #TODO: change save() and reload(),`if True` condition to `with...` enter, exit
         if True:
@@ -103,7 +178,7 @@ class HAProxyAPI(object):
                 raise exceptions.Duplicate(e)
 
             self.cfg.save()
-            self.svs.reload()
+            self.svc.reload()
 
             return listener
 
@@ -148,10 +223,10 @@ class HAProxyAPI(object):
                 server = self.cfg['backend'][bnd]['server'][srv]
                 server.update({'check' : True})
                 self.cfg['backend'][bnd]['server'][srv] = server
-        #with self.svs.trans(exit='running'):
+        #with self.svc.trans(exit='running'):
             #       with self.cfg.trans(enter='reload', exit='working'):
         self.cfg.save()
-        self.svs.reload()
+        self.svc.reload()
 
 
     @rpc.service_method
@@ -171,7 +246,7 @@ class HAProxyAPI(object):
                 raise exceptions.NotFound('Backend not found: %s' % (backend, ))
             else:
                 raise exceptions.Empty('No listeners to add server to')
-        #with self.svs.trans(exit='running'):
+        #with self.svc.trans(exit='running'):
             #with self.cfg.trans(exit='working'):
         if True:
             for bnd in bnds:
@@ -183,7 +258,7 @@ class HAProxyAPI(object):
                 self.cfg.backends[bnd]['server'][ipaddr.replace('.', '-')] = server
 
             self.cfg.save()
-            self.svs.reload()
+            self.svc.reload()
 
 
     @rpc.service_method
@@ -197,7 +272,7 @@ class HAProxyAPI(object):
             self.cfg.globals['stats']['socket'] = '/var/run/haproxy-stats.sock'
             self.cfg.defaults['stats'][''] = 'enable'
             self.cfg.save()
-            self.svs.reload()
+            self.svc.reload()
 
         #TODO: select parameters what we need with filter by ipaddr
         stats = haproxy.StatSocket().show_stat()
@@ -243,7 +318,7 @@ class HAProxyAPI(object):
             raise exceptions.NotFound(e)
 
         self.cfg.save()
-        self.svs.reload()
+        self.svc.reload()
 
 
     @rpc.service_method
@@ -259,11 +334,11 @@ class HAProxyAPI(object):
             backend.update(HEALTHCHECK_DEFAULTS)
             self.cfg['backend'][bnd] = backend
 
-        #with self.svs.trans(exit='running'):
+        #with self.svc.trans(exit='running'):
             #       with self.cfg.trans(enter='reload', exit='working'):
             #TODO: with...
         self.cfg.save()
-        self.svs.reload()
+        self.svc.reload()
 
 
     @rpc.service_method
@@ -278,7 +353,7 @@ class HAProxyAPI(object):
             if ipaddr and srv_name in self.cfg.backends[bd]['server']:
                 del self.cfg.backends[bd]['server'][srv_name]
         self.cfg.save()
-        self.svs.reload()
+        self.svc.reload()
 
 
     @rpc.service_method
