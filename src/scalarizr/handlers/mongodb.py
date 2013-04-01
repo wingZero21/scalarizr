@@ -541,6 +541,7 @@ class MongoDBHandler(ServiceCtlHandler):
 							self._logger.warning(err)
 						else:
 							raise
+
 					except BaseException, e:
 						self._logger.error(e)
 
