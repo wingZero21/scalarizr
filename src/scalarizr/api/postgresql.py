@@ -38,7 +38,7 @@ class PostgreSQLAPI(object):
     def _parse_query_out(self, out):
         '''
         Parses xlog_delay or error string from strings like:
-         log_delay 
+         log_delay
         -----------
                  034
         (1 row)

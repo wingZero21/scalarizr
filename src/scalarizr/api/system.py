@@ -36,11 +36,11 @@ class _ScalingMetricStrategy(object):
     def _get_execute(metric):
         if not os.access(metric.path, os.X_OK):
             raise BaseException("File is not executable: '%s'" % metric.path)
-  
+
         exec_timeout = 3
-  
+
         proc = subps.Popen(metric.path, stdout=subps.PIPE, stderr=subps.PIPE, close_fds=True)
- 
+
         timeout_time = time.time() + exec_timeout
         while time.time() < timeout_time:
             if proc.poll() is None:
@@ -55,15 +55,15 @@ class _ScalingMetricStrategy(object):
             else:
                 os.kill(proc.pid, signal.SIGTERM)
             raise BaseException('Timeouted')
-                                
+
         stdout, stderr = proc.communicate()
-        
+
         if proc.returncode > 0:
             raise BaseException(stderr if stderr else 'exitcode: %d' % proc.returncode)
-        
+
         return stdout
-  
-  
+
+
     @staticmethod
     def _get_read(metric):
         try:
@@ -71,7 +71,7 @@ class _ScalingMetricStrategy(object):
                 value = fp.readline()
         except IOError:
             raise BaseException("File is not readable: '%s'" % metric.path)
-  
+
         return value
 
 
@@ -116,7 +116,7 @@ class SystemAPI(object):
             attr = getattr(extension, name)
             if not name.startswith('_') and callable(attr):
                 if hasattr(self, name):
-                    LOG.warn('Duplicate attribute %s. Overriding %s with %s', 
+                    LOG.warn('Duplicate attribute %s. Overriding %s with %s',
                             name, getattr(self, name), attr)
                 setattr(self, name, attr)
 
@@ -177,7 +177,7 @@ class SystemAPI(object):
         '''
         Block devices list
         @return: List of block devices including ramX and loopX
-        @rtype: list 
+        @rtype: list
         '''
 
         lines = self._readlines(self._DISKSTATS)
@@ -192,12 +192,12 @@ class SystemAPI(object):
         '''
         Return system information
         @rtype: dict
-        
+
         Sample:
         {'kernel_name': 'Linux',
         'kernel_release': '2.6.41.10-3.fc15.x86_64',
         'kernel_version': '#1 SMP Mon Jan 23 15:46:37 UTC 2012',
-        'nodename': 'marat.office.webta',           
+        'nodename': 'marat.office.webta',
         'machine': 'x86_64',
         'processor': 'x86_64',
         'hardware_platform': 'x86_64'}
@@ -218,7 +218,7 @@ class SystemAPI(object):
     @rpc.service_method
     def dist(self):
         '''
-        Return Linux distribution information 
+        Return Linux distribution information
         @rtype: dict
 
         Sample:
@@ -295,7 +295,7 @@ class SystemAPI(object):
         '''
         Return CPU stat from /proc/stat
         @rtype: dict
-        
+
         Sample: {
             'user': 8416,
             'nice': 0,
@@ -317,7 +317,7 @@ class SystemAPI(object):
         '''
         Return Memory information from /proc/meminfo
         @rtype: dict
-        
+
         Sample: {
             'total_swap': 0,
             'avail_swap': 0,
@@ -346,7 +346,7 @@ class SystemAPI(object):
     @rpc.service_method
     def load_average(self):
         '''
-        Return Load average (1, 5, 15) in 3 items list  
+        Return Load average (1, 5, 15) in 3 items list
         '''
 
         return os.getloadavg()
@@ -456,11 +456,11 @@ class SystemAPI(object):
         '''
         @return list of scaling metrics
         @rtype: list
-        
+
         Sample: [{
-            'id': 101011, 
-            'name': 'jmx.scaling', 
-            'value': 1, 
+            'id': 101011,
+            'name': 'jmx.scaling',
+            'value': 1,
             'error': None
         }, {
             'id': 202020,
@@ -472,7 +472,7 @@ class SystemAPI(object):
 
         # Obtain scaling metrics from Scalr.
         scaling_metrics = bus.queryenv_service.get_scaling_metrics()
-        
+
         max_threads = 10
         wrk_pool = pool.ThreadPool(processes=max_threads)
 

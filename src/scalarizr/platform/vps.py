@@ -9,16 +9,15 @@ from scalarizr.platform import Platform
 import socket
 
 def get_platform():
-	return VpsPlatform()
+    return VpsPlatform()
 
 class VpsPlatform(Platform):
-	name = "vps"
-	
-	features = []
-	
-	def get_private_ip(self):
-		return self.get_public_ip()
-	
-	def get_public_ip(self):
-		return socket.gethostbyname(socket.gethostname())
-	
+    name = "vps"
+
+    features = []
+
+    def get_private_ip(self):
+        return self.get_public_ip()
+
+    def get_public_ip(self):
+        return socket.gethostbyname(socket.gethostname())
