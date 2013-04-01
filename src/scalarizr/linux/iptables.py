@@ -398,6 +398,8 @@ def ensure(chain_rules, append=False):
 
 
 def enabled():
+	# amazon linux doesn't have iptables service installed by default,
+	# which makes "chkconfig --list iptables" fail
 	if linux.os["name"] == "Amazon":
 		pkgmgr.installed("iptables-services")
 
