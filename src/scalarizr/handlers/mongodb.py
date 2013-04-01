@@ -537,7 +537,7 @@ class MongoDBHandler(ServiceCtlHandler):
 					try:
 						self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
 					except pymongo.errors.OperationFailure, err:
-						if 'unauthorized' in str(err):
+						if 'unauthorized' in str(err) or 'not authorized' in str(err):
 							self._logger.warning(err)
 						else:
 							raise
