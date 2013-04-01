@@ -256,6 +256,11 @@ class RebundleStratery:
 			if entry.fstype in NETWORK_FILESYSTEMS:
 				LOG.debug('Remove %s from fstab', entry.device)
 				del fstab[entry.device]
+
+		root_entry = fstab['/']
+		del fstab['/']
+		fstab.add(root_entry.device, root_entry.mpoint, root_entry.fstype,
+				  root_entry.options, root_entry.dump, 0)
 		
 		# Ubuntu 10.04 mountall workaround
 		# @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
