@@ -21,10 +21,10 @@ class NginxAPI(object):
     def _parse_roles(self, roles):
         destinations = []
         for role in roles:
-            if type(role) is int:
+            if type(role) is str:
                 role = {'id': role}
-            elif type(role) is str:
-                role = {'id': int(role)}
+            elif type(role) is int:
+                role = {'id': str(role)}
             # assuming that role is dict by default
             role['servers'] = self._get_role_servers(role['id'])
             destinations.append(role)
@@ -36,32 +36,34 @@ class NginxAPI(object):
         for server in servers:
             if type(server) is str:
                 server = {'servers': [server]}
-            # assuming that server is dict by default
-            server['servers'] = [server['host']]
+            else:
+                # assuming that server is dict by default
+                server['servers'] = [server['host']]
             destinations.append(server)
 
         return destinations
 
-    def _make_backend_conf(self, name, destinations):
+    def _make_backend_conf(self, name, destinations, ip_hash=True):
         """Returns config for one upstream server"""
         config = metaconf.Configuration('nginx')
-        config.add('upstream', self.name or 'backend')
-        config.add('upstream/iphash', '')  # Is it really needed?
+        config.add('upstream', name or 'backend')
+        if ip_hash:
+            config.add('upstream/iphash', '')
 
-        for dest in self.destinations:
-            for server in dest['servers']:
-                if dest.get('port'):
+        for dest in destinations:
+            for i, server in enumerate(dest['servers']):
+                if dest.has_key('port'):
                     server = '%s:%s' % (server, dest['port'])
-                config.add('upstream/server', server)
+                if dest.has_key('backup'):
+                    server = '%s %s' % (server, 'backup')
+                if dest.has_key('max_fails'):
+                    server = '%s %s' % (server, 'max_fails=%i' % dest['max_fails'])
+                if dest.has_key('fail_timeout'):
+                    server = '%s %s' % (server, 'fail_timeout=%is' % dest['fail_timeout'])
+                if dest.has_key('down'):
+                    server = '%s %s' % (server, 'down')
 
-                if dest.get('backup'):
-                    config.add('upstream/server', 'backup')
-                if dest.get('max_fails'):
-                    config.add('upstream/server', 'max_fails=%i' % dest['max_fails'])
-                if dest.get('fail_timeout'):
-                    config.add('upstream/server', 'fail_timeout=%is' % dest['fail_timeout'])
-                if dest.get('down'):
-                    config.add('upstream/server', 'down')
+                config.add('upstream/server', server)
 
         return config
 
@@ -103,7 +105,9 @@ class NginxAPI(object):
         for backend_destinations in grouped_destinations:
             # TODO: delete backends from initial config, that have similar name as new
             location = grouped_destinations[0]['location']
-            name = '%s_%s' % (addr, location)  # TODO: validate name
+            if location.startswith('/'):
+                location = location[1:]
+            name = '%s_%s' % (addr, location.replace('/', '_'))
 
             backend = self._make_backend_conf(name, backend_destinations)
             config.extend(backend)
@@ -115,6 +119,7 @@ class NginxAPI(object):
         return location_and_backend_name
 
     def extend_https_config(self, addr, location_and_backend_name):
+        # TODO: Finish this method
         ini = bus.cnf.rawini
         config_dir = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH))
         config_path = os.path.join(config_dir, 'https.include')
