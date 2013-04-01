@@ -22,8 +22,8 @@ from copy import copy
 import logging
 
 from scalarizr import linux
-from scalarizr.linux import coreutils
-from scalarizr.linux import redhat
+from scalarizr.linux import redhat, pkgmgr
+
 
 LOG = logging.getLogger(__name__)
 
@@ -337,7 +337,7 @@ def _to_inner(rule):
 
 
 def _is_plain_ip(s):
-	return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] ==\
+	return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] == \
 		   [True] * 4
 
 
@@ -397,12 +397,10 @@ def ensure(chain_rules, append=False):
 		chains[chain].ensure(rules, append)
 
 
-def _is_plain_ip(s):
-	return [n.isdigit() and 0 <= int(n) <= 255 for n in s.split('.')] == \
-		   [True] * 4
-
-
 def enabled():
+	if linux.os["name"] == "Amazon":
+		pkgmgr.installed("iptables-services")
+
 	if linux.os['family'] in ('RedHat', 'Oracle'):
 		out = redhat.chkconfig(list="iptables")[0]
 		return bool(re.search(r"iptables.*?\s\d:on", out))
@@ -420,9 +418,9 @@ def redhat_input_chain():
 	return False
 
 
-'''
-Initialization.
-'''
+
+# Initialization
+
 if enabled():
 	rh_chain = redhat_input_chain()
 	if rh_chain:
