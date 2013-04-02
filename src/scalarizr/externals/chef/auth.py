@@ -21,7 +21,7 @@ def sha1_base64(value):
 
 class UTC(datetime.tzinfo):
     """UTC timezone stub."""
-    
+
     ZERO = datetime.timedelta(0)
 
     def utcoffset(self, dt):
@@ -64,7 +64,7 @@ def sign_request(key, http_method, path, body, host, timestamp, user_id):
     """Generate the needed headers for the Opscode authentication protocol."""
     timestamp = canonical_time(timestamp)
     hashed_body = sha1_base64(body or '')
-    
+
     # Simple headers
     headers = {
         'x-ops-sign': 'version=1.0',
@@ -72,7 +72,7 @@ def sign_request(key, http_method, path, body, host, timestamp, user_id):
         'x-ops-timestamp': timestamp,
         'x-ops-content-hash': hashed_body,
     }
-    
+
     # Create RSA signature
     req = canonical_request(http_method, path, hashed_body, timestamp, user_id)
     sig = _ruby_b64encode(key.private_encrypt(req))

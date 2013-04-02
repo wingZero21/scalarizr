@@ -8,7 +8,7 @@ from scalarizr.platform.cloudstack import CloudStackPlatform
 
 
 def get_platform():
-	return IDCFPlatform()
+    return IDCFPlatform()
 
 class IDCFPlatform(CloudStackPlatform):
-	name = 'idcf'
+    name = 'idcf'

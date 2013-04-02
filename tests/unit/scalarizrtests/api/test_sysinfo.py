@@ -164,7 +164,7 @@ class TestSysInfoAPI(unittest.TestCase):
         (out, err, rc) = system2(('hostname'))
         self.assertEqual(out.strip(), self.info.fqdn())
         old_name = out.strip()
-        
+
         self.info.fqdn('Scalr-Role-12345')
         (out, err, rc) = system2(('hostname'))
         self.assertEqual(out.strip(), 'Scalr-Role-12345')

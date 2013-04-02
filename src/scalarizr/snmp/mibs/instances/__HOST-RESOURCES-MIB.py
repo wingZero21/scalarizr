@@ -22,16 +22,16 @@ class InternationalDisplayString(OctetString):
 class KBytes(Integer32):
     subtypeSpec = Integer32.subtypeSpec+constraint.ValueRangeConstraint(0,2147483647L)
     pass
-   
+
 class NewMibTable(MibTable):
-	
-	def __init__(self, name):
-		MibTable.__init__(self, name)
-	
-	def getNextNode(self, name, idx):
-		mibBuilder.lastBuildId += 1
-		mibBuilder.mibSymbols["__HOST-RESOURCES-MIB"] = hrSWRunvalues()
-		return MibTable.getNextNode(self, name, idx)
+
+    def __init__(self, name):
+        MibTable.__init__(self, name)
+
+    def getNextNode(self, name, idx):
+        mibBuilder.lastBuildId += 1
+        mibBuilder.mibSymbols["__HOST-RESOURCES-MIB"] = hrSWRunvalues()
+        return MibTable.getNextNode(self, name, idx)
 
 
 # Objects
@@ -59,71 +59,71 @@ hrSWRunPerfMem = MibTableColumn((1, 3, 6, 1, 2, 1, 25, 5, 1, 1, 2), KBytes()).se
 # Exports
 
 
-	
+
 
 def hrSWRunvalues():
-	devicelist = dict(hrSWRunTable = hrSWRunTable,
-					  hrSWRunEntry = hrSWRunEntry, 
-					  hrSWRunIndex = hrSWRunIndex,
-					  hrSWRunName  = hrSWRunName,
-					  hrSWRunPath  = hrSWRunPath,
-					  hrSWRunParameters = hrSWRunParameters,
-					  hrSWRunType = hrSWRunType,
-					  hrSWRunStatus = hrSWRunStatus,
-					  hrSWRunPerfTable = hrSWRunPerfTable,
-					  hrSWRunPerfEntry = hrSWRunPerfEntry,
-					  hrSWRunPerfCPU = hrSWRunPerfCPU,
-					  hrSWRunPerfMem = hrSWRunPerfMem)
-	proclist = []
-	runtype_map = dict(R = 1, S = 2, T = 3, D = 3)
-	for pid in os.listdir('/proc'):
-		temp = {}
-		if pid.isdigit():
-			index = int(pid)
-			temp['hrSWRunIndex'+pid] = MibScalarInstance(hrSWRunIndex.getName(), (index ,), hrSWRunIndex.getSyntax().clone(index))
-			
-			try:
-				fp = open('/proc/'+pid+'/stat')
-			except:
-				continue
-			status = fp.read().split()
-			fp.close()			
-			proc_name = status[1][1:-1]
-			proc_state = status[2]
-			proc_perfcpu = int(status[13]) + int(status[14])
-			if proc_perfcpu > 2147483647:
-				proc_perfcpu = -2
-			try:
-				fp = open('/proc/'+pid+'/status')
-			except:
-				continue
-			status = fp.readlines()
-			fp.close()			
-			proc_perfmem = status[14].split()[1].strip()
-			
-			temp['hrSWRunName'+pid] = MibScalarInstance(hrSWRunName.getName(), (index ,), hrSWRunName.getSyntax().clone(proc_name))
-			try:
-				temp['hrSWRunStatus'+pid] = MibScalarInstance(hrSWRunStatus.getName(), (index ,), hrSWRunStatus.getSyntax().clone(runtype_map[proc_state]))
-			except:
-				temp['hrSWRunStatus'+pid] = MibScalarInstance(hrSWRunStatus.getName(), (index ,), hrSWRunStatus.getSyntax().clone(4))
-			try:
-				fp = open('/proc/'+pid+'/cmdline')
-				cmdline = fp.readline()
-				cmdline = cmdline.replace('\x00', ' ').split()
-				fp.close()
-			except:
-				continue
-			if len(cmdline):
-				temp['hrSWRunPath'+pid] = MibScalarInstance(hrSWRunPath.getName(), (index ,), hrSWRunPath.getSyntax().clone(cmdline[0]))
-				temp['hrSWRunParameters'+pid] = MibScalarInstance(hrSWRunParameters.getName(), (index ,), hrSWRunParameters.getSyntax().clone(' '.join(cmdline[1:])[:127]))
-			else:
-				temp['hrSWRunPath'+pid] = MibScalarInstance(hrSWRunPath.getName(), (index ,), hrSWRunPath.getSyntax().clone(''))
-				temp['hrSWRunParameters'+pid] = MibScalarInstance(hrSWRunParameters.getName(), (index ,), hrSWRunParameters.getSyntax().clone(' '))
-			temp['hrSWRunType'+pid] = MibScalarInstance(hrSWRunType.getName(), (index ,), hrSWRunType.getSyntax().clone(4))
-			temp['hrSWRunPerfMem'+pid] = MibScalarInstance(hrSWRunPerfMem.getName(), (index ,), hrSWRunPerfMem.getSyntax().clone(int(proc_perfmem)))
-			temp['hrSWRunPerfCPU'+pid] = MibScalarInstance(hrSWRunPerfCPU.getName(), (index ,), hrSWRunPerfCPU.getSyntax().clone(proc_perfcpu))
-		if temp:
-			devicelist.update(temp)
-	return devicelist
+    devicelist = dict(hrSWRunTable = hrSWRunTable,
+                                      hrSWRunEntry = hrSWRunEntry,
+                                      hrSWRunIndex = hrSWRunIndex,
+                                      hrSWRunName  = hrSWRunName,
+                                      hrSWRunPath  = hrSWRunPath,
+                                      hrSWRunParameters = hrSWRunParameters,
+                                      hrSWRunType = hrSWRunType,
+                                      hrSWRunStatus = hrSWRunStatus,
+                                      hrSWRunPerfTable = hrSWRunPerfTable,
+                                      hrSWRunPerfEntry = hrSWRunPerfEntry,
+                                      hrSWRunPerfCPU = hrSWRunPerfCPU,
+                                      hrSWRunPerfMem = hrSWRunPerfMem)
+    proclist = []
+    runtype_map = dict(R = 1, S = 2, T = 3, D = 3)
+    for pid in os.listdir('/proc'):
+        temp = {}
+        if pid.isdigit():
+            index = int(pid)
+            temp['hrSWRunIndex'+pid] = MibScalarInstance(hrSWRunIndex.getName(), (index ,), hrSWRunIndex.getSyntax().clone(index))
+
+            try:
+                fp = open('/proc/'+pid+'/stat')
+            except:
+                continue
+            status = fp.read().split()
+            fp.close()
+            proc_name = status[1][1:-1]
+            proc_state = status[2]
+            proc_perfcpu = int(status[13]) + int(status[14])
+            if proc_perfcpu > 2147483647:
+                proc_perfcpu = -2
+            try:
+                fp = open('/proc/'+pid+'/status')
+            except:
+                continue
+            status = fp.readlines()
+            fp.close()
+            proc_perfmem = status[14].split()[1].strip()
+
+            temp['hrSWRunName'+pid] = MibScalarInstance(hrSWRunName.getName(), (index ,), hrSWRunName.getSyntax().clone(proc_name))
+            try:
+                temp['hrSWRunStatus'+pid] = MibScalarInstance(hrSWRunStatus.getName(), (index ,), hrSWRunStatus.getSyntax().clone(runtype_map[proc_state]))
+            except:
+                temp['hrSWRunStatus'+pid] = MibScalarInstance(hrSWRunStatus.getName(), (index ,), hrSWRunStatus.getSyntax().clone(4))
+            try:
+                fp = open('/proc/'+pid+'/cmdline')
+                cmdline = fp.readline()
+                cmdline = cmdline.replace('\x00', ' ').split()
+                fp.close()
+            except:
+                continue
+            if len(cmdline):
+                temp['hrSWRunPath'+pid] = MibScalarInstance(hrSWRunPath.getName(), (index ,), hrSWRunPath.getSyntax().clone(cmdline[0]))
+                temp['hrSWRunParameters'+pid] = MibScalarInstance(hrSWRunParameters.getName(), (index ,), hrSWRunParameters.getSyntax().clone(' '.join(cmdline[1:])[:127]))
+            else:
+                temp['hrSWRunPath'+pid] = MibScalarInstance(hrSWRunPath.getName(), (index ,), hrSWRunPath.getSyntax().clone(''))
+                temp['hrSWRunParameters'+pid] = MibScalarInstance(hrSWRunParameters.getName(), (index ,), hrSWRunParameters.getSyntax().clone(' '))
+            temp['hrSWRunType'+pid] = MibScalarInstance(hrSWRunType.getName(), (index ,), hrSWRunType.getSyntax().clone(4))
+            temp['hrSWRunPerfMem'+pid] = MibScalarInstance(hrSWRunPerfMem.getName(), (index ,), hrSWRunPerfMem.getSyntax().clone(int(proc_perfmem)))
+            temp['hrSWRunPerfCPU'+pid] = MibScalarInstance(hrSWRunPerfCPU.getName(), (index ,), hrSWRunPerfCPU.getSyntax().clone(proc_perfcpu))
+        if temp:
+            devicelist.update(temp)
+    return devicelist
 
 mibBuilder.mibSymbols["__HOST-RESOURCES-MIB"] = hrSWRunvalues()

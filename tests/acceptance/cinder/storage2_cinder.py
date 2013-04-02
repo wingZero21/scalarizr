@@ -15,7 +15,7 @@ def init_cinder_vol(server_id, size=1):
     if not (hasattr(world, 'cinder_vol') and world.cinder_vol != None):
         world.cinder_vol = cinder.CinderVolume(volume_type=None, snapshot_id=None)
     world.cinder_vol._server_id = lambda: server_id
-    world.cinder_vol.umount = lambda: None 
+    world.cinder_vol.umount = lambda: None
     world.cinder_vol.size = size
     # world.cinder_vol.avail_zone = None
     # world.cinder_vol.snapshot_id = None
@@ -64,7 +64,7 @@ def when_i_run_destroy(step):
 def then_it_should_delete_volume_on_cinder(step):
     vol = world.cinder_vol._cinder.volumes.get(world.deleting_id)
     assert vol.status == 'deleting', 'CinderVolume failed to delete a volume'
-    
+
 @step(u'And set id attribute to None')
 def and_set_id_attribute_to_none(step):
     assert world.cinder_vol.id == None, 'CinderVolume failed to clear a volume id'

@@ -7,9 +7,9 @@ class Roledef(object):
     def __init__(self, name, api, hostname_attr):
         self.name = name
         self.api = api
-	self.hostname_attr = hostname_attr
-	
-    
+        self.hostname_attr = hostname_attr
+
+
     def __call__(self):
 
         for row in Search('node', 'roles:'+self.name, api=self.api):
@@ -29,7 +29,7 @@ def chef_roledefs(api=None, hostname_attr = 'fqdn'):
         @roles('web_app')
         def mytask():
             run('uptime')
-            
+
     hostname_attr is the attribute in the chef node that holds the real hostname.
     to refer to a nested attribute, separate the levels with '.'.
     for example 'ec2.public_hostname'
