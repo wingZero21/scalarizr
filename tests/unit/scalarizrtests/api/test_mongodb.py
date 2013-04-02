@@ -24,5 +24,3 @@ class MMSAgent_Test(unittest.TestCase):
                 file_handler = mock_open.return_value.__enter__.return_value
                 file_handler.write.assert_called_with(
                         '\nmms_key = "API_KEY"\nsecret_key = "SECRET_KEY"\nglobalAuthUsername = """scalr"""\nglobalAuthPassword = """PASSWORD"""\n')
-
-

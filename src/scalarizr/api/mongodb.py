@@ -59,7 +59,7 @@ class _MMSAgent(object):
 
         user = 'scalr'
         password = __node__['mongodb']['password']
-        
+
         with open('%s/mms-agent/settings.py' % _MMSAgent.install_dir, 'r') as f:
             content = f.read()
 
