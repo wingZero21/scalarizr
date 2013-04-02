@@ -519,6 +519,12 @@ class MySQLConf(BaseConfig):
 	def _set_socket(self, path):
 		self.set('mysqld/socket', path)
 
+	def _get_pid_file(self):
+		return self.get('mysqld/pid-file')
+
+
+	def _set_pid_file(self, path):
+		self.set('mysqld/pid-file', path)
 
 	log_bin = property(_get_log_bin, _set_log_bin)
 	server_id = property(_get_server_id, _set_server_id)
@@ -530,6 +536,7 @@ class MySQLConf(BaseConfig):
 	read_only = property(_get_read_only, _set_read_only)
 	datadir_default = DEFAULT_DATADIR
 	socket = property(_get_socket, _set_socket)
+	pid_file = property(_get_pid_file, _set_pid_file)
 
 	
 	

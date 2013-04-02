@@ -469,6 +469,10 @@ class MysqlHandler(DBMSRHandler):
 		
 		self.generate_datadir()
 		self.mysql.service.stop('Configuring MySQL')
+
+		if 'Amazon' == linux.os['name']:
+			self.mysql.my_cnf.pid_file = os.path.join(__mysql__['data_dir'], 'mysqld.pid')
+			
 		repl = 'master' if int(__mysql__['replication_master']) else 'slave'
 		bus.fire('before_mysql_configure', replication=repl)
 		if repl == 'master':
