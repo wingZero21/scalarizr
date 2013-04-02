@@ -14,8 +14,8 @@ from scalarizr import rpc
 import logging
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
-                'timeout': {'check':'3s'},
-                'default-server': {'inter': '30s', 'fall': 2, 'rise': 10}
+        'timeout': {'check':'3s'},
+        'default-server': {'inter': '30s', 'fall': 2, 'rise': 10}
 }
 
 _rule_protocol = validate.rule(choises=['tcp', 'http', 'TCP', 'HTTP'])
@@ -40,41 +40,22 @@ class HAProxyAPI(object):
         return ipaddr.replace('.', '-')
 
 
-    def add_proxy(self, **kwargs):
+    def add_proxy(self, port, backend_port=None, roles=None, servers=None,
+                            **server_params):
         """
 
         :param port: listener port
         :type port: int
+        :param backend_port: port for backend server to listen?
+        :type backend_port: int
         :param roles: role ids (ints) or dicts with "id" key
         :type roles: list
         :param servers: server ips
         :type servers: list
-        :param backend_port: port for backend server to listen?
-        :type backend_port: int
 
         """
 
-        """
-        listener_name(port)
-        backend_name(port)
-
-
-
-        listener_obj(port, backend_name)
-
-
-        backend_obj(a lot of params)
-
-
-        save(listener_name, listener_obj)
-        save(backend_name, backend_obj)
-        svc_reload()
-        """
-
-        #params_map
-
-
-        port = kwargs["port"]
+        # params_map?
 
         listener_name = haproxy.naming('listen', "tcp", port)
         backend_name = haproxy.naming('backend', "tcp", port)
@@ -83,31 +64,54 @@ class HAProxyAPI(object):
 
 
         listener = {
-            'mode': "tcp",
-            'balance': 'roundrobin',
-            'bind': '*:%s' % port,
-            'default_backend': backend_name,
+                'mode': "tcp",
+                'balance': 'roundrobin',
+                'bind': '*:%s' % port,
+                'default_backend': backend_name,
         }
 
-        backend = {}
-        backend.update({'mode': backend_protocol})
+        backend = {"mode": "tcp"}
         backend.update(HEALTHCHECK_DEFAULTS)
 
 
-        assert kwargs["port"]
-        kwargs.setdefault("backend_port", kwargs["port"])
 
-        # tcp proxy to the roles
-        if {"port", "roles"} == kwds:
-            pass
-            # backends for each role or one backend?
-            # listener on port for the backend
-        elif {"port", "roles", "servers", "backend_port"} == kwds:
-            pass
-            # create new backend or append server to existing?
-            # listener on port for the backend
-        elif True:
-            pass
+        # update with default server params
+        #? or apply to each server in the end
+        backend["default server"] = server_params
+
+
+        # roles to server ips & their params
+        role_servers = server_list_from_roles(roles)
+
+        # update with the aggregated servers list
+        for bnd in bnds:
+            server = {
+                    'address': ipaddr,
+                    'port': bnd.split(':')[-1],
+                    'check': True
+            }
+            self.cfg.backends[bnd]['server'][ipaddr.replace('.', '-')] = server
+
+
+
+        self.cfg['listen'][listener_name] = listener
+        if not self.cfg.backend or not bnd in self.cfg.backend:
+            self.cfg['backend'][bnd] = backend
+
+        try:
+            iptables.FIREWALL.ensure(
+                    {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
+            )
+        except Exception, e:
+            raise exceptions.Duplicate(e)
+
+        self.cfg.save()
+        self.svc.reload()
+
+
+
+
+
 
 
 
