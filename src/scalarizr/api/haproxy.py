@@ -14,8 +14,8 @@ from scalarizr import rpc
 import logging
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
-        'timeout': {'check':'3s'},
-        'default-server': {'inter': '30s', 'fall': 2, 'rise': 10}
+    'timeout': {'check': '3s'},
+    'default-server': {'inter': '30s', 'fall': 2, 'rise': 10}
 }
 
 _rule_protocol = validate.rule(choises=['tcp', 'http', 'TCP', 'HTTP'])
@@ -41,66 +41,126 @@ class HAProxyAPI(object):
 
 
     def add_proxy(self, port, backend_port=None, roles=None, servers=None,
-                            **server_params):
+                check_timeout=None, maxconn=None, **default_server_params):
         """
+        Add proxy yo.
 
         :param port: listener port
         :type port: int
-        :param backend_port: port for backend server to listen?
+        :param backend_port: port for backend server to listen on?
         :type backend_port: int
         :param roles: role ids (ints) or dicts with "id" key
         :type roles: list
         :param servers: server ips
         :type servers: list
+        :param check_timeout: ``timeout check`` - additional read timeout,
+                              e.g. "3s"
+        :type check_timeout: str
+        :param maxconn: set ``maxconn`` of the frontend
+        :type maxconn: str
+        :param **default_server_params: following kwargs will be applied to
+                                        the ``default-server`` key of the
+                                        backend
+        :param check_interval: value for ``inter``, e.g. "3s"
+        :type check_interval: str
+        :param fall_threshold: value for ``fall``
+        :type fall_threshold: int
+        :param rise_threshold: value for ``rise``
+        :type rise_threshold: int
+        :param server_maxconn: value for ``maxconn``, not to confuse with
+                               the frontend's ``maxconn``
+        :type server_maxconn: str
+        :param down: value for #?
+        :type down: bool
+        :param backup: value for ``backup``
+        :type backup: bool
+
+        :returns: ?
+
+        .. note:: official documentation on the global parameters and server \
+        options can be found at \
+        http://cbonte.github.com/haproxy-dconv/configuration-1.4.html
 
         """
 
-        # params_map?
+        # default values
+        if not backend_port:
+            backend_port = port
+        if not roles:
+            roles = []
+        if not servers:
+            servers = []
 
+        # translate param names to config param names
+        server_param_names_map = {
+            "check_interval": "inter",
+            "fall_threshold": "fall",
+            "rise_threshold": "rise",
+            "server_maxconn": "maxconn",
+        }
+        def rename(params):
+            return dict([
+                (server_param_names_map.setdefault(key, key), val)
+                    for key, val in params.items()
+            ])
+
+        # allowing short servers & roles specification
+        # creating new lists here also protects from side effects
+        roles = map(lambda x: {"id": x} if isinstance(x, int) else x, roles)
+        servers = map(lambda x: {"host": x} if isinstance(x, str) else x, servers)
+
+        #
         listener_name = haproxy.naming('listen', "tcp", port)
         backend_name = haproxy.naming('backend', "tcp", port)
 
-        # check for duplicate listener
-
+        #? check for duplicate listener?
 
         listener = {
-                'mode': "tcp",
-                'balance': 'roundrobin',
-                'bind': '*:%s' % port,
-                'default_backend': backend_name,
+            'mode': "tcp",
+            'balance': 'roundrobin',
+            'bind': '*:%s' % port,
+            'default_backend': backend_name,
         }
+        if maxconn:
+            listener["maxconn"] = maxconn
 
-        backend = {"mode": "tcp"}
+        backend = {
+            "mode": "tcp",
+            "server": {},
+        }
         backend.update(HEALTHCHECK_DEFAULTS)
-
-
-
-        # update with default server params
-        #? or apply to each server in the end
-        backend["default server"] = server_params
-
+        if check_timeout:
+            backend["timeout"]["check"] = check_timeout
+        backend["default-server"].update(rename(default_server_params))
+        backend["default-server"]["port"] = backend_port
 
         # roles to server ips & their params
-        role_servers = server_list_from_roles(roles)
+        roles_servers = []
+        for role in roles:
+            role_id, role_params = role.pop("id"), role
 
-        # update with the aggregated servers list
-        for bnd in bnds:
-            server = {
-                    'address': ipaddr,
-                    'port': bnd.split(':')[-1],
-                    'check': True
-            }
-            self.cfg.backends[bnd]['server'][ipaddr.replace('.', '-')] = server
+            # get_servers(role_id) -> [ip] ?
+            role_servers = map(lambda ip: {"host": ip}, get_servers(role_id))
+            [server.update(role_params) for server in role_servers]
 
+            roles_servers.extend(role_servers)
 
+        # get all servers together & enable healthchecks
+        servers.extend(roles_servers)
+        [server.setdefault("check", True) for server in servers]
 
+        # update the backend
+        for server in servers:
+            backend['server'][server["host"].replace('.', '-')] = rename(server)
+
+        # save to cfg
         self.cfg['listen'][listener_name] = listener
-        if not self.cfg.backend or not bnd in self.cfg.backend:
-            self.cfg['backend'][bnd] = backend
+        if not self.cfg.backend or not backend_name in self.cfg.backend:
+            self.cfg['backend'][backend_name] = backend
 
         try:
             iptables.FIREWALL.ensure(
-                    {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
             )
         except Exception, e:
             raise exceptions.Duplicate(e)
@@ -109,10 +169,20 @@ class HAProxyAPI(object):
         self.svc.reload()
 
 
+    def health():
+        try:
+            if self.cfg.defaults['stats'][''] == 'enable' and \
+                    self.cfg.globals['stats']['socket'] == '/var/run/haproxy-stats.sock':
+                pass
+        except:
+            self.cfg.globals['stats']['socket'] = '/var/run/haproxy-stats.sock'
+            self.cfg.defaults['stats'][''] = 'enable'
+            self.cfg.save()
+            self.svc.reload()
 
+        stats = haproxy.StatSocket().show_stat()
 
-
-
+        print stats
 
 
     @rpc.service_method
