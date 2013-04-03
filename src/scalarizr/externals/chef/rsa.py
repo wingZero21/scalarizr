@@ -158,7 +158,7 @@ class Key(object):
             buf = create_string_buffer(self.raw, len(self.raw))
         else:
             buf = create_string_buffer(self.raw)
-        
+
         bio = BIO_new_mem_buf(buf, len(buf))
         try:
             self.key = PEM_read_bio_RSAPrivateKey(bio, 0, 0, 0)

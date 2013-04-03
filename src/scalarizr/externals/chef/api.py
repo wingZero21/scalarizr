@@ -173,7 +173,7 @@ class ChefAPI(object):
             raise
         return response
 
-    def api_request(self, method, path, headers={}, data=None):    
+    def api_request(self, method, path, headers={}, data=None):
         headers = dict((k.lower(), v) for k, v in headers.iteritems())
         headers['accept'] = 'application/json'
         if data is not None:

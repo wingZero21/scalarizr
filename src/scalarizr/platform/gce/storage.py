@@ -22,160 +22,160 @@ CHUNK_SIZE = 2*1024*1024
 
 
 def get_op_status(conn, proj_id, op_name, fields=None):
-	fields = ', '.join(fields) if fields else None
-	return conn.globalOperations().get(project=proj_id,
-								 operation=op_name, fields=fields).execute()
+    fields = ', '.join(fields) if fields else None
+    return conn.globalOperations().get(project=proj_id,
+                                                             operation=op_name, fields=fields).execute()
 
 
 def wait_for_operation_to_complete(connection, project_id, operation_name, timeout=3600):
-	def op_complete():
-		status = get_op_status(connection, project_id, operation_name,
-							   ('status', 'error'))
-		if 'DONE' == status['status']:
-			error = status.get('error')
-			if error:
-				err_msg = '\n'.join([err['message'] for err in error['errors']])
-				raise Exception(err_msg)
-			return True
-		return False
+    def op_complete():
+        status = get_op_status(connection, project_id, operation_name,
+                                                   ('status', 'error'))
+        if 'DONE' == status['status']:
+            error = status.get('error')
+            if error:
+                err_msg = '\n'.join([err['message'] for err in error['errors']])
+                raise Exception(err_msg)
+            return True
+        return False
 
-	util.wait_until(op_complete, timeout=timeout)
+    util.wait_until(op_complete, timeout=timeout)
 
 
 class GoogleCSTransferProvider(transfer.TransferProvider):
 
-	schema = 'gcs'
-	urlparse.uses_netloc.append(schema)
+    schema = 'gcs'
+    urlparse.uses_netloc.append(schema)
 
-	def list(self, remote_path):
-		bucket, path = self._parse_path(remote_path)
+    def list(self, remote_path):
+        bucket, path = self._parse_path(remote_path)
 
-		req = self.cloudstorage.objects().list(
-			bucket=bucket, prefix=path, delimiter='/'
-		)
-		resp = req.execute()
-		return tuple('gcs://%s' % o['name'] for o in resp['items'])
-
-
-	def get(self, remote_path, local_path):
-		LOG.debug('Downloading %s from cloud storage (local path: %s)', remote_path, local_path)
-		bucket, name = self._parse_path(remote_path)
-		local_path = os.path.join(local_path, os.path.basename(remote_path))
-		f = open(local_path, 'w')
-		request = self.cloudstorage.objects().get_media(
-			bucket=bucket, object=name)
-		media = MediaIoBaseDownload(f, request, chunksize=CHUNK_SIZE)
-		done = False
-
-		while not done:
-			status, done = media.next_chunk()
-			if status:
-				LOG.debug('Downloaded %d%%' % int(status.progress() * 100))
-
-		LOG.debug('Download complete.')
-		return local_path
+        req = self.cloudstorage.objects().list(
+                bucket=bucket, prefix=path, delimiter='/'
+        )
+        resp = req.execute()
+        return tuple('gcs://%s' % o['name'] for o in resp['items'])
 
 
-	def put(self, local_path, remote_path):
-		LOG.debug('Uploading %s to cloud storage (remote path: %s)', local_path, remote_path)
+    def get(self, remote_path, local_path):
+        LOG.debug('Downloading %s from cloud storage (local path: %s)', remote_path, local_path)
+        bucket, name = self._parse_path(remote_path)
+        local_path = os.path.join(local_path, os.path.basename(remote_path))
+        f = open(local_path, 'w')
+        request = self.cloudstorage.objects().get_media(
+                bucket=bucket, object=name)
+        media = MediaIoBaseDownload(f, request, chunksize=CHUNK_SIZE)
+        done = False
 
-		filename = os.path.basename(local_path)
-		bucket, name = self._parse_path(remote_path)
-		name = os.path.join(name, filename)
+        while not done:
+            status, done = media.next_chunk()
+            if status:
+                LOG.debug('Downloaded %d%%' % int(status.progress() * 100))
 
-		buckets = self._list_buckets()
-		if bucket not in buckets:
-			self._create_bucket(bucket)
-
-		media = MediaFileUpload(local_path,
-			'application/octet-stream',
-			resumable=True)
-
-		response = None
-		req = self.cloudstorage.objects().insert(
-			bucket=bucket, name=name, media_body=media
-		)
-		last_progress = 0
-		while response is None:
-			status, response = req.next_chunk()
-			if status:
-				percentage = int(status.progress() * 100)
-				if percentage - last_progress >= 10:
-					LOG.debug("Uploaded %d%%." % percentage)
-					last_progress = percentage
-		LOG.debug('Upload completed.')
-		return 'gcs://%s' % os.path.join(bucket, name)
+        LOG.debug('Download complete.')
+        return local_path
 
 
+    def put(self, local_path, remote_path):
+        LOG.debug('Uploading %s to cloud storage (remote path: %s)', local_path, remote_path)
 
-	def _parse_path(self, path):
-		o = urlparse.urlparse(path)
-		if o.scheme != self.schema:
-			raise transfer.TransferError('Wrong schema')
-		return o.hostname, o.path[1:]
+        filename = os.path.basename(local_path)
+        bucket, name = self._parse_path(remote_path)
+        name = os.path.join(name, filename)
 
+        buckets = self._list_buckets()
+        if bucket not in buckets:
+            self._create_bucket(bucket)
 
-	def _list_buckets(self):
-		pl = bus.platform
-		proj_id = pl.get_numeric_project_id()
+        media = MediaFileUpload(local_path,
+                'application/octet-stream',
+                resumable=True)
 
-		req = self.cloudstorage.buckets().list(projectId=proj_id)
-		resp = req.execute()
-		if 'items' not in resp:
-			return []
-		buckets = [b['id'] for b in resp['items']]
-		return buckets
-
-
-	def _create_bucket(self, bucket_name):
-		pl = bus.platform
-		proj_id = pl.get_numeric_project_id()
-
-		req_body = dict(id=bucket_name, projectId=proj_id)
-		req = self.cloudstorage.buckets().insert(body=req_body)
-		try:
-			req.execute()
-		except:
-			e = sys.exc_info()[1]
-			if not 'You already own this bucket' in str(e):
-				raise
+        response = None
+        req = self.cloudstorage.objects().insert(
+                bucket=bucket, name=name, media_body=media
+        )
+        last_progress = 0
+        while response is None:
+            status, response = req.next_chunk()
+            if status:
+                percentage = int(status.progress() * 100)
+                if percentage - last_progress >= 10:
+                    LOG.debug("Uploaded %d%%." % percentage)
+                    last_progress = percentage
+        LOG.debug('Upload completed.')
+        return 'gcs://%s' % os.path.join(bucket, name)
 
 
-	@property
-	def cloudstorage(self):
-		pl = bus.platform
-		return pl.new_storage_client()
+
+    def _parse_path(self, path):
+        o = urlparse.urlparse(path)
+        if o.scheme != self.schema:
+            raise transfer.TransferError('Wrong schema')
+        return o.hostname, o.path[1:]
+
+
+    def _list_buckets(self):
+        pl = bus.platform
+        proj_id = pl.get_numeric_project_id()
+
+        req = self.cloudstorage.buckets().list(projectId=proj_id)
+        resp = req.execute()
+        if 'items' not in resp:
+            return []
+        buckets = [b['id'] for b in resp['items']]
+        return buckets
+
+
+    def _create_bucket(self, bucket_name):
+        pl = bus.platform
+        proj_id = pl.get_numeric_project_id()
+
+        req_body = dict(id=bucket_name, projectId=proj_id)
+        req = self.cloudstorage.buckets().insert(body=req_body)
+        try:
+            req.execute()
+        except:
+            e = sys.exc_info()[1]
+            if not 'You already own this bucket' in str(e):
+                raise
+
+
+    @property
+    def cloudstorage(self):
+        pl = bus.platform
+        return pl.new_storage_client()
 
 
 class GceEphemeralVolume(storage.Volume):
-	pass
+    pass
 
 
 class GceEphemeralVolumeProvider(storage.VolumeProvider):
-	type = 'gce_ephemeral'
-	vol_class = GceEphemeralVolume
+    type = 'gce_ephemeral'
+    vol_class = GceEphemeralVolume
 
-	def create(self, **kwargs):
-		# Name - full device name (google created link name)
-		name = kwargs.get('name')
-		if not name:
-			raise storage.StorageError('Device_name attribute should be non-empty')
+    def create(self, **kwargs):
+        # Name - full device name (google created link name)
+        name = kwargs.get('name')
+        if not name:
+            raise storage.StorageError('Device_name attribute should be non-empty')
 
-		device = '/dev/disk/by-id/google-%s' % name
-		if not os.path.exists(device):
-			raise storage.StorageError("Device '%s' not found" % device)
+        device = '/dev/disk/by-id/google-%s' % name
+        if not os.path.exists(device):
+            raise storage.StorageError("Device '%s' not found" % device)
 
-		kwargs['device'] = device
-		super(GceEphemeralVolumeProvider, self).create(**kwargs)
-
-
-	def create_snapshot(self, vol, snap, **kwargs):
-		raise storage.StorageError("Snapshotting is unsupported by GCE"
-									"ephemeral disks.")
+        kwargs['device'] = device
+        super(GceEphemeralVolumeProvider, self).create(**kwargs)
 
 
-	def create_from_snapshot(self, **kwargs):
-		raise storage.StorageError("GCE ephemeral disks have no snapshots.")
+    def create_snapshot(self, vol, snap, **kwargs):
+        raise storage.StorageError("Snapshotting is unsupported by GCE"
+                                                                "ephemeral disks.")
+
+
+    def create_from_snapshot(self, **kwargs):
+        raise storage.StorageError("GCE ephemeral disks have no snapshots.")
 
 
 storage.Storage.explore_provider(GceEphemeralVolumeProvider)
@@ -183,68 +183,68 @@ storage.Storage.explore_provider(GceEphemeralVolumeProvider)
 
 class GcePersistentVolume(storage.Volume):
 
-	@property
-	def link(self):
-		compute = __node__['gce']['compute_connection']
-		project_id = __node__['gce']['project_id']
-		return '%s%s/disks/%s' % (compute._baseUrl, project_id, self.name)
+    @property
+    def link(self):
+        compute = __node__['gce']['compute_connection']
+        project_id = __node__['gce']['project_id']
+        return '%s%s/disks/%s' % (compute._baseUrl, project_id, self.name)
 
 
 class GcePersistentSnapshot(storage.Snapshot):
-	pass
+    pass
 
 
 class GcePersistentVolumeProvider(GceEphemeralVolumeProvider):
-	type = 'gce_persistent'
-	vol_class = GcePersistentVolume
-	snap_class = GcePersistentSnapshot
+    type = 'gce_persistent'
+    vol_class = GcePersistentVolume
+    snap_class = GcePersistentSnapshot
 
 
-	def create_snapshot(self, vol, snap, **kwargs):
-		compute = __node__['gce']['compute_connection']
-		project_id = __node__['gce']['project_id']
-		now_raw = datetime.datetime.utcnow()
-		now_str = now_raw.strftime('%d-%b-%Y-%H-%M-%S-%f')
-		snap_name = '%s-snap-%s' % (vol.id, now_str)
+    def create_snapshot(self, vol, snap, **kwargs):
+        compute = __node__['gce']['compute_connection']
+        project_id = __node__['gce']['project_id']
+        now_raw = datetime.datetime.utcnow()
+        now_str = now_raw.strftime('%d-%b-%Y-%H-%M-%S-%f')
+        snap_name = '%s-snap-%s' % (vol.id, now_str)
 
-		op = compute.snapshots().insert(project=project_id,
-								body = dict(
-										name=snap_name,
-										sourceDisk=vol.link,
-										sourceDiskId=vol.id,
-										description=snap.description
-								))
+        op = compute.snapshots().insert(project=project_id,
+                                                        body = dict(
+                                                                        name=snap_name,
+                                                                        sourceDisk=vol.link,
+                                                                        sourceDiskId=vol.id,
+                                                                        description=snap.description
+                                                        ))
 
-		wait_for_operation_to_complete(compute, project_id, op['name'])
-		gce_snap = compute.snapshots().get(project=project_id,
-									snapshot=snap_name,
-									fields='id').execute()
+        wait_for_operation_to_complete(compute, project_id, op['name'])
+        gce_snap = compute.snapshots().get(project=project_id,
+                                                                snapshot=snap_name,
+                                                                fields='id').execute()
 
-		snap.id = gce_snap['id']
-		snap.name = snap_name
+        snap.id = gce_snap['id']
+        snap.name = snap_name
 
-		return snap
-
-
-	def create_from_snapshot(self, **kwargs):
-		raise storage.StorageError("Can't create from snapshot - attaching to "
-					"running instances is unsupported")
+        return snap
 
 
-	def destroy_snapshot(self, snap):
-		try:
-			connection = __node__['gce']['compute_connection']
-			project_id = __node__['gce']['project_id']
+    def create_from_snapshot(self, **kwargs):
+        raise storage.StorageError("Can't create from snapshot - attaching to "
+                                "running instances is unsupported")
 
-			op = connection.snapshots().delete(project=project_id,
-											   snapshot=snap.name).execute()
 
-			wait_for_operation_to_complete(connection, project_id,
-											   op['name'])
-		except:
-			e = sys.exc_info()[1]
-			raise storage.StorageError('Failed to delete google disk snapshot.'
-										' Error: %s' % e)
+    def destroy_snapshot(self, snap):
+        try:
+            connection = __node__['gce']['compute_connection']
+            project_id = __node__['gce']['project_id']
+
+            op = connection.snapshots().delete(project=project_id,
+                                                                               snapshot=snap.name).execute()
+
+            wait_for_operation_to_complete(connection, project_id,
+                                                                               op['name'])
+        except:
+            e = sys.exc_info()[1]
+            raise storage.StorageError('Failed to delete google disk snapshot.'
+                                                                    ' Error: %s' % e)
 
 
 

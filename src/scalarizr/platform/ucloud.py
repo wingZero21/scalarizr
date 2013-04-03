@@ -2,8 +2,8 @@ from scalarizr.platform.cloudstack import CloudStackPlatform
 
 
 def get_platform():
-	return UCloudPlatform()
+    return UCloudPlatform()
 
 
 class UCloudPlatform(CloudStackPlatform):
-	name = 'ucloud'
+    name = 'ucloud'

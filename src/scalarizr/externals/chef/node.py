@@ -5,7 +5,7 @@ from scalarizr.externals.chef.base import ChefObject
 from scalarizr.externals.chef.exceptions import ChefError
 
 class NodeAttributes(collections.MutableMapping):
-    
+
     def __init__(self, search_path=[], path=None, write=None):
         if not isinstance(search_path, collections.Sequence):
             search_path = [search_path]

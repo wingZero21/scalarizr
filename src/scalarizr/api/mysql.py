@@ -89,7 +89,7 @@ class MySQLAPI(object):
         else:
             try:
                 slave_status = mysql_cli.slave_status()
-                slave_status = dict(zip(map(string.lower, slave_status.keys()), 
+                slave_status = dict(zip(map(string.lower, slave_status.keys()),
                                     slave_status.values()))
                 slave_status['status'] = 'up'
                 return {'slave': slave_status}

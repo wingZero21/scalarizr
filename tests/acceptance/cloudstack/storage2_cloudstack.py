@@ -40,7 +40,7 @@ def init_vol(server_id, size=1):
     cloudstack.__cloudstack__['instance_id'] = server_id
     if not (hasattr(world, 'vol') and world.vol != None):
         world.vol = cloudstack.CSVolume(volume_type=None, snapshot_id=None)
-    world.vol.umount = lambda: None 
+    world.vol.umount = lambda: None
     world.vol.size = size
     # world.vol.avail_zone = None
     # world.vol.snapshot_id = None
@@ -91,7 +91,7 @@ def then_it_should_delete_volume_on_cloudstack(step):
     if len(volume_list) != 0:
         vol = world.vol._conn.listVolumes(id=world.deleting_id)[0]
         assert vol.status == 'deleting', 'CSVolume failed to delete a volume'
-    
+
 @step(u'And set id attribute to None')
 def and_set_id_attribute_to_none(step):
     assert world.vol.id == None, 'CSVolume failed to clear a volume id'

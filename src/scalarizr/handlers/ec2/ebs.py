@@ -10,12 +10,12 @@ from scalarizr.platform.ec2 import ebstool
 
 
 def get_handlers ():
-	return [EbsHandler()]
+    return [EbsHandler()]
 
 class EbsHandler(BlockDeviceHandler):
 
-	def __init__(self):
-		BlockDeviceHandler.__init__(self, 'ebs')
+    def __init__(self):
+        BlockDeviceHandler.__init__(self, 'ebs')
 
-	def get_devname(self, devname):
-		return ebstool.get_ebs_devname(devname)
+    def get_devname(self, devname):
+        return ebstool.get_ebs_devname(devname)
