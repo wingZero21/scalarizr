@@ -70,9 +70,16 @@ def iptables(**long_kwds):
 		if key in long_kwds:
 			ordered_long[key] = long_kwds.pop(key)
 	ordered_long.update(long_kwds)
-
-	return linux.system(linux.build_cmd_args(executable=IPTABLES_BIN,
-		long=ordered_long))
+	args0 = linux.build_cmd_args(
+			executable=IPTABLES_BIN,
+			long=ordered_long)
+	args = []
+	for arg in args0:
+		if arg.startswith('--not-'):
+			args.extend(('!', arg.replace('not-', '')))
+		else:
+			args.append(arg)
+	return linux.system(args)
 
 
 def iptables_save(filename=None, *short_args, **long_kwds):
@@ -178,16 +185,31 @@ class _Chain(object):
 			list_rules_kwargs["table"] = table
 			list_kwargs["table"] = table
 
+		ret = []
 		try:
 			out = iptables(**list_rules_kwargs)[0]
 		except linux.LinuxError, e:
 			if "Unknown arg `--list-rules'" in e.err:
-				out = iptables(**list_kwargs)[0]
-				return self._parse_list(out)
-			else:
-				raise
+				try:
+					out = iptables(**list_kwargs)[0]
+					ret = self._parse_list(out)
+					e = None
+				except linux.LinuxError, e:
+					# This will redefine original exception
+					pass
+			if e:
+				if "No chain/target" in e.err:
+					pass
+				else:
+					raise
 		else:
-			return self._parse_list_rules(out)
+			ret = self._parse_list_rules(out)
+
+		if table and table != 'filter':
+			for rule in ret:
+				rule['table'] = table 
+		return ret
+
 
 	def _parse_list_rules(self, output):
 		result = []
@@ -198,13 +220,23 @@ class _Chain(object):
 			filling the last dict from 'result' with {'option': 'value'} pairs
 			from ['--option', 'value', ...] arglist. Multiple or no values per
 			option is acceptable.
+
+			NOTE: [... "!", "--option", "value"] gets parsed as
+			{"not_option", "value"} while more correct representation would be
+			{"option": "!" + "value"}
+			_to_inner() should take care of translating {"not_option": "value"}
+			to {"option": "!" + "value"}
 			"""
 
 			ruledict = result[-1]
-			key = option[2:]
+			key = option[2:] if option.startswith("--") else option
+			if key == "!" and element.startswith("--"):  # element is the new option which must be inverted
+				return "not_" + element[2:]
 			val = ruledict.setdefault(key, True)
 
 			if element.startswith('--'):  # element is the new option
+				return element
+			elif element == '!':
 				return element
 			else:
 				if val == True:
@@ -283,6 +315,10 @@ class _Chain(object):
 				if _is_plain_ip(val):
 					rule[key] = val + "/32"
 
+			for key in ('source', 'destination'):
+				if rule[key].startswith('!'):
+					rule['not_%s' % key] = rule.pop(key)[1:]
+
 			result.append(rule)
 
 		return result
@@ -292,7 +328,15 @@ class _Chain(object):
 		# NOTE: rule comparison is far from ideal, check _to_inner method
 		# NOTE: existing rules don't have table attribute
 
-		existing = self.list()
+		tables = [rule.get('table') for rule in rules]
+		filter(None, tables)
+		if not 'filter' in tables:
+			tables.append('filter')
+
+		existing = []
+		for table in tables:
+			existing.extend(self.list(table))
+
 		for rule in reversed(rules):
 			rule_repr = _to_inner(rule)
 			if rule_repr not in existing:
@@ -305,6 +349,7 @@ class _Chain(object):
 
 
 #? Group this two functions in a Rule class?
+# to canonical view
 def _to_inner(rule):
 	"""
 	Converts rule to its inner representation for comparison.
@@ -327,8 +372,11 @@ def _to_inner(rule):
 	if 'source' in inner and _is_plain_ip(inner["source"]):
 		inner["source"] += "/32"
 	# 2
+	#if 'not_destination' in inner:
+	#	inner['destination'] = '!' + inner.pop('not_destination')
 	if 'destination' in inner and _is_plain_ip(inner["destination"]):
 		inner["destination"] += "/32"
+
 	# 3
 	if 'dport' in inner and isinstance(inner["dport"], int):
 		inner["dport"] = str(inner["dport"])
