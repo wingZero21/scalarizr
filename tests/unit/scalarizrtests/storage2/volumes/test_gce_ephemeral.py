@@ -29,5 +29,3 @@ class TestGceEphemeralStorage(unittest.TestCase):
     def test_name_is_none(self, exists):
         vol = gce_ephemeral.GceEphemeralVolume()
         self.assertRaises(AssertionError, vol.ensure)
-
-

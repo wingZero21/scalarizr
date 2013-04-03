@@ -25,7 +25,7 @@ class HaproxyFormatProvider(IniFormatProvider):
 
         sections_names = ('defaults', 'frontend', 'listen', 'backend', 'global')
         self._section_re_string = '^\s*(?P<section_name>%s)\s+(?P<value>[^#]+)?\s*(?P<comment>#.*)?$' %  \
-                                                                                '|'.join(sections_names)
+                                            '|'.join(sections_names)
         self._opt_re_string = '^\s*(?P<option>[^#\s]+)\s+(?P<value>[^#]+)?\s*(?P<comment>#.*)?$'
         self._indent = ''
 

@@ -152,17 +152,3 @@ Number   Major   Minor   RaidDevice State
                                                                         'rebuild_status': 6,
                                                                         'state': 'clean, degraded, recovering',
                                                                         'raid_devices': 2})
-
-
-
-
-
-
-
-
-
-
-
-
-
-

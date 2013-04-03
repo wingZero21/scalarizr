@@ -76,7 +76,7 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
                 os.chdir('/')
                 os.umask(0)
 
-                import resource         # Resource usage information.
+                import resource     # Resource usage information.
                 maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
                 if (maxfd == resource.RLIM_INFINITY):
                     maxfd = 1024
@@ -131,8 +131,8 @@ initdv2.explore(BEHAVIOUR, MysqlProxyInitScript)
 
 def is_mysql_role(behaviours):
     return bool(set((BuiltinBehaviours.MYSQL,
-                       BuiltinBehaviours.MYSQL2,
-                       BuiltinBehaviours.PERCONA)).intersection(set(behaviours)))
+               BuiltinBehaviours.MYSQL2,
+               BuiltinBehaviours.PERCONA)).intersection(set(behaviours)))
 
 
 class MysqlProxyHandler(ServiceCtlHandler):
@@ -147,18 +147,18 @@ class MysqlProxyHandler(ServiceCtlHandler):
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         return message.behaviour and is_mysql_role(message.behaviour) and message.name in (
-                                Messages.HOST_UP,
-                                Messages.HOST_DOWN,
-                                NEW_MASTER_UP,
-                                DbMsrMessages.DBMSR_NEW_MASTER_UP
+                    Messages.HOST_UP,
+                    Messages.HOST_DOWN,
+                    NEW_MASTER_UP,
+                    DbMsrMessages.DBMSR_NEW_MASTER_UP
         )
 
 
     def on_init(self):
         bus.on(
-                start=self.on_start,
-                before_host_up=self.on_before_host_up,
-                reload=self.on_reload
+            start=self.on_start,
+            before_host_up=self.on_before_host_up,
+            reload=self.on_reload
         )
 
 

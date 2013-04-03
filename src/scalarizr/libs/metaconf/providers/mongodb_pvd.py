@@ -10,7 +10,7 @@ from ..utils import unquote
 
 
 class MongodbFormatProvider(RedisFormatProvider):
-    _opt_re_string          = r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*?)\s*(?P<comment>[#;](.*))?$'
+    _opt_re_string      = r'(?P<option>[^:=\s][^:=]*)\s*(?P<vi>[:=])\s*(?P<value>.*?)\s*(?P<comment>[#;](.*))?$'
     
     def write_option(self, fp, node):
         if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':

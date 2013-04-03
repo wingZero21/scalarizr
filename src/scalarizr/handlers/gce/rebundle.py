@@ -90,7 +90,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                         excludes = [os.path.join(ex, '**') for ex in exclude_dirs]
                         excludes.extend(self.exclude_files)
                         excludes.extend(self._excludes)
-                        
+
                         LOG.info('Copying root filesystem to image')
                         rsync('/', tmp_mount_dir, archive=True,
                                                                           hard_links=True,

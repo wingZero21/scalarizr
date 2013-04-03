@@ -16,20 +16,20 @@ _InstanceType = type(_C())
 def abstractmethod(funcobj):
     """A decorator indicating abstract methods.
 
-            Requires that the metaclass is ABCMeta or derived from it.  A
-            class that has a metaclass derived from ABCMeta cannot be
-            instantiated unless all of its abstract methods are overridden.
-            The abstract methods can be called using any of the normal
-            'super' call mechanisms.
+        Requires that the metaclass is ABCMeta or derived from it.  A
+        class that has a metaclass derived from ABCMeta cannot be
+        instantiated unless all of its abstract methods are overridden.
+        The abstract methods can be called using any of the normal
+        'super' call mechanisms.
 
-            Usage:
+        Usage:
 
-                    class C:
-                            __metaclass__ = ABCMeta
-                            @abstractmethod
-                            def my_abstract_method(self, ...):
-                                    ...
-            """
+            class C:
+                __metaclass__ = ABCMeta
+                @abstractmethod
+                def my_abstract_method(self, ...):
+                    ...
+        """
     funcobj.__isabstractmethod__ = True
     return funcobj
 
@@ -37,29 +37,29 @@ def abstractmethod(funcobj):
 class abstractproperty(property):
     """A decorator indicating abstract properties.
 
-            Requires that the metaclass is ABCMeta or derived from it.  A
-            class that has a metaclass derived from ABCMeta cannot be
-            instantiated unless all of its abstract properties are overridden.
-            The abstract properties can be called using any of the normal
-            'super' call mechanisms.
+        Requires that the metaclass is ABCMeta or derived from it.  A
+        class that has a metaclass derived from ABCMeta cannot be
+        instantiated unless all of its abstract properties are overridden.
+        The abstract properties can be called using any of the normal
+        'super' call mechanisms.
 
-            Usage:
+        Usage:
 
-                    class C:
-                            __metaclass__ = ABCMeta
-                            @abstractproperty
-                            def my_abstract_property(self):
-                                    ...
+            class C:
+                __metaclass__ = ABCMeta
+                @abstractproperty
+                def my_abstract_property(self):
+                    ...
 
-            This defines a read-only property; you can also define a read-write
-            abstract property using the 'long' form of property declaration:
+        This defines a read-only property; you can also define a read-write
+        abstract property using the 'long' form of property declaration:
 
-                    class C:
-                            __metaclass__ = ABCMeta
-                            def getx(self): ...
-                            def setx(self, value): ...
-                            x = abstractproperty(getx, setx)
-            """
+            class C:
+                __metaclass__ = ABCMeta
+                def getx(self): ...
+                def setx(self, value): ...
+                x = abstractproperty(getx, setx)
+        """
     __isabstractmethod__ = True
 
 
@@ -67,17 +67,17 @@ class ABCMeta(type):
 
     """Metaclass for defining Abstract Base Classes (ABCs).
 
-            Use this metaclass to create an ABC.  An ABC can be subclassed
-            directly, and then acts as a mix-in class.  You can also register
-            unrelated concrete classes (even built-in classes) and unrelated
-            ABCs as 'virtual subclasses' -- these and their descendants will
-            be considered subclasses of the registering ABC by the built-in
-            issubclass() function, but the registering ABC won't show up in
-            their MRO (Method Resolution Order) nor will method
-            implementations defined by the registering ABC be callable (not
-            even via super()).
+        Use this metaclass to create an ABC.  An ABC can be subclassed
+        directly, and then acts as a mix-in class.  You can also register
+        unrelated concrete classes (even built-in classes) and unrelated
+        ABCs as 'virtual subclasses' -- these and their descendants will
+        be considered subclasses of the registering ABC by the built-in
+        issubclass() function, but the registering ABC won't show up in
+        their MRO (Method Resolution Order) nor will method
+        implementations defined by the registering ABC be callable (not
+        even via super()).
 
-            """
+        """
 
     # A global counter that is incremented each time a class is
     # registered as a virtual subclass of anything.  It forces the
@@ -88,8 +88,8 @@ class ABCMeta(type):
         cls = super(ABCMeta, mcls).__new__(mcls, name, bases, namespace)
         # Compute set of abstract method names
         abstracts = set(name
-                for name, value in namespace.items()
-                if getattr(value, "__isabstractmethod__", False))
+            for name, value in namespace.items()
+            if getattr(value, "__isabstractmethod__", False))
         for base in bases:
             for name in getattr(base, "__abstractmethods__", set()):
                 value = getattr(cls, name, None)
@@ -138,13 +138,13 @@ class ABCMeta(type):
             subtype = subclass
         if subtype is subclass or subclass is None:
             if (cls._abc_negative_cache_version ==
-                    ABCMeta._abc_invalidation_counter and
-                    subtype in cls._abc_negative_cache):
+                ABCMeta._abc_invalidation_counter and
+                subtype in cls._abc_negative_cache):
                 return False
                 # Fall back to the subclass check.
             return cls.__subclasscheck__(subtype)
         return (cls.__subclasscheck__(subclass) or
-                        cls.__subclasscheck__(subtype))
+                cls.__subclasscheck__(subtype))
 
     def __subclasscheck__(cls, subclass):
         """Override for issubclass(subclass, cls)."""

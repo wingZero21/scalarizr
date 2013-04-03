@@ -72,7 +72,7 @@ class WeakSet(object):
 
     def __reduce__(self):
         return (self.__class__, (list(self),),
-                        getattr(self, '__dict__', None))
+                getattr(self, '__dict__', None))
 
     __hash__ = None
 

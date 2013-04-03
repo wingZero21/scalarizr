@@ -30,7 +30,7 @@ OPT_VOLUME_CNF = 'volume_config'
 OPT_SNAPSHOT_CNF = 'snapshot_config'
 DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq/mnesia'
 STORAGE_VOLUME_CNF = 'rabbitmq.json'
-RABBITMQ_MGMT_PLUGIN_NAME= 'rabbitmq_management' 
+RABBITMQ_MGMT_PLUGIN_NAME= 'rabbitmq_management'
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
 
 RABBIT_HOSTNAME_TPL = 'rabbit-%s'
@@ -41,22 +41,22 @@ class RabbitMQMessages:
     RABBITMQ_SETUP_CONTROL_PANEL = 'RabbitMq_SetupControlPanel'
     RABBITMQ_RECONFIGURE_RESULT = 'RabbitMq_ReconfigureResult'
     RABBITMQ_SETUP_CONTROL_PANEL_RESULT = 'RabbitMq_SetupControlPanelResult'
-    
+
     INT_RABBITMQ_HOST_INIT = 'RabbitMq_IntHostInit'
 
 
 def get_handlers():
     return (RabbitMQHandler(), )
 
-            
-class RabbitMQHandler(ServiceCtlHandler):       
+
+class RabbitMQHandler(ServiceCtlHandler):
 
     def __init__(self):
         if not software.whereis('rabbitmqctl'):
             raise HandlerError("Rabbitmqctl binary was not found. Check your installation.")
-    
+
         bus.on("init", self.on_init)
-        
+
         self._logger = logging.getLogger(__name__)
         self.rabbitmq = rabbitmq_svc.rabbitmq
         self.service = initdv2.lookup(BuiltinBehaviours.RABBITMQ)
@@ -77,7 +77,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         bus.on("before_host_down", self.on_before_host_down)
 
         if 'bootstrapping' == __node__['state']:
-                
+
             self.cleanup_hosts_file('/')
             self._logger.info('Performing initial cluster reset')
 
@@ -102,7 +102,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 
             __rabbitmq__['volume'] = rabbitmq_vol
 
-    
+
     def on_reload(self):
         self.queryenv = bus.queryenv_service
         self.platform = bus.platform
@@ -117,7 +117,7 @@ class RabbitMQHandler(ServiceCtlHandler):
                                                                                         RabbitMQMessages.RABBITMQ_RECONFIGURE,
                                                                                         RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL,
                                                                                         RabbitMQMessages.INT_RABBITMQ_HOST_INIT)
-        
+
 
     def get_initialization_phases(self, hir_message):
         self._phase_rabbitmq = 'Configure RabbitMQ'
@@ -126,9 +126,9 @@ class RabbitMQHandler(ServiceCtlHandler):
         self._step_patch_conf = 'Patch configuration files'
         self._step_join_cluster = 'Join cluster'
         self._step_collect_hostup_data = 'Collect HostUp data'
-        
+
         return {'before_host_up': [{
-                        'name': self._phase_rabbitmq, 
+                        'name': self._phase_rabbitmq,
                         'steps': [
                                 self._step_accept_scalr_conf,
                                 self._step_create_storage,
@@ -136,7 +136,7 @@ class RabbitMQHandler(ServiceCtlHandler):
                                 self._step_join_cluster,
                                 self._step_collect_hostup_data
                         ]
-                }]}             
+                }]}
 
     def cleanup_hosts_file(self, rootdir):
         """ Clean /etc/hosts file """
@@ -148,18 +148,18 @@ class RabbitMQHandler(ServiceCtlHandler):
                     dns.ScalrHosts.delete(hostname=hostname)
             finally:
                 dns.ScalrHosts.HOSTS_FILE_PATH = '/etc/hosts'
-                        
 
-        
+
+
 
     def on_before_hello(self, message):
         try:
             rabbit_version = software.rabbitmq_software_info()
         except:
             raise HandlerError("Can't find rabbitmq on this server.")
-    
+
         if rabbit_version.version < (2, 7, 0):
-            self._logger.error("Unsupported RabbitMQ version. Assertion failed: %s >= 2.7.0", 
+            self._logger.error("Unsupported RabbitMQ version. Assertion failed: %s >= 2.7.0",
                                             '.'.join(rabbit_version.version))
             sys.exit(1)
 
@@ -173,7 +173,7 @@ class RabbitMQHandler(ServiceCtlHandler):
                 self.rabbitmq.enable_plugin(RABBITMQ_MGMT_PLUGIN_NAME)
             finally:
                 self.service.start()
-        
+
             panel_url = 'http://%s:55672/mgmt/' % self.platform.get_public_ip()
             msg_body = dict(status='ok', cpanel_url=panel_url)
         except:
@@ -187,7 +187,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         try:
             if not 'running' == __node__['state']:
                 raise HandlerError('Server is not in RUNNING state yet')
-        
+
             if message.node_type != __rabbitmq__['node_type']:
                 self._logger.info('Changing node type to %s' % message.node_type)
 
@@ -199,7 +199,7 @@ class RabbitMQHandler(ServiceCtlHandler):
                 for hostname, ip in hostname_ip_pairs:
                     nodes_to_cluster_with.append(hostname)
                     dns.ScalrHosts.set(ip, hostname)
-                    
+
                 if nodes_to_cluster_with or disk_node:
                     self_hostname = __rabbitmq__['hostname']
                     self.rabbitmq.change_node_type(self_hostname,
@@ -208,11 +208,11 @@ class RabbitMQHandler(ServiceCtlHandler):
                     raise HandlerError('At least 1 disk node should'
                                             'present in cluster')
 
-                                                                                                            
+
                 __rabbitmq__['node_type'] = message.node_type
             else:
                 raise HandlerError('Node type is already %s' % message.node_type)
-                
+
             msg_body = dict(status='ok', node_type=message.node_type)
         except:
             error = str(sys.exc_info()[1])
@@ -224,13 +224,13 @@ class RabbitMQHandler(ServiceCtlHandler):
     def on_HostInit(self, message):
         if not BuiltinBehaviours.RABBITMQ in message.behaviour:
             return
-                    
+
         if message.local_ip != self.platform.get_private_ip():
             hostname = RABBIT_HOSTNAME_TPL % message.server_index
             self._logger.info("Adding %s as %s to hosts file", message.local_ip, hostname)
             dns.ScalrHosts.set(message.local_ip, hostname)
-    
-            
+
+
     on_RabbitMq_IntHostInit = on_HostInit
 
 
@@ -238,17 +238,17 @@ class RabbitMQHandler(ServiceCtlHandler):
         if not BuiltinBehaviours.RABBITMQ in message.behaviour:
             return
         dns.ScalrHosts.delete(message.local_ip)
-        
-        
+
+
     def on_before_host_down(self, msg):
         self.service.stop()
-        
+
 
     def on_BeforeHostTerminate(self, msg):
         if msg.remote_ip == self.platform.get_public_ip() and \
                                 int(__rabbitmq__['server_index']) != 1:
             self.service.stop()
-    
+
 
     def on_host_init_response(self, message):
         with bus.initialization_op as op:
@@ -257,16 +257,16 @@ class RabbitMQHandler(ServiceCtlHandler):
 
                     if not message.body.has_key("rabbitmq"):
                         raise HandlerError("HostInitResponse message for RabbitMQ behaviour must have 'rabbitmq' property")
-                
+
                     rabbitmq_data = message.rabbitmq.copy()
-                    
+
                     if not rabbitmq_data['password']:
                         rabbitmq_data['password'] = cryptotool.pwgen(10)
 
                     hostname = RABBIT_HOSTNAME_TPL % int(message.server_index)
                     rabbitmq_data['server_index'] = message.server_index
                     rabbitmq_data['hostname'] = hostname
-    
+
                     dns.ScalrHosts.set('127.0.0.1', hostname)
                     with open('/etc/hostname', 'w') as f:
                         f.write(hostname)
@@ -294,7 +294,7 @@ class RabbitMQHandler(ServiceCtlHandler):
                     nodes_to_cluster_with = []
                     server_index = __rabbitmq__['server_index']
                     msg_body = dict(server_index=server_index)
-                    
+
                     for hostname, ip in hostname_ip_pairs:
                         nodes_to_cluster_with.append(hostname)
                         dns.ScalrHosts.set(ip, hostname)
@@ -310,10 +310,10 @@ class RabbitMQHandler(ServiceCtlHandler):
                     rabbitmq_volume = __rabbitmq__['volume']
                     rabbitmq_volume.ensure(mkfs=True, mount=True)
                     __rabbitmq__['volume'] = rabbitmq_volume
-    
+
                     rabbitmq_user = pwd.getpwnam("rabbitmq")
                     os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
-                    
+
                 with op.step(self._step_patch_conf):
                     # Check if it's first run here, before rabbit starts
                     init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
@@ -331,11 +331,11 @@ class RabbitMQHandler(ServiceCtlHandler):
 
                     self._logger.debug('Enabling management agent plugin')
                     self.rabbitmq.enable_plugin(RABBITMQ_MGMT_AGENT_PLUGIN_NAME)
-                    
+
                     cookie = __rabbitmq__['cookie']
                     self._logger.debug('Setting erlang cookie: %s' % cookie)
                     self.rabbitmq.set_cookie(cookie)
-                    
+
                     self.service.start()
 
                 with op.step(self._step_join_cluster):
@@ -348,11 +348,11 @@ class RabbitMQHandler(ServiceCtlHandler):
                     self.rabbitmq.delete_user('guest')
                     password = __rabbitmq__['password']
                     self.rabbitmq.check_scalr_user(password)
-    
+
                     cluster_nodes = self.rabbitmq.cluster_nodes()
                     if not all([node in cluster_nodes for node in nodes_to_cluster_with]):
                         raise HandlerError('Cannot cluster with all role servers')
-                
+
                 with op.step(self._step_collect_hostup_data):
                     # Update message
                     msg_data = dict()
@@ -382,4 +382,3 @@ class RabbitMQHandler(ServiceCtlHandler):
     def hostname(self):
         server_index = __rabbitmq__['server_index']
         return RABBIT_HOSTNAME_TPL % server_index
-        

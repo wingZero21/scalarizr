@@ -26,7 +26,7 @@ class GoGridService:
         self._secret = secret
         self._version = version
         self._url = url
-
+    
     def _request(self, uri, params, resp_reader):
         post_data = dict(params) 
         post_data["api_key"] = self._api_key
@@ -50,7 +50,7 @@ class GoGridService:
             else:
                 return resp_reader(xml_strip(xml))
 
-        
+            
     def list_servers(self, num_items=None, page=None, server_type=None, is_sandbox=None):
         p = dict()
         for k, v in locals().items():
@@ -61,9 +61,9 @@ class GoGridService:
                 elif k == "server_type":
                     k = "server.type"
                 p[k] = v
-
+        
         return self._request("/grid/server/list", p, self._list_servers_reader)
-
+    
     def _list_servers_reader(self, xml):
         (xml)
         return tuple(Server(el) for el in xml.getElementsByTagName("list")[0].childNodes)
@@ -94,7 +94,7 @@ class ServerImage:
     price, is_active, is_public, created_time, updated_time  = None
 
     def __init__(self, xml):
-            
+        
         pass
         
 class IpAddress:

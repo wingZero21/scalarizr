@@ -89,4 +89,3 @@ class TestGcePersistentStorage(unittest.TestCase):
 
         link = vol.link
         assert link == '%s%s/disks/%s' % (compute._baseUrl, project_id,vol_name)
-

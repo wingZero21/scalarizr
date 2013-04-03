@@ -25,9 +25,9 @@ class GceLifeCycle(handlers.Handler):
 
         pl = bus.platform
         message.body['gce'] = {
-                'serverId': pl.get_instance_id(),
-                'cloudLocation ': pl.get_zone(),
-                'serverName': pl.get_hostname().split('.')[0],
-                'machineType': pl.get_machine_type()
+            'serverId': pl.get_instance_id(),
+            'cloudLocation ': pl.get_zone(),
+            'serverName': pl.get_hostname().split('.')[0],
+            'machineType': pl.get_machine_type()
         }
 

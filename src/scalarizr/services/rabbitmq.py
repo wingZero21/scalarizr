@@ -69,11 +69,11 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
                         '/var/run/rabbitmq/pid',
                         socks=[initdv2.SockParam(5672, timeout=20)]
                         )
-        
+
     def stop(self, reason=None):
         system2((RABBITMQCTL, 'stop'))
         wait_until(lambda: not self._running, sleep=2)
-        
+
 
     def restart(self, reason=None):
         self.stop()
@@ -84,30 +84,30 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
     def start(self):
         env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid',
                     'RABBITMQ_MNESIA_BASE': '/var/lib/rabbitmq/mnesia'}
-        
+
         run_detached(RABBITMQ_SERVER, args=['-detached'], env=env)
         initdv2.wait_sock(self.socks[0])
-                        
-        
+
+
     def status(self):
         if self._running:
             return initdv2.Status.RUNNING
         else:
             return initdv2.Status.NOT_RUNNING
-    
+
     @property
     def _running(self):
         rcode = system2((RABBITMQCTL, 'status'), raise_exc=False)[2]
         return False if rcode else True
-                
-        
+
+
 initdv2.explore(SERVICE_NAME, RabbitMQInitScript)
 
-        
-        
+
+
 class RabbitMQ(object):
     _instance = None
-    
+
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super(RabbitMQ, cls).__new__(
@@ -124,7 +124,7 @@ class RabbitMQ(object):
                 break
         else:
             raise Exception('RabbitMQ plugin directory not found')
-    
+
         self.service = initdv2.lookup(SERVICE_NAME)
 
     def set_cookie(self, cookie):
@@ -144,50 +144,50 @@ class RabbitMQ(object):
         system2((RABBITMQCTL, 'reset'), logger=self._logger)
 
 
-    def stop_app(self):             
+    def stop_app(self):
         system2((RABBITMQCTL, 'stop_app'), logger=self._logger)
 
 
     def start_app(self):
         system2((RABBITMQCTL, 'start_app'), logger=self._logger)
-        
-        
+
+
     def check_scalr_user(self, password):
         if SCALR_USERNAME in self.list_users():
             self.set_user_password(SCALR_USERNAME, password)
             self.set_user_tags(SCALR_USERNAME, 'administrator')
         else:
             self.add_user(SCALR_USERNAME, password, True)
-            
+
         self.set_full_permissions(SCALR_USERNAME)
-                                
-        
+
+
     def add_user(self, username, password, is_admin=False):
         system2((RABBITMQCTL, 'add_user', username, password), logger=self._logger)
         if is_admin:
-            self.set_user_tags(username, 'administrator')                   
+            self.set_user_tags(username, 'administrator')
 
 
     def delete_user(self, username):
         if username in self.list_users():
             system2((RABBITMQCTL, 'delete_user', username), logger=self._logger)
-            
-            
+
+
     def set_user_tags(self, username, tags):
         if type(tags) == str:
             tags = (tags,)
         system2((RABBITMQCTL, 'set_user_tags', username) + tags , logger=self._logger)
-        
-        
+
+
     def set_user_password(self, username, password):
         system2((RABBITMQCTL, 'change_password', username, password), logger=self._logger)
-        
-        
+
+
     def set_full_permissions(self, username):
-        """ Set full permissions on '/' virtual host """ 
+        """ Set full permissions on '/' virtual host """
         permissions = ('.*', ) * 3
         system2((RABBITMQCTL, 'set_permissions', username) + permissions, logger=self._logger)
-                
+
 
     def list_users(self):
         out = system2((RABBITMQCTL, 'list_users'), logger=self._logger)[0]
@@ -220,21 +220,21 @@ class RabbitMQ(object):
             if disk_node:
                 nodes.append(NODE_HOSTNAME_TPL % self_hostname)
             cmd = [RABBITMQCTL, 'cluster'] + nodes
-    
+
         clustered = False
-        
+
         while not clustered:
             self.stop_app()
             if do_reset:
                 self.reset()
             system2(cmd, logger=self._logger)
-            
+
             p = subprocess.Popen((RABBITMQCTL, 'start_app'))
             for i in range(15):
                 if p.poll() is None:
                     time.sleep(1)
                     continue
-                                            
+
                 if p.returncode:
                     raise Exception(p.stderr.read())
                 else:
@@ -243,7 +243,7 @@ class RabbitMQ(object):
             else:
                 p.kill()
                 self.service.restart(force=True)
-                
+
 
     def cluster_nodes(self):
         out = system2((RABBITMQCTL, 'cluster_status'),logger=self._logger)[0]
@@ -252,8 +252,3 @@ class RabbitMQ(object):
 
 
 rabbitmq = RabbitMQ()
-
-
-
-
-                

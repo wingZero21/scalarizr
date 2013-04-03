@@ -18,7 +18,7 @@ _services  = dict()
 _instances = dict()
 
 
-# TODO: error codes not used 
+# TODO: error codes not used
 class InitdError(BaseException):
     GENERIC_ERR = 1
     INVALID_ARG = 2
@@ -27,7 +27,7 @@ class InitdError(BaseException):
     NOT_INSTALLED = 5
     NOT_CONFIGURED = 6
     NOT_RUNNING = 7
-    
+
     @property
     def code(self):
         return len(self.args) > 1 and self.args[1] or None
@@ -47,29 +47,29 @@ class InitScript(object):
     name = None
     pid_file = None
     lock_file = None
-    
+
     def start(self):
         '''
-        @raise InitdError: 
+        @raise InitdError:
         '''
         pass
 
     def stop(self):
         '''
-        @raise InitdError: 
-        '''             
+        @raise InitdError:
+        '''
         pass
 
     def restart(self):
         '''
-        @raise InitdError: 
-        '''             
+        @raise InitdError:
+        '''
         pass
 
     def reload(self):
         '''
-        @raise InitdError: 
-        '''             
+        @raise InitdError:
+        '''
         pass
 
     def status(self):
@@ -91,7 +91,7 @@ class InitScript(object):
                     return Status.NOT_RUNNING
                 finally:
                     fp.close()
-                    
+
                 if status:
                     pid_state = re.search('State:\s+(?P<state>\w)', status).group('state')
                     if pid_state in ('T', 'Z'):
@@ -129,7 +129,7 @@ class InitScript(object):
 
 class SockParam:
     def __init__(self, port=None, family=socket.AF_INET, type=socket.SOCK_STREAM, conn_address=None, timeout=5):
-            
+
         self.family = family
         self.type = type
         self.conn_address = (conn_address or '127.0.0.1', int(port))
@@ -137,7 +137,7 @@ class SockParam:
 
 class ParametrizedInitScript(InitScript):
     name = None
-    
+
     def __init__(self, name, initd_script, pid_file=None, lock_file=None, socks=None):
         if isinstance(initd_script, basestring):
             if not os.path.exists(initd_script):
@@ -146,40 +146,40 @@ class ParametrizedInitScript(InitScript):
             if not os.access(initd_script, os.X_OK):
                 raise InitdError("Permission denied to execute %s" % (initd_script))
 
-        self.name = name                
+        self.name = name
         self.initd_script = initd_script
         self.pid_file = pid_file
         self.lock_file = lock_file
         self.socks = socks
         self.local = local()
-        
+
         '''
         @param socks: list(SockParam)
         '''
-        
+
     def _start_stop_reload(self, action):
         try:
             args = [self.initd_script] \
                             if isinstance(self.initd_script, basestring) \
                             else list(self.initd_script)
-            args.append(action) 
+            args.append(action)
             out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
         except PopenError, e:
             raise InitdError("Popen failed with error %s" % (e,))
-    
+
         if returncode:
             raise InitdError("Cannot %s %s. output= %s. %s" % (action, self.name, out, err), returncode)
 
         if self.socks and (action != "stop" and not (action == 'reload' and not self.running)):
             for sock in self.socks:
                 wait_sock(sock)
-        
+
 #               if self.pid_file:
 #                       if (action == "start" or action == "restart") and not os.path.exists(self.pid_file):
 #                               raise InitdError("Cannot start %s. pid file %s doesn't exists" % (self.name, self.pid_file))
 #                       if action == "stop" and os.path.exists(self.pid_file):
-#                               raise InitdError("Cannot stop %s. pid file %s still exists" % (self.name, self.pid_file))       
-                        
+#                               raise InitdError("Cannot stop %s. pid file %s still exists" % (self.name, self.pid_file))
+
         return True
 
     def start(self):
@@ -194,7 +194,7 @@ class ParametrizedInitScript(InitScript):
     def reload(self):
         if not self.running:
             raise InitdError('Service "%s" is not running' % self.name, InitdError.NOT_RUNNING)
-        return self._start_stop_reload('reload') 
+        return self._start_stop_reload('reload')
 
     @property
     def running(self):
@@ -246,9 +246,9 @@ def lookup(name):
 
     if not _instances.has_key(name):
         _instances[name] = _services[name]()
-        
+
     return _instances[name]
-    
+
 def wait_sock(sock = None):
     if not isinstance(sock, SockParam):
         raise InitdError('Socks parameter must be instance of SockParam class')
@@ -256,7 +256,7 @@ def wait_sock(sock = None):
     time_start = time.time()
     while time.time() - time_start < sock.timeout:
         try:
-            s = socket.socket(sock.family, sock.type)                       
+            s = socket.socket(sock.family, sock.type)
             s.connect(sock.conn_address)
             s.shutdown(2)
             del s

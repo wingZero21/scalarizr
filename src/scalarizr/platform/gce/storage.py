@@ -249,14 +249,3 @@ class GcePersistentVolumeProvider(GceEphemeralVolumeProvider):
 
 
 storage.Storage.explore_provider(GcePersistentVolumeProvider)
-
-
-
-
-
-
-
-
-
-
-

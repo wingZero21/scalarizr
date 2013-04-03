@@ -27,9 +27,9 @@ class RaidVolume(base.Volume):
 
     lv_re = re.compile(r'Logical volume "([^\"]+)" created')
 
-    
-    def __init__(self, 
-                            disks=None, raid_pv=None, level=None, lvm_group_cfg=None, 
+
+    def __init__(self,
+                            disks=None, raid_pv=None, level=None, lvm_group_cfg=None,
                             vg=None, pv_uuid=None, **kwds):
         '''
         :type disks: list
@@ -61,7 +61,7 @@ class RaidVolume(base.Volume):
         if disks:
             disks = [storage2.volume(disk) for disk in disks]
         super(RaidVolume, self).__init__(disks=disks or [],
-                        raid_pv=raid_pv, level=level and int(level), 
+                        raid_pv=raid_pv, level=level and int(level),
                         lvm_group_cfg=lvm_group_cfg,
                         vg=vg, pv_uuid=pv_uuid, **kwds)
         self.features.update({'restore': True, 'grow': True})
@@ -162,12 +162,12 @@ class RaidVolume(base.Volume):
             try:
                 lvm2.pvs(raid_device)
             except:
-                lvm2.pvcreate(raid_device, uuid=self.pv_uuid, 
+                lvm2.pvcreate(raid_device, uuid=self.pv_uuid,
                                         restorefile=vg_restore_file)
             finally:
                 lvm2.vgcfgrestore(self.vg, file=vg_restore_file)
                 os.remove(vg_restore_file)
-                
+
 
             # Check that logical volume exists
             lv_infos = lvm2.lvs(self.vg)
@@ -220,7 +220,7 @@ class RaidVolume(base.Volume):
         missing_devices = disks_devices[::2]
         md0_devices = [disks_devices[i] if i % 2 else 'missing' \
                                         for i in range(0, len(disks_devices))]
-        
+
 
         # Stop broken raid
         if os.path.exists('/dev/md127'):
@@ -343,7 +343,7 @@ class RaidVolume(base.Volume):
     def _grow(self, new_vol, **growth):
         if int(self.level) in (0, 10):
             raise storage2.StorageError("Raid%s doesn't support growth" % self.level)
-            
+
         disk_growth = growth.get('disks')
 
         current_len = len(self.disks)

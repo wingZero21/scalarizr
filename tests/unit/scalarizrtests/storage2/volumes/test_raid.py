@@ -210,7 +210,7 @@ class RaidVolumeTest(unittest.TestCase):
         raid_vol.ensure()
         raid_dev = mdadm.mdfind.return_value
         lvm2.pvs.assert_called_once_with(raid_dev)
-        lvm2.pvcreate.assert_called_once_with(raid_dev, uuid='pvuuid', 
+        lvm2.pvcreate.assert_called_once_with(raid_dev, uuid='pvuuid',
                                                                                   restorefile=tempfile_mock)
 
 
@@ -314,7 +314,7 @@ class RaidVolumeTest(unittest.TestCase):
 
         lvm2.reset_mock()
         mdadm.reset_mock()
-        
+
         storage2.volume.side_effect = disks
 
         raid_vol.destroy(force=True, remove_disks=True)
@@ -381,5 +381,3 @@ class RaidVolumeTest(unittest.TestCase):
                          mock.call('resume', raid_vol.device)]
 
         self.assertSequenceEqual(lvm2.dmsetup.mock_calls, calls)
-
-

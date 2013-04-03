@@ -5,7 +5,6 @@ logging.basicConfig(
                 level=logging.DEBUG)
 
 
-
 # convenience functions
 # should be moved to commons.py if we'll have one
 # terrain problem: imports automatically only if test were run from this dir
