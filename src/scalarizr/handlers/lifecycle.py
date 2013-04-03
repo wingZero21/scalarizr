@@ -221,7 +221,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 		msg = self.new_message(Messages.HELLO, data,
 			broadcast=True # It's not really broadcast but need to contain broadcast message data 
 		)
-		msg.body['behaviour'] = self.get_ready_behaviours()
+		behs = self.get_ready_behaviours()
+		if 'mysql2' in behs:
+			# only mysql2 should be returned to Scalr
+			try:
+				behs.remove('mysql')
+			except IndexError:
+				pass
+		msg.body['behaviour'] = behs
 		bus.fire("before_hello", msg)
 		self.send_message(msg)
 		bus.fire("hello")
