@@ -28,6 +28,11 @@ from scalarizr.linux import redhat
 LOG = logging.getLogger(__name__)
 
 
+if linux.os['name'] == 'Amazon':
+	from scalarizr.linux import pkgmgr
+	pkgmgr.installed('iptables-services')
+
+
 IPTABLES_BIN = '/sbin/iptables'
 IPTABLES_SAVE = '/sbin/iptables-save'
 IPTABLES_RESTORE = '/sbin/iptables-restore'
