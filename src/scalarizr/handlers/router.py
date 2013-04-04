@@ -22,6 +22,7 @@ class RouterHandler(handlers.Handler):
 	def __init__(self):
 		self._data = None
 		bus.on(init=self.on_init, start=self.on_start)
+		super(RouterHandler, self).__init__()
 
 	def on_init(self):
 		bus.on(
@@ -50,7 +51,7 @@ class RouterHandler(handlers.Handler):
 		if not hir.body.get('router'):
 			msg = "HostInitResponse message for Router behavior " \
 					"must have 'router' property"
-			raise HandlerError(msg)
+			raise handlers.HandlerError(msg)
 
 		self._data = hir.router
 
@@ -77,9 +78,8 @@ class RouterHandler(handlers.Handler):
 		for subnet_cidr in self._data.get('subnets', []):
 			rules.append({
 				'table': 'nat', 
-				#'protocol': 'all', 
 				'source': subnet_cidr, 
-				'not_destination': self._data['cidr'],  # TODO: implement [!] in iptables module
+				'not_destination': self._data['cidr'],
 				'jump': 'MASQUERADE'})
 		if rules:
 			iptables.ensure({'POSTROUTING': rules})
@@ -104,7 +104,6 @@ class RouterHandler(handlers.Handler):
 				'file_cache_path "%s"\n'
 				'cookbook_path "%s/cookbooks"' % (solo_home, solo_home)
 			)
-		solo_exec = linux.which('chef-solo')
 		linux.system(('chef-solo', '-c', solo_rb, '-j', solo_attr), 
 				close_fds=True, preexec_fn=os.setsid)
 
