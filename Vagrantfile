@@ -27,7 +27,7 @@ Vagrant.configure("2") do |config|
           aws.keypair_name = "vagrant"
           aws.ssh_private_key_path = ENV['EC2_VAGRANT_SSH_KEY']
           aws.ssh_username = "root"
-          aws.ami = "ami-d884e1b1"
+          aws.ami = "ami-ccc1a4a5"
         end      
       end
     end
