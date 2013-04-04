@@ -295,7 +295,7 @@ class RedisAPI(object):
 		slaves = {}
 		for redis_process in ri.instances:
 			repl_data = {}
-			for key, val in redis_process.info.items():
+			for key, val in redis_process.redis_cli.info.items():
 				if key.startswith('master'):
 					repl_data[key] = val
 			repl_data['status'] = repl_data['master_link_status']
