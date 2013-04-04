@@ -29,6 +29,7 @@ from scalarizr.services import make_backup_steps
 from scalarizr.api import service as preset_service
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, \
 	PgUser, SU_EXEC, PgSQLPresetProvider, __postgresql__
+from scalarizr.services import postgresql
 from scalarizr.node import __node__
 from scalarizr import storage2
 from scalarizr.services import backup
@@ -49,7 +50,8 @@ OPT_ROOT_PASSWORD = "root_password"
 OPT_ROOT_SSH_PUBLIC_KEY = "root_ssh_public_key"
 OPT_ROOT_SSH_PRIVATE_KEY = "root_ssh_private_key"
 OPT_CURRENT_XLOG_LOCATION = 'current_xlog_location'
-OPT_REPLICATION_MASTER = "replication_master"
+OPT_REPLICATION_MASTER = postgresql.OPT_REPLICATION_MASTER
+
 
 __postgresql__.update({
 	'port': 5432,

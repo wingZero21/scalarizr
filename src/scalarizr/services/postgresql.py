@@ -37,13 +37,14 @@ CREATEUSER = '/usr/bin/createuser'
 CREATEDB = '/usr/bin/createdb'
 PG_DUMP = '/usr/bin/pg_dump'
 
-ROOT_USER 				= "scalr"
-DEFAULT_USER			= "postgres"
+ROOT_USER = "scalr"
+DEFAULT_USER = "postgres"
 
-STORAGE_DATA_DIR 		= "data"
-TRIGGER_NAME 			= "trigger"
-PRESET_FNAME            = 'postgresql.conf'
-OPT_PG_VERSION				= 'pg_version'
+STORAGE_DATA_DIR = "data"
+TRIGGER_NAME = "trigger"
+PRESET_FNAME = 'postgresql.conf'
+OPT_PG_VERSION = 'pg_version'
+OPT_REPLICATION_MASTER = "replication_master"
 
 LOG = logging.getLogger(__name__)
 __postgresql__ = __node__[SERVICE_NAME]
