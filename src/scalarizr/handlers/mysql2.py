@@ -721,7 +721,10 @@ class MysqlHandler(DBMSRHandler):
 				# Unplug slave storage and plug master one
 				old_vol = storage2.volume(__mysql__['volume'])
 				try:
-					old_vol.umount()
+					if old_vol.type == 'raid':
+						old_vol.detach()
+					else:
+						old_vol.umount()
 					new_vol.mpoint = __mysql__['storage_dir']
 					new_vol.ensure(mount=True)				
 					# Continue if master storage is a valid MySQL storage
@@ -769,9 +772,13 @@ class MysqlHandler(DBMSRHandler):
 						msg = "%s is not a valid MySQL storage" % __mysql__['data_dir']
 						raise HandlerError(msg)
 				except:
+					LOG.debug('Caught error. Log it and start healing...', exc_info=sys.exc_info())
 					self.mysql.service.stop('Detaching new volume')
 					new_vol.detach()
-					old_vol.mount()
+					if old_vol.type == 'raid':
+						old_vol.ensure(mount=True)
+					else:
+						old_vol.mount()
 					raise
 			else:
 				# Set read_only option
