@@ -35,7 +35,7 @@ Scenario: Mark server as down
 Scenario: Proxy with advancend configuration
     Given i have a regular server S
     And i have a down server SD
-    And i have i backup server SB
+    And i have a backup server SB
     And i have a regular role R
     And i have a backup role RB
     And i have a down role RD
