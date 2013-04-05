@@ -11,25 +11,25 @@ from scalarizr.api import nginx
 
 class TestNginxAPI(object):
 
+    def setup(self):
+        self.api = nginx.NginxAPI()
+
     def test_parse_roles(self):
-        api = nginx.NginxAPI()
         roles = [123, '456', {'id': '098', 'down': True}]
-        parsed_roles = api._parse_roles(roles)
+        parsed_roles = self.api._parse_roles(roles)
         assert parsed_roles == [
             {'id': '123', 'servers': []},
             {'id': '456', 'servers': []},
             {'id': '098', 'servers': [], 'down': True}], "%s" % parsed_roles
 
     def test_parse_servers(self):
-        api = nginx.NginxAPI()
         servers = ['123.123.132.321', {'host': '10.10.10.10', 'backup': True}]
-        parsed_servers = api._parse_servers(servers)
+        parsed_servers = self.api._parse_servers(servers)
         assert parsed_servers == [{'servers': ['123.123.132.321']},
                                   {'host': '10.10.10.10', 'servers': ['10.10.10.10'], 'backup': True}], \
             "%s" % parsed_servers
 
     def test_make_backend_conf(self):
-        api = nginx.NginxAPI()
         destinations = [{'servers': ['123.231.0.1', '122.232.0.9'], 'max_fails': 5},
                         {'servers': ['0.0.0.1', '1.1.1.9'], 'down': True}]
         desired_config = '''upstream ppp {
@@ -40,13 +40,12 @@ class TestNginxAPI(object):
 \tserver\t1.1.1.9 down;
 }
 '''
-        conf = api._make_backend_conf('ppp', destinations)
+        conf = self.api._make_backend_conf('ppp', destinations)
         str_fp = StringIO.StringIO()
         conf.write_fp(str_fp, close=False)
         assert desired_config == str_fp.getvalue(), '%s' % str_fp.getvalue()
 
     def test_group_destinations(self):
-        api = nginx.NginxAPI()
         destinations = [
             {'id': '123', 'location': '/'},
             {'id': '234'},
@@ -55,7 +54,7 @@ class TestNginxAPI(object):
             {'id': '756', 'location': '/alocation'},
             {'id': '951', 'location': '/alocation'}
         ]
-        grouped_destinations = api._group_destinations(destinations)
+        grouped_destinations = self.api._group_destinations(destinations)
         assert grouped_destinations == [[{'id': '1232', 'location': '/something'},
                                          {'id': '0158', 'location': '/something'}],
                                         [{'id': '756', 'location': '/alocation'},
@@ -63,3 +62,41 @@ class TestNginxAPI(object):
                                         [{'id': '123', 'location': '/'},
                                          {'id': '234', 'location': '/'}]], \
             '%s' % grouped_destinations
+
+    # @mock.patch('self.api._get_ssl_cert')
+    def test_make_server_conf(self):
+        # get_ssl_cert.return_value = ('keys/https.crt', 'keys/https.key')
+        # TODO: rewrite test for using regexp
+        desired_config = """server  {
+   listen   80;
+   server_name   ytu.com;
+   location test/ {
+      proxy_pass   http://ytu.com_test_backend;
+      proxy_set_header   Host $host;
+      proxy_set_header   X-Real-IP $remote_addr;
+      proxy_set_header   Host $host;
+      client_max_body_size   10m;
+      client_body_buffer_size   128k;
+      proxy_buffering   on;
+      proxy_connect_timeout   15;
+      proxy_intercept_errors   on;
+   }
+   location / {
+      proxy_pass   http://ytu.com_backend;
+      proxy_set_header   Host $host;
+      proxy_set_header   X-Real-IP $remote_addr;
+      proxy_set_header   Host $host;
+      client_max_body_size   10m;
+      client_body_buffer_size   128k;
+      proxy_buffering   on;
+      proxy_connect_timeout   15;
+      proxy_intercept_errors   on;
+   }
+}"""
+        locations_and_backends = (('test/', 'ytu.com_test_backend'),
+                                  ('/', 'ytu.com_backend'))
+        conf = self.api._make_server_conf('ytu.com', locations_and_backends)
+        str_fp = StringIO.StringIO()
+        conf.write_fp(str_fp, close=False)
+        assert desired_config == str_fp, '%s' % str_fp.getvalue()
+        

@@ -95,17 +95,19 @@ class QueryEnvService(object):
         return resp_body
 
 
-    def list_roles(self, role_name=None, behaviour=None, with_init=None):
+    def list_roles(self, role_name=None, behaviour=None, with_init=None, farm_role_id=None):
         """
         @return Role[]
         """
         parameters = {}
-        if None != role_name:
+        if role_name:
             parameters["role"] = role_name
-        if None != behaviour:
+        if behaviour:
             parameters["behaviour"] = behaviour
-        if None != with_init:
+        if with_init:
             parameters["showInitServers"] = "1"
+        if farm_role_id:
+            parameters["farm-role-id"] = farm_role_id
 
         return self._request("list-roles", parameters, self._read_list_roles_response)
 
@@ -172,6 +174,12 @@ class QueryEnvService(object):
         """
         return self._request("get-https-certificate",{}, self._read_get_https_certificate_response)
 
+    def get_ssl_certificate(self, certificate_id):
+        """
+        @return (cert, pkey, cacert)
+        """
+        raise NotImplementedError()
+
     def list_ebs_mountpoints(self):
         """
         @return Mountpoint[]
@@ -203,7 +211,7 @@ class QueryEnvService(object):
         """
         return {'params':self._request("get-global-config", {}, self._read_get_global_config_response)}
 
-    def _request (self, command, params={}, response_reader=None, response_reader_args=None):
+    def _request(self, command, params={}, response_reader=None, response_reader_args=None):
         xml = self.fetch(command, **params)
         response_reader_args = response_reader_args or ()
         return response_reader(xml, *response_reader_args)
@@ -434,7 +442,7 @@ class RoleHost(QueryEnvResult):
     index = None
     replication_master = False
     internal_ip = None
-    external_ip     = None
+    external_ip = None
     shard_index = None
     replica_set_index = None
     status = None
