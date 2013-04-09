@@ -446,12 +446,14 @@ class RoleHost(QueryEnvResult):
     shard_index = None
     replica_set_index = None
     status = None
+    cloud_location = None
 
-    def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None,
-                            shard_index=None, replica_set_index=None, status=None):
+    def __init__(self, index=None, replication_master=False, internal_ip=None, external_ip=None,
+                 shard_index=None, replica_set_index=None, status=None, cloud_location=None):
         self.internal_ip = internal_ip
         self.external_ip = external_ip
         self.status = status
+        self.cloud_location = cloud_location
         if index:
             self.index = int(index)
         if replication_master:
@@ -464,11 +466,12 @@ class RoleHost(QueryEnvResult):
 
     def __repr__(self):
         return "index = " + str(self.index) \
-+ "; replication_master = " + str(self.replication_master) \
-+ "; internal_ip = " + str(self.internal_ip) \
-+ "; external_ip = " + str(self.external_ip) \
-+ "; shard_index = " + str(self.shard_index) \
-+ "; replica_set_index = " + str(self.replica_set_index)
+            + "; replication_master = " + str(self.replication_master) \
+            + "; internal_ip = " + str(self.internal_ip) \
+            + "; external_ip = " + str(self.external_ip) \
+            + "; shard_index = " + str(self.shard_index) \
+            + "; replica_set_index = " + str(self.replica_set_index) \
+            + "; cloud_location = " + self.cloud_location
 
 
 class Script(object):
@@ -485,9 +488,9 @@ class Script(object):
 
     def __repr__(self):
         return "asynchronous = " + str(self.asynchronous) \
-+ "; exec_timeout = " + str(self.exec_timeout) \
-+ "; name = " + str(self.name) \
-+ "; body = " + str(self.body)
+            + "; exec_timeout = " + str(self.exec_timeout) \
+            + "; name = " + str(self.name) \
+            + "; body = " + str(self.body)
 
 class VirtualHost(object):
     hostname = None
@@ -504,9 +507,9 @@ class VirtualHost(object):
 
     def __repr__(self):
         return "hostname = " + str(self.hostname) \
-+ "; type = " + str(self.type) \
-+ "; raw = " + str(self.raw) \
-+ "; https = " + str(self.https)
+            + "; type = " + str(self.type) \
+            + "; raw = " + str(self.raw) \
+            + "; https = " + str(self.https)
 
 class ScalingMetric(object):
     class RetriveMethod:
