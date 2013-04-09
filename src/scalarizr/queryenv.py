@@ -59,11 +59,11 @@ class QueryEnvService(object):
         signature, timestamp = cryptotool.sign_http_request(request_body, key)
 
         try:
-        # Work over [Errno -3] Temporary failure in name resolution
-        # http://bugs.centos.org/view.php?id=4814
-        os.chmod('/etc/resolv.conf', 0755)
+            # Work over [Errno -3] Temporary failure in name resolution
+            # http://bugs.centos.org/view.php?id=4814
+            os.chmod('/etc/resolv.conf', 0755)
         except OSError:
-            LOG.debug('Cant chmod /etc/resolv.conf: %s', sys.exc_info()[1])
+            self._logger.debug('Cant chmod /etc/resolv.conf: %s', sys.exc_info()[1])
 
         post_data = urllib.urlencode(request_body)
         headers = {
