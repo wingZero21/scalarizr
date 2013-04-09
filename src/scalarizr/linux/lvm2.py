@@ -103,7 +103,7 @@ def pvs(*physical_volumes, **long_kwds):
         ret = {}
         for line in out.splitlines():
             item = PVInfo(*line.strip().split('|'))
-            ret[item.pv_name] = item
+            ret[os.path.realpath(item.pv_name)] = item
         return ret
     except linux.LinuxError, e:
         if 'not found' in str(e).lower():
