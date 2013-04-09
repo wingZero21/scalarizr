@@ -197,7 +197,7 @@ class EphSnapshot(base.Snapshot):
 			self._snap_status = self.QUEUED
 			mpoint = tempfile.mkdtemp()
 			opts = []
-			if coreutils.blkid(lvm_snap.device) == 'xfs':
+			if coreutils.blkid(lvm_snap.device).get('type') == 'xfs':
 				opts += ['-o', 'nouuid,ro']
 			mount.mount(lvm_snap.device, mpoint, *opts)
 
