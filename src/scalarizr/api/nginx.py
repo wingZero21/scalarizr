@@ -1,6 +1,7 @@
 from __future__ import with_statement
 
 import os
+from fnmatch import fnmatch
 
 from scalarizr import rpc
 from scalarizr.bus import bus
@@ -17,15 +18,43 @@ HTTPS_INC_PATH = 'https_include_path'
 
 class NginxAPI(object):
 
-    def __init__(self):
+    # TODO: move next method to Configuration class
+    def _find_xpath(self, conf, element_xpath, value):
+        '''
+        Finds xpath of certain element by given value.
+        Use this method when you need to find certain element in list of 
+        elements with same name. Example:
+        config contents:
+        ``server 12.23.34.45;``
+        ``server 10.10.12.11 backend;``
+        ``server 10.10.12.12 backend;``
+
+        ``api._find_xpath(conf, 'server', '12.23.34.45')`` will find first
+        element (its xpath will be 'server[1]').
+
+        Wildcards can be used:
+        ``api._find_xpath(conf, 'server', '10.10.12.11*')`` will find second
+        element ('server[2]')
+        '''
+        for i, _ in enumerate(conf.get_list(element_xpath)):
+            xpath = '%s[%i]' % (element_xpath, i + 1)
+            if fnmatch(conf.get(xpath), value):
+                return xpath
+        return None
+
+    def __init__(self, app_inc_dir=None, https_inc_dir=None):
         self.service = NginxInitScript()
-        ini = bus.cnf.rawini
-        app_inc_dir = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH))
+
+        if not app_inc_dir:
+            ini = bus.cnf.rawini
+            app_inc_dir = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH))
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
         self.app_servers_inc = metaconf.Configuration('nginx')
         self.app_servers_inc.read(self.app_inc_path)
 
-        https_inc_dir = os.path.dirname(ini.get(CNF_SECTION, HTTPS_INC_PATH))
+        if not https_inc_dir:
+            ini = bus.cnf.rawini
+            https_inc_dir = os.path.dirname(ini.get(CNF_SECTION, HTTPS_INC_PATH))
         self.https_inc_path = os.path.join(https_inc_dir, 'https.include')
         self.https_inc = metaconf.Configuration('nginx')
 
@@ -138,7 +167,7 @@ class NginxAPI(object):
                 if 'port' in dest or port:
                     server = '%s:%s' % (server, dest.get('port', port))
 
-                if 'backup' in dest:
+                if 'backup' in dest and dest['backup']:
                     server = '%s %s' % (server, 'backup')
 
                 _max_fails = dest.get('max_fails', max_fails)
@@ -149,7 +178,7 @@ class NginxAPI(object):
                 if _fail_timeout:
                     server = '%s %s' % (server, 'fail_timeout=%is' % _fail_timeout)
 
-                if 'down' in dest:
+                if 'down' in dest and dest['down']:
                     server = '%s %s' % (server, 'down')
 
                 config.add('upstream/server', server)
@@ -219,7 +248,8 @@ class NginxAPI(object):
         # making backend configs for each group
         for backend_destinations in grouped_destinations:
             # TODO: delete backends from initial config, that have similar name as new
-            location = grouped_destinations[0]['location']
+            location = backend_destinations[0]['location']
+
             if location.startswith('/'):
                 location = location[1:]
             name = '%s_%s' % (addr, location.replace('/', '_'))
@@ -227,7 +257,7 @@ class NginxAPI(object):
                 name = name[:-1]
 
             self._add_backend(name,
-                              grouped_destinations,
+                              backend_destinations,
                               port=port,
                               ip_hash=ip_hash,
                               max_fails=max_fails,
@@ -354,11 +384,8 @@ class NginxAPI(object):
         '''
         Removes backend with given name from app-servers config.
         '''
-        for i, _ in enumerate(self.https_inc.get_list('upstream')):
-            upstream_xpath = 'upstream[%i]' % i + 1
-            if self.app_servers_inc.get(upstream_xpath) == name:
-                self.app_servers_inc.remove(upstream_xpath)
-                break
+        xpath = self._find_xpath(self.app_servers_inc, 'upstream', name)
+        self.app_servers_inc.remove(xpath)
 
     def _remove_server(self, name):
         '''
@@ -420,4 +447,57 @@ class NginxAPI(object):
             self.https_inc.write(self.https_inc_path)
             self.app_servers_inc.write(self.app_inc_path)
 
-    # TODO: add methods to add/remove destinations from certain backend
+    # TODO: use this method in backend conf making or smth.
+    def _host_to_str(self, host):
+        if type(host) == str:
+            return host
+
+        result = host['ip']
+        if 'port' in host:
+            result = '%s:%s' % (result, host['port'])
+
+        if 'backup' in host and host['backup']:
+            result = '%s %s' % (result, 'backup')
+
+        _max_fails = host.get('max_fails')
+        if _max_fails:
+            result = '%s %s' % (result, 'max_fails=%i' % _max_fails)
+
+        _fail_timeout = host.get('fail_timeout')
+        if _fail_timeout:
+            result = '%s %s' % (result, 'fail_timeout=%is' % _fail_timeout)
+
+        if 'down' in host:
+            result = '%s %s' % (result, 'down')
+
+        return result
+
+    def add_host(self, backend, host):
+        '''
+        Adds host to backend with given name. Parameter host can be dict
+        or string
+        '''
+        self.app_servers_inc.read(self.app_inc_path)
+
+        xpath = self._find_xpath(self.app_servers_inc, 'upstream', backend)
+        self.app_servers_inc.add('%s/server' % xpath, self._host_to_str(host))
+
+        self.app_servers_inc.write(self.app_inc_path)
+        self.service.restart()
+
+    def remove_host(self, backend, host):
+        '''
+        Adds host to backend with given name. Parameter host is ip of server
+        '''
+        self.app_servers_inc.read(self.app_inc_path)
+
+        backend_xpath = self._find_xpath(self.app_servers_inc,
+                                         'upstream',
+                                         backend)
+        host_xpath = self._find_xpath(self.app_inc_path,
+                                      '%s/server' % backend_xpath,
+                                      host + '*')
+        self.app_servers_inc.remove(host_xpath)
+
+        self.app_servers_inc.write(self.app_inc_path)
+        self.service.restart()

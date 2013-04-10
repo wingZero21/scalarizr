@@ -1,18 +1,33 @@
 # -*- coding: utf-8 -*-
 from lettuce import step
 from lettuce import world
+from lettuce import before
+from scalarizr.api import nginx
+
+@before.each_feature
+def create_api(feature):
+    world.app_servers = './app-servers.include'
+    world.https_inc = './https.include'
+    world.api = nginx.NginxAPI('./', './')
 
 @step(u'Given I have a server')
 def given_i_have_a_server(step):
-    assert False, 'This step must be implemented'
+    world.addr = 'uty.com'
+    world.servers = ['123.123.123.123']
 
 @step(u'When I add proxy')
 def when_i_add_proxy(step):
-    assert False, 'This step must be implemented'
+    world.api.add_proxy(world.addr, servers=world.servers)
 
 @step(u'Then I expect proxying')
 def then_i_expect_proxying(step):
-    assert False, 'This step must be implemented'
+    # TODO: check conf files
+    s = ''
+    with open(world.app_servers, 'r') as fp:
+        s = fp.read()
+    with open(world.https_inc, 'r') as fp:
+        s = s + '\n' + fp.read()
+    raise BaseException(s)
 
 ###############################################################################
 
