@@ -321,7 +321,7 @@ class _Chain(object):
 					rule[key] = val + "/32"
 
 			for key in ('source', 'destination'):
-				if rule[key].startswith('!'):
+				if rule.get(key, '').startswith('!'):
 					rule['not_%s' % key] = rule.pop(key)[1:]
 
 			result.append(rule)
