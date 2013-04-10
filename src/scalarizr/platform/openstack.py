@@ -97,7 +97,7 @@ class OpenstackPlatform(platform.Platform):
     def get_public_ip(self):
         if self._public_ip is None:
             ifaces = platform.net_interfaces()
-            self._public_ip = ifaces['eth0'] if 'eth1' in ifaces else ''
+            self._public_ip = ifaces['eth0'] if 'eth1' in ifaces and 'eth0' in ifaces else ''
         return self._public_ip
 
     def _get_property(self, name):
