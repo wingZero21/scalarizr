@@ -179,7 +179,9 @@ class __os(dict):
 		o, e, ret_code = system(['modprobe', '-l'], raise_exc=False, silent=True)
 		self['mods_enabled'] = 0 if ret_code else 1
 
-		arch = osmod.uname()[-1]
+		uname = osmod.uname()
+		self['kernel_release'] = Version(uname[2])
+		arch = uname[-1]
 		if re.search(r'i\d86', arch):
 			arch = 'i386'
 		self['arch'] = arch
