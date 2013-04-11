@@ -39,6 +39,7 @@ def mdfind(*devices):
             array = '/dev/%s' % line.split()[0]
             md_info = detail(array)
             md_devices = md_info['devices'].keys()
+            md_devices = map(os.path.realpath, md_devices)
             if sorted(md_devices) == sorted(devices):
                 return array
     else:

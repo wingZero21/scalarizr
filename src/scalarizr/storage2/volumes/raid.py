@@ -115,8 +115,7 @@ class RaidVolume(base.Volume):
         self._check_attr('vg')
         self._check_attr('disks')
 
-        assert int(self.level) in (0,1,5,10),\
-                                                                'Unknown raid level: %s' % self.level
+        assert int(self.level) in (0,1,5,10), 'Unknown raid level: %s' % self.level
 
         disks = []
         for disk in self.disks:
