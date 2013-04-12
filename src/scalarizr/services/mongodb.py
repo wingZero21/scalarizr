@@ -172,6 +172,7 @@ class MongoDB(BaseService):
         self.arbiter_conf.shardsvr = True
         self.arbiter_conf.port = ARBITER_DEFAULT_PORT
         self.arbiter_conf.logpath = ARBITER_LOG_PATH
+        self.arbiter_conf.nojournal = True
 
 
     def _prepare_config_server(self):
@@ -205,6 +206,7 @@ class MongoDB(BaseService):
 
     def start_shardsvr(self):
         self.working_dir.unlock()
+        self.working_dir.set_permissions()
         if self.auth:
             self._logger.info('Starting main mongod process with auth enabled')
         else:
@@ -260,7 +262,10 @@ class MongoDB(BaseService):
                 
     def stop_default_init_script(self):
         if self.default_init_script.running:
-            if not self.router_cli.is_router_connection():
+            try:
+                if not self.router_cli.is_router_connection():
+                    self.default_init_script.stop('Stopping default mongod service')
+            except:
                 self.default_init_script.stop('Stopping default mongod service')
                 
                         
@@ -312,7 +317,7 @@ class MongoDB(BaseService):
         self._logger.debug('Getting rs status')
         ret = self.cli.get_rs_status()
         if 'errmsg' in ret:
-            self._logger.error('Could not get status of replica set' % (ret['errmsg']))
+            self._logger.error('Could not get status of replica set: %s' % (ret['errmsg']))
         else:
             return int(ret['myState']) if 'myState' in ret else None
                     
@@ -524,12 +529,14 @@ class WorkingDirectory(object):
         if not os.path.exists(dst):
             self._logger.debug('Creating directory structure for mongodb files: %s' % dst)
             os.makedirs(dst)
-            
-        self._logger.debug("changing directory owner to %s" % self.user)        
-        chown_r(dst, self.user)
-        self.path = dst
 
+        self.path = dst
+        self.set_permissions()
         return dst
+
+    def set_permissions(self):
+        self._logger.debug("Changing working directory owner to %s" % self.user)
+        chown_r(self.path, self.user)
 
     @property
     def lock_path(self):
@@ -633,8 +640,8 @@ class MongoDBConfig(BaseConfig):
     port = property(_get_port, _set_port)
     replSet = property(_get_replSet, _set_replSet)
     logpath = property(_get_logpath, _set_logpath)
-    
-    
+
+
 class ArbiterConf(MongoDBConfig):
     config_name = 'mongodb.arbiter.conf'
 
