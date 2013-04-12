@@ -63,8 +63,9 @@ class FreeDeviceLetterMgr(object):
         letters = list(self._all - self._acquired)
         letters.sort()
         for l in letters:
-            pattern = get_system_devname(l) + '*'
-            if not glob.glob(pattern):
+            #
+            #pattern = get_system_devname(l) + '*'
+            if not (glob.glob('/dev/sd' + l + '*') or glob.glob('/dev/xvd' + l + '*')):
                 with self._lock:
                     if not l in self._acquired:
                         self._acquired.add(l)
