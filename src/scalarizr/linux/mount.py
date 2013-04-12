@@ -10,6 +10,7 @@ from __future__ import with_statement
 import re
 import os
 import collections
+import itertools
 
 from scalarizr import linux
 from scalarizr.util import disttool
@@ -40,6 +41,7 @@ class _Mounts(object):
 			if line[0] != "#":
 				m = filter(None, self._entry_re.split(line))
 				if m:
+					m.extend(itertools.repeat('', 6-len(m)))
 					self._entries.append(_MountEntry(*m))
 
 	def __getitem__(self, device_or_mpoint):
