@@ -333,15 +333,20 @@ class CSVolume(base.Volume):
         self._conn.attachVolume(volume_id, instance_id, device_id)
 
         LOG.debug('Checking that volume %s is attached', volume_id)
+
+
+
         wait_until(self._attached,
                    logger=LOG,
                    timeout=self._global_timeout,
                    error_text="Volume %s wasn't attached in a reasonable time"
                    " (vm_id: %s)." % (volume_id, instance_id))
         LOG.debug('Volume %s attached', volume_id)
-
         vol = self._conn.listVolumes(id=volume_id)[0]
-        devname = deviceid_to_devname(vol.deviceid)
+
+        # Not true device name
+        #devname = deviceid_to_devname(vol.deviceid)
+        channel = '/tmp/szr-block-device.channel'
 
         def scsi_attached():
             # Rescan all SCSI buses
@@ -349,14 +354,17 @@ class CSVolume(base.Volume):
             for name in os.listdir(scsi_host):
                 with open(scsi_host + '/' + name + '/scan', 'w') as fp:
                     fp.write('- - -')
-            return os.access(devname, os.F_OK | os.R_OK)
-        LOG.debug('Checking that device %s is available', devname)
+            return os.access(channel, os.F_OK | os.R_OK)
+        LOG.debug('Checking that device is available in OS')
         wait_until(scsi_attached,
-                   sleep=5,
+                   sleep=1,
                    logger=LOG,
                    timeout=self._global_timeout,
-                   error_text="Device %s wasn't available in a reasonable time" % devname)
-        LOG.debug('Device %s is available', devname)
+                   error_text="Device wasn't available in OS in a reasonable time")
+        LOG.debug('Device is available in OS')
+
+        with open(channel) as fp:
+            devname = fp.read()        
 
         return vol, devname
 

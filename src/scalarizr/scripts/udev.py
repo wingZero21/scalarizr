@@ -6,6 +6,7 @@ Created on Mar 1, 2010
 '''
 
 import os
+import time
 
 from scalarizr.messaging import Messages, Queues
 from scalarizr.bus import bus
@@ -17,6 +18,12 @@ def main():
 	init_script()	
 	logger = logging.getLogger("scalarizr.scripts.udev")
 	logger.info("Starting udev script...")
+
+	channel = '/tmp/szr-block-device.channel'
+	if not os.path.exists(channel):
+		os.mkfifo(channel)
+	with open(channel, 'w') as fp:
+		fp.write(os.environ['DEVNAME'])
 	
 	try:
 		initd = initdv2.lookup('scalarizr')
@@ -31,3 +38,6 @@ def main():
 	
 	except (BaseException, Exception), e:
 		logger.exception(e)
+	finally:
+		time.sleep(2)
+		os.remove(channel)
