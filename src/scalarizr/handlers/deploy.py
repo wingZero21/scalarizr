@@ -173,7 +173,7 @@ class SvnSource(Source):
 	def update(self, workdir):
 		if not os.access(self.executable, os.X_OK):
 			self._logger.info('Installing Subversion SCM...')
-			pkgmgr.installed('subversion', updatedb=True)
+			pkgmgr.installed('subversion')
 		
 		do_update = False
 		if os.path.exists(os.path.join(workdir, '.svn')):
@@ -240,7 +240,7 @@ class GitSource(Source):
 				package = 'git-core'
 			else:
 				package = 'git'
-			pkgmgr.installed(package, updatedb=True)
+			pkgmgr.installed(package)
 
 		#if not os.path.exists(workdir):
 		#	self._logger.info('Creating destination directory')

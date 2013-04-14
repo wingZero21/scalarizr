@@ -357,7 +357,7 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 						 raise_exc=False)
 
 
-def installed(name, version=None, updatedb=False):
+def installed(name, version=None, updatedb=True):
 	'''
 	Ensure that package installed
 	'''
@@ -370,7 +370,7 @@ def installed(name, version=None, updatedb=False):
 		mgr.install(name, version)
 
 
-def latest(name, updatedb=False):
+def latest(name, updatedb=True):
 	'''
 	Ensure that latest version of package installed 
 	'''
