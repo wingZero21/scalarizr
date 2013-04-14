@@ -63,8 +63,11 @@ class EphVolume(base.Volume):
 
 			self.disk = storage2.volume(self.disk)
 			# Compatibility with storage v1
-			if self.disk.device and self.disk.type == 'base' and self.disk.device.startswith('/dev/sd'):
-				self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
+			if self.disk.device and self.disk.type == 'base':
+				if self.disk.device.startswith('/dev/sd'):
+					self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
+				elif 'google' in self.disk.device:
+					self.disk = storage2.volume(type='gce_ephemeral', name='ephemeral-disk-0')
 
 			self._lvm_volume = storage2.volume(
 					type='lvm',
