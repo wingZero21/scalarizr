@@ -19,7 +19,9 @@ from urlparse import urlparse
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages, Queues
 from scalarizr.handlers import Handler, script_executor, operation
-from scalarizr.util import system2, disttool, dicts
+from scalarizr.util import system2, dicts
+from scalarizr import linux
+from scalarizr.linux import pkgmgr
 
 
 
@@ -171,13 +173,7 @@ class SvnSource(Source):
 	def update(self, workdir):
 		if not os.access(self.executable, os.X_OK):
 			self._logger.info('Installing Subversion SCM...')
-			if disttool.is_debian_based():
-				system2(('apt-get', '-y', '--force-yes', 'install', 'subversion'))
-			elif disttool.is_redhat_based():
-				system2(('yum', '-y', 'install', 'subversion'))
-			else:
-				raise SourceError('Cannot install Subversion. Unknown distribution %s' % 
-								str(disttool.linux_dist()))
+			pkgmgr.installed('subversion', updatedb=True)
 		
 		do_update = False
 		if os.path.exists(os.path.join(workdir, '.svn')):
@@ -215,7 +211,8 @@ class SvnSource(Source):
 		self._logger.info('Updating source from %s into working dir %s', self.url, workdir)		
 		out = system2(args)[0]
 		self._logger.info(out)
-		self._logger.info('Deploying %s to %s has been completed successfully.' % (self.url,workdir))
+		self._logger.info('Deploying %s to %s has been completed successfully.', 
+						self.url, workdir)
 		
 	@property
 	def client_version(self):
@@ -239,13 +236,11 @@ class GitSource(Source):
 	def update(self, workdir):
 		if not os.access(self.executable, os.X_OK):
 			self._logger.info('Installing Git SCM...')
-			if disttool.is_debian_based():
-				system2(('apt-get', '-y', 'install', 'git-core'))
-			elif disttool.is_redhat_based():
-				system2(('yum', '-y', 'install', 'git'))
+			if linux.os['family'] == 'Debian':
+				package = 'git-core'
 			else:
-				raise SourceError('Cannot install Git. Unknown distribution %s' %
-								str(disttool.linux_dist()))
+				package = 'git'
+			pkgmgr.installed(package, updatedb=True)
 
 		#if not os.path.exists(workdir):
 		#	self._logger.info('Creating destination directory')
@@ -360,7 +355,8 @@ class HttpSource(Source):
 					self._logger.debug('Removing already existed file %s', dst)
 					os.remove(dst)
 				shutil.move(tmpdst, workdir)
-				self._logger.info('Deploying %s to %s has been completed successfully.' % (self.url,dst))
+				self._logger.info('Deploying %s to %s has been completed successfully.', 
+						self.url, dst)
 			
 		except:
 			exc = sys.exc_info()

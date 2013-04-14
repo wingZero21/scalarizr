@@ -100,6 +100,12 @@ class AptPackageMgr(PackageMgr):
 	
 
 	def updatedb(self):
+		path = '/var/lib/apt/lists'
+		for f in os.listdir(path):
+			f = os.path.join(path, f)
+			if os.path.isfile(f):
+				os.remove(f)
+
 		self.apt_get_command('update')		
 
 	def install(self, name, version=None, updatedb=False, **kwds):
