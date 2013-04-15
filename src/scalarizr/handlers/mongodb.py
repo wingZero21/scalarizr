@@ -869,8 +869,8 @@ class MongoDBHandler(ServiceCtlHandler):
             
     def on_BeforeHostTerminate(self, message):
         if 'mms' in __mongodb__:
-        down_host_shard_id = int(message.mongodb['shard_index'])
-        down_host_rs_id = int(message.mongodb['replica_set_index'])
+            down_host_shard_id = int(message.mongodb['shard_index'])
+            down_host_rs_id = int(message.mongodb['replica_set_index'])
             self._on_host_terminate_mms_configure(down_host_shard_id, down_host_rs_id)
 
         if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
