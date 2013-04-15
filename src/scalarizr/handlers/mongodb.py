@@ -13,6 +13,8 @@ import os
 import sys
 import time
 import shutil
+import urllib
+import urllib2
 import logging
 import datetime
 import threading
@@ -52,6 +54,7 @@ import scalarizr.services.mongodb as mongo_svc
 from scalarizr.messaging.p2p import P2pMessageStore
 from scalarizr.handlers import operation, prepare_tags
 
+from scalarizr.api import mongodb as mongodb_api
 
 __mongodb__ = __node__['mongodb']
 
@@ -250,6 +253,7 @@ class MongoDBHandler(ServiceCtlHandler):
         self._step_create_scalr_users = 'Create Scalr users'
         self._step_create_shard = 'Create Shard'
         
+        self.api = mongodb_api.MongoDBAPI()
         
         self.on_reload()   
         self._status_trackers = dict()
@@ -327,6 +331,9 @@ class MongoDBHandler(ServiceCtlHandler):
                     
                     mongodb_data['password'] = mongodb_data.get('password') or cryptotool.pwgen(10)
 
+                    if 'mms' in mongodb_data and not mongodb_data['mms']:
+                        del mongodb_data['mms']
+
                     self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
                     __mongodb__.update(mongodb_data)
 
@@ -384,6 +391,11 @@ class MongoDBHandler(ServiceCtlHandler):
                 if self.shard_index == 0 and self.rs_id == 0:
                     with op.step(self._step_start_cfg_server):
                         self.mongodb.start_config_server()
+
+                        # Enable MMS Agent
+                        if 'mms' in __mongodb__:
+                            self.api.enable_mms(__mongodb__['mms']['api_key'], __mongodb__['mms']['secret_key'])
+
                     hostup_msg.mongodb['config_server'] = 1
                 else:
                     hostup_msg.mongodb['config_server'] = 0
@@ -625,16 +637,39 @@ class MongoDBHandler(ServiceCtlHandler):
             Hosts.set(message.local_ip, hostname)
 
 
+    def _on_new_host_mms_configure(self, new_host_shard_id, new_host_rs_id):
+        """
+        Configure MMS on new host up
+
+        :type new_host_shard_id: int
+        :param new_host_shard_id: New server shard index
+
+        :type new_host_rs_id: int
+        :param new_host_rs_id: New server replica set index
+        """
+
+        if self.shard_index == 0 and self.rs_id == 0:
+            up_node_host = HOSTNAME_TPL % (new_host_shard_id, new_host_rs_id)
+            self._add_host_to_mms(up_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
+            if new_host_rs_id < 2:
+                self._add_host_to_mms(up_node_host, mongo_svc.ROUTER_DEFAULT_PORT)
+            if new_host_shard_id == 0 and new_host_rs_id == 0:
+                self._add_host_to_mms(up_node_host, mongo_svc.CONFIG_SERVER_DEFAULT_PORT)
+            if len(self._get_shard_hosts(new_host_shard_id)) % 2 == 0:
+                self._add_host_to_mms(HOSTNAME_TPL % (new_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
+            else:
+                self._delete_host_from_mms(HOSTNAME_TPL % (new_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
+
+
     def on_HostUp(self, message):
         if BuiltinBehaviours.MONGODB not in message.behaviour:
             return
 
-        private_ip = self._platform.get_private_ip()
-        if message.local_ip != private_ip:
-                
             new_host_shard_idx = int(message.mongodb['shard_index'])
             new_host_rs_id = int(message.mongodb['replica_set_index'])
 
+        private_ip = self._platform.get_private_ip()
+        if message.local_ip != private_ip:
             """ If mongos runs on this instance """
 
             if self.rs_id == 0 and self.shard_index == 0:
@@ -663,6 +698,9 @@ class MongoDBHandler(ServiceCtlHandler):
             else:
                 if len(self.mongodb.replicas) % 2 != 0:
                     self.mongodb.stop_arbiter()
+
+        if 'mms' in __mongodb__:
+            self._on_new_host_mms_configure(new_host_shard_idx, new_host_rs_id)
 
 
     def update_shard(self):
@@ -804,7 +842,36 @@ class MongoDBHandler(ServiceCtlHandler):
         self.mongodb.mongod.stop('Rebooting instance')
 
                 
+    def _on_host_terminate_mms_configure(self, down_host_shard_id, down_host_rs_id):
+        """
+        Configure MMS on host terminate
+
+        :type down_host_shard_id: int
+        :param down_host_shard_id: Terminated server shard index
+
+        :type down_host_rs_id: int
+        :param down_host_rs_id: Terminated server replica set index
+        """
+
+        if self.shard_index == 0 and self.rs_id == 0:
+            down_node_host = HOSTNAME_TPL % (down_host_shard_id, down_host_rs_id)
+            self._delete_host_from_mms(down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
+            if down_host_rs_id < 2:
+                self._delete_host_from_mms(down_node_host, mongo_svc.ROUTER_DEFAULT_PORT)
+            if down_host_shard_id == 0 and down_host_rs_id == 0:
+                self._delete_host_from_mms(down_node_host, self.mongodb.arbiter.port)
+            if STATE[CLUSTER_STATE_KEY] != MongoDBClusterStates.TERMINATING\
+                    and len(self._get_shard_hosts(down_host_shard_id)) % 2 == 0:
+                self._add_host_to_mms(HOSTNAME_TPL % (down_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
+            else:
+                self._delete_host_from_mms(HOSTNAME_TPL % (down_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
+
+            
     def on_BeforeHostTerminate(self, message):
+        if 'mms' in __mongodb__:
+        down_host_shard_id = int(message.mongodb['shard_index'])
+        down_host_rs_id = int(message.mongodb['replica_set_index'])
+            self._on_host_terminate_mms_configure(down_host_shard_id, down_host_rs_id)
 
         if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
             return
@@ -1100,9 +1167,8 @@ class MongoDBHandler(ServiceCtlHandler):
         message.mongodb = msg_data.copy()
 
 
-    def _get_shard_hosts(self):
+    def _get_shard_hosts(self, shard_index):
         hosts = self._get_cluster_hosts()
-        shard_index = self.shard_index
         return [host for host in hosts if host.shard_index == shard_index]
 
 
@@ -1146,7 +1212,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
             msg_body = dict(mongodb=dict(shard_index=self.shard_index,
                                             replica_set_index=self.rs_id))
-            for host in self._get_shard_hosts():
+            for host in self._get_shard_hosts(self.shard_index):
                 self.send_int_message(host.internal_ip,
                                                 MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER,
                                                 msg_body, broadcast=True)
@@ -1230,7 +1296,7 @@ class MongoDBHandler(ServiceCtlHandler):
                     raise HandlerError('Platform does not support pluggable volumes')
 
                 self._logger.info('Mongodb too stale to synchronize. Trying to get snapshot from primary')
-                for host in self._get_shard_hosts():
+                for host in self._get_shard_hosts(self.shard_index):
                     self.send_int_message(host.internal_ip,
                                     MongoDBMessages.INT_CREATE_DATA_BUNDLE,
                                     include_pad=True, broadcast=True)
@@ -1303,6 +1369,12 @@ class MongoDBHandler(ServiceCtlHandler):
         except:
             self.send_result_error_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT, 'Cluster terminate failed')
     
+        # Delete mongodb-0-0 from MMS on terminate cluster
+        if 'mms' in __mongodb__ and self.shard_index == 0 and self.rs_id == 0:
+            self._delete_host_from_mms(self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+            self._delete_host_from_mms(self.hostname, mongo_svc.ROUTER_DEFAULT_PORT)
+            self._delete_host_from_mms(self.hostname, mongo_svc.CONFIG_SERVER_DEFAULT_PORT)
+        
 
     def on_MongoDb_IntClusterTerminate(self, message):
         try:
@@ -1444,6 +1516,40 @@ class MongoDBHandler(ServiceCtlHandler):
                     {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.CONFIG_SERVER_DEFAULT_PORT)},
             ])
     
+            
+    def _add_host_to_mms(self, host, port):
+        """
+        Function to add host to MMS
+        MMS api call https://mms.10gen.com/host/v1/addHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
+
+        :type host: string
+        :param host: hostname
+
+        :type port: string or int
+        :param port: MongoDB instance port
+        """
+
+        req = 'https://mms.10gen.com/host/v1/addHost/%s?%s'\
+            % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
+        urllib2.urlopen(req)
+
+
+    def _delete_host_from_mms(self, host, port):
+        """
+        Function to delete host from MMS
+        MMS api call https://mms.10gen.com/host/v1/deleteHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
+
+        :type host: string
+        :param host: hostname
+
+        :type port: string or int
+        :param port: MongoDB instance port
+        """
+
+        req = 'https://mms.10gen.com/host/v1/deleteHost/%s?%s'\
+            % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
+        urllib2.urlopen(req)
+        
             
     @property
     def shard_index(self):
