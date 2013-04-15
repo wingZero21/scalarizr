@@ -289,7 +289,7 @@ class RedisAPI(object):
         if ri.master:
             masters = {}
             for port in ri.ports:
-                masters[port] = 'up'
+                masters[port] = {'status':'up'}
             return {'masters': masters}
 
         slaves = {}
