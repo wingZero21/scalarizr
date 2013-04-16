@@ -8,12 +8,13 @@ from scalarizr.bus import bus
 import scalarizr.libs.metaconf as metaconf
 from scalarizr.node import __node__
 from scalarizr.handlers.nginx import NginxInitScript
-from scalarizr.config import BuiltinBehaviours
 
 
-CNF_SECTION = BuiltinBehaviours.WWW
 APP_INC_PATH = 'app_include_path'
 HTTPS_INC_PATH = 'https_include_path'
+
+
+__nginx__ = __node__['nginx']
 
 
 class NginxAPI(object):
@@ -46,15 +47,13 @@ class NginxAPI(object):
         self.service = NginxInitScript()
 
         if not app_inc_dir:
-            ini = bus.cnf.rawini
-            app_inc_dir = os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH))
+            app_inc_dir = os.path.dirname(__nginx__[APP_INC_PATH])
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
         self.app_servers_inc = metaconf.Configuration('nginx')
         self.app_servers_inc.read(self.app_inc_path)
 
         if not https_inc_dir:
-            ini = bus.cnf.rawini
-            https_inc_dir = os.path.dirname(ini.get(CNF_SECTION, HTTPS_INC_PATH))
+            https_inc_dir = os.path.dirname(__nginx__[HTTPS_INC_PATH])
         self.https_inc_path = os.path.join(https_inc_dir, 'https.include')
         self.https_inc = metaconf.Configuration('nginx')
 
@@ -250,9 +249,9 @@ class NginxAPI(object):
             # TODO: delete backends from initial config, that have similar name as new
             location = backend_destinations[0]['location']
 
-            if location.startswith('/'):
-                location = location[1:]
-            name = '%s_%s' % (addr, location.replace('/', '_'))
+            # if location.startswith('/'):
+            #     location_name = location[1:]
+            name = '%s%s' % (addr, location.replace('/', '_'))
             if name.endswith('_'):
                 name = name[:-1]
 

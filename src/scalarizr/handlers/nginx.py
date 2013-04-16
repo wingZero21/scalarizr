@@ -16,6 +16,7 @@ from scalarizr.service import CnfController
 from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 from scalarizr.api import service as preset_service
+from scalarizr.node import __node__
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
@@ -42,13 +43,14 @@ HTTPS_INC_PATH = 'https_include_path'
 APP_INC_PATH = 'app_include_path'
 UPSTREAM_APP_ROLE = 'upstream_app_role'
 
+__nginx__ = __node__['nginx']
+
 
 class NginxInitScript(initdv2.ParametrizedInitScript):
     _nginx_binary = None
 
     def __init__(self):
-        cnf = bus.cnf; ini = cnf.rawini
-        self._nginx_binary = ini.get(CNF_SECTION, BIN_PATH)
+        self._nginx_binary = __nginx__[BIN_PATH]
 
 
         pid_file = None
@@ -177,8 +179,7 @@ def get_handlers():
 
 class NginxCnfController(CnfController):
     def __init__(self):
-        cnf = bus.cnf; ini = cnf.rawini
-        nginx_conf_path = os.path.join(os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)), 'nginx.conf')
+        nginx_conf_path = os.path.join(os.path.dirname(__nginx__[APP_INC_PATH]), 'nginx.conf')
         CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx', {"on":'1',"'off'":'0','off':'0'})
 
     @property
@@ -216,15 +217,13 @@ class NginxHandler(ServiceCtlHandler):
 
     def on_reload(self):
         self._queryenv = bus.queryenv_service
-        self._cnf = bus.cnf
 
-        ini = self._cnf.rawini
-        self._nginx_binary = ini.get(CNF_SECTION, BIN_PATH)
-        self._https_inc_path = ini.get(CNF_SECTION, HTTPS_INC_PATH)
-        self._app_inc_path = ini.get(CNF_SECTION, APP_INC_PATH)
-        self._app_port = ini.get(CNF_SECTION, APP_PORT)
+        self._nginx_binary = __nginx__[BIN_PATH]
+        self._https_inc_path = __nginx__[HTTPS_INC_PATH]
+        self._app_inc_path = __nginx__[APP_INC_PATH]
+        self._app_port = __nginx__[APP_PORT]
         try:
-            self._upstream_app_role = ini.get(CNF_SECTION, UPSTREAM_APP_ROLE)
+            self._upstream_app_role = __nginx__[UPSTREAM_APP_ROLE]
         except ConfigParser.Error:
             self._upstream_app_role = None
 
@@ -581,9 +580,8 @@ class NginxConf(BaseConfig):
 class NginxPresetProvider(PresetProvider):
 
     def __init__(self):
-        cnf = bus.cnf
-        ini = cnf.rawini
-        nginx_conf_path = os.path.join(os.path.dirname(ini.get(CNF_SECTION, APP_INC_PATH)), 'nginx.conf')
+
+        nginx_conf_path = os.path.join(os.path.dirname(__nginx__[APP_INC_PATH]), 'nginx.conf')
         config_mapping = {'nginx.conf':NginxConf(nginx_conf_path)}
         service = initdv2.lookup('nginx')
         PresetProvider.__init__(self, service, config_mapping)

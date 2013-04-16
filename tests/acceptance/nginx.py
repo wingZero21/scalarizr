@@ -1,33 +1,77 @@
 # -*- coding: utf-8 -*-
+import BaseHTTPServer
+import urllib2
+from threading import Thread
+
 from lettuce import step
 from lettuce import world
 from lettuce import before
 from scalarizr.api import nginx
 
+
+class Server(BaseHTTPServer.HTTPServer):
+    """
+    Server creates simple HTTP listener on given port on localhost
+    """
+
+    class _Handler(BaseHTTPServer.BaseHTTPRequestHandler):
+
+        get_response = "<html><head><title>Something</title></head></html>"
+
+        def do_HEAD(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+
+        def do_GET(self):
+            """Respond to a GET request."""
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(Server._Handler.get_response)
+
+    def __init__(self, port, get_response=None):
+        "process with running server should be creaded"
+        if get_response:
+            Server._Handler.get_response = get_response
+        super_cls = BaseHTTPServer.HTTPServer
+        super_cls.__init__(self, ('localhost', port), self._Handler)
+
+        def serve_job():
+            print 'serve started'
+            super_cls.serve_forever(self)
+            print 'serve ended'
+        self.serve_thread = Thread(target=serve_job)
+
+    def serve_forever(self):
+        self.serve_thread.start()
+
+
 @before.each_feature
 def create_api(feature):
     world.app_servers = './app-servers.include'
     world.https_inc = './https.include'
-    world.api = nginx.NginxAPI('./', './')
+    world.api = nginx.NginxAPI()
 
 @step(u'Given I have a server')
 def given_i_have_a_server(step):
-    world.addr = 'uty.com'
-    world.servers = ['123.123.123.123']
+    world.expected_response = 'KUKU'
+    world.server = Server(8000, world.expected_response)
+    world.server.serve_forever()
+    world.servers = [{ 'host': 'localhost', 'port': '8000'}]
 
 @step(u'When I add proxy')
 def when_i_add_proxy(step):
-    world.api.add_proxy(world.addr, servers=world.servers)
+    world.api.add_proxy('uty.com', servers=world.servers, port=8008)
 
 @step(u'Then I expect proxying')
 def then_i_expect_proxying(step):
-    # TODO: check conf files
-    s = ''
-    with open(world.app_servers, 'r') as fp:
-        s = fp.read()
-    with open(world.https_inc, 'r') as fp:
-        s = s + '\n' + fp.read()
-    raise BaseException(s)
+    conn = urllib2.urlopen('http://localhost:8008')
+    response = conn.read()
+    world.server.shutdown()
+    world.server.server_close()
+    urllib2.urlopen('http://localhost:8008')
+    assert response == world.expected_response
 
 ###############################################################################
 

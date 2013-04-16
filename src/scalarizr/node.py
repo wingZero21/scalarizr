@@ -347,6 +347,11 @@ __node__['mongodb'] = Compound({
                                 Ini('%s/%s.ini' % (private_dir, 'mongodb'), 'mongodb')
 })
 
+__node__['nginx'] = Compound({
+    'binary_path,app_include_path,https_include_path,app_port,main_handler,upstream_app_role':
+        Ini('%s/%s.ini' % (private_dir, 'www'), 'www')
+})
+
 __node__['ec2'] = Compound({
         't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
         'hostname_as_pubdns':
