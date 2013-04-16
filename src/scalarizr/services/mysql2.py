@@ -1,10 +1,14 @@
 from __future__ import with_statement
 
 import os
+import sys
 import re
 import logging
 import subprocess
 import threading
+import time
+import signal
+import errno
 
 from scalarizr import linux, storage2
 from scalarizr.storage2 import cloudfs
@@ -264,7 +268,48 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			if self._transfer:
 				self._transfer.kill()
 			if self._xbak:
-				self._xbak.kill()
+				self._xbak_kill()
+
+	def _xbak_kill(self):
+		""" Popen.kill() is not enough when one of the children gets hung """
+
+		# get children
+		try:
+			pgrep = linux.system(linux.build_cmd_args(executable="pgrep",
+					short=["-P"], params="%s" % self._xbak.pid))
+		except linux.LinuxError:
+			children = []
+		else:
+			children = map(int, pgrep[0].splitlines())
+			#? the children may have children of their own
+
+		# sigterm xbak
+		self._xbak.terminate()
+
+		# wait
+		time.sleep(2)
+
+		# sigkill xbak
+		self._xbak.kill()
+
+		# try killing children
+		for child in children:
+			try:
+				os.kill(child, signal.SIGKILL)
+			except OSError, e:
+				if e.errno != errno.ESRCH:
+					LOG.warning("Failed to stop innobackupex child, pid %s", child)
+					#? or raise or report in a message	   
+			else:
+				LOG.debug("Had to clean up innobackupex child, pid %s", child)
+
+		# sql-slave not running? run
+		try:
+			LOG.debug("Attempting START SLAVE IO_THREAD")
+			self._client().start_slave_io_thread()
+		except:
+			# pymysql.err.InternalError: (1200, u'The server is not configured as slave; fix in config file or with CHANGE MASTER TO')
+			LOG.debug('Caught error', exc_info=sys.exc_info())
 
 
 class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):

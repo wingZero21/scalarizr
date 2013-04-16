@@ -219,6 +219,10 @@ class MySQLClient(object):
 
 	def stop_slave_io_thread(self):
 		return self.fetchone("STOP SLAVE IO_THREAD")
+
+
+	def start_slave_io_thread(self):
+		return self.fetchone("START SLAVE IO_THREAD")
 	
 	
 	def lock_tables(self):
