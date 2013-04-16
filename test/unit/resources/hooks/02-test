@@ -1,3 +1,0 @@
-#!/bin/sh
-echo "__SCRIPT 2__creates file named as 1st execution parameter"
-touch /home/shaitanich/workspace/scalarizr-trunk/test/resources/hooks/$1

@@ -6,13 +6,13 @@ Created on Dec 12, 2011
 '''
 
 class NotFound(Exception):
-	pass
+    pass
 
 class Empty(Exception):
-	pass
+    pass
 
 class Timeout(Exception):
-	pass
+    pass
 
 class Duplicate(Exception):
-	pass
+    pass

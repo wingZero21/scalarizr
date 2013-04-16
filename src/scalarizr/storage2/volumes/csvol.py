@@ -173,7 +173,7 @@ class CSVolume(base.Volume):
                         raise storage2.StorageError("Volume %s doesn't exist" %
                                                     self.id)
                     self._native_vol = vol_list[0]
-                    self._check_attachement()                    
+                    self._check_attachement()
 
                 if not self.id:
                     LOG.debug('Creating new volume')

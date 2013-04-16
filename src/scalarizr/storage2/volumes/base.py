@@ -33,15 +33,21 @@ class Base(bases.ConfigDriven):
 
 
 class Volume(Base):
+    """
+    Base class for all volume types
+    """
     MAX_SIZE = None
 
     def __init__(self,
                             device=None,
                             fstype='ext3',
-                            fscreated=False,
                             mpoint=None,
                             snap=None,
                             **kwds):
+
+        # Get rid of fscreated flag
+        kwds.pop('fscreated', None)
+
         super(Volume, self).__init__(
                         device=device,
                         fstype=fstype,
@@ -53,6 +59,13 @@ class Volume(Base):
 
 
     def ensure(self, mount=False, mkfs=False, fstab=False, **updates):
+        """
+        Make sure that volume is attached and ready for use.
+
+        :param mount: if set, volume eventually will be mounted to it's mpoint
+        :param mkfs: if set, volume will have corresponding fs eventually
+        :return:
+        """
         if not self.features['restore']:
             self._check_restore_unsupported()
         if self.snap and isinstance(self.snap, Snapshot):
@@ -79,22 +92,28 @@ class Volume(Base):
 
 
     def snapshot(self, description=None, tags=None, **kwds):
+
         return self._snapshot(description, tags, **kwds)
 
 
     def destroy(self, force=False, **kwds):
+        LOG.debug('Destroying volume %s', self.id)
         if self.device:
             self.detach(force, **kwds)
         self._destroy(force, **kwds)
+        LOG.debug('Volume %s destroyed', self.id)
 
 
     def detach(self, force=False, **kwds):
+        LOG.debug('Detaching volume %s', self.id)
         if not self.device:
+            LOG.debug('Volume %s has no device, nothing to detach', self.id)
             return
         self.umount()
         self._detach(force, **kwds)
         if self.features['detach']:
             self.device = None
+        LOG.debug('Volume %s detached', self.id)
 
 
     def mount(self):
@@ -110,12 +129,20 @@ class Volume(Base):
 
 
     def umount(self):
-        self._check()
+        try:
+            self._check(fstype=False, device=True)
+        except:
+            return
+
         mod_mount.umount(self.device)
 
 
     def mounted_to(self):
-        self._check()
+        try:
+            self._check(fstype=False, device=True)
+        except:
+            return False
+
         try:
             return mod_mount.mounts()[self.device].mpoint
         except KeyError:
@@ -124,12 +151,7 @@ class Volume(Base):
 
     def is_fs_created(self):
         self._check()
-        try:
-            device_attrs = coreutils.blkid(self.device)
-        except:
-            return False
-
-        fstype = device_attrs.get('type')
+        fstype = coreutils.blkid(self.device).get('type')
 
         if fstype is None:
             return False
@@ -138,17 +160,15 @@ class Volume(Base):
             return True
 
 
-    def mkfs(self):
+    def mkfs(self, force=False):
         self._check()
-        if self.fscreated:
+        if not force and self.is_fs_created():
             raise storage2.OperationError(
-                            'fscreated flag is active. Filesystem creation denied '
-                            'to preserve the original filesystem. If you wish to '
-                            'proceed anyway set fscreated=False and retry')
+                                            'Filesystem on device %s is already created' % self.device)
+
         fs = storage2.filesystem(self.fstype)
         LOG.info('Creating filesystem on %s', self.device)
         fs.mkfs(self.device)
-        self.fscreated = True
 
 
     def clone(self):
@@ -288,6 +308,8 @@ class Volume(Base):
 
 
     def _ensure(self):
+        # Base volume doesn't guarantee that device 'self.device' exists
+        # TODO: Add explanatory comment
         pass
 
 

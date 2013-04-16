@@ -1,4 +1,0 @@
-#!/bin/sh
-echo "__SCRIPT 3__touched file named as aenv parameter:"
-echo $aenv
-touch test/resources/hooks/$aenv

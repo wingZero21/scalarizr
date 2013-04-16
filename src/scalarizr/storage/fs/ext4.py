@@ -6,9 +6,9 @@ Created on Nov 24, 2010
 @author: marat
 '''
 
-from .ext3 import ExtFileSystem  
+from .ext3 import ExtFileSystem
 
 class Ext4FileSystem(ExtFileSystem):
-	name = 'ext4'
+    name = 'ext4'
 
 __filesystem__ = Ext4FileSystem
