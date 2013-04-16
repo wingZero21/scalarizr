@@ -12,6 +12,7 @@ else:
 
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
+from scalarizr.util import software
 
 class parameter_handler(object):
     def __init__(self, regexp):
@@ -29,22 +30,27 @@ class BaseExec(object):
     package = None
 
     def __init__(self, lazy_check=True, **kwds):
+        kwds['close_fds'] = True
+        self.subprocess_kwds = kwds
         self.lazy_check = lazy_check
         if not lazy_check:
             self.check()
         self._collect_handlers()
-        kwds['close_fds'] = True
-        self.subprocess_kwds = kwds
 
 
     def check(self):
-        if not os.access(self.executable, os.X_OK):
+        if not self.executable.startswith('/'):
+            exec_path = software.whereis(self.executable)
+        else:
+            exec_path = self.executable
+
+        if not exec_path or not os.access(exec_path, os.X_OK):
             if self.package:
                 pkgmgr.installed(self.package)
             else:
                 msg = 'Executable %s is not found, you should either ' \
                       'specify `package` attribute or install the software ' \
-                      'manually' % (self.executable)
+                      'manually' % self.executable
                 raise linux.LinuxError(msg)
 
 
@@ -124,6 +130,8 @@ class BaseExec(object):
             if not self._checked:
                 self.check()
             cmd_args = self._prepare_args(*params, **keys)
+            if not self.subprocess_kwds.get('shell') and not self.executable.startswith('/'):
+                self.executable = software.whereis(self.executable)
             final_args = (self.executable,) + tuple(cmd_args)
             self._check_streams()
             return subprocess.Popen(final_args, **self.subprocess_kwds)
@@ -145,7 +153,7 @@ class BaseExec(object):
 
 
 class dd_exec(BaseExec):
-    executable = 'dd'
+    executable = '/bin/dd'
 
     # dd uses -- before parameter only for --version and --help,
     # which we can ignore
@@ -161,6 +169,7 @@ class dd_exec(BaseExec):
 
 class iptables_exec(BaseExec):
     executable = '/sbin/iptables'
+    package = 'iptables'
 
     @parameter_handler('^(not_)?(.+)')
     def params_with_not(self, re_result, key, value, cmd_args):
