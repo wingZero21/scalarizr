@@ -276,7 +276,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		# get children
 		try:
 			pgrep = linux.system(linux.build_cmd_args(executable="pgrep",
-					short=["-P"], params="%s" % self._xbak.pid))
+					short=["-P"], params=[str(self._xbak.pid)]))
 		except linux.LinuxError:
 			children = []
 		else:
