@@ -341,7 +341,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 				hostup_msg.body['volumes'] = []
 				for vol_info in volumes:
 					vol = storage2_volume(**vol_info)
-					vol.ensure(mount=bool(vol.mpoint), mkfs=True, fstab=True)
+					vol.ensure(mount=bool(vol.mpoint), mkfs=True)
 					vol_config = vol.config()
 					hostup_msg.body['volumes'].append(vol_config)
 				self._logger.debug('HU volumes:\n%s' % hostup_msg.body['volumes'])

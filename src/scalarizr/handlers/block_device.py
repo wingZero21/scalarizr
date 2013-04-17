@@ -14,6 +14,7 @@ from scalarizr.bus import bus
 from scalarizr import storage2
 from scalarizr import config
 from scalarizr import handlers
+from scalarizr.node import __node__
 from scalarizr.messaging import Messages
 from scalarizr.util import wait_until
 from scalarizr.linux import mount
@@ -30,6 +31,7 @@ class BlockDeviceHandler(handlers.Handler):
 
 	def __init__(self, vol_type):
 		self._vol_type = vol_type
+		self._volumes = []
 		self.on_reload()
 		
 		bus.on(init=self.on_init, reload=self.on_reload)
@@ -58,13 +60,21 @@ class BlockDeviceHandler(handlers.Handler):
 		return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, Messages.MOUNTPOINTS_RECONFIGURE)
 
 	def on_init(self):
-		bus.on("before_host_init", self.on_before_host_init)
-		bus.on("host_init_response", self.on_host_init_response)
+		bus.on(
+			before_host_init=self.on_before_host_init,
+			host_init_response=self.on_host_init_response,
+			before_host_up=self.on_before_host_up
+		)
+
 		try:
 			handlers.script_executor.skip_events.add(Messages.INT_BLOCK_DEVICE_UPDATED)
 		except AttributeError:
 			pass
-
+		if __node__['state'] == 'running':
+			volumes = self._queryenv.list_farm_role_params(__node__['farm_role_id']).get('volumes', [])
+			for vol in volumes:
+				vol = storage2.volume(vol)
+				vol.ensure(mount=bool(vol.mpoint))
 
 	def on_before_host_init(self, *args, **kwargs):
 		LOG.debug("Adding udev rule for EBS devices")
@@ -82,12 +92,23 @@ class BlockDeviceHandler(handlers.Handler):
 			raise
 
 
-	def on_host_init_response(self, *args, **kwargs):
+	def on_host_init_response(self, hir):
+		self._volumes = hir.body.get('volumes', [])
 		LOG.info('Configuring block device mountpoints')
 		with bus.initialization_op as op:
 			with op.phase(self._phase_plug_volume):
 				wait_until(self._plug_all_volumes, sleep=10, timeout=600, 
 						error_text='Cannot attach and mount disks in a reasonable time')
+
+	def on_before_host_up(self, hostup):
+		if self._volumes:
+			LOG.debug('HIR volumes: %s', self._volumes)
+			hostup.body['volumes'] = []
+			for vol in self._volumes:
+				vol = storage2.volume(**vol)
+				LOG.info('Ensuring %s volume %s', vol.type, dict(vol))
+				vol.ensure(mount=bool(vol.mpoint), mkfs=True)
+				hostup.body['volumes'].append(dict(vol))
 
 
 	def _plug_all_volumes(self):
