@@ -327,6 +327,10 @@ class CSVolume(base.Volume):
         self._check_connection()
         volume_id = self.id or self._native_vol.id
 
+        channel = '/tmp/udev-block-device'
+        if not os.path.exists(channel):
+            os.remove(channel)
+
         msg = 'Attaching volume %s%s%s' % (volume_id,
                                            device_id and ' as device %s' % deviceid_to_devname(device_id) or '',
                                            ' instance %s' % instance_id or '')
@@ -334,7 +338,6 @@ class CSVolume(base.Volume):
         self._conn.attachVolume(volume_id, instance_id, device_id)
 
         LOG.debug('Checking that volume %s is attached', volume_id)
-
 
 
         wait_until(self._attached,
@@ -347,7 +350,6 @@ class CSVolume(base.Volume):
 
         # Not true device name
         #devname = deviceid_to_devname(vol.deviceid)
-        channel = '/tmp/szr-block-device.channel'
 
         def scsi_attached():
             # Rescan all SCSI buses
@@ -365,7 +367,8 @@ class CSVolume(base.Volume):
         LOG.debug('Device is available in OS')
 
         with open(channel) as fp:
-            devname = fp.read()        
+            devname = fp.read()
+        os.remove(channel)        
 
         return vol, devname
 

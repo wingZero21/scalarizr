@@ -19,15 +19,15 @@ def main():
 	logger = logging.getLogger("scalarizr.scripts.udev")
 	logger.info("Starting udev script...")
 
-	channel = '/tmp/szr-block-device.channel'
-	if not os.path.exists(channel):
-		os.mkfifo(channel)
-	with open(channel, 'w') as fp:
-		fp.write(os.environ['DEVNAME'])
+
 	
 	try:
 		initd = initdv2.lookup('scalarizr')
 		if initd.running:
+			channel = '/tmp/udev-block-device'
+			with open(channel, 'w+') as fp:
+				fp.write(os.environ['DEVNAME'])
+
 			msg_service = bus.messaging_service
 			producer = msg_service.get_producer()
 		
@@ -40,4 +40,3 @@ def main():
 		logger.exception(e)
 	finally:
 		time.sleep(2)
-		os.remove(channel)
