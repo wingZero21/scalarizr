@@ -334,18 +334,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 			self._define_initialization(message)
 			bus.fire("host_init_response", message)
 			hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)
-			###
-			if 'volumes' in message.body:
-				self._logger.debug('HIR volumes:\n%s' % message.volumes)
-				volumes = message.volumes or []
-				hostup_msg.body['volumes'] = []
-				for vol_info in volumes:
-					vol = storage2_volume(**vol_info)
-					vol.ensure(mount=bool(vol.mpoint), mkfs=True)
-					vol_config = vol.config()
-					hostup_msg.body['volumes'].append(vol_config)
-				self._logger.debug('HU volumes:\n%s' % hostup_msg.body['volumes'])
-			###
 			bus.fire("before_host_up", hostup_msg)
 			if bus.scalr_version >= (2, 2, 3):
 				self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_subhandler=True)
