@@ -38,9 +38,6 @@ class RouterHandler(handlers.Handler):
 
 			<router>
 				<cidr>10.0.0.0/16</cidr>
-				<subnets>
-					<item>10.0.0.0/24</item>
-				</subnets>
 				<whitelist>
 					<item></item>
 				</whitelist>
@@ -74,15 +71,13 @@ class RouterHandler(handlers.Handler):
 		linux.system(('augtool',), stdin=augscript) 
 		linux.system(('sysctl', '-p'))
 
-		rules = []
-		for subnet_cidr in self._data.get('subnets', []):
-			rules.append({
+		if self._data['cidr']:
+			iptables.ensure({'POSTROUTING': [{
 				'table': 'nat', 
-				'source': subnet_cidr, 
+				'source': self._data['cidr'], 
 				'not_destination': self._data['cidr'],
-				'jump': 'MASQUERADE'})
-		if rules:
-			iptables.ensure({'POSTROUTING': rules})
+				'jump': 'MASQUERADE'
+				}]})
 
 		solo_home = '/tmp/chef'
 		solo_rb = '%s/solo.rb' % solo_home
