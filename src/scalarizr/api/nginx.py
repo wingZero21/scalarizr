@@ -8,7 +8,10 @@ from scalarizr.bus import bus
 import scalarizr.libs.metaconf as metaconf
 from scalarizr.node import __node__
 from scalarizr.handlers.nginx import NginxInitScript
-
+# import StringIO
+# str_fp = StringIO.StringIO()
+# self.app_servers_inc.write_fp(str_fp, close=False)
+# raise BaseException('%s' % str_fp.getvalue())
 
 APP_INC_PATH = 'app_include_path'
 HTTPS_INC_PATH = 'https_include_path'
@@ -21,11 +24,14 @@ class NginxAPI(object):
 
     # TODO: move next method to Configuration class
     def _find_xpath(self, conf, element_xpath, value):
-        '''
-        Finds xpath of certain element by given value.
+        """
+        Finds first xpath of certain element by given value.
+
         Use this method when you need to find certain element in list of 
         elements with same name. Example:
+
         config contents:
+
         ``server 12.23.34.45;``
         ``server 10.10.12.11 backend;``
         ``server 10.10.12.12 backend;``
@@ -34,14 +40,37 @@ class NginxAPI(object):
         element (its xpath will be 'server[1]').
 
         Wildcards can be used:
+
         ``api._find_xpath(conf, 'server', '10.10.12.11*')`` will find second
         element ('server[2]')
-        '''
-        for i, _ in enumerate(conf.get_list(element_xpath)):
-            xpath = '%s[%i]' % (element_xpath, i + 1)
-            if fnmatch(conf.get(xpath), value):
-                return xpath
+        """
+        for i, val in enumerate(conf.get_list(element_xpath)):
+            if fnmatch(val, value):
+                return '%s[%i]' % (element_xpath, i + 1)
         return None
+
+    # TODO: move next method to Configuration class
+    def _find_all_xpaths(self, conf, element_xpath, value):
+        """
+        Much like ``_find_xpath()`` this method finds xpaths by given value,
+        but returns all matches in list.
+
+        Example:
+
+        config contents:
+
+        ``server 12.23.34.45;``
+        ``server 10.10.12.11 backend;``
+        ``server 10.10.12.12 backend;``
+
+        ``api._find_all_xpaths(conf, 'server', '10.10.12.11*')`` will return
+        ``['server[2]', 'server[3]'']``.
+        """
+        result = []
+        for i, val in enumerate(conf.get_list(element_xpath)):
+            if fnmatch(val, value):
+                result.append('%s[%i]' % (element_xpath, i + 1))
+        return result or None
 
     def __init__(self, app_inc_dir=None, https_inc_dir=None):
         self.service = NginxInitScript()
@@ -52,12 +81,30 @@ class NginxAPI(object):
         self.app_servers_inc = metaconf.Configuration('nginx')
         self.app_servers_inc.read(self.app_inc_path)
 
+        # TODO: rename backend_table because it actually a list
+        self.backend_table = []
+
         if not https_inc_dir:
             https_inc_dir = os.path.dirname(__nginx__[HTTPS_INC_PATH])
         self.https_inc_path = os.path.join(https_inc_dir, 'https.include')
         self.https_inc = metaconf.Configuration('nginx')
 
         self.https_inc.read(self.https_inc_path)
+
+    def _clear_nginx_includes(self):
+        with open(self.app_inc_path, 'w') as fp:
+            fp.write('')
+        with open(self.https_inc_path, 'w') as fp:
+            fp.write('')
+        self.app_servers_inc.read(self.app_inc_path)
+        self.https_inc.read(self.https_inc_path)
+
+    @rpc.service_method
+    def recreate_backend_table(self, proxy_list):
+        self._clear_nginx_includes()
+        self.backend_table = []
+        for proxy_parms in proxy_list:
+            self.add_proxy(**proxy_parms)
 
     def _get_role_servers(self, role_id):
         """ Method is used to get role servers from scalr """
@@ -98,7 +145,8 @@ class NginxAPI(object):
     def _parse_roles(self, roles):
         """
         Parses list of roles. Role can be either int (role id)
-        or dictionary. Dictionary example
+        or dictionary. Dictionary example:
+
         .. code-block:: python
             {
             'id': 123,
@@ -107,9 +155,13 @@ class NginxAPI(object):
             # ...
             # other backend params
             }
+
         Returns destination dictionaries with format like above
         plus servers list in 'servers' key.
         """
+        if not roles:
+            return []
+
         destinations = []
         for role in roles:
             if type(role) is str:
@@ -125,7 +177,8 @@ class NginxAPI(object):
     def _parse_servers(self, servers):
         """
         Parses list of servers. Servers can be either str (server ip)
-        or dictionary. Dictionary example
+        or dictionary. Dictionary example:
+
         .. code-block:: python
             {
             'host': '10.20.30.40',
@@ -134,9 +187,13 @@ class NginxAPI(object):
             # ...
             # other backend params
             }
+
         Returns destination dictionaries with format like above
         plus servers list in 'servers' key (will contain only one ip).
         """
+        if not servers:
+            return []
+
         destinations = []
         for server in servers:
             if type(server) is str:
@@ -185,10 +242,10 @@ class NginxAPI(object):
         return config
 
     def _group_destinations(self, destinations):
-        '''
+        """
         Groups destinations by location in list of lists.
         If no location defined assumes that it'r '/' location.
-        '''
+        """
         sorted_destinations = sorted(destinations,
                                      key=lambda x: x.get('location'),
                                      reverse=True)
@@ -216,9 +273,9 @@ class NginxAPI(object):
                      ip_hash=True,
                      max_fails=None,
                      fail_timeout=None):
-        '''
+        """
         Adds backend to app-servers config, but without writing it to file.
-        '''
+        """
         backend = self._make_backend_conf(name,
                                           destinations,
                                           port=port,
@@ -234,26 +291,41 @@ class NginxAPI(object):
                       ip_hash=True,
                       max_fails=None,
                       fail_timeout=None):
-        '''
+        """
         Makes backend for each group of destinations and writes it to
         app-servers config file.
+
         Returns tuple of pairs with location and backend names:
         [[dest1, dest2], [dest3]] -> ((location1, name1), (location2, name2))
 
         Tuple of pairs is used instead of dict, because we need to keep order 
         saved.
-        '''
+
+        Name of backend is construct by pattern:
+
+            ```addr`[_`location`][__`role_id1`[_`role_id2`[...]]]``
+
+        Example:
+
+            ``test.com_somepage_123_345``
+        """
         locations_and_backends = ()
         # making backend configs for each group
         for backend_destinations in grouped_destinations:
             # TODO: delete backends from initial config, that have similar name as new
             location = backend_destinations[0]['location']
 
-            # if location.startswith('/'):
-            #     location_name = location[1:]
-            name = '%s%s' % (addr, location.replace('/', '_'))
-            if name.endswith('_'):
-                name = name[:-1]
+            # Find role ids that will be used in backend
+            role_ids = set([dest.get('id') for dest in backend_destinations])
+            role_ids.discard(None)
+            role_namepart = '_'.join(role_ids)
+
+            if location.startswith('/'):
+                location = location[1:]
+
+            name = '%s_%s__%s' % (addr, 
+                                  location.replace('/', '_').rstrip('_'),
+                                  role_namepart)
 
             self._add_backend(name,
                               backend_destinations,
@@ -262,7 +334,7 @@ class NginxAPI(object):
                               max_fails=max_fails,
                               fail_timeout=fail_timeout)
 
-            locations_and_backends += ((location, name),)
+            locations_and_backends += ((location or '/', name),)
 
         return locations_and_backends
 
@@ -273,9 +345,9 @@ class NginxAPI(object):
                           ssl=False,
                           ssl_port=None,
                           ssl_certificate_id=None):
-        '''
+        """
         Makes config (metaconf.Configuration object)
-        '''
+        """
         config = metaconf.Configuration('nginx')
         server_xpath = 'server'
         config.add('server', '')
@@ -322,9 +394,9 @@ class NginxAPI(object):
                     ssl=False,
                     ssl_port=None,
                     ssl_certificate_id=None):
-        '''
+        """
         Adds server to https config, but without writing it to file.
-        '''
+        """
         server_config = self._make_server_conf(addr,
                                                locations_and_backends,
                                                port,
@@ -348,10 +420,9 @@ class NginxAPI(object):
                   backend_max_fails=None,
                   backend_fail_timeout=None,
                   reread_conf=True):
-        '''
+        """
         Adds proxy
-        '''
-        # TODO: write tests
+        """
         destinations = self._parse_roles(roles)
         destinations.extend(self._parse_servers(servers))
 
@@ -367,6 +438,11 @@ class NginxAPI(object):
                                                     ip_hash=backend_ip_hash,
                                                     max_fails=backend_max_fails,
                                                     fail_timeout=backend_fail_timeout)
+
+        for backend_destinations, (_, backend_name) \
+            in zip(grouped_destinations, locations_and_backends):
+            self.backend_table[backend_name] = backend_destinations
+
         self._add_server(addr,
                          locations_and_backends,
                          port=port,
@@ -380,16 +456,16 @@ class NginxAPI(object):
         self.service.restart()
 
     def _remove_backend(self, name):
-        '''
+        """
         Removes backend with given name from app-servers config.
-        '''
+        """
         xpath = self._find_xpath(self.app_servers_inc, 'upstream', name)
         self.app_servers_inc.remove(xpath)
 
     def _remove_server(self, name):
-        '''
+        """
         Removes server from https.include config. Also removes used backends.
-        '''
+        """
         for i, _ in enumerate(self.https_inc.get_list('server')):
 
             server_xpath = 'server[%i]' % i + 1
@@ -407,14 +483,19 @@ class NginxAPI(object):
 
     @rpc.service_method
     def remove_proxy(self, addr):
-        '''
+        """
         Removes proxy for addr. Removes created server and its backends.
-        '''
+        """
         # TODO: review method
         self.https_inc.read(self.https_inc_path)
         self.app_servers_inc.read(self.app_inc_path)
 
         self._remove_server(addr)
+
+        # remove each backend that were in use by this proxy from backend_table
+        for backend_name in self.backend_table:
+            if addr in backend_name:
+                self.backend_table.pop(backend_name)
 
         self.https_inc.write(self.https_inc_path)
         self.app_servers_inc.write(self.app_inc_path)
@@ -422,9 +503,9 @@ class NginxAPI(object):
 
     @rpc.service_method
     def update_proxy(self, **kwds):
-        '''
+        """
         Applies new configuration for existing proxy
-        '''
+        """
         try:
             # try to apply changes
             addr = kwds.get('addr')
@@ -471,32 +552,129 @@ class NginxAPI(object):
 
         return result
 
-    def add_host(self, backend, host):
-        '''
-        Adds host to backend with given name. Parameter host can be dict
-        or string
-        '''
-        self.app_servers_inc.read(self.app_inc_path)
+    @rpc.service_method
+    def add_host(self, backend, host, update_conf=True, service_restart=True):
+        """
+        Adds host to backend with given name pattern.
+        Parameter host can be dict or string (ip addr)
+        """
+        if update_conf:
+            self.app_servers_inc.read(self.app_inc_path)
 
-        xpath = self._find_xpath(self.app_servers_inc, 'upstream', backend)
+        xpath = self._find_xpath(self.app_servers_inc,
+                                 'upstream',
+                                 backend + '*')
         self.app_servers_inc.add('%s/server' % xpath, self._host_to_str(host))
 
-        self.app_servers_inc.write(self.app_inc_path)
-        self.service.restart()
+        if update_conf:
+            self.app_servers_inc.write(self.app_inc_path)
+        if service_restart:
+            self.service.restart()
 
-    def remove_host(self, backend, host):
-        '''
-        Adds host to backend with given name. Parameter host is ip of server
-        '''
-        self.app_servers_inc.read(self.app_inc_path)
+    @rpc.service_method
+    def remove_host(self, backend, host, update_conf=True, service_restart=True):
+        """
+        Removes host from backend with given name pattern.
+        Parameter host can be dict or string (ip addr)
+        """
+        if update_conf:
+            self.app_servers_inc.read(self.app_inc_path)
+
+        server = host
+        if type(host) is dict:
+            server = host['ip']
 
         backend_xpath = self._find_xpath(self.app_servers_inc,
                                          'upstream',
-                                         backend)
+                                         backend + '*')
         host_xpath = self._find_xpath(self.app_inc_path,
                                       '%s/server' % backend_xpath,
-                                      host + '*')
+                                      server + '*')
         self.app_servers_inc.remove(host_xpath)
 
-        self.app_servers_inc.write(self.app_inc_path)
-        self.service.restart()
+        if update_conf:
+            self.app_servers_inc.write(self.app_inc_path)
+        if service_restart:
+            self.service.restart()
+
+    @rpc.service_method
+    def add_server_to_role(self, 
+                           server,
+                           role_id,
+                           update_conf=True, 
+                           service_restart=True):
+        """
+        Adds server to each backend that uses given role
+        """
+        if type(role_id) is not str:
+            role_id = str(role_id)
+
+        if update_conf:
+            self.app_servers_inc.read(self.app_inc_path)
+
+        for backend_name, backend_destinations in self.backend_table:
+            for dest in backend_destinations:
+                if dest.get('id') == role_id and server not in dest['servers']:
+                    host = {'ip': server}
+                    # taking server parameters
+                    host.update(dest)
+                    host.pop('servers')
+                    host.pop('id')
+
+                    self.add_host(backend_name, host, False, False)
+                    dest['servers'].append(server)
+
+        if update_conf:
+            self.app_servers_inc.write(self.app_inc_path)
+        if service_restart:
+            self.service.restart()
+
+    @rpc.service_method
+    def remove_server_from_role(self,
+                                server,
+                                role_id,
+                                update_conf=True,
+                                service_restart=True):
+        """
+        Removes server from each backend that uses given role
+        """
+        if type(role_id) is not str:
+            role_id = str(role_id)
+
+        if update_conf:
+            self.app_servers_inc.read(self.app_inc_path)
+
+        for backend_name, backend_destinations in self.backend_table:
+            for dest in backend_destinations:
+                if dest.get('id') == role_id and server in dest['servers']:
+                    self.remove_host(backend_name, server, False, False)
+                    dest['servers'].remove(server)
+
+        if update_conf:
+            self.app_servers_inc.write(self.app_inc_path)
+        if service_restart:
+            self.service.restart()
+
+
+    @rpc.service_method
+    def remove_server_from_all_backends(self,
+                                        server,
+                                        update_conf=True,
+                                        service_restart=True):
+        """
+        Method is used to remove stand-alone servers, that aren't belong
+        to any role
+        """
+        if update_conf:
+            self.app_servers_inc.read(self.app_inc_path)
+
+        for backend_name, backend_destinations in self.backend_table:
+            for dest in backend_destinations:
+                if server in dest['servers']:
+                    self.remove_host(backend_name, server, False, False)
+                    dest['servers'].remove(server)
+
+        if update_conf:
+            self.app_servers_inc.write(self.app_inc_path)
+        if service_restart:
+            self.service.restart()

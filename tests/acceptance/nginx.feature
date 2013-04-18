@@ -4,12 +4,12 @@ Feature: Nginx
 Scenario: Proxy to a server
     Given I have a server  
     When I add proxy
-    Then I expect proxying
+    Then I expect proxying to server
 
 Scenario: Proxy to a role
     Given I have a role
     When I add proxy
-    Then I expect proxying
+    Then I expect proxying to role
 
 Scenario: Proxy to a role, and new server up
     Given I have a proxy to a role
