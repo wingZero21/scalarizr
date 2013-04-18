@@ -333,7 +333,10 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 
 		# sql-slave not running? run
 		if int(__mysql__['replication_master']):
-			self._client().start_slave_io_thread()
+			try:
+				self._client().start_slave_io_thread()
+			except:
+				LOG.warning('Cannot start slave io thread', exc_info=sys.exc_info())
 
 
 class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
