@@ -320,6 +320,9 @@ class LinuxImage:
 		
 		vol_entry = [v for v in self._mtab
 						if v.device.startswith('/dev')][0]
+		if vol_entry.device == '/dev/root' and not os.path.exists(vol_entry.device):
+			vol_entry = [v for v in mount.mounts('/etc/mtab')
+						if v.device.startswith('/dev')][0]
 		fs = Storage.lookup_filesystem(vol_entry.fstype)
 					
 		# create filesystem
