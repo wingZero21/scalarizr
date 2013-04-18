@@ -92,6 +92,8 @@ def eradicate(process):
 				self._obj.terminate()
 				time.sleep(grace)
 				self._obj.kill()
+				time.sleep(0.1)
+				self._obj.poll()  # avoid leaving defunct processes
 			else:
 				try:
 					os.kill(self.pid, signal.SIGTERM)
