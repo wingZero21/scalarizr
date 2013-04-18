@@ -106,13 +106,14 @@ def remove(path):
 		shutil.rmtree(path)
 
 
-def clean_dir(path):
+def clean_dir(path, recursive=True):
 	if not os.path.isdir(path):
 		raise Exception('No such directory: %s' % path)
 
 	content = glob.glob(os.path.join(path, '*'))
 	for item in content:
-		remove(item)
+		if recursive or (not recursive and os.path.isfile(item)):
+			remove(item)
 
 
 def blkid(device_path, **kwargs):

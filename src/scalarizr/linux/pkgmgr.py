@@ -15,6 +15,7 @@ import string
 import time
 
 from scalarizr import linux
+from scalarizr.linux import coreutils
 from urlparse import urlparse
 
 LOG = logging.getLogger(__name__)
@@ -100,13 +101,13 @@ class AptPackageMgr(PackageMgr):
 	
 
 	def updatedb(self):
-		path = '/var/lib/apt/lists'
-		for f in os.listdir(path):
-			f = os.path.join(path, f)
-			if os.path.isfile(f):
-				os.remove(f)
+		coreutils.clean_dir('/var/lib/apt/lists', recursive=False)
+		try:
+			coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
+		except OSError:
+			pass
+		self.apt_get_command('update')	
 
-		self.apt_get_command('update')		
 
 	def install(self, name, version=None, updatedb=False, **kwds):
 		if version:
@@ -357,7 +358,15 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 						 raise_exc=False)
 
 
-def installed(name, version=None, updatedb=True):
+def updatedb():
+	'''
+	Sync packages databases
+	'''
+	mgr = package_mgr()
+	mgr.updatedb()
+
+
+def installed(name, version=None, updatedb=False):
 	'''
 	Ensure that package installed
 	'''

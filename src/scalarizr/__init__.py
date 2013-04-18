@@ -19,6 +19,7 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
 from scalarizr.api.binding import jsonrpc_http
 from scalarizr.storage.util.loop import listloop
+from scalarizr.linux import pkgmgr
 
 # Utils
 from scalarizr.util import initdv2, log, PeriodicalExecutor
@@ -298,6 +299,8 @@ def _init_platform():
 	logger = logging.getLogger(__name__)
 	cnf = bus.cnf; ini = cnf.rawini
 	
+	pkgmgr.updatedb()
+
 	# Initialize platform
 	logger.debug("Initialize platform")
 	name = ini.get('general', 'platform')
@@ -305,6 +308,7 @@ def _init_platform():
 		bus.platform = PlatformFactory().new_platform(name)
 	else:
 		raise ScalarizrError("Platform not defined")
+
 
 def _init_services():
 	logger = logging.getLogger(__name__)
