@@ -12,7 +12,7 @@ import logging
 from math import ceil
 
 from scalarizr import linux
-from scalarizr.linux import pkgmgr, os as os_info
+from scalarizr.linux import os as os_info
 
 try:
 	from collections import namedtuple
@@ -49,6 +49,7 @@ def modprobe(module_name, **long_kwds):
 
 def dmsetup(action, *params, **long_kwds):
 	if not os.path.exists('/sbin/dmsetup'):
+		from scalarizr.linux import pkgmgr
 		if linux.os.debian_family:
 			package = 'dmsetup'
 		else:
