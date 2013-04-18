@@ -30,6 +30,12 @@ def setup_tests_deps(hostname=None, keyname=None):
 	with settings(warn_only=True):
 		if run('cat /etc/*-release | head -1 | grep -q Ubuntu').succeeded:
 			run('which easy_install || apt-get install python-setuptools')
+			run("which pip || apt-get install python-pip")
+			run("which git || apt-get install -y git")
+			run("which lettuce || pip install git+https://github.com/Scalr/lettuce.git")
 		else:
 			run('which easy_install || yum install python-setuptools')
-	run('easy_install lettuce mock nose')
+			run("which pip-python || yum install python-pip")
+			run("which git || yum install git")
+			run("which lettuce || pip-python install git+https://github.com/Scalr/lettuce.git")
+	run('easy_install mock nose')

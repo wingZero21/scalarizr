@@ -56,6 +56,59 @@ __mysql__.update({
 })
 
 
+# TODO: move
+def eradicate(process):
+	"""
+	Kill process tree.
+
+	:param process: pid (int) or subprocess.Popen instance
+
+	"""
+
+	class Victim(object):
+
+		def __init__(self, process):
+			self._obj = process
+
+		@property
+		def pid(self):
+			return self._obj if isinstance(self._obj, int) else \
+				   self._obj.pid
+
+		def get_children(self):
+			try:
+				pgrep = linux.system(linux.build_cmd_args(
+					executable="pgrep",
+					short=["-P"],
+					params=[str(self.pid)]))
+			except linux.LinuxError:
+				children = []
+			else:
+				children = map(int, pgrep[0].splitlines())
+			return children
+
+		def die(self, grace=2):
+			if isinstance(self._obj, subprocess.Popen):
+				self._obj.terminate()
+				time.sleep(grace)
+				self._obj.kill()
+			else:
+				try:
+					os.kill(self.pid, signal.SIGTERM)
+					time.sleep(grace)
+					os.kill(self.pid, signal.SIGKILL)
+				except OSError, e:
+					if e.errno == errno.ESRCH:
+						pass  # no such process
+					else:
+						LOG.debug("Failed to stop pid %s" % self.pid)
+
+	victim = Victim(process)
+	children = victim.get_children()
+	victim.die()
+	map(eradicate, children)
+
+
 class MySQLSnapBackup(backup.SnapBackup):
 	def __init__(self, **kwds):
 		super(MySQLSnapBackup, self).__init__(**kwds)
@@ -273,42 +326,16 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 	def _xbak_kill(self):
 		""" Popen.kill() is not enough when one of the children gets hung """
 
-		# get children
-		try:
-			pgrep = linux.system(linux.build_cmd_args(executable="pgrep",
-					short=["-P"], params=[str(self._xbak.pid)]))
-		except linux.LinuxError:
-			children = []
-		else:
-			children = map(int, pgrep[0].splitlines())
-			#? the children may have children of their own
-
-		# sigterm xbak
-		self._xbak.terminate()
-
-		# wait
-		time.sleep(2)
-
-		# sigkill xbak
-		self._xbak.kill()
-
-		# try killing children
-		for child in children:
-			try:
-				os.kill(child, signal.SIGKILL)
-			except OSError, e:
-				if e.errno != errno.ESRCH:
-					LOG.warning("Failed to stop innobackupex child, pid %s", child)
-					#? or raise or report in a message	   
-			else:
-				LOG.debug("Had to clean up innobackupex child, pid %s", child)
+		LOG.debug("Killing process tree of pid %s" % self._xbak.pid)
+		eradicate(self._xbak)
 
 		# sql-slave not running? run
 		try:
 			LOG.debug("Attempting START SLAVE IO_THREAD")
 			self._client().start_slave_io_thread()
 		except:
-			# pymysql.err.InternalError: (1200, u'The server is not configured as slave; fix in config file or with CHANGE MASTER TO')
+			# pymysql.err.InternalError: (1200, u'The server is not configured
+			# as slave; fix in config file or with CHANGE MASTER TO')
 			LOG.debug('Caught error', exc_info=sys.exc_info())
 
 
