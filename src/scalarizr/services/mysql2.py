@@ -332,13 +332,8 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		eradicate(self._xbak)
 
 		# sql-slave not running? run
-		try:
-			LOG.debug("Attempting START SLAVE IO_THREAD")
+		if int(__mysql__['replication_master']):
 			self._client().start_slave_io_thread()
-		except:
-			# pymysql.err.InternalError: (1200, u'The server is not configured
-			# as slave; fix in config file or with CHANGE MASTER TO')
-			LOG.debug('Caught error', exc_info=sys.exc_info())
 
 
 class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
