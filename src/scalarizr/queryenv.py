@@ -172,13 +172,16 @@ class QueryEnvService(object):
         """
         @return (cert, pkey, cacert)
         """
-        return self._request("get-https-certificate",{}, self._read_get_https_certificate_response)
+        return self.get_ssl_certificate(None)
 
     def get_ssl_certificate(self, certificate_id):
         """
         @return (cert, pkey, cacert)
         """
-        raise NotImplementedError()
+        parameters = {}
+        if certificate_id:
+            parameters['id'] = certificate_id
+        return self._request("get-https-certificate", parameters, self._read_get_https_certificate_response)
 
     def list_ebs_mountpoints(self):
         """

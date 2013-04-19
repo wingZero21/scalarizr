@@ -44,6 +44,16 @@ class NginxAPI(object):
         ``api._find_xpath(conf, 'server', '10.10.12.11*')`` will find second
         element ('server[2]')
         """
+        # attrib_list = conf.get_dict(element_xpath)
+        # if not attrib_list:
+        #     return None
+
+        # values = []
+        # if attrib_list[0]['mc_type'] is 'section':
+        #     values = [x['value'] for x in attrib_list]
+        # else:
+        #     values = conf.get_list(element_xpath)
+
         for i, val in enumerate(conf.get_list(element_xpath)):
             if fnmatch(val, value):
                 return '%s[%i]' % (element_xpath, i + 1)
@@ -66,6 +76,16 @@ class NginxAPI(object):
         ``api._find_all_xpaths(conf, 'server', '10.10.12.11*')`` will return
         ``['server[2]', 'server[3]'']``.
         """
+        # attrib_list = conf.get_dict(element_xpath)
+        # if not attrib_list:
+        #     return None
+
+        # values = []
+        # if attrib_list[0]['mc_type'] is 'section':
+        #     values = [x['value'] for x in attrib_list]
+        # else:
+        #     values = conf.get_list(element_xpath)
+
         result = []
         for i, val in enumerate(conf.get_list(element_xpath)):
             if fnmatch(val, value):
@@ -81,8 +101,7 @@ class NginxAPI(object):
         self.app_servers_inc = metaconf.Configuration('nginx')
         self.app_servers_inc.read(self.app_inc_path)
 
-        # TODO: rename backend_table because it actually a list
-        self.backend_table = []
+        self.backend_table = {}
 
         if not https_inc_dir:
             https_inc_dir = os.path.dirname(__nginx__[HTTPS_INC_PATH])
@@ -108,6 +127,9 @@ class NginxAPI(object):
 
     def _get_role_servers(self, role_id):
         """ Method is used to get role servers from scalr """
+        if type(role_id) is int:
+            role_id = str(role_id)
+
         server_location = __node__['cloud_location']
         queryenv = bus.queryenv_service
         roles = queryenv.list_roles(farm_role_id=role_id)
@@ -117,6 +139,7 @@ class NginxAPI(object):
                    h.external_ip
                    for h in role.hosts]
             servers.extend(ips)
+
         return servers
 
     def _get_ssl_cert(self, ssl_certificate_id):
@@ -163,12 +186,17 @@ class NginxAPI(object):
             return []
 
         destinations = []
-        for role in roles:
-            if type(role) is str:
-                role = {'id': role}
-            elif type(role) is int:
-                role = {'id': str(role)}
-            # assuming that role is dict by default
+        for r in roles:
+            role = {}
+            if type(r) is str:
+                role['id'] = role
+            elif type(r) is int:
+                role['id'] = str(r)
+            else:
+                # assuming that r is dict by default
+                role.update(r)
+                if type(role['id']) is int:
+                    role['id'] = str(role['id'])
             role['servers'] = self._get_role_servers(role['id'])
             destinations.append(role)
 
@@ -195,51 +223,17 @@ class NginxAPI(object):
             return []
 
         destinations = []
-        for server in servers:
-            if type(server) is str:
-                server = {'servers': [server]}
+        for s in servers:
+            server = {}
+            if type(s) is str:
+                server['servers'] = [s]
             else:
-                # assuming that server is dict by default
+                # assuming that s is dict by default
+                server.update(s)
                 server['servers'] = [server['host']]
             destinations.append(server)
 
         return destinations
-
-    def _make_backend_conf(self,
-                           name,
-                           destinations,
-                           port=None,
-                           ip_hash=True,
-                           max_fails=None,
-                           fail_timeout=None):
-        """Returns config for one backend server"""
-        config = metaconf.Configuration('nginx')
-        config.add('upstream', name or 'backend')
-        if ip_hash:
-            config.add('upstream/iphash', '')
-
-        for dest in destinations:
-            for i, server in enumerate(dest['servers']):
-                if 'port' in dest or port:
-                    server = '%s:%s' % (server, dest.get('port', port))
-
-                if 'backup' in dest and dest['backup']:
-                    server = '%s %s' % (server, 'backup')
-
-                _max_fails = dest.get('max_fails', max_fails)
-                if _max_fails:
-                    server = '%s %s' % (server, 'max_fails=%i' % _max_fails)
-
-                _fail_timeout = dest.get('fail_timeout', fail_timeout)
-                if _fail_timeout:
-                    server = '%s %s' % (server, 'fail_timeout=%is' % _fail_timeout)
-
-                if 'down' in dest and dest['down']:
-                    server = '%s %s' % (server, 'down')
-
-                config.add('upstream/server', server)
-
-        return config
 
     def _group_destinations(self, destinations):
         """
@@ -284,6 +278,42 @@ class NginxAPI(object):
                                           fail_timeout=fail_timeout)
         self.app_servers_inc.extend(backend)
 
+    def _make_backend_conf(self,
+                           name,
+                           destinations,
+                           port=None,
+                           ip_hash=True,
+                           max_fails=None,
+                           fail_timeout=None):
+        """Returns config for one backend server"""
+        config = metaconf.Configuration('nginx')
+        config.add('upstream', name or 'backend')
+        if ip_hash:
+            config.add('upstream/iphash', '')
+
+        for dest in destinations:
+            for i, server in enumerate(dest['servers']):
+                if 'port' in dest or port:
+                    server = '%s:%s' % (server, dest.get('port', port))
+
+                if 'backup' in dest and dest['backup']:
+                    server = '%s %s' % (server, 'backup')
+
+                _max_fails = dest.get('max_fails', max_fails)
+                if _max_fails:
+                    server = '%s %s' % (server, 'max_fails=%i' % _max_fails)
+
+                _fail_timeout = dest.get('fail_timeout', fail_timeout)
+                if _fail_timeout:
+                    server = '%s %s' % (server, 'fail_timeout=%is' % _fail_timeout)
+
+                if 'down' in dest and dest['down']:
+                    server = '%s %s' % (server, 'down')
+
+                config.add('upstream/server', server)
+
+        return config
+
     def _add_backends(self,
                       addr,
                       grouped_destinations,
@@ -323,9 +353,10 @@ class NginxAPI(object):
             if location.startswith('/'):
                 location = location[1:]
 
-            name = '%s_%s__%s' % (addr, 
-                                  location.replace('/', '_').rstrip('_'),
-                                  role_namepart)
+            name = '%s%s__%s' % (addr, 
+                                 ('_' + location.replace('/', '_')).rstrip('_'),
+                                 role_namepart)
+            name = name.rstrip('_')
 
             self._add_backend(name,
                               backend_destinations,
@@ -351,7 +382,7 @@ class NginxAPI(object):
         config = metaconf.Configuration('nginx')
         server_xpath = 'server'
         config.add('server', '')
-        config.add('%s/listen' % server_xpath, port or '80')
+        # config.add('%s/listen' % server_xpath, port or '80')
 
         if ssl:
             config.add('%s/listen' % server_xpath, ssl_port or '443')
@@ -366,6 +397,9 @@ class NginxAPI(object):
             config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
             config.add('%s/ssl_ciphers' % server_xpath, 'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
             config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
+
+        else: 
+            config.add('%s/listen' % server_xpath, port or '80')
 
         config.add('%s/server_name' % server_xpath, addr)
 
@@ -468,13 +502,18 @@ class NginxAPI(object):
         """
         for i, _ in enumerate(self.https_inc.get_list('server')):
 
-            server_xpath = 'server[%i]' % i + 1
+            server_xpath = 'server[%i]' % (i + 1)
             server_name = self.https_inc.get('%s/server_name' % server_xpath)
 
             if server_name == name:
-                backends = self.https_inc.get_list('%s/location' % server_xpath)
+                location_xpath = '%s/location' % server_xpath
+                location_qty = len(self.https_inc.get_list(location_xpath))
                 
-                for backend in backends:
+                for i in xrange(location_qty):
+                    xpath = location_xpath + ('[%i]' % i)
+                    backend = self.https_inc.get(xpath + '/proxy_pass')
+                    # TODO: find out, can we proxy by https?
+                    backend = backend.replace('http://', '')
                     self._remove_backend(backend)
 
                 self.https_inc.remove(server_xpath)
@@ -482,7 +521,7 @@ class NginxAPI(object):
                 break
 
     @rpc.service_method
-    def remove_proxy(self, addr):
+    def remove_proxy(self, addr, service_restart=True):
         """
         Removes proxy for addr. Removes created server and its backends.
         """
@@ -499,7 +538,8 @@ class NginxAPI(object):
 
         self.https_inc.write(self.https_inc_path)
         self.app_servers_inc.write(self.app_inc_path)
-        self.service.restart()
+        if service_restart:
+            self.service.restart()
 
     @rpc.service_method
     def update_proxy(self, **kwds):
@@ -507,7 +547,7 @@ class NginxAPI(object):
         Applies new configuration for existing proxy
         """
         try:
-            # try to apply changes
+            # trying to apply changes
             addr = kwds.get('addr')
             if addr:
                 self.https_inc.read(self.https_inc_path)
@@ -526,6 +566,7 @@ class NginxAPI(object):
             self.app_servers_inc.read(self.app_inc_path + '.bak')
             self.https_inc.write(self.https_inc_path)
             self.app_servers_inc.write(self.app_inc_path)
+            raise
 
     # TODO: use this method in backend conf making or smth.
     def _host_to_str(self, host):
@@ -564,6 +605,7 @@ class NginxAPI(object):
         xpath = self._find_xpath(self.app_servers_inc,
                                  'upstream',
                                  backend + '*')
+
         self.app_servers_inc.add('%s/server' % xpath, self._host_to_str(host))
 
         if update_conf:
@@ -587,7 +629,7 @@ class NginxAPI(object):
         backend_xpath = self._find_xpath(self.app_servers_inc,
                                          'upstream',
                                          backend + '*')
-        host_xpath = self._find_xpath(self.app_inc_path,
+        host_xpath = self._find_xpath(self.app_servers_inc,
                                       '%s/server' % backend_xpath,
                                       server + '*')
         self.app_servers_inc.remove(host_xpath)
@@ -612,7 +654,7 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
-        for backend_name, backend_destinations in self.backend_table:
+        for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if dest.get('id') == role_id and server not in dest['servers']:
                     host = {'ip': server}
@@ -644,7 +686,7 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
-        for backend_name, backend_destinations in self.backend_table:
+        for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if dest.get('id') == role_id and server in dest['servers']:
                     self.remove_host(backend_name, server, False, False)
@@ -668,7 +710,7 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
-        for backend_name, backend_destinations in self.backend_table:
+        for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if server in dest['servers']:
                     self.remove_host(backend_name, server, False, False)

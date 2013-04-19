@@ -345,8 +345,11 @@ class Configuration:
         v = conf.get("general/server_id")
         v = "3233-322"
         """
-
-        return self._find(path).text
+        el = self._find(path)
+        value = el.text
+        if not value.strip():
+            value = el.attrib.get('value', value)
+        return value
 
     def get_float(self, path):
         return float(self.get(path))
@@ -358,7 +361,15 @@ class Configuration:
         return self.get(path).lower() in ["1", "yes", "true", "on"]
 
     def get_list(self, path):
-        return list(el.text for el in self._find_all(path) if el.tag)
+        result = []
+        for el in self._find_all(path):
+            if el.tag:
+                value = el.text
+                if not value.strip():
+                    value = el.attrib.get('value', value)
+                result.append(value)
+        return result
+        # return list(el.text for el in self._find_all(path) if el.tag)
 
     def get_dict(self, path):
         return [x.attrib for x in self._find_all(path) if x.attrib]

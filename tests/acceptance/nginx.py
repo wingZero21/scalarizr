@@ -1,13 +1,65 @@
 # -*- coding: utf-8 -*-
 import BaseHTTPServer
-import urllib2
+from urllib2 import urlopen
+from httplib import HTTPSConnection
 import time
 from threading import Thread
 
 from lettuce import step
 from lettuce import world
 from lettuce import before
+from lettuce import after
 from scalarizr.api import nginx
+
+
+TEST_SSL_KEY = \
+"""-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAwOhlIzUdJfEPwz9+Exp1D4xspHtxvx8O5QK0Q2+Faau0sgJf
+cOjxTi3D9yF1FMp9vI8F/xwTYodtPYCQGSH4zlO8BFdFjzXVwNmdjBiE76t5jc6N
+bzc6WjRDZzUzMICSg+NLMn+i/F6Hnb4MDzyUxTt+mVVzqpSi4vDSFYOYCJIiNz5s
+IjdkOhOA0F4CGL6d51LOLPXGzaVE9CddQIMhX3oR0MJyByMMF2YXahgGo0snGQy7
+fQ0RmoTyqaMk0VB5AK22G5X/whCCY6r40L6eS0ZtXtfCZ8jyeL5ipdSjSXCqQKUZ
+7F2OBViD/cCpaj9GztEInB9clTjtviKz9OuhewIDAQABAoIBAQCyhR47Y8bSuvA0
+ZwicUyqrte9AlECidvKIumTp10WmkdFJvupmChxtleq5RAwernmHyu/osym5T8yn
+UteHeqnO/yyK89yaeF6U9o5W/MXhKlX2BoVau8hTe/Q4icISi5mLVgfb9sR1OmHU
+d/CfFRg0Iie5bJv660yGKgixAjPrEPyU6rttUkDiFAgtYi5b62AfXbIOstiJlyAA
+Mb2TX7qR1EcZHrwD6LExQWEqDyiQGbvYfVsVSxWfUqYjxP0yn4AypIPv3DO0kPa1
+ONa4eFAq/k7y+F7Ki/zXGaUHGXrHiBdwiEIWTfaaQxqxytAk90dUbGsNwHr47A+4
+CfMIAzHpAoGBAPKkZTgzY0T7PDMBB5fVZABbBtBi3ewopl2iCLGG+1ljTpHpz5Ip
+JGRN5qX26533pGhmFgsw13esIH4Fb15khETExLq/NO1U4O8IpIyBSWsfAxpmPMsr
+fT2iugqJM4UMVJ2Nfl4tCJz/afB4GdcZIsmdcp9pijdTl3zZWkGbZ1VXAoGBAMuH
+FUqs7WWHMZcbIflvYmppXmbQnohnnX9BMdS3+/Xi22+RwtJqk6KxS959SAugLn4o
+raRE8KoECV5XDeeCylfke0VrzVr5VmDRDyCGa1/6RYTvHGZZiAgLXUAyWTn1QYC0
+A399d4qf78vbKbYKjinuM3BkyPfQxOYj5rGy4Pp9AoGBAI6CBTzj2YrbL7kZAren
+Sct3quHbH1IjccqObyKtD5SpYa0LMLE8XrZWln+lLS8jEjmKs6mw7uvHeXHqiUVc
+Ld8h3hV8VX6Kmm1pmxM2n8M9fJoVr+D30t/PYgrsGAkte8jpIG35bxSeYj8smqid
+h7P4OCjuWJI0E0XtdjgQKLmTAoGAW0P73DynR7vUFPppxbyY2TbeyiQKswgjrAjE
+G6tVJPHRjLpELq7z/SSb7O0o/W2a65+6Hct8UAD3YoKPDZ2strUSQhMRRxZAEbIt
+olwkkilcOzwt9Ad55IGUE1GAiWjdMqWGXAkbLeKCWVux3JvnHA5gqqnHJLlNUhYP
+QOgB0tECgYB7Z9dA0LhloKcirIjOjMoHxJQRkgTAI+AJaSn9WH03JdNclkcGf5XD
+AL7qQy12GQcu+1VpYieRoydJ1JsHVSHpOELnOR67dh4IigjkLSMWbHcl4W3VIfda
+ACqsDtC2Eyr1JvKadcWI4zGw6qDXW38tDrf8NapFxX4JjByOmLwIVg==
+-----END RSA PRIVATE KEY-----"""
+
+TEST_SSL_CERT = \
+"""-----BEGIN CERTIFICATE-----
+MIIC9zCCAd+gAwIBAgIJAJGpAeUq8dZFMA0GCSqGSIb3DQEBBQUAMBIxEDAOBgNV
+BAMMB3V0eS5jb20wHhcNMTMwNDE5MTYzNDQwWhcNMjMwNDE3MTYzNDQwWjASMRAw
+DgYDVQQDDAd1dHkuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA
+wOhlIzUdJfEPwz9+Exp1D4xspHtxvx8O5QK0Q2+Faau0sgJfcOjxTi3D9yF1FMp9
+vI8F/xwTYodtPYCQGSH4zlO8BFdFjzXVwNmdjBiE76t5jc6Nbzc6WjRDZzUzMICS
+g+NLMn+i/F6Hnb4MDzyUxTt+mVVzqpSi4vDSFYOYCJIiNz5sIjdkOhOA0F4CGL6d
+51LOLPXGzaVE9CddQIMhX3oR0MJyByMMF2YXahgGo0snGQy7fQ0RmoTyqaMk0VB5
+AK22G5X/whCCY6r40L6eS0ZtXtfCZ8jyeL5ipdSjSXCqQKUZ7F2OBViD/cCpaj9G
+ztEInB9clTjtviKz9OuhewIDAQABo1AwTjAdBgNVHQ4EFgQUxIFfj5Paa9PfeHFS
+T5hayHHhMQEwHwYDVR0jBBgwFoAUxIFfj5Paa9PfeHFST5hayHHhMQEwDAYDVR0T
+BAUwAwEB/zANBgkqhkiG9w0BAQUFAAOCAQEAg0cR1KXGmXuIitzJowoqnkdMGa3o
+YhxR97p8qRjOw0rcIQburgbGWL2OA+P+1rBqGJxJ5xBhOVvQYDOIbPjq3Cv+OLGn
+Mo4hhOSWDnQOfuIdjBoU9WCaoKs/HYOXJ1KFI5xGl+PKEdvJ8taKelpZwqJ/rYUc
+uINsVMKrRiOgmQMFk+xCjGcu9mseEk3LSCy1GDUdAfEf1qwTAlzJSdN//qafi/bL
+XudkNgs3PflVNnLa34czdKWCNgo8816/LZynxxiO/cQs3dWMYC/RhPnYTtBX+gR3
+2P1eqWWsQDD0WA9sYZEJCGn6Gp++KN7HH+wWmQKY4+ycFnujwcLKL14u2A==
+-----END CERTIFICATE-----"""
 
 
 class Server(BaseHTTPServer.HTTPServer):
@@ -17,6 +69,8 @@ class Server(BaseHTTPServer.HTTPServer):
 
     def __init__(self, port, get_response=None):
         "process with running server should be creaded"
+        if type(port) is str:
+            port = int(port)
         if not get_response:
             get_response = "<html><head><title>Something</title></head></html>"
 
@@ -34,6 +88,8 @@ class Server(BaseHTTPServer.HTTPServer):
                 self.end_headers()
                 self.wfile.write(get_response)
 
+        self.port = port
+
         super_cls = BaseHTTPServer.HTTPServer
         super_cls.__init__(self, ('localhost', port), _Handler)
 
@@ -45,6 +101,10 @@ class Server(BaseHTTPServer.HTTPServer):
 
     def serve_forever(self):
         self.serve_thread.start()
+
+    def go_down(self):
+        self.shutdown()
+        self.server_close()
 
 
 def clear_nginx_includes():
@@ -63,10 +123,39 @@ def read_nginx_includes():
     return result
 
 
+def get_responses(qty):
+    return [urlopen('http://localhost:8008').read() for _ in xrange(qty)]
+
+
 @before.each_feature
 def create_api(feature=None):
     world.api = nginx.NginxAPI()
 
+
+@before.each_scenario
+def clear_add_proxy_world_parms(scenario):
+    world.roles = None
+    world.servers = None
+    world.ssl = None
+    world.ssl_port = None
+    world.ssl_cert_id = None
+    world.backend_port = None
+    world.backend_ip_hash = None
+    world.backend_max_fails = None
+    world.backend_fail_timeout = None
+
+
+@after.each_scenario
+def shutdown_servers(scenario):
+    for world_attr in dir(world):
+        if not world_attr.startswith('_'):
+            obj = world.__getattribute__(world_attr)
+            if isinstance(obj, Server):
+                obj.go_down()
+
+
+###############################################################################
+# Scenario 1
 
 @step(u'Given I have a server')
 def given_i_have_a_server(step):
@@ -74,37 +163,41 @@ def given_i_have_a_server(step):
     world.server = Server(8000, world.expected_response)
     world.server.serve_forever()
     world.servers = [{'host': 'localhost', 'port': '8000'}]
-    world.roles = None
 
 
 @step(u'When I add proxy')
 def when_i_add_proxy(step):
-    world.api.add_proxy('uty.com',
+    world.api.add_proxy(addr='uty.com',
                         roles=world.roles,
                         servers=world.servers,
-                        port=8008)
+                        port=8008 if not world.ssl else None,
+                        ssl=world.ssl,
+                        ssl_port=world.ssl_port,
+                        ssl_certificate_id=world.ssl_cert_id,
+                        backend_port=world.backend_port,
+                        backend_ip_hash=world.backend_ip_hash,
+                        backend_max_fails=world.backend_max_fails,
+                        backend_fail_timeout=world.backend_fail_timeout)
 
 
 @step(u'Then I expect proxying to server')
 def then_i_expect_proxying_to_server(step):
-    conn = urllib2.urlopen('http://localhost:8008')
-    response = conn.read()
+    response = get_responses(1)[0]
     world.server.shutdown()
     world.server.server_close()
-    world.server = None
 
     clear_nginx_includes()
-    world.servers = None
 
     assert response == world.expected_response
 
 ###############################################################################
+# Scenario 2
 
 
 @step(u'Given I have a role')
 def given_i_have_a_role(step):
-    server1_port = 8000
-    server2_port = 8001
+    server1_port = 8001
+    server2_port = 8002
     # Mocking up get role servers to return our Server adresses
     world.api._get_role_servers = lambda x: ['localhost:%s' % server1_port,
                                              'localhost:%s' % server2_port]
@@ -116,30 +209,23 @@ def given_i_have_a_role(step):
     world.server2 = Server(server2_port, world.expected_response2)
     world.server2.serve_forever()
 
-    world.roles = [123]
-    world.servers = None
+    world.role_id = 123
+    world.roles = [world.role_id]
 
 
 @step(u'Then I expect proxying to role')
 def then_i_expect_proxying_to_role(step):
-    conn = urllib2.urlopen('http://localhost:8008')
-    response1 = conn.read()
-    conn = urllib2.urlopen('http://localhost:8008')
-    response2 = conn.read()
-
-    world.server1.shutdown()
-    world.server1.server_close()
-    world.server2.shutdown()
-    world.server2.server_close()
+    responses = get_responses(2)
 
     clear_nginx_includes()
-    world.roles = None
     create_api()
 
-    assert response1 == world.expected_response1, response1
-    assert response2 == world.expected_response2, response2
+    assert world.expected_response1 in responses, '%s' % responses
+    assert world.expected_response2 in responses, '%s' % responses
+
 
 ###############################################################################
+# Scenario 3
 
 
 @step(u'Given I have a proxy to a role')
@@ -150,35 +236,82 @@ def given_i_have_a_proxy_to_a_role(step):
 
 @step(u'When I launch new server of this role')
 def when_i_launch_new_server_of_this_role(step):
-    
+    world.expected_response3 = 'Test3'
+    world.server3 = Server('8003', world.expected_response3)
+    world.server3.serve_forever()
+
+    world.api.add_server_to_role('localhost:8003', world.role_id)
 
 
 @step(u'Then server appears in backend')
 def then_server_appears_in_backend(step):
-    assert False, 'This step must be implemented'
+    responses = get_responses(3)
+
+    clear_nginx_includes()
+    create_api()
+
+    assert world.expected_response3 in responses, '%s' % responses
 
 
 ###############################################################################
+# Scenario 4
 
 
 @step(u'When I terminate one server of this role')
 def when_i_terminate_one_server_of_this_role(step):
-    assert False, 'This step must be implemented'
+    world.api.remove_server_from_role('localhost:8002', world.role_id)
 
 
 @step(u'Then server removed from backend')
 def then_server_removed_from_backend(step):
-    assert False, 'This step must be implemented'
+    responses = get_responses(2)
+
+    clear_nginx_includes()
+    create_api()
+
+    assert world.expected_response2 not in responses, '%s' % responses
+
+
+###############################################################################
+# Scenario 5
 
 
 @step(u'And I have SSL keypair')
 def and_i_have_ssl_keypair(step):
-    assert False, 'This step must be implemented'
+    def get_ssl_cert(id_):
+        if id_ != 123:
+            return None
+
+        cert_path = '/vagrant/https.crt'
+        with open(cert_path, 'w') as fp:
+            fp.write(TEST_SSL_CERT)
+
+        key_path = '/vagrant/https.key'
+        with open(key_path, 'w') as fp:
+            fp.write(TEST_SSL_KEY)
+
+        return (cert_path, key_path)
+
+    world.api._get_ssl_cert = get_ssl_cert
+    world.ssl = True
+    world.ssl_cert_id = 123
 
 
 @step(u'Then I expect proxying https -> http')
 def then_i_expect_proxying_https_http(step):
-    assert False, 'This step must be implemented'
+    c = HTTPSConnection('localhost')
+    c.request("GET", "/")
+    response = c.getresponse()
+    data = response.read()
+
+    clear_nginx_includes()
+    create_api()
+
+    assert data == world.expected_response, data
+
+
+###############################################################################
+# Scenario 6
 
 
 @step(u'And I have HTTP disabled')
@@ -186,81 +319,235 @@ def and_i_have_http_disabled(step):
     assert False, 'This step must be implemented'
 
 
-@step(u'And I expect redirect https -> http')
+@step(u'And I expect redirect http -> https')
 def and_i_expect_redirect_https_http(step):
     assert False, 'This step must be implemented'
 
 
+# /later
+
+###############################################################################
+# Scenario 7
+
+
 @step(u'Given I have a proxy to two roles: master and backup')
 def given_i_have_a_proxy_to_two_roles_master_and_backup(step):
-    assert False, 'This step must be implemented'
+    server1_port = 8001
+    server2_port = 8002
+    server3_port = 8003
+    # Mocking up get role servers to return our Server adresses
+    def get_role_servers(role):
+        if role == '123':
+            return ['localhost:%s' % server1_port, 'localhost:%s' % server2_port]
+        else:
+            return ['localhost:%s' % server3_port]
+
+    world.api._get_role_servers = get_role_servers
+
+    world.expected_response1 = 'Test1'
+    world.expected_response2 = 'Test2'
+    world.expected_response3 = 'Test3123'
+    world.server1 = Server(server1_port, world.expected_response1)
+    world.server1.serve_forever()
+    world.server2 = Server(server2_port, world.expected_response2)
+    world.server2.serve_forever()
+    world.server3 = Server(server3_port, world.expected_response3)
+    world.server3.serve_forever()
+
+    world.roles = [123, {'id': 321, 'backup': True}]
+
+    world.api.add_proxy(addr='uty.com',
+                        roles=world.roles,
+                        port=8008)
+
+    responses = get_responses(3)
+    assert world.expected_response3 not in responses
 
 
 @step(u'When I terminate master servers')
 def when_i_terminate_master_servers(step):
-    assert False, 'This step must be implemented'
+    world.server1.go_down()
+    world.server2.go_down()
 
 
 @step(u'Then I expect proxying to backup servers')
 def then_i_expect_proxying_to_backup_servers(step):
-    assert False, 'This step must be implemented'
+    responses = get_responses(3)
 
+    clear_nginx_includes()
+    create_api()
+
+    assert world.expected_response1 not in responses, responses
+    assert world.expected_response2 not in responses, responses
+    assert world.expected_response3 in responses, responses
+
+
+###############################################################################
+# Scenario 8
 
 @step(u'Given I have a proxy to two servers')
 def given_i_have_a_proxy_to_two_servers(step):
-    assert False, 'This step must be implemented'
+    world.expected_response1 = 'Test1'
+    world.server1 = Server(8001, world.expected_response1)
+    world.server1.serve_forever()
+
+    world.expected_response2 = 'Test2'
+    world.server2 = Server(8002, world.expected_response2)
+    world.server2.serve_forever()
+    world.servers = [{'host': 'localhost', 'port': '8001'},
+                     {'host': 'localhost', 'port': '8002'}]
+
+    world.api.add_proxy(addr='uty.com',
+                        servers=world.servers,
+                        port=8008)
+
+    responses = get_responses(2)
+    assert world.expected_response1 in responses, '%s' % responses
+    assert world.expected_response2 in responses, '%s' % responses
 
 
 @step(u'When I update proxy marking one server as down')
 def when_i_update_proxy_marking_one_server_as_down(step):
-    assert False, 'This step must be implemented'
+    server_to_update = world.servers[1]
+    server_to_update['down'] = True
+    world.api.update_proxy(addr='uty.com',
+                        servers=world.servers,
+                        port=8008)
+
 
 
 @step(u'Then I expect proxying to remaining server')
 def then_i_expect_proxying_to_remaining_server(step):
-    assert False, 'This step must be implemented'
+    responses = get_responses(2)
+    clear_nginx_includes()
+
+    assert world.expected_response2 not in responses, '%s' % responses
+
+
+###############################################################################
+# Scenario 9
 
 
 @step(u'Given I have a regular server S')
 def given_i_have_a_regular_server_s(step):
-    assert False, 'This step must be implemented'
+    world.S_response = 'Server S'
+    world.server_S = Server(8001, world.S_response)
+    world.server_S.serve_forever()
+
+    world.servers = [{'host': 'localhost', 'port': '8001'}]
 
 
 @step(u'And I have a down server SD')
 def and_i_have_a_down_server_sd(step):
-    assert False, 'This step must be implemented'
+    world.SD_response = 'Server SD'
+    world.server_SD = Server(8002, world.SD_response)
+    world.server_SD.serve_forever()
+
+    world.servers.append({'host': 'localhost', 'port': '8002', 'down': True})
 
 
-@step(u'And I have I backup server SB')
+@step(u'And I have a backup server SB')
 def and_i_have_i_backup_server_sb(step):
-    assert False, 'This step must be implemented'
+    world.SB_response = 'Server SB'
+    world.server_SB = Server(8003, world.SB_response)
+    world.server_SB.serve_forever()
+
+    world.servers.append({'host': 'localhost', 'port': '8003', 'backup': True})
 
 
 @step(u'And I have a regular role R')
 def and_i_have_a_regular_role_r(step):
-    assert False, 'This step must be implemented'
+    server1_port = 8004
+    server2_port = 8005
+
+    def get_role_servers(role):
+        if role == '123':
+            return ['localhost:%s' % 8004, 'localhost:%s' % 8005]
+        elif role == '321':
+            return ['localhost:%s' % 8006]
+        elif role == '890':
+            return ['localhost:%s' % 8007]
+
+    # Mocking up get role servers to return our Server adresses
+    world.api._get_role_servers = get_role_servers
+
+    world.R_role_response1 = 'R Role server 1'
+    world.R_role_response2 = 'R Role server 2'
+    world.R_role_server1 = Server(server1_port, world.R_role_response1)
+    world.R_role_server1.serve_forever()
+    world.R_role_server2 = Server(server2_port, world.R_role_response2)
+    world.R_role_server2.serve_forever()
+
+    world.roles = [123]
 
 
 @step(u'And I have a backup role RB')
 def and_i_have_a_backup_role_rb(step):
-    assert False, 'This step must be implemented'
+    server1_port = 8006
+
+    world.RB_role_response1 = 'RB Role server 1'
+    world.RB_role_server1 = Server(server1_port, world.RB_role_response1)
+    world.RB_role_server1.serve_forever()
+
+    world.roles.append({'id': 321, 'backup': True})
 
 
 @step(u'And I have a down role RD')
 def and_i_have_a_down_role_rd(step):
-    assert False, 'This step must be implemented'
+    server1_port = 8007
+
+    world.RD_role_response1 = 'RD Role server 1'
+    world.RD_role_server1 = Server(server1_port, world.RD_role_response1)
+    world.RD_role_server1.serve_forever()
+
+    world.roles.append({'id': 890, 'down': True})
 
 
 @step(u'Then I expect S and R servers are regular in backend')
 def then_i_expect_s_and_r_servers_are_regular_in_backend(step):
-    assert False, 'This step must be implemented'
+    responses = get_responses(10)
 
+    # regular destination's responses are in responses list
+    assert world.S_response in responses, responses
+    assert world.R_role_response1 in responses, responses
+    assert world.R_role_response2 in responses, responses
 
-@step(u'And I expect SD and RD servers are down in backend')
-def and_i_expect_sd_and_rd_servers_are_down_in_backend(step):
-    assert False, 'This step must be implemented'
+    # backup and down destination's responses are not
+    assert world.SB_response not in responses, responses
+    assert world.SD_response not in responses, responses
+    assert world.RB_role_response1 not in responses, responses
+    assert world.RD_role_response1 not in responses, responses
 
 
 @step(u'And I expect SB and RB servers are backup in backend')
 def and_i_expect_sb_and_rb_servers_are_backup_in_backend(step):
-    assert False, 'This step must be implemented'
+    world.server_S.go_down()
+    world.R_role_server1.go_down()
+    world.R_role_server2.go_down()
+
+    responses = get_responses(10)
+
+    # as regular destinations goes down, backups starts to respond
+    assert world.SB_response in responses, responses
+    assert world.RB_role_response1 in responses, responses
+
+    assert world.S_response not in responses, responses
+    assert world.R_role_response1 not in responses, responses
+    assert world.R_role_response2 not in responses, responses
+
+    # down destinations still quiet
+    assert world.SD_response not in responses, responses
+    assert world.RD_role_response1 not in responses, responses
+
+
+@step(u'And I expect SD and RD servers are down in backend')
+def and_i_expect_sd_and_rd_servers_are_down_in_backend(step):
+    # as previous steps checks that serponses list don't have responses from
+    # down destinations, we simply pass this step
+
+    clear_nginx_includes()
+    create_api()
+    
+
+
+
