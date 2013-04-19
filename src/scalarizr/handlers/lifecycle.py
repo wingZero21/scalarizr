@@ -336,13 +336,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 				hostup_msg.body['volumes'] = []
 				for vol_info in volumes:
 					vol = storage2_volume(**vol_info)
-					vol.ensure()
-					if not vol.fscreated:
-						vol.mkfs()
-					if vol.mpoint:
-						vol.mount()
-					vol_config = vol.config()
-					hostup_msg.body['volumes'].append(vol_config)
+					vol.ensure(mount=bool(vol.mpoint), mkfs=True)
+					hostup_msg.body['volumes'].append(dict(vol))
 				self._logger.debug('HU volumes:\n%s' % hostup_msg.body['volumes'])
 			###
 			bus.fire("before_host_up", hostup_msg)
