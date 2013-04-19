@@ -19,7 +19,7 @@ import subprocess as subps
 
 from multiprocessing import pool
 
-from scalarizr import rpc
+from scalarizr import rpc, linux
 from scalarizr.bus import bus
 from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
@@ -222,18 +222,15 @@ class SystemAPI(object):
         @rtype: dict
 
         Sample:
-        {'id': 'Fedora',
-        'release': '15',
-        'codename': 'Lovelock',
-        'description': 'Fedora release 15 (Lovelock)'}
+        {'distributor': 'ubuntu',
+        'release': '12.04',
+        'codename': 'precise'}
         '''
-
-        linux_dist = disttool.linux_dist()
         return {
-            'id': linux_dist[0],
-            'release': linux_dist[1],
-            'codename': linux_dist[2],
-            'description': '%s %s (%s)' % (linux_dist[0], linux_dist[1], linux_dist[2])
+            'distributor': linux.os['name'].lower(),
+            'release': str(linux.os['release']),
+            'codename': linux.os['codename']
+            'id': linux_dist[0]
         }
 
 
