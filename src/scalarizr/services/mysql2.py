@@ -332,7 +332,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 		eradicate(self._xbak)
 
 		# sql-slave not running? run
-		if int(__mysql__['replication_master']):
+		if not int(__mysql__['replication_master']):
 			try:
 				self._client().start_slave_io_thread()
 			except:
