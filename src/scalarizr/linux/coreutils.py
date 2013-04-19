@@ -124,7 +124,7 @@ def blkid(device_path, **kwargs):
 	ret = dict()
 
 	args = ['/sbin/blkid']
-	for k,v in kwargs.items():
+	for k, v in kwargs.items():
 		if type(v) == bool:
 			args.append('-%s' % k)
 		else:
@@ -138,7 +138,7 @@ def blkid(device_path, **kwargs):
 		for line in pairs:
 			line = line.strip()
 			if line:
-				k,v = line.split('=',1)
+				k, v = line.split('=', 1)
 				ret[k.lower()] = v[1:-1]
 
 	return ret
@@ -168,7 +168,7 @@ def split(filename, part_name_prefix, chunk_size, dest_dir):
 	try:
 		try:
 			f = open(filename, "rb")
-		except (OSError,IOError):
+		except (OSError, IOError):
 			logger.error("Cannot open file to split '%s'", filename)
 			raise
 		

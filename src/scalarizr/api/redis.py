@@ -162,7 +162,8 @@ class RedisAPI(object):
         freed_ports = []
         for port in ports:
             if op:
-                op.step('Shutdown Redis %s on port %s' ('Master' if is_replication_master else 'Slave', port))
+                msg = 'Shutdown Redis %s on port %s' % ('Master' if is_replication_master else 'Slave', port)
+                op.step(msg)
             try:
                 if op:
                     op.__enter__()
@@ -295,7 +296,7 @@ class RedisAPI(object):
         slaves = {}
         for redis_process in ri.instances:
             repl_data = {}
-			for key, val in redis_process.redis_cli.info.items():
+            for key, val in redis_process.redis_cli.info.items():
                 if key.startswith('master'):
                     repl_data[key] = val
             repl_data['status'] = repl_data['master_link_status']

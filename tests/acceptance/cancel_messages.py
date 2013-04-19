@@ -129,22 +129,22 @@ def message_info(msg_id):
 
 
 def flood_db(n):
-	conn = pymysql.connect(host="127.0.0.1", user=None, passwd='', db=None)
-	conn.autocommit(True)
+    conn = pymysql.connect(host="127.0.0.1", user=None, passwd='', db=None)
+    conn.autocommit(True)
 
-	def fetchall(query):
-		cur = conn.cursor(None)
-		cur.execute(query)
-		return cur.fetchall()
+    def fetchall(query):
+        cur = conn.cursor(None)
+        cur.execute(query)
+        return cur.fetchall()
 
-	fetchall("DROP DATABASE IF EXISTS testdb")
-	fetchall("CREATE DATABASE testdb")
-	fetchall("use testdb")
-	fetchall("CREATE TABLE testtable (one MEDIUMTEXT)")
+    fetchall("DROP DATABASE IF EXISTS testdb")
+    fetchall("CREATE DATABASE testdb")
+    fetchall("use testdb")
+    fetchall("CREATE TABLE testtable (one MEDIUMTEXT)")
 
-	z = 'z' * 1024 * 1023
+    z = 'z' * 1024 * 1023
 
-	[fetchall("INSERT INTO testtable VALUES ('%s')" % z) for i in range(n)]
+    [fetchall("INSERT INTO testtable VALUES ('%s')" % z) for i in range(n)]
 
 
 @before.each_scenario
@@ -161,8 +161,8 @@ def teardown(scenario):
 
 @step("I have used the storage for (\d+) MB")
 def i_have_used_the_storage_for(step, mb):
-	flood_db(int(mb))
-	return
+    flood_db(int(mb))
+    return
     # TODO: delay on s3 instead
     subprocess.call([
             "dd",

@@ -63,11 +63,11 @@ class EphVolume(base.Volume):
 
             self.disk = storage2.volume(self.disk)
             # Compatibility with storage v1
-			if self.disk.device and self.disk.type == 'base':
-				if self.disk.device.startswith('/dev/sd'):
-                self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
-				elif 'google' in self.disk.device:
-					self.disk = storage2.volume(type='gce_ephemeral', name='ephemeral-disk-0')
+            if self.disk.device and self.disk.type == 'base':
+                if self.disk.device.startswith('/dev/sd'):
+                    self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
+                elif 'google' in self.disk.device:
+                    self.disk = storage2.volume(type='gce_ephemeral', name='ephemeral-disk-0')
 
             self._lvm_volume = storage2.volume(
                             type='lvm',
@@ -198,13 +198,13 @@ class EphSnapshot(base.Snapshot):
 
         try:
             self._snap_status = self.QUEUED
-			mpoint = tempfile.mkdtemp()
-			opts = []
-			if coreutils.blkid(lvm_snap.device).get('type') == 'xfs':
-				opts += ['-o', 'nouuid,ro']
-			mount.mount(lvm_snap.device, mpoint, *opts)
+            mpoint = tempfile.mkdtemp()
+            opts = []
+            if coreutils.blkid(lvm_snap.device).get('type') == 'xfs':
+                opts += ['-o', 'nouuid,ro']
+            mount.mount(lvm_snap.device, mpoint, *opts)
 
-			self.data_size = coreutils.statvfs(mpoint)['used']
+            self.data_size = coreutils.statvfs(mpoint)['used']
 
             try:
                 transfer = cloudfs.LargeTransfer(
@@ -220,12 +220,12 @@ class EphSnapshot(base.Snapshot):
                 self._snap_status = self.COMPLETED
 
             finally:
-				mount.umount(mpoint)
-				os.rmdir(mpoint)
+                mount.umount(mpoint)
+                os.rmdir(mpoint)
 
         except:
             self._snap_status = self.FAILED
-			LOG.exception('Caught error while uploading LVM snapshot')
+            LOG.exception('Caught error while uploading LVM snapshot')
         finally:
             lvm_snap.destroy()
 

@@ -84,11 +84,11 @@ class TestMounts(object):
         cgroup = self.mounts['cgroup']
         assert cgroup.mpoint == '/sys/fs/cgroup/systemd', 'First matched line'
 
-	def test_getitem_nfs(self):
-		nfs = self.mounts['/share']
-		assert nfs.fsck_order == ''
-		assert nfs.dump == ''
-		assert nfs.fstype == 'nfs'
+    def test_getitem_nfs(self):
+        nfs = self.mounts['/share']
+        assert nfs.fsck_order == ''
+        assert nfs.dump == ''
+        assert nfs.fstype == 'nfs'
 
     def test_add_entry(self):
         mpoint = '/mnt/storage'
@@ -108,9 +108,9 @@ class TestMounts(object):
 
     def test_remove_entry(self):
         assert 'systemd-1' in self.mounts
-		assert len(self.mounts) == 36
+        assert len(self.mounts) == 36
 
         del self.mounts['systemd-1']
 
         assert 'systemd-1' not in self.mounts
-		assert len(self.mounts) == 31
+        assert len(self.mounts) == 31

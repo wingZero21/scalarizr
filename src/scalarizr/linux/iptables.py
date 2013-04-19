@@ -75,16 +75,16 @@ def iptables(**long_kwds):
         if key in long_kwds:
             ordered_long[key] = long_kwds.pop(key)
     ordered_long.update(long_kwds)
-	args0 = linux.build_cmd_args(
-			executable=IPTABLES_BIN,
-			long=ordered_long)
-	args = []
-	for arg in args0:
-		if arg.startswith('--not-'):
-			args.extend(('!', arg.replace('not-', '')))
-		else:
-			args.append(arg)
-	return linux.system(args)
+    args0 = linux.build_cmd_args(
+            executable=IPTABLES_BIN,
+            long=ordered_long)
+    args = []
+    for arg in args0:
+        if arg.startswith('--not-'):
+            args.extend(('!', arg.replace('not-', '')))
+        else:
+            args.append(arg)
+    return linux.system(args)
 
 
 def iptables_save(filename=None, *short_args, **long_kwds):
@@ -190,30 +190,30 @@ class _Chain(object):
             list_rules_kwargs["table"] = table
             list_kwargs["table"] = table
 
-		ret = []
+        ret = []
         try:
             out = iptables(**list_rules_kwargs)[0]
         except linux.LinuxError, e:
             if "Unknown arg `--list-rules'" in e.err:
-				try:
-                out = iptables(**list_kwargs)[0]
-					ret = self._parse_list(out)
-					e = None
-				except linux.LinuxError, e:
-					# This will redefine original exception
-					pass
-			if e:
-				if "No chain/target" in e.err:
-					pass
+                try:
+                    out = iptables(**list_kwargs)[0]
+                    ret = self._parse_list(out)
+                    e = None
+                except linux.LinuxError, e:
+                    # This will redefine original exception
+                    pass
+            if e:
+                if "No chain/target" in e.err:
+                    pass
             else:
                 raise
         else:
 			ret = self._parse_list_rules(out)
 
-		if table and table != 'filter':
-			for rule in ret:
-				rule['table'] = table 
-		return ret
+        if table and table != 'filter':
+            for rule in ret:
+                rule['table'] = table 
+        return ret
 
 
     def _parse_list_rules(self, output):
@@ -234,15 +234,15 @@ class _Chain(object):
             """
 
             ruledict = result[-1]
-			key = option[2:] if option.startswith("--") else option
-			if key == "!" and element.startswith("--"):  # element is the new option which must be inverted
-				return "not_" + element[2:]
+            key = option[2:] if option.startswith("--") else option
+            if key == "!" and element.startswith("--"):  # element is the new option which must be inverted
+                return "not_" + element[2:]
             val = ruledict.setdefault(key, True)
 
             if element.startswith('--'):  # element is the new option
                 return element
-			elif element == '!':
-				return element
+            elif element == '!':
+                return element
             else:
                 if val == True:
                     ruledict[key] = element
@@ -320,9 +320,9 @@ class _Chain(object):
                 if _is_plain_ip(val):
                     rule[key] = val + "/32"
 
-			for key in ('source', 'destination'):
-				if rule.get(key, '').startswith('!'):
-					rule['not_%s' % key] = rule.pop(key)[1:]
+            for key in ('source', 'destination'):
+                if rule.get(key, '').startswith('!'):
+                    rule['not_%s' % key] = rule.pop(key)[1:]
 
             result.append(rule)
 
@@ -333,14 +333,14 @@ class _Chain(object):
         # NOTE: rule comparison is far from ideal, check _to_inner method
         # NOTE: existing rules don't have table attribute
 
-		tables = [rule.get('table') for rule in rules]
-		filter(None, tables)
-		if not 'filter' in tables:
-			tables.append('filter')
+        tables = [rule.get('table') for rule in rules]
+        filter(None, tables)
+        if not 'filter' in tables:
+            tables.append('filter')
 
-		existing = []
-		for table in tables:
-			existing.extend(self.list(table))
+        existing = []
+        for table in tables:
+            existing.extend(self.list(table))
 
         for rule in reversed(rules):
             rule_repr = _to_inner(rule)
