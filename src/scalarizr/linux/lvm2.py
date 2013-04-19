@@ -16,6 +16,8 @@ from scalarizr import linux
 
 if not linux.which('lvs'):
     from scalarizr.linux import pkgmgr
+	# set updatedb=True to work over problem on GCE:
+	# E: Problem renaming the file /var/cache/apt/pkgcache.bin.fsF22K to /var/cache/apt/pkgcache.bin
     pkgmgr.installed('lvm2')
 
 

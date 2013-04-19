@@ -862,7 +862,7 @@ class MysqlHandler(DBMSRHandler):
 
             LOG.debug("__mysql__['volume']: %s", __mysql__['volume'])
 
-            if __mysql__['volume'].type in ('eph', 'lvm'):
+			if __mysql__['volume'].type in ('eph', 'lvm') or __node__['platform'] == 'idcf':
                 if 'restore' in mysql2:
                     restore = backup.restore(**mysql2['restore'])
                 else:
