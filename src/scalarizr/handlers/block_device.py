@@ -71,7 +71,7 @@ class BlockDeviceHandler(handlers.Handler):
 		except AttributeError:
 			pass
 		if __node__['state'] == 'running':
-			volumes = self._queryenv.list_farm_role_params(__node__['farm_role_id']).get('volumes', [])
+			volumes = self._queryenv.list_farm_role_params(__node__['farm_role_id']).get('params', {}).get('volumes', [])
 			for vol in volumes:
 				vol = storage2.volume(vol)
 				vol.ensure(mount=bool(vol.mpoint))
