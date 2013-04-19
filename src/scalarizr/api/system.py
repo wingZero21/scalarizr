@@ -230,7 +230,6 @@ class SystemAPI(object):
             'distributor': linux.os['name'].lower(),
             'release': str(linux.os['release']),
             'codename': linux.os['codename']
-            'id': linux_dist[0]
         }
 
 
