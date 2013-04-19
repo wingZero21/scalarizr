@@ -72,6 +72,7 @@ class BlockDeviceHandler(handlers.Handler):
 			pass
 		if __node__['state'] == 'running':
 			volumes = self._queryenv.list_farm_role_params(__node__['farm_role_id']).get('params', {}).get('volumes', [])
+			volumes = volumes or []  # Cast to list
 			for vol in volumes:
 				vol = storage2.volume(vol)
 				vol.ensure(mount=bool(vol.mpoint))
