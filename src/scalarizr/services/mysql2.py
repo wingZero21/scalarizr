@@ -1,10 +1,14 @@
 from __future__ import with_statement
 
 import os
+import sys
 import re
 import logging
 import subprocess
 import threading
+import time
+import signal
+import errno
 
 from scalarizr import linux, storage2
 from scalarizr.storage2 import cloudfs
@@ -50,6 +54,61 @@ __mysql__.update({
 		'log_bin': 'mysql_bin'
 	}
 })
+
+
+# TODO: move
+def eradicate(process):
+	"""
+	Kill process tree.
+
+	:param process: pid (int) or subprocess.Popen instance
+
+	"""
+
+	class Victim(object):
+
+		def __init__(self, process):
+			self._obj = process
+
+		@property
+		def pid(self):
+			return self._obj if isinstance(self._obj, int) else \
+				   self._obj.pid
+
+		def get_children(self):
+			try:
+				pgrep = linux.system(linux.build_cmd_args(
+					executable="pgrep",
+					short=["-P"],
+					params=[str(self.pid)]))
+			except linux.LinuxError:
+				children = []
+			else:
+				children = map(int, pgrep[0].splitlines())
+			return children
+
+		def die(self, grace=2):
+			if isinstance(self._obj, subprocess.Popen):
+				self._obj.terminate()
+				time.sleep(grace)
+				self._obj.kill()
+				time.sleep(0.1)
+				self._obj.poll()  # avoid leaving defunct processes
+			else:
+				try:
+					os.kill(self.pid, signal.SIGTERM)
+					time.sleep(grace)
+					os.kill(self.pid, signal.SIGKILL)
+				except OSError, e:
+					if e.errno == errno.ESRCH:
+						pass  # no such process
+					else:
+						LOG.debug("Failed to stop pid %s" % self.pid)
+
+	victim = Victim(process)
+	children = victim.get_children()
+	victim.die()
+	map(eradicate, children)
 
 
 class MySQLSnapBackup(backup.SnapBackup):
@@ -264,7 +323,20 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
 			if self._transfer:
 				self._transfer.kill()
 			if self._xbak:
-				self._xbak.kill()
+				self._xbak_kill()
+
+	def _xbak_kill(self):
+		""" Popen.kill() is not enough when one of the children gets hung """
+
+		LOG.debug("Killing process tree of pid %s" % self._xbak.pid)
+		eradicate(self._xbak)
+
+		# sql-slave not running? run
+		if not int(__mysql__['replication_master']):
+			try:
+				self._client().start_slave_io_thread()
+			except:
+				LOG.warning('Cannot start slave io thread', exc_info=sys.exc_info())
 
 
 class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
