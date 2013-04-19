@@ -3,6 +3,10 @@ __author__ = 'Nick'
 import re
 import os
 import sys
+import time
+import locale
+import logging
+import threading
 import subprocess
 
 if sys.version_info[0:2] >= (2, 7):
@@ -23,16 +27,35 @@ class parameter_handler(object):
         return fn
 
 
+class ProcessTimeout(Exception):
+    pass
+
+
+class ProcessError(Exception):
+    pass
+
+
 class BaseExec(object):
     _handlers = dict()
     executable = None
     _checked = False
     package = None
 
-    def __init__(self, lazy_check=True, **kwds):
+
+    def __init__(self, lazy_check=True, wait=True, raise_exc=True, timeout=None,
+                        acceptable_codes=None, logger=None, to_log=True, **kwds):
+
+        self.lazy_check = lazy_check
+        self.wait_for_process = wait
+        self.raise_exc=raise_exc
+        self.timeout = timeout
+        self.acceptable_codes = acceptable_codes or (0,)
+        self.logger = logger or logging.getLogger(__name__)
+        self.to_log = to_log
+
         kwds['close_fds'] = True
         self.subprocess_kwds = kwds
-        self.lazy_check = lazy_check
+
         if not lazy_check:
             self.check()
         self._collect_handlers()
@@ -40,13 +63,15 @@ class BaseExec(object):
 
     def check(self):
         if not self.executable.startswith('/'):
-            exec_path = software.whereis(self.executable)
+            exec_paths = software.whereis(self.executable)
+            exec_path = exec_paths[0] if exec_paths else None
         else:
             exec_path = self.executable
 
         if not exec_path or not os.access(exec_path, os.X_OK):
             if self.package:
                 pkgmgr.installed(self.package)
+
             else:
                 msg = 'Executable %s is not found, you should either ' \
                       'specify `package` attribute or install the software ' \
@@ -104,7 +129,7 @@ class BaseExec(object):
         return cmd_args
 
 
-    def _prepare_args(self, *params, **keys):
+    def prepare_args(self, *params, **keys):
         cmd_args = []
         # 1st step, before handlers
         params, key_value_pairs = self._before_all_handlers(*params, **keys)
@@ -129,15 +154,61 @@ class BaseExec(object):
         try:
             if not self._checked:
                 self.check()
-            cmd_args = self._prepare_args(*params, **keys)
+            if len(keys) == 1 and 'kwargs' in keys:
+                keys = keys['kwargs']
+            # Set locale
+            if not 'env' in self.subprocess_kwds:
+                self.subprocess_kwds['env'] = os.environ
+                # Set en_US locale or C
+            if not self.subprocess_kwds['env'].get('LANG'):
+                default_locale = locale.getdefaultlocale()
+                if default_locale == ('en_US', 'UTF-8'):
+                    self.subprocess_kwds['env']['LANG'] = 'en_US'
+                else:
+                    self.subprocess_kwds['env']['LANG'] = 'C'
+
+            cmd_args = self.prepare_args(*params, **keys)
+
             if not self.subprocess_kwds.get('shell') and not self.executable.startswith('/'):
-                self.executable = software.whereis(self.executable)
+                # TODO: Raise error if not found
+                self.executable = software.whereis(self.executable)[0]
+
             final_args = (self.executable,) + tuple(cmd_args)
             self._check_streams()
-            return subprocess.Popen(final_args, **self.subprocess_kwds)
+            read_stdout = self.stdout == subprocess.PIPE
+            read_stderr = self.stderr == subprocess.PIPE
+
+            self.popen = subprocess.Popen(final_args, **self.subprocess_kwds)
+            if self.wait_for_process:
+                rcode = self.wait(self.popen, self.timeout)
+                if rcode not in self.acceptable_codes and self.raise_exc:
+                    raise ProcessError('Process %s finished with code %s' % (self.executable, rcode))
+                ret = dict(return_code=rcode)
+                if read_stdout:
+                    ret['stdout'] = self.popen.stdout.read()
+                    self.logger.debug('Stdout: %s' % ret['stdout'])
+                if read_stderr:
+                    ret['stderr'] = self.popen.stderr.read()
+                    self.logger.debug('Stderr: %s' % ret['stderr'])
+                return ret
+            else:
+                return self.popen
         finally:
             for stream in ('stderr, stdout, stdin'):
                 self.subprocess_kwds.pop(stream, None)
+
+
+    def wait(self, popen, timeout=None):
+        wait_start = time.time()
+        while True:
+            rcode = popen.poll()
+            if rcode is not None:
+                return rcode
+            else:
+                if timeout:
+                    now = time.time()
+                    if now - wait_start > timeout:
+                        raise ProcessTimeout('Process %s reached timeout %s sec' % (self.executable, timeout))
 
 
     def _check_streams(self):
@@ -177,6 +248,7 @@ class iptables_exec(BaseExec):
             cmd_args.append('!')
         self._default_handler(re_result.group(2), value, cmd_args)
 
+
     def _before_all_handlers(self, *params, **keys):
         # in iptables, protocol and match should preceed other flags
         ordered_keys = OrderedDict()
@@ -185,3 +257,18 @@ class iptables_exec(BaseExec):
                 ordered_keys[key] = keys.pop(key)
         ordered_keys.update(keys)
         return params, ordered_keys.iteritems()
+
+
+class grep_exec(BaseExec):
+    executable = 'grep'
+
+
+class pigz(BaseExec):
+    executable='pigz'
+    package='pigz'
+
+
+class tee(BaseExec):
+    executable='tee'
+
+
