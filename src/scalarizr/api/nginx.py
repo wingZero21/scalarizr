@@ -421,13 +421,13 @@ class NginxAPI(object):
 
         return config
 
-    def _add_server(self,
-                    addr,
-                    locations_and_backends,
-                    port=None,
-                    ssl=False,
-                    ssl_port=None,
-                    ssl_certificate_id=None):
+    def _add_confserver(self,
+                        addr,
+                        locations_and_backends,
+                        port=None,
+                        ssl=False,
+                        ssl_port=None,
+                        ssl_certificate_id=None):
         """
         Adds server to https config, but without writing it to file.
         """
@@ -437,8 +437,7 @@ class NginxAPI(object):
                                                ssl,
                                                ssl_port,
                                                ssl_certificate_id)
-        self.https_inc.extend(server_config)
-        
+        self.https_inc.extend(server_config)   
 
     @rpc.service_method
     def add_proxy(self,
@@ -477,7 +476,7 @@ class NginxAPI(object):
             in zip(grouped_destinations, locations_and_backends):
             self.backend_table[backend_name] = backend_destinations
 
-        self._add_server(addr,
+        self._add_confserver(addr,
                          locations_and_backends,
                          port=port,
                          ssl=ssl,
@@ -487,7 +486,7 @@ class NginxAPI(object):
         self.app_servers_inc.write(self.app_inc_path)
         self.https_inc.write(self.https_inc_path)
 
-        self.service.restart()
+        self.service.reload()
 
     def _remove_backend(self, name):
         """
@@ -496,7 +495,7 @@ class NginxAPI(object):
         xpath = self._find_xpath(self.app_servers_inc, 'upstream', name)
         self.app_servers_inc.remove(xpath)
 
-    def _remove_server(self, name):
+    def _remove_confserver(self, name):
         """
         Removes server from https.include config. Also removes used backends.
         """
@@ -529,7 +528,7 @@ class NginxAPI(object):
         self.https_inc.read(self.https_inc_path)
         self.app_servers_inc.read(self.app_inc_path)
 
-        self._remove_server(addr)
+        self._remove_confserver(addr)
 
         # remove each backend that were in use by this proxy from backend_table
         for backend_name in self.backend_table:
@@ -539,7 +538,7 @@ class NginxAPI(object):
         self.https_inc.write(self.https_inc_path)
         self.app_servers_inc.write(self.app_inc_path)
         if service_restart:
-            self.service.restart()
+            self.service.reload()
 
     @rpc.service_method
     def update_proxy(self, **kwds):
@@ -556,7 +555,7 @@ class NginxAPI(object):
                 self.https_inc.write(self.https_inc_path + '.bak')
                 self.app_servers_inc.write(self.app_inc_path + '.bak')
 
-                self._remove_server(addr)
+                self._remove_confserver(addr)
 
                 self.add_proxy(reread_conf=False, **kwds)
 
@@ -569,35 +568,35 @@ class NginxAPI(object):
             raise
 
     # TODO: use this method in backend conf making or smth.
-    def _host_to_str(self, host):
-        if type(host) == str:
-            return host
+    def _server_to_str(self, server):
+        if type(server) == str:
+            return server
 
-        result = host['ip']
-        if 'port' in host:
-            result = '%s:%s' % (result, host['port'])
+        result = server['ip']
+        if 'port' in server:
+            result = '%s:%s' % (result, server['port'])
 
-        if 'backup' in host and host['backup']:
+        if 'backup' in server and server['backup']:
             result = '%s %s' % (result, 'backup')
 
-        _max_fails = host.get('max_fails')
+        _max_fails = server.get('max_fails')
         if _max_fails:
             result = '%s %s' % (result, 'max_fails=%i' % _max_fails)
 
-        _fail_timeout = host.get('fail_timeout')
+        _fail_timeout = server.get('fail_timeout')
         if _fail_timeout:
             result = '%s %s' % (result, 'fail_timeout=%is' % _fail_timeout)
 
-        if 'down' in host:
+        if 'down' in server:
             result = '%s %s' % (result, 'down')
 
         return result
 
     @rpc.service_method
-    def add_host(self, backend, host, update_conf=True, service_restart=True):
+    def add_server(self, backend, server, update_conf=True, service_restart=True):
         """
-        Adds host to backend with given name pattern.
-        Parameter host can be dict or string (ip addr)
+        Adds server to backend with given name pattern.
+        Parameter server can be dict or string (ip addr)
         """
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
@@ -606,38 +605,37 @@ class NginxAPI(object):
                                  'upstream',
                                  backend + '*')
 
-        self.app_servers_inc.add('%s/server' % xpath, self._host_to_str(host))
+        self.app_servers_inc.add('%s/server' % xpath, self._server_to_str(server))
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
         if service_restart:
-            self.service.restart()
+            self.service.reload()
 
     @rpc.service_method
-    def remove_host(self, backend, host, update_conf=True, service_restart=True):
+    def remove_server(self, backend, server, update_conf=True, service_restart=True):
         """
-        Removes host from backend with given name pattern.
-        Parameter host can be dict or string (ip addr)
+        Removes server from backend with given name pattern.
+        Parameter server can be dict or string (ip addr)
         """
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
-        server = host
-        if type(host) is dict:
-            server = host['ip']
+        if type(server) is dict:
+            server = server['ip']
 
         backend_xpath = self._find_xpath(self.app_servers_inc,
                                          'upstream',
                                          backend + '*')
-        host_xpath = self._find_xpath(self.app_servers_inc,
-                                      '%s/server' % backend_xpath,
-                                      server + '*')
-        self.app_servers_inc.remove(host_xpath)
+        server_xpath = self._find_xpath(self.app_servers_inc,
+                                        '%s/server' % backend_xpath,
+                                        server + '*')
+        self.app_servers_inc.remove(server_xpath)
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
         if service_restart:
-            self.service.restart()
+            self.service.reload()
 
     @rpc.service_method
     def add_server_to_role(self, 
@@ -657,19 +655,19 @@ class NginxAPI(object):
         for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if dest.get('id') == role_id and server not in dest['servers']:
-                    host = {'ip': server}
+                    srv = {'ip': server}
                     # taking server parameters
-                    host.update(dest)
-                    host.pop('servers')
-                    host.pop('id')
+                    srv.update(dest)
+                    srv.pop('servers')
+                    srv.pop('id')
 
-                    self.add_host(backend_name, host, False, False)
+                    self.add_server(backend_name, srv, False, False)
                     dest['servers'].append(server)
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
         if service_restart:
-            self.service.restart()
+            self.service.reload()
 
     @rpc.service_method
     def remove_server_from_role(self,
@@ -689,13 +687,13 @@ class NginxAPI(object):
         for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if dest.get('id') == role_id and server in dest['servers']:
-                    self.remove_host(backend_name, server, False, False)
+                    self.remove_server(backend_name, server, False, False)
                     dest['servers'].remove(server)
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
         if service_restart:
-            self.service.restart()
+            self.service.reload()
 
 
     @rpc.service_method
@@ -713,10 +711,10 @@ class NginxAPI(object):
         for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if server in dest['servers']:
-                    self.remove_host(backend_name, server, False, False)
+                    self.remove_server(backend_name, server, False, False)
                     dest['servers'].remove(server)
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
         if service_restart:
-            self.service.restart()
+            self.service.reload()
