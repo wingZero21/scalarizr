@@ -81,12 +81,13 @@ class QueryEnvService(object):
                 req = urllib2.Request(url, post_data, headers)
                 response = opener.open(req)
                 break
-            except IOError, e:
+            except:
+            	e = sys.exc_info()[1]
                 if isinstance(e, urllib2.HTTPError):
                     resp_body = e.read() if e.fp is not None else ""
                     self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, resp_body or e.msg, msg_wait)
                 else:
-                    self._logger.warn('QueryEnv failed. %s. %s', sys.exc_info()[1], msg_wait)
+                    self._logger.warn('QueryEnv failed. %s. %s', e, msg_wait)
                 self._logger.warn('Sleep %s seconds before next attempt...', wait_seconds)
                 time.sleep(wait_seconds)
 
