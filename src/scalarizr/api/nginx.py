@@ -315,7 +315,7 @@ class NginxAPI(object):
         return config
 
     def _add_backends(self,
-                      addr,
+                      hostname,
                       grouped_destinations,
                       port=None,
                       ip_hash=True,
@@ -333,7 +333,7 @@ class NginxAPI(object):
 
         Name of backend is construct by pattern:
 
-            ```addr`[_`location`][__`role_id1`[_`role_id2`[...]]]``
+            ```hostname`[_`location`][__`role_id1`[_`role_id2`[...]]]``
 
         Example:
 
@@ -353,7 +353,7 @@ class NginxAPI(object):
             if location.startswith('/'):
                 location = location[1:]
 
-            name = '%s%s__%s' % (addr, 
+            name = '%s%s__%s' % (hostname, 
                                  ('_' + location.replace('/', '_')).rstrip('_'),
                                  role_namepart)
             name = name.rstrip('_')
@@ -370,7 +370,7 @@ class NginxAPI(object):
         return locations_and_backends
 
     def _make_server_conf(self,
-                          addr,
+                          hostname,
                           locations_and_backends,
                           port=None,
                           ssl=False,
@@ -401,7 +401,7 @@ class NginxAPI(object):
         else: 
             config.add('%s/listen' % server_xpath, port or '80')
 
-        config.add('%s/server_name' % server_xpath, addr)
+        config.add('%s/server_name' % server_xpath, hostname)
 
         for i, (location, backend_name) in enumerate(locations_and_backends):
             location_xpath = '%s/location' % server_xpath
@@ -422,7 +422,7 @@ class NginxAPI(object):
         return config
 
     def _add_confserver(self,
-                        addr,
+                        hostname,
                         locations_and_backends,
                         port=None,
                         ssl=False,
@@ -431,7 +431,7 @@ class NginxAPI(object):
         """
         Adds server to https config, but without writing it to file.
         """
-        server_config = self._make_server_conf(addr,
+        server_config = self._make_server_conf(hostname,
                                                locations_and_backends,
                                                port,
                                                ssl,
@@ -441,7 +441,7 @@ class NginxAPI(object):
 
     @rpc.service_method
     def add_proxy(self,
-                  addr,
+                  hostname,
                   roles=[],
                   servers=[],
                   port=None,
@@ -465,7 +465,7 @@ class NginxAPI(object):
             self.app_servers_inc.read(self.app_inc_path)
             self.https_inc.read(self.https_inc_path)
 
-        locations_and_backends = self._add_backends(addr,
+        locations_and_backends = self._add_backends(hostname,
                                                     grouped_destinations,
                                                     port=backend_port,
                                                     ip_hash=backend_ip_hash,
@@ -476,7 +476,7 @@ class NginxAPI(object):
             in zip(grouped_destinations, locations_and_backends):
             self.backend_table[backend_name] = backend_destinations
 
-        self._add_confserver(addr,
+        self._add_confserver(hostname,
                          locations_and_backends,
                          port=port,
                          ssl=ssl,
@@ -520,19 +520,19 @@ class NginxAPI(object):
                 break
 
     @rpc.service_method
-    def remove_proxy(self, addr, service_restart=True):
+    def remove_proxy(self, hostname, service_restart=True):
         """
-        Removes proxy for addr. Removes created server and its backends.
+        Removes proxy for hostname. Removes created server and its backends.
         """
         # TODO: review method
         self.https_inc.read(self.https_inc_path)
         self.app_servers_inc.read(self.app_inc_path)
 
-        self._remove_confserver(addr)
+        self._remove_confserver(hostname)
 
         # remove each backend that were in use by this proxy from backend_table
         for backend_name in self.backend_table:
-            if addr in backend_name:
+            if hostname in backend_name:
                 self.backend_table.pop(backend_name)
 
         self.https_inc.write(self.https_inc_path)
@@ -547,15 +547,15 @@ class NginxAPI(object):
         """
         try:
             # trying to apply changes
-            addr = kwds.get('addr')
-            if addr:
+            hostname = kwds.get('hostname')
+            if hostname:
                 self.https_inc.read(self.https_inc_path)
                 self.app_servers_inc.read(self.app_inc_path)
 
                 self.https_inc.write(self.https_inc_path + '.bak')
                 self.app_servers_inc.write(self.app_inc_path + '.bak')
 
-                self._remove_confserver(addr)
+                self._remove_confserver(hostname)
 
                 self.add_proxy(reread_conf=False, **kwds)
 

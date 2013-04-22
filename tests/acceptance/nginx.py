@@ -167,7 +167,7 @@ def given_i_have_a_server(step):
 
 @step(u'When I add proxy')
 def when_i_add_proxy(step):
-    world.api.add_proxy(addr='uty.com',
+    world.api.add_proxy(hostname='uty.com',
                         roles=world.roles,
                         servers=world.servers,
                         port=8008 if not world.ssl else None,
@@ -178,6 +178,7 @@ def when_i_add_proxy(step):
                         backend_ip_hash=world.backend_ip_hash,
                         backend_max_fails=world.backend_max_fails,
                         backend_fail_timeout=world.backend_fail_timeout)
+    time.sleep(1)
 
 
 @step(u'Then I expect proxying to server')
@@ -241,6 +242,7 @@ def when_i_launch_new_server_of_this_role(step):
     world.server3.serve_forever()
 
     world.api.add_server_to_role('localhost:8003', world.role_id)
+    time.sleep(1)
 
 
 @step(u'Then server appears in backend')
@@ -260,6 +262,7 @@ def then_server_appears_in_backend(step):
 @step(u'When I terminate one server of this role')
 def when_i_terminate_one_server_of_this_role(step):
     world.api.remove_server_from_role('localhost:8002', world.role_id)
+    time.sleep(1)
 
 
 @step(u'Then server removed from backend')
@@ -356,9 +359,10 @@ def given_i_have_a_proxy_to_two_roles_master_and_backup(step):
 
     world.roles = [123, {'id': 321, 'backup': True}]
 
-    world.api.add_proxy(addr='uty.com',
+    world.api.add_proxy(hostname='uty.com',
                         roles=world.roles,
                         port=8008)
+    time.sleep(1)
 
     responses = get_responses(3)
     assert world.expected_response3 not in responses
@@ -397,9 +401,10 @@ def given_i_have_a_proxy_to_two_servers(step):
     world.servers = [{'host': 'localhost', 'port': '8001'},
                      {'host': 'localhost', 'port': '8002'}]
 
-    world.api.add_proxy(addr='uty.com',
+    world.api.add_proxy(hostname='uty.com',
                         servers=world.servers,
                         port=8008)
+    time.sleep(1)
 
     responses = get_responses(2)
     assert world.expected_response1 in responses, '%s' % responses
@@ -410,9 +415,10 @@ def given_i_have_a_proxy_to_two_servers(step):
 def when_i_update_proxy_marking_one_server_as_down(step):
     server_to_update = world.servers[1]
     server_to_update['down'] = True
-    world.api.update_proxy(addr='uty.com',
+    world.api.update_proxy(hostname='uty.com',
                         servers=world.servers,
                         port=8008)
+    time.sleep(1)
 
 
 
