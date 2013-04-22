@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import BaseHTTPServer
+import urllib2
 from urllib2 import urlopen
 from httplib import HTTPSConnection
 import time
@@ -127,13 +128,15 @@ def get_responses(qty):
     return [urlopen('http://localhost:8008').read() for _ in xrange(qty)]
 
 
-@before.each_feature
+@before.each_scenario
 def create_api(feature=None):
     world.api = nginx.NginxAPI()
 
 
 @before.each_scenario
 def clear_add_proxy_world_parms(scenario):
+    world.http = True
+    world.port = 8008
     world.roles = None
     world.servers = None
     world.ssl = None
@@ -170,7 +173,8 @@ def when_i_add_proxy(step):
     world.api.add_proxy(hostname='uty.com',
                         roles=world.roles,
                         servers=world.servers,
-                        port=8008 if not world.ssl else None,
+                        port=world.port,
+                        http=world.http,
                         ssl=world.ssl,
                         ssl_port=world.ssl_port,
                         ssl_certificate_id=world.ssl_cert_id,
@@ -184,8 +188,6 @@ def when_i_add_proxy(step):
 @step(u'Then I expect proxying to server')
 def then_i_expect_proxying_to_server(step):
     response = get_responses(1)[0]
-    world.server.shutdown()
-    world.server.server_close()
 
     clear_nginx_includes()
 
@@ -299,6 +301,8 @@ def and_i_have_ssl_keypair(step):
     world.ssl = True
     world.ssl_cert_id = 123
 
+    world.port = None
+
 
 @step(u'Then I expect proxying https -> http')
 def then_i_expect_proxying_https_http(step):
@@ -319,15 +323,30 @@ def then_i_expect_proxying_https_http(step):
 
 @step(u'And I have HTTP disabled')
 def and_i_have_http_disabled(step):
-    assert False, 'This step must be implemented'
+    world.port = 8008
+    world.ssl_port = 443
+    world.http = False
 
 
 @step(u'And I expect redirect http -> https')
-def and_i_expect_redirect_https_http(step):
-    assert False, 'This step must be implemented'
+def and_i_expect_redirect_http_https(step):
+    time.sleep(1)
+    class TestRedirectHandler(urllib2.HTTPRedirectHandler):
+        redirect_occured = False
+        super = urllib2.HTTPRedirectHandler
 
+        def http_error_302(self, req, fp, code, msg, headers):
+            TestRedirectHandler.redirect_occured = True
+            return self.super.http_error_302(self, req, fp, code, msg, headers)
 
-# /later
+        http_error_301 = http_error_303 = http_error_307 = http_error_302
+
+    cookieprocessor = urllib2.HTTPCookieProcessor()
+    opener = urllib2.build_opener(TestRedirectHandler, cookieprocessor)
+    opener.open('http://localhost:%s' % world.port).read()
+
+    assert TestRedirectHandler.redirect_occured, 'No http to https redirect'
+
 
 ###############################################################################
 # Scenario 7
@@ -338,6 +357,7 @@ def given_i_have_a_proxy_to_two_roles_master_and_backup(step):
     server1_port = 8001
     server2_port = 8002
     server3_port = 8003
+
     # Mocking up get role servers to return our Server adresses
     def get_role_servers(role):
         if role == '123':

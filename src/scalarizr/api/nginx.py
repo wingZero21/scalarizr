@@ -276,7 +276,7 @@ class NginxAPI(object):
                                           ip_hash=ip_hash,
                                           max_fails=max_fails,
                                           fail_timeout=fail_timeout)
-        self.app_servers_inc.extend(backend)
+        self.app_servers_inc.append_conf(backend)
 
     def _make_backend_conf(self,
                            name,
@@ -369,23 +369,43 @@ class NginxAPI(object):
 
         return locations_and_backends
 
-    def _make_server_conf(self,
-                          hostname,
-                          locations_and_backends,
-                          port=None,
-                          ssl=False,
-                          ssl_port=None,
-                          ssl_certificate_id=None):
+    def _make_redirector_conf(self, hostname, port, ssl_port):
         """
-        Makes config (metaconf.Configuration object)
+        Makes config (metaconf.Configuration object) for server section of
+        nginx config that is used to redirect http to https
         """
         config = metaconf.Configuration('nginx')
         server_xpath = 'server'
         config.add('server', '')
-        # config.add('%s/listen' % server_xpath, port or '80')
+
+        config.add('%s/listen' % server_xpath, str(port))
+        config.add('%s/server_name' % server_xpath, hostname + '_redirector')
+
+        redirect_regex = '^(.*)$ https://localhost:%s$1 permanent' % (ssl_port)
+        config.add('%s/rewrite' % server_xpath, redirect_regex)
+
+        return config
+
+    def _make_server_conf(self,
+                          hostname,
+                          locations_and_backends,
+                          port='80',
+                          ssl=False,
+                          ssl_port=None,
+                          ssl_certificate_id=None):
+        """
+        Makes config (metaconf.Configuration object) for server section of
+        nginx config
+        """
+        config = metaconf.Configuration('nginx')
+        server_xpath = 'server'
+        config.add('server', '')
+
+        if port:
+            config.add('%s/listen' % server_xpath, str(port))
 
         if ssl:
-            config.add('%s/listen' % server_xpath, ssl_port or '443')
+            config.add('%s/listen' % server_xpath, '%s ssl' % (ssl_port or '443'))
             config.add('%s/ssl' % server_xpath, 'on')
             ssl_cert_path, ssl_cert_key_path = self._get_ssl_cert(ssl_certificate_id)
             config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
@@ -398,8 +418,7 @@ class NginxAPI(object):
             config.add('%s/ssl_ciphers' % server_xpath, 'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
             config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
 
-        else: 
-            config.add('%s/listen' % server_xpath, port or '80')
+        
 
         config.add('%s/server_name' % server_xpath, hostname)
 
@@ -424,27 +443,35 @@ class NginxAPI(object):
     def _add_confserver(self,
                         hostname,
                         locations_and_backends,
-                        port=None,
+                        port='80',
+                        http=True,
                         ssl=False,
                         ssl_port=None,
                         ssl_certificate_id=None):
         """
         Adds server to https config, but without writing it to file.
         """
+        if not http:
+            redirector_conf = self._make_redirector_conf(hostname,
+                                                         port,
+                                                         ssl_port)
+            self.https_inc.append_conf(redirector_conf)
+
         server_config = self._make_server_conf(hostname,
                                                locations_and_backends,
-                                               port,
+                                               port if http else None,
                                                ssl,
                                                ssl_port,
                                                ssl_certificate_id)
-        self.https_inc.extend(server_config)   
+        self.https_inc.append_conf(server_config)   
 
     @rpc.service_method
     def add_proxy(self,
                   hostname,
                   roles=[],
                   servers=[],
-                  port=None,
+                  port='80',
+                  http=True,
                   ssl=False,
                   ssl_port=None,
                   ssl_certificate_id=None,
@@ -477,11 +504,12 @@ class NginxAPI(object):
             self.backend_table[backend_name] = backend_destinations
 
         self._add_confserver(hostname,
-                         locations_and_backends,
-                         port=port,
-                         ssl=ssl,
-                         ssl_port=ssl_port,
-                         ssl_certificate_id=ssl_certificate_id)
+                             locations_and_backends,
+                             port=port,
+                             http=http,
+                             ssl=ssl,
+                             ssl_port=ssl_port,
+                             ssl_certificate_id=ssl_certificate_id)
 
         self.app_servers_inc.write(self.app_inc_path)
         self.https_inc.write(self.https_inc_path)
@@ -504,7 +532,7 @@ class NginxAPI(object):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.https_inc.get('%s/server_name' % server_xpath)
 
-            if server_name == name:
+            if name == server_name or name == server_name + '_redirector':
                 location_xpath = '%s/location' % server_xpath
                 location_qty = len(self.https_inc.get_list(location_xpath))
                 
@@ -517,14 +545,11 @@ class NginxAPI(object):
 
                 self.https_inc.remove(server_xpath)
 
-                break
-
     @rpc.service_method
     def remove_proxy(self, hostname, service_restart=True):
         """
         Removes proxy for hostname. Removes created server and its backends.
         """
-        # TODO: review method
         self.https_inc.read(self.https_inc_path)
         self.app_servers_inc.read(self.app_inc_path)
 

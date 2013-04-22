@@ -36,9 +36,10 @@ Scenario: Proxy HTTPS
 # not impl
 Scenario: HTTPS only
     Given I have a server
+    And I have SSL keypair
     And I have HTTP disabled
     When I add proxy
-    Then I expect proxying
+    Then I expect proxying to server
     And I expect redirect http -> https
 
 # 7

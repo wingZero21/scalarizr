@@ -172,9 +172,16 @@ class Configuration:
         Extend self with options from another config
         Comments and blank lines from importing config will not be added
         """
+        # TODO: rename this method to `merge`
         self._init()
         for node in conf.etree.getroot():
             self._extend(node)
+
+    def append_conf(self, conf):
+        # TODO: rename this method to `extend`
+        self._init()
+        for node in conf.etree.getroot():
+            self.etree.find(self._cursect).append(node)
 
     def comment(self, path):
         """
