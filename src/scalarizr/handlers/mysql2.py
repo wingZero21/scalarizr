@@ -695,8 +695,9 @@ class MysqlHandler(DBMSRHandler):
         bus.fire('before_slave_promote_to_master')
 
         __mysql__['compat_prior_backup_restore'] = mysql2.get('volume_config') or \
-                                                                                                mysql2.get('snapshot_config') or \
-                                                                                                message.body.get('volume_config')
+                                                    mysql2.get('snapshot_config') or \
+                                                    message.body.get('volume_config') and \
+                                                    not mysql2.get('volume')
         new_vol = None
         if __node__['platform'] == 'idcf':
             new_vol = None
@@ -795,7 +796,7 @@ class MysqlHandler(DBMSRHandler):
                     else:
                         bak = backup.backup(
                                         type='snap_mysql',
-                                        volume=__mysql__['volume'],
+                                        volume=__mysql__['volume'] ,
                                         description=self._data_bundle_description(),
                                         tags=self.resource_tags())
                     restore = bak.run()
