@@ -6,7 +6,6 @@ import sys
 import time
 import locale
 import logging
-import threading
 import subprocess
 
 if sys.version_info[0:2] >= (2, 7):
@@ -18,7 +17,11 @@ from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr.util import software
 
+
 class parameter_handler(object):
+    """
+    decorator for executor methods, to handle options, specified by regexp
+    """
     def __init__(self, regexp):
         self.regexp = re.compile(regexp)
 
@@ -36,17 +39,59 @@ class ProcessError(Exception):
 
 
 class BaseExec(object):
+    """
+    Base class for software-specific executors.
+    It's main goal is to provide simple and convinient way to process command line arguments for
+    different software.
+
+    Command line options processing flow:
+        __call__, start and start_nowait methods accept arbitrary number of arguments and keyword arguments.
+        Keyword args (kwargs) are treated as command line keys ant their values. Arguments (args) are treated as
+        command line parameters.
+
+            pvcreate --force -u mypv-32 --zero y  /dev/md0 /dev/loop1
+            |        |__________________________| |__________________|
+            |           keys and values               parameters
+            executable
+
+        1. Kwargs and args are passed to _before_all_handlers. This method should return list of parameters
+           and iterator of (key, value) pairs for kwargs (it could set kwargs processing order, or alter/change
+           args and kwargs, following some logic).
+
+        2. For each key-value pair, trying to find suitable handler among "parameter-handler"-decorated methods.
+           If decorator's regexp matches the key, decorated method handles key-value pair. If no methods matches
+           the key, "_default_handler" will be used to handle key-value pair.
+
+           Default handler should accept key-value pair, and list of command line arguments,
+           which handler should complement. "parameter_handler"-decorated handler additionaly accepts regexp-search
+           result (see iptables implementation for details)
+
+        3. Final list of command line arguments is passed to "_after_all_handlers" method, and result is considered
+           to be final list of command line arguments
+
+    """
     _handlers = dict()
     executable = None
     _checked = False
     package = None
 
 
-    def __init__(self, lazy_check=True, wait=True, raise_exc=True, timeout=None,
+    def __init__(self, lazy_check=True, raise_exc=True, timeout=None,
                         acceptable_codes=None, logger=None, to_log=True, **kwds):
+        """
+        :param lazy_check: if True, executable check will be perform right before first run,
+                            otherwise, check will be performed immediately
+        :param raise_exc: if True, bad return code will raise ProcessError exception
+        :param timeout: process timeout in seconds. If called with start() or __call__(),
+                        will raise ProcessTimeout, if reached
+        :param acceptable_codes: List of return codes, that are good (will not raise ProcessError, if
+                                    raise_exc == True). By default - (0,)
+        :param logger: You can pass your logger here, all produced log messages will use it, instead of default.
+        :param to_log: If True, cmd args, stdout and stderr will be logged. Log level - debug.
+        :param kwds: kwargs to pass to subprocess.
+        """
 
         self.lazy_check = lazy_check
-        self.wait_for_process = wait
         self.raise_exc=raise_exc
         self.timeout = timeout
         self.acceptable_codes = acceptable_codes or (0,)
@@ -63,7 +108,7 @@ class BaseExec(object):
 
     def check(self):
         if not self.executable.startswith('/'):
-            exec_paths = software.whereis(self.executable)
+            exec_paths = software.which(self.executable)
             exec_path = exec_paths[0] if exec_paths else None
         else:
             exec_path = self.executable
@@ -151,12 +196,35 @@ class BaseExec(object):
 
 
     def start(self, *params, **keys):
+        popen = self.start_nowait(*params, **keys)
+        rcode = self.wait(popen, self.timeout)
+        if rcode not in self.acceptable_codes and self.raise_exc:
+            raise ProcessError('Process %s finished with code %s' % (self.executable, rcode))
+        ret = [rcode, None, None]
+
+        def get_stream(name):
+            stream_obj = getattr(popen, name, None)
+            try:
+                if stream_obj is not None and not stream_obj.closed:
+                    stream_str = stream_obj.read()
+                    if self.to_log:
+                        self.logger.debug('%s: %s' % (name.upper(), stream_str))
+                    return stream_str
+            except:
+                pass
+
+        ret[1] = get_stream('stdout')
+        ret[2] = get_stream('stderr')
+        return tuple(ret)
+
+
+    def start_nowait(self, *params, **keys):
         try:
             if not self._checked:
                 self.check()
             if len(keys) == 1 and 'kwargs' in keys:
                 keys = keys['kwargs']
-            # Set locale
+                # Set locale
             if not 'env' in self.subprocess_kwds:
                 self.subprocess_kwds['env'] = os.environ
                 # Set en_US locale or C
@@ -170,32 +238,21 @@ class BaseExec(object):
             cmd_args = self.prepare_args(*params, **keys)
 
             if not self.subprocess_kwds.get('shell') and not self.executable.startswith('/'):
-                # TODO: Raise error if not found
-                self.executable = software.whereis(self.executable)[0]
+                self.executable = software.which(self.executable)
 
             final_args = (self.executable,) + tuple(cmd_args)
             self._check_streams()
-            read_stdout = self.stdout == subprocess.PIPE
-            read_stderr = self.stderr == subprocess.PIPE
+            if self.to_log:
+                self.logger.debug('Starting subprocess. Args: %s' % ' '.join(final_args))
 
             self.popen = subprocess.Popen(final_args, **self.subprocess_kwds)
-            if self.wait_for_process:
-                rcode = self.wait(self.popen, self.timeout)
-                if rcode not in self.acceptable_codes and self.raise_exc:
-                    raise ProcessError('Process %s finished with code %s' % (self.executable, rcode))
-                ret = dict(return_code=rcode)
-                if read_stdout:
-                    ret['stdout'] = self.popen.stdout.read()
-                    self.logger.debug('Stdout: %s' % ret['stdout'])
-                if read_stderr:
-                    ret['stderr'] = self.popen.stderr.read()
-                    self.logger.debug('Stderr: %s' % ret['stderr'])
-                return ret
-            else:
-                return self.popen
+            return self.popen
         finally:
             for stream in ('stderr, stdout, stdin'):
                 self.subprocess_kwds.pop(stream, None)
+
+
+    __call__ = start
 
 
     def wait(self, popen, timeout=None):
@@ -220,7 +277,7 @@ class BaseExec(object):
             self.subprocess_kwds['stderr'] = subprocess.PIPE
 
 
-#### Realisations ######
+#### Implementations ######
 
 
 class dd_exec(BaseExec):
@@ -259,16 +316,17 @@ class iptables_exec(BaseExec):
         return params, ordered_keys.iteritems()
 
 
-class grep_exec(BaseExec):
-    executable = 'grep'
+class rsync(BaseExec):
+    executable = 'rsync'
+    package='rsync'
+
+    @parameter_handler('^exclude$')
+    def _handle_exclude(self, re_result, key, value, cmd_args):
+        if not isinstance(value, (tuple, list)):
+            value = (value, )
+        for val in value:
+            cmd_args.extend(['--exclude', val])
 
 
-class pigz(BaseExec):
-    executable='pigz'
-    package='pigz'
-
-
-class tee(BaseExec):
-    executable='tee'
 
 
