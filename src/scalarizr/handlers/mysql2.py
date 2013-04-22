@@ -977,10 +977,13 @@ class MysqlHandler(DBMSRHandler):
 
 
     def _change_selinux_ctx(self):
-        chcon = software.whereis('chcon')
-        if disttool.is_redhat_based() and chcon:
+        try:
+            chcon = software.which('chcon')
+        except LookupError:
+            return
+        if disttool.is_redhat_based():
             LOG.debug('Changing SELinux file security context for new mysql datadir')
-            system2((chcon[0], '-R', '-h', 'system_u:object_r:mysqld_db_t',
+            system2((chcon, '-R', '-h', 'system_u:object_r:mysqld_db_t',
                             os.path.dirname(__mysql__['storage_dir'])), raise_exc=False)
 
     def _fix_percona_debian_cnf(self):
@@ -1211,7 +1214,7 @@ class MysqlHandler(DBMSRHandler):
         data_dir = os.path.join(storage_path, mysql_svc.STORAGE_DATA_DIR),
         pid_file = os.path.join(storage_path, 'mysql.pid')
         socket_file = os.path.join(storage_path, 'mysql.sock')
-        mysqld_safe_bin = software.whereis('mysqld_safe')[0]
+        mysqld_safe_bin = software.which('mysqld_safe')
 
         LOG.info('Performing InnoDB recovery')
         mysqld_safe_cmd = (mysqld_safe_bin,

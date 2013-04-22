@@ -57,12 +57,15 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
         --pid-path=/var/run/nginx
         but actual pid-file is /var/run/nginx.pid
         try:
-                nginx = software.whereis('nginx')
-                if nginx:
-                        out = system2((nginx[0], '-V'))[1]
-                        m = re.search("--pid-path=(.*?)\s", out)
-                        if m:
-                                        pid_file = m.group(1)
+                try:
+                    nginx = software.which('nginx')
+
+                    out = system2((nginx, '-V'))[1]
+                    m = re.search("--pid-path=(.*?)\s", out)
+                    if m:
+                             pid_file = m.group(1)
+                except LookupError:
+                        pass
         except:
                 pass
         '''

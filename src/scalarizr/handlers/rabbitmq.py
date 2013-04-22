@@ -52,7 +52,9 @@ def get_handlers():
 class RabbitMQHandler(ServiceCtlHandler):
 
     def __init__(self):
-        if not software.whereis('rabbitmqctl'):
+        try:
+            software.which('rabbitmqctl')
+        except LookupError:
             raise HandlerError("Rabbitmqctl binary was not found. Check your installation.")
 
         bus.on("init", self.on_init)

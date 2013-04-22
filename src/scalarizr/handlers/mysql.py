@@ -951,7 +951,7 @@ class MysqlHandler(ServiceCtlHandler):
         data_dir = os.path.join(storage_path, STORAGE_DATA_DIR),
         pid_file = os.path.join(storage_path, 'mysql.pid')
         socket_file = os.path.join(storage_path, 'mysql.sock')
-        mysqld_safe_bin = software.whereis('mysqld_safe')[0]
+        mysqld_safe_bin = software.which('mysqld_safe')
 
         '''
         ndb_support = any(row['Engine'] == 'ndbcluster' and row['Support'] == 'YES'
@@ -1281,11 +1281,12 @@ class MysqlHandler(ServiceCtlHandler):
 
     def _change_selinux_ctx(self):
         if disttool.is_rhel():
-            chcon = software.whereis('chcon')
-            if not chcon:
+            try:
+                chcon = software.which('chcon')
+            except LookupError:
                 return
             LOG.debug('Changing SELinux file security context for new mysql home')
-            system2((chcon[0], '-R', '-u', 'system_u', '-r',
+            system2((chcon, '-R', '-u', 'system_u', '-r',
                      'object_r', '-t', 'mysqld_db_t', os.path.dirname(STORAGE_PATH)), raise_exc=False)
 
     def _init_master(self, message):
@@ -1818,10 +1819,12 @@ class MysqlHandler(ServiceCtlHandler):
                 os.makedirs(directory)
                 src_dir = os.path.dirname(raw_value + "/") + "/"
                 if os.path.isdir(src_dir):
-                    set_se_path = software.whereis('setsebool')
-                    if set_se_path:
+                    try:
+                        set_se_path = software.which('setsebool')
                         LOG.debug('Make SELinux rule for rsync')
-                        system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
+                        system2((set_se_path, 'rsync_disable_trans', 'on'), raise_exc=False)
+                    except LookupError:
+                        pass
                     LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
                     rsync(src_dir, directory, archive=True, exclude='ib_logfile*')
                     self._mysql_config.set(directive, dirname)
