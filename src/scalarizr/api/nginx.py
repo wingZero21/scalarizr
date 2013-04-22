@@ -155,11 +155,11 @@ class NginxAPI(object):
         if not os.path.exists(keys_dir_path):
             os.mkdir(keys_dir_path)
 
-        cert_path = os.path.join(keys_dir_path, 'https.crt')
+        cert_path = os.path.join(keys_dir_path, 'https_%s.crt' % ssl_certificate_id)
         with open(cert_path, 'w') as fp:
             fp.write(cert)
 
-        key_path = os.path.join(keys_dir_path, 'https.key')
+        key_path = os.path.join(keys_dir_path, 'https_%s.key' % ssl_certificate_id)
         with open(key_path, 'w') as fp:
             fp.write(key)
 
