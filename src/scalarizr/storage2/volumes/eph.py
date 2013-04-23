@@ -39,8 +39,7 @@ class EphVolume(base.Volume):
                 cloudfs_dir += '/'
         kwds.pop('lvm_group_cfg', None)
 
-        super(EphVolume, self).__init__(vg=vg, disk=disk, size=size,
-                                                                                        cloudfs_dir=cloudfs_dir, **kwds)
+        super(EphVolume, self).__init__(vg=vg, disk=disk, size=size or '100%', cloudfs_dir=cloudfs_dir, **kwds)
 
         self._lvm_volume = None
 
@@ -57,8 +56,7 @@ class EphVolume(base.Volume):
             for attr in ('disk', 'fstype', 'size', 'vg', 'mpoint'):
                 if not getattr(self, attr, None):
                     if not self.snap or not getattr(self.snap, attr, None):
-                        raise storage2.StorageError('Missing ephemeral volume'
-                                                                                                ' attribute "%s"' % attr)
+                        raise storage2.StorageError('Missing ephemeral volume attribute "%s"' % attr)
                     setattr(self, attr, getattr(self.snap, attr))
 
             self.disk = storage2.volume(self.disk)
