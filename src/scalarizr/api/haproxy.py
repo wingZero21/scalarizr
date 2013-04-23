@@ -155,6 +155,7 @@ class HAProxyAPI(object):
 
         # save to cfg
         self.cfg['listen'][listener_name] = listener
+        # backends?
         if not self.cfg.backend or not backend_name in self.cfg.backend:
             self.cfg['backend'][backend_name] = backend
 
