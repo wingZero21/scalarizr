@@ -251,11 +251,12 @@ def system2(*popenargs, **kwargs):
 
     if not 'env' in kwargs:
         kwargs['env'] = os.environ
+        
     # Set en_US locale or C
     if not kwargs['env'].get('LANG'):
         default_locale = locale.getdefaultlocale()
         if default_locale == ('en_US', 'UTF-8'):
-            kwargs['env']['LANG'] = 'en_US'
+            kwargs['env']['LANG'] = 'en_US.UTF-8'
         else:
             kwargs['env']['LANG'] = 'C'
 

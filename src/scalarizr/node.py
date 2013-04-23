@@ -7,7 +7,7 @@ import sys
 try:
     import json
 except ImportError:
-    import simplejson as json
+    import simplejson as json 
 
 
 base_dir = '/etc/scalr'
@@ -38,7 +38,7 @@ class Store(dict):
                 kwds = dict(args)
         for key, value in kwds.items():
             self.__setitem__(key, value)
-
+    
 
 
 class Compound(Store):
@@ -91,7 +91,7 @@ class Json(Store):
     def __init__(self, filename, fn):
         '''
         Example:
-        jstore = Json('/etc/scalr/private.d/storage/mysql.json',
+        jstore = Json('/etc/scalr/private.d/storage/mysql.json', 
                                 'scalarizr.storage2.volume')
         '''
         self.filename = filename
@@ -171,7 +171,7 @@ class Ini(Store):
 
 
 class IniOption(Ini):
-    def __init__(self, filenames, section, option,
+    def __init__(self, filenames, section, option, 
                     getfilter=None, setfilter=None):
         self.option = option
         self.getfilter = getfilter
@@ -260,14 +260,14 @@ class Attr(Store):
                     return getattr(base, path[-1])
                 self.getter = getter
         except:
-            raise KeyError(key)
+            raise KeyError(key) 
         return self.getter()
 
 
 class Call(Attr):
     def __getitem__(self, key):
         attr = Attr.__getitem__(self, key)
-        return attr()
+        return attr()   
 
 
 def _import(objectstr):
@@ -292,7 +292,7 @@ __node__ = {
                                 Ini(private_dir + '/config.ini', 'general'),
         'platform': Ini(public_dir + '/config.ini', 'general'),
         'behavior': IniOption(
-                                                [public_dir + '/config.ini', private_dir + '/config.ini'],
+                                                [public_dir + '/config.ini', private_dir + '/config.ini'], 
                                                 'general', 'behaviour',
                                                 lambda val: val.strip().split(','),
                                                 lambda val: ','.join(val)),
@@ -306,12 +306,12 @@ __node__ = {
 for behavior in ('mysql', 'mysql2', 'percona'):
     section = 'mysql2' if behavior == 'percona' else behavior
     __node__[behavior] = Compound({
-            'volume,volume_config':
-                            Json('%s/storage/%s.json' % (private_dir, 'mysql'),
+            'volume,volume_config': 
+                            Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
                                     'scalarizr.storage2.volume'),
-            '*_password,log_*,replication_master':
+            '*_password,log_*,replication_master': 
                             Ini('%s/%s.ini' % (private_dir, behavior), section),
-            'mysqldump_options':
+            'mysqldump_options': 
                             Ini('%s/%s.ini' % (public_dir, behavior), section)
     })
 
@@ -349,7 +349,7 @@ __node__['mongodb'] = Compound({
 
 __node__['ec2'] = Compound({
         't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
-        'hostname_as_pubdns':
+        'hostname_as_pubdns': 
                                 Ini('%s/%s.ini' % (public_dir, 'ec2'), 'ec2'),
         'ami_id': Call('scalarizr.bus', 'bus.platform.get_ami_id'),
         'kernel_id': Call('scalarizr.bus', 'bus.platform.get_kernel_id'),
@@ -381,8 +381,11 @@ __node__['rackspace'] = Compound({
 __node__['gce'] = Compound({
         'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
         'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),
-        'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id')
+        'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id'),
+        'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
+        'zone': Call('scalarizr.bus', 'bus.platform.get_zone')
 })
+
 __node__['scalr'] = Compound({
         'version': File(private_dir + '/.scalr-version'),
         'id': Ini(private_dir + '/config.ini', 'general', {'id': 'scalr_id'})
