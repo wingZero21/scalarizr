@@ -1,4 +1,3 @@
-from __future__ import with_statement
 '''
 Created on Jan 6, 2010
 
@@ -17,17 +16,18 @@ from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 from scalarizr.api import service as preset_service
 from scalarizr.node import __node__
+from scalarizr.api.nginx import NginxAPI
+from scalarizr.api.nginx import NginxInitScript
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.util import system2, cached, firstmatched,\
+from scalarizr.util import cached, firstmatched,\
         validators, software, initdv2, disttool
 from scalarizr.linux import iptables
 from scalarizr.services import BaseConfig, PresetProvider
 
 # Stdlibs
-import os, logging, shutil, re, time, pwd
-from telnetlib import Telnet
+import os, logging, shutil
 from datetime import datetime
 import ConfigParser
 import cStringIO
@@ -44,71 +44,6 @@ APP_INC_PATH = 'app_include_path'
 UPSTREAM_APP_ROLE = 'upstream_app_role'
 
 __nginx__ = __node__['nginx']
-
-
-class NginxInitScript(initdv2.ParametrizedInitScript):
-    _nginx_binary = None
-
-    def __init__(self):
-        self._nginx_binary = __nginx__[BIN_PATH]
-
-
-        pid_file = None
-        '''
-        Saw on 8.04:
-        --pid-path=/var/run/nginx
-        but actual pid-file is /var/run/nginx.pid
-        try:
-                nginx = software.whereis('nginx')
-                if nginx:
-                        out = system2((nginx[0], '-V'))[1]
-                        m = re.search("--pid-path=(.*?)\s", out)
-                        if m:
-                                        pid_file = m.group(1)
-        except:
-                pass
-        '''
-
-        initdv2.ParametrizedInitScript.__init__(
-                self,
-                'nginx',
-                '/etc/init.d/nginx',
-                pid_file = pid_file,
-                socks=[initdv2.SockParam(80)]
-        )
-
-    def status(self):
-        status = initdv2.ParametrizedInitScript.status(self)
-        if not status and self.socks:
-            ip, port = self.socks[0].conn_address
-            telnet = Telnet(ip, port)
-            telnet.write('HEAD / HTTP/1.0\n\n')
-            if 'server: nginx' in telnet.read_all().lower():
-                return initdv2.Status.RUNNING
-            return initdv2.Status.UNKNOWN
-        return status
-
-    def configtest(self, path=None):
-        args = '%s -t' % self._nginx_binary
-        if path:
-            args += '-c %s' % path
-
-        out = system2(args, shell=True)[1]
-        if 'failed' in out.lower():
-            raise initdv2.InitdError("Configuration isn't valid: %s" % out)
-
-    def stop(self):
-        if not self.running:
-            return True
-        ret =  initdv2.ParametrizedInitScript.stop(self)
-        time.sleep(1)
-        return ret
-
-    def restart(self):
-        self.configtest()
-        ret = initdv2.ParametrizedInitScript.restart(self)
-        time.sleep(1)
-        return ret
 
 
 initdv2.explore('nginx', NginxInitScript)
@@ -197,6 +132,7 @@ class NginxHandler(ServiceCtlHandler):
 
         self._logger = logging.getLogger(__name__)
         self.preset_provider = NginxPresetProvider()
+        self.api = NginxAPI()
         preset_service.services[BEHAVIOUR] = self.preset_provider
 
         bus.define_events("nginx_upstream_reload")
@@ -232,6 +168,10 @@ class NginxHandler(ServiceCtlHandler):
             data = getattr(message, BEHAVIOUR)
             if data and 'preset' in data:
                 self.initial_preset = data['preset'].copy()
+            if data and 'proxies' in data:
+                self._proxies = data['proxies'].copy()
+            else:
+                self._proxies = None
 
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
@@ -253,9 +193,13 @@ class NginxHandler(ServiceCtlHandler):
         }]}
 
     def on_start(self):
-        if self._cnf.state == ScalarizrState.RUNNING:
+        if __node__['state'] == 'running':
             self._update_vhosts()
             self._reload_upstream()
+
+            role_params = self._queryenv.list_role_params(__node__['farm_role_id'])
+            if role_params and 'proxies' in role_params:
+                self.api.recreate_proxying(role_params['proxies'])
 
     def on_before_host_up(self, message):
         with bus.initialization_op as op:
@@ -268,6 +212,8 @@ class NginxHandler(ServiceCtlHandler):
 
         bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
 
+        if self._proxies:
+            self.api.recreate_proxying(self._proxies)
 
     def on_HostUp(self, message):
         self._reload_upstream()

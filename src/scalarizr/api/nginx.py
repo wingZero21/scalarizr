@@ -2,12 +2,16 @@ from __future__ import with_statement
 
 import os
 from fnmatch import fnmatch
+from telnetlib import Telnet
+import time
 
 from scalarizr import rpc
 from scalarizr.bus import bus
 import scalarizr.libs.metaconf as metaconf
 from scalarizr.node import __node__
-from scalarizr.handlers.nginx import NginxInitScript
+from scalarizr.util import initdv2
+from scalarizr.util import system2
+
 # import StringIO
 # str_fp = StringIO.StringIO()
 # self.app_servers_inc.write_fp(str_fp, close=False)
@@ -20,7 +24,78 @@ HTTPS_INC_PATH = 'https_include_path'
 __nginx__ = __node__['nginx']
 
 
+class NginxInitScript(initdv2.ParametrizedInitScript):
+    _nginx_binary = None
+
+    def __init__(self):
+        self._nginx_binary = __nginx__['binary_path']
+
+
+        pid_file = None
+        '''
+        Saw on 8.04:
+        --pid-path=/var/run/nginx
+        but actual pid-file is /var/run/nginx.pid
+        try:
+                nginx = software.whereis('nginx')
+                if nginx:
+                        out = system2((nginx[0], '-V'))[1]
+                        m = re.search("--pid-path=(.*?)\s", out)
+                        if m:
+                                        pid_file = m.group(1)
+        except:
+                pass
+        '''
+
+        initdv2.ParametrizedInitScript.__init__(
+                self,
+                'nginx',
+                '/etc/init.d/nginx',
+                pid_file = pid_file,
+                socks=[initdv2.SockParam(80)]
+        )
+
+    def status(self):
+        status = initdv2.ParametrizedInitScript.status(self)
+        if not status and self.socks:
+            ip, port = self.socks[0].conn_address
+            telnet = Telnet(ip, port)
+            telnet.write('HEAD / HTTP/1.0\n\n')
+            if 'server: nginx' in telnet.read_all().lower():
+                return initdv2.Status.RUNNING
+            return initdv2.Status.UNKNOWN
+        return status
+
+    def configtest(self, path=None):
+        args = '%s -t' % self._nginx_binary
+        if path:
+            args += '-c %s' % path
+
+        out = system2(args, shell=True)[1]
+        if 'failed' in out.lower():
+            raise initdv2.InitdError("Configuration isn't valid: %s" % out)
+
+    def stop(self):
+        if not self.running:
+            return True
+        ret =  initdv2.ParametrizedInitScript.stop(self)
+        time.sleep(1)
+        return ret
+
+    def restart(self):
+        self.configtest()
+        ret = initdv2.ParametrizedInitScript.restart(self)
+        time.sleep(1)
+        return ret
+
+
 class NginxAPI(object):
+
+    _instance = None
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(NginxAPI, cls).__new__(cls, *args, **kwargs)
+        return cls._instance
 
     # TODO: move next method to Configuration class
     def _find_xpath(self, conf, element_xpath, value):
@@ -44,16 +119,6 @@ class NginxAPI(object):
         ``api._find_xpath(conf, 'server', '10.10.12.11*')`` will find second
         element ('server[2]')
         """
-        # attrib_list = conf.get_dict(element_xpath)
-        # if not attrib_list:
-        #     return None
-
-        # values = []
-        # if attrib_list[0]['mc_type'] is 'section':
-        #     values = [x['value'] for x in attrib_list]
-        # else:
-        #     values = conf.get_list(element_xpath)
-
         for i, val in enumerate(conf.get_list(element_xpath)):
             if fnmatch(val, value):
                 return '%s[%i]' % (element_xpath, i + 1)
@@ -76,16 +141,6 @@ class NginxAPI(object):
         ``api._find_all_xpaths(conf, 'server', '10.10.12.11*')`` will return
         ``['server[2]', 'server[3]'']``.
         """
-        # attrib_list = conf.get_dict(element_xpath)
-        # if not attrib_list:
-        #     return None
-
-        # values = []
-        # if attrib_list[0]['mc_type'] is 'section':
-        #     values = [x['value'] for x in attrib_list]
-        # else:
-        #     values = conf.get_list(element_xpath)
-
         result = []
         for i, val in enumerate(conf.get_list(element_xpath)):
             if fnmatch(val, value):
@@ -118,12 +173,18 @@ class NginxAPI(object):
         self.app_servers_inc.read(self.app_inc_path)
         self.https_inc.read(self.https_inc_path)
 
+    def restart_service(self):
+        self.service.reload()
+
     @rpc.service_method
-    def recreate_backend_table(self, proxy_list):
+    def recreate_proxying(self, proxy_list):
         self._clear_nginx_includes()
         self.backend_table = []
+
         for proxy_parms in proxy_list:
-            self.add_proxy(**proxy_parms)
+            self.add_proxy(restart_service=False, **proxy_parms)
+
+        self.restart_service()
 
     def _get_role_servers(self, role_id):
         """ Method is used to get role servers from scalr """
@@ -465,7 +526,6 @@ class NginxAPI(object):
                                                ssl_certificate_id)
         self.https_inc.append_conf(server_config)   
 
-    @rpc.service_method
     def add_proxy(self,
                   hostname,
                   roles=[],
@@ -479,7 +539,8 @@ class NginxAPI(object):
                   backend_ip_hash=False,
                   backend_max_fails=None,
                   backend_fail_timeout=None,
-                  reread_conf=True):
+                  reread_conf=True,
+                  restart_service=True):
         """
         Adds proxy
         """
@@ -514,7 +575,8 @@ class NginxAPI(object):
         self.app_servers_inc.write(self.app_inc_path)
         self.https_inc.write(self.https_inc_path)
 
-        self.service.reload()
+        if restart_service:
+            self.restart_service()
 
     def _remove_backend(self, name):
         """
@@ -539,14 +601,13 @@ class NginxAPI(object):
                 for i in xrange(location_qty):
                     xpath = location_xpath + ('[%i]' % i)
                     backend = self.https_inc.get(xpath + '/proxy_pass')
-                    # TODO: find out, can we proxy by https?
                     backend = backend.replace('http://', '')
                     self._remove_backend(backend)
 
                 self.https_inc.remove(server_xpath)
 
     @rpc.service_method
-    def remove_proxy(self, hostname, service_restart=True):
+    def remove_proxy(self, hostname, restart_service=True):
         """
         Removes proxy for hostname. Removes created server and its backends.
         """
@@ -562,13 +623,13 @@ class NginxAPI(object):
 
         self.https_inc.write(self.https_inc_path)
         self.app_servers_inc.write(self.app_inc_path)
-        if service_restart:
-            self.service.reload()
+        if restart_service:
+            self.restart_service()
 
     @rpc.service_method
-    def update_proxy(self, **kwds):
+    def make_proxy(self, **kwds):
         """
-        Applies new configuration for existing proxy
+        RPC method for adding or updating proxy configuration.
         """
         try:
             # trying to apply changes
@@ -597,7 +658,7 @@ class NginxAPI(object):
         if type(server) == str:
             return server
 
-        result = server['ip']
+        result = server['host']
         if 'port' in server:
             result = '%s:%s' % (result, server['port'])
 
@@ -618,7 +679,7 @@ class NginxAPI(object):
         return result
 
     @rpc.service_method
-    def add_server(self, backend, server, update_conf=True, service_restart=True):
+    def add_server(self, backend, server, update_conf=True, restart_service=True):
         """
         Adds server to backend with given name pattern.
         Parameter server can be dict or string (ip addr)
@@ -634,11 +695,11 @@ class NginxAPI(object):
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
-        if service_restart:
-            self.service.reload()
+        if restart_service:
+            self.restart_service()
 
     @rpc.service_method
-    def remove_server(self, backend, server, update_conf=True, service_restart=True):
+    def remove_server(self, backend, server, update_conf=True, restart_service=True):
         """
         Removes server from backend with given name pattern.
         Parameter server can be dict or string (ip addr)
@@ -647,7 +708,7 @@ class NginxAPI(object):
             self.app_servers_inc.read(self.app_inc_path)
 
         if type(server) is dict:
-            server = server['ip']
+            server = server['host']
 
         backend_xpath = self._find_xpath(self.app_servers_inc,
                                          'upstream',
@@ -659,15 +720,15 @@ class NginxAPI(object):
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
-        if service_restart:
-            self.service.reload()
+        if restart_service:
+            self.restart_service()
 
     @rpc.service_method
     def add_server_to_role(self, 
                            server,
                            role_id,
                            update_conf=True, 
-                           service_restart=True):
+                           restart_service=True):
         """
         Adds server to each backend that uses given role
         """
@@ -680,7 +741,7 @@ class NginxAPI(object):
         for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if dest.get('id') == role_id and server not in dest['servers']:
-                    srv = {'ip': server}
+                    srv = {'host': server}
                     # taking server parameters
                     srv.update(dest)
                     srv.pop('servers')
@@ -691,15 +752,15 @@ class NginxAPI(object):
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
-        if service_restart:
-            self.service.reload()
+        if restart_service:
+            self.restart_service()
 
     @rpc.service_method
     def remove_server_from_role(self,
                                 server,
                                 role_id,
                                 update_conf=True,
-                                service_restart=True):
+                                restart_service=True):
         """
         Removes server from each backend that uses given role
         """
@@ -717,15 +778,15 @@ class NginxAPI(object):
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
-        if service_restart:
-            self.service.reload()
+        if restart_service:
+            self.restart_service()
 
 
     @rpc.service_method
     def remove_server_from_all_backends(self,
                                         server,
                                         update_conf=True,
-                                        service_restart=True):
+                                        restart_service=True):
         """
         Method is used to remove stand-alone servers, that aren't belong
         to any role
@@ -741,5 +802,5 @@ class NginxAPI(object):
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
-        if service_restart:
-            self.service.reload()
+        if restart_service:
+            self.restart_service()

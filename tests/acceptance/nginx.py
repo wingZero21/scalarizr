@@ -134,7 +134,7 @@ def create_api(feature=None):
 
 
 @before.each_scenario
-def clear_add_proxy_world_parms(scenario):
+def clear_make_proxy_world_parms(scenario):
     world.http = True
     world.port = 8008
     world.roles = None
@@ -170,7 +170,7 @@ def given_i_have_a_server(step):
 
 @step(u'When I add proxy')
 def when_i_add_proxy(step):
-    world.api.add_proxy(hostname='uty.com',
+    world.api.make_proxy(hostname='uty.com',
                         roles=world.roles,
                         servers=world.servers,
                         port=world.port,
@@ -379,7 +379,7 @@ def given_i_have_a_proxy_to_two_roles_master_and_backup(step):
 
     world.roles = [123, {'id': 321, 'backup': True}]
 
-    world.api.add_proxy(hostname='uty.com',
+    world.api.make_proxy(hostname='uty.com',
                         roles=world.roles,
                         port=8008)
     time.sleep(1)
@@ -409,6 +409,7 @@ def then_i_expect_proxying_to_backup_servers(step):
 ###############################################################################
 # Scenario 8
 
+
 @step(u'Given I have a proxy to two servers')
 def given_i_have_a_proxy_to_two_servers(step):
     world.expected_response1 = 'Test1'
@@ -421,7 +422,7 @@ def given_i_have_a_proxy_to_two_servers(step):
     world.servers = [{'host': 'localhost', 'port': '8001'},
                      {'host': 'localhost', 'port': '8002'}]
 
-    world.api.add_proxy(hostname='uty.com',
+    world.api.make_proxy(hostname='uty.com',
                         servers=world.servers,
                         port=8008)
     time.sleep(1)
@@ -435,7 +436,7 @@ def given_i_have_a_proxy_to_two_servers(step):
 def when_i_update_proxy_marking_one_server_as_down(step):
     server_to_update = world.servers[1]
     server_to_update['down'] = True
-    world.api.update_proxy(hostname='uty.com',
+    world.api.make_proxy(hostname='uty.com',
                         servers=world.servers,
                         port=8008)
     time.sleep(1)
