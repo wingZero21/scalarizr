@@ -28,7 +28,7 @@ class EphVolume(base.Volume):
     """
 
 
-    def __init__(self, vg=None, disk=None, size=None, cloudfs_dir=None,     **kwds):
+    def __init__(self, vg=None, disk=None, size=None, cloudfs_dir=None, **kwds):
         # Compatibility with 1.0
         snap_backend = kwds.pop('snap_backend', None)
         if snap_backend:
@@ -39,7 +39,7 @@ class EphVolume(base.Volume):
                 cloudfs_dir += '/'
         kwds.pop('lvm_group_cfg', None)
 
-        super(EphVolume, self).__init__(vg=vg, disk=disk, size=size or '100%', cloudfs_dir=cloudfs_dir, **kwds)
+        super(EphVolume, self).__init__(vg=vg, disk=disk, size=size or '80%', cloudfs_dir=cloudfs_dir, **kwds)
 
         self._lvm_volume = None
 
