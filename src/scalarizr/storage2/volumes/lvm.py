@@ -151,8 +151,11 @@ class LvmVolume(base.Volume):
         else:
             long_kwds['extents'] = '1%ORIGIN'
 
+        lv_name = '%s/%s' % (self.vg, long_kwds['name'])
+        if lv_name in lvm2.lvs():
+            lvm2.lvremove(lv_name)
         lvm2.lvcreate(**long_kwds)
-        lv_info = lvm2.lvs('%s/%s' % (self.vg, long_kwds['name'])).values()[0]
+        lv_info = lvm2.lvs(lv_name).values()[0]
 
         return storage2.snapshot(
                         type='lvm_native',
