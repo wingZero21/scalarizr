@@ -128,6 +128,7 @@ class NginxHandler(ServiceCtlHandler):
     localhost = '127.0.0.1:80'
 
     def __init__(self):
+        self._cnf = bus.cnf
         ServiceCtlHandler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
 
         self._logger = logging.getLogger(__name__)
@@ -148,7 +149,7 @@ class NginxHandler(ServiceCtlHandler):
 
         self._insert_iptables_rules()
 
-        if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+        if __node__['state'] == ScalarizrState.BOOTSTRAPPING:
             self._stop_service('Configuring')
 
     def on_reload(self):

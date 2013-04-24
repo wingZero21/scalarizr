@@ -348,8 +348,8 @@ __node__['mongodb'] = Compound({
 })
 
 __node__['nginx'] = Compound({
-    'binary_path,app_include_path,https_include_path,app_port,main_handler,upstream_app_role':
-        Ini('%s/%s.ini' % (private_dir, 'www'), 'www')
+    'binary_path,app_include_path,https_include_path,app_port,upstream_app_role':
+        Ini('%s/%s.ini' % (public_dir, 'www'), 'www')
 })
 
 __node__['ec2'] = Compound({

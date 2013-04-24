@@ -149,21 +149,25 @@ class NginxAPI(object):
 
     def __init__(self, app_inc_dir=None, https_inc_dir=None):
         self.service = NginxInitScript()
+        self.backend_table = {}
 
         if not app_inc_dir:
             app_inc_dir = os.path.dirname(__nginx__[APP_INC_PATH])
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
         self.app_servers_inc = metaconf.Configuration('nginx')
-        self.app_servers_inc.read(self.app_inc_path)
-
-        self.backend_table = {}
+        if os.path.exists(self.app_inc_path):
+            self.app_servers_inc.read(self.app_inc_path)
+        else:
+            open(self.app_inc_path, 'w').close() 
 
         if not https_inc_dir:
             https_inc_dir = os.path.dirname(__nginx__[HTTPS_INC_PATH])
         self.https_inc_path = os.path.join(https_inc_dir, 'https.include')
         self.https_inc = metaconf.Configuration('nginx')
-
-        self.https_inc.read(self.https_inc_path)
+        if os.path.exists(self.https_inc_path):
+            self.app_servers_inc.read(self.https_inc_path)
+        else:
+            open(self.https_inc_path, 'w').close()
 
     def _clear_nginx_includes(self):
         with open(self.app_inc_path, 'w') as fp:
