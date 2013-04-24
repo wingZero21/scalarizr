@@ -1,3 +1,7 @@
+import errno
+import signal
+from scalarizr.services.mysql2 import LOG
+
 __author__ = 'Nick'
 
 import re
@@ -36,6 +40,49 @@ class ProcessTimeout(Exception):
 
 class ProcessError(Exception):
     pass
+
+
+class Process(object):
+
+    stdout = stderr = returncode = None
+
+    def __init__(self, executable, popen_obj):
+        self.popen_obj = popen_obj
+        self.executable = executable
+
+
+    def terminate(self):
+        eradicate(self.popen_obj)
+
+
+    def _get_stream(self, name):
+        stream_obj = getattr(self.popen_obj, name, None)
+        try:
+            if stream_obj is not None and not stream_obj.closed:
+                stream_str = stream_obj.read()
+                return stream_str
+        except:
+            pass
+
+
+    def wait(self, timeout=None):
+        if timeout is None:
+            self.stdout, self.stderr = self.popen_obj.communicate()
+            self.rcode = self.popen_obj.returncode
+            return self.rcode, self.stdout, self.stderr
+
+        wait_start = time.time()
+        while True:
+            self.rcode = self.popen_obj.poll()
+            if self.rcode is not None:
+                self.stdout = self._get_stream('stdout')
+                self.stderr = self._get_stream('stderr')
+                return self.rcode, self.stdout, self.stderr
+            else:
+                if timeout:
+                    now = time.time()
+                    if now - wait_start > timeout:
+                        raise ProcessTimeout('Process %s reached timeout %s sec' % (self.executable, timeout))
 
 
 class BaseExec(object):
@@ -196,26 +243,16 @@ class BaseExec(object):
 
 
     def start(self, *params, **keys):
-        popen = self.start_nowait(*params, **keys)
-        rcode = self.wait(popen, self.timeout)
+        proc = self.start_nowait(*params, **keys)
+        rcode, out, err = proc.wait(self.timeout)
+        if self.to_log:
+            self.logger.debug('stdout: %s' %  out)
+            self.logger.debug('stderr: %s' %  err)
+
         if rcode not in self.acceptable_codes and self.raise_exc:
-            raise ProcessError('Process %s finished with code %s' % (self.executable, rcode))
-        ret = [rcode, None, None]
+            raise ProcessError('Process %s finished with code %s.' % (self.executable, rcode))
 
-        def get_stream(name):
-            stream_obj = getattr(popen, name, None)
-            try:
-                if stream_obj is not None and not stream_obj.closed:
-                    stream_str = stream_obj.read()
-                    if self.to_log:
-                        self.logger.debug('%s: %s' % (name.upper(), stream_str))
-                    return stream_str
-            except:
-                pass
-
-        ret[1] = get_stream('stdout')
-        ret[2] = get_stream('stderr')
-        return tuple(ret)
+        return rcode, out, err
 
 
     def start_nowait(self, *params, **keys):
@@ -245,28 +282,14 @@ class BaseExec(object):
             if self.to_log:
                 self.logger.debug('Starting subprocess. Args: %s' % ' '.join(final_args))
 
-            self.popen = subprocess.Popen(final_args, **self.subprocess_kwds)
-            return self.popen
+            popen = subprocess.Popen(final_args, **self.subprocess_kwds)
+            process = Process(self.executable, popen)
+            return process
         finally:
             for stream in ('stderr, stdout, stdin'):
                 self.subprocess_kwds.pop(stream, None)
 
-
     __call__ = start
-
-
-    def wait(self, popen, timeout=None):
-        wait_start = time.time()
-        while True:
-            rcode = popen.poll()
-            if rcode is not None:
-                return rcode
-            else:
-                if timeout:
-                    now = time.time()
-                    if now - wait_start > timeout:
-                        raise ProcessTimeout('Process %s reached timeout %s sec' % (self.executable, timeout))
-
 
     def _check_streams(self):
         if not 'stdin' in self.subprocess_kwds:
@@ -328,5 +351,54 @@ class rsync(BaseExec):
             cmd_args.extend(['--exclude', val])
 
 
+def eradicate(process):
+    """
+    Kill process tree.
+    :param process: pid (int) or subprocess.Popen instance
 
+    """
 
+    class Victim(object):
+
+        def __init__(self, process):
+            self._obj = process
+
+        @property
+        def pid(self):
+            return self._obj if isinstance(self._obj, int) else \
+                       self._obj.pid
+
+        def get_children(self):
+            try:
+                pgrep = linux.system(linux.build_cmd_args(
+                        executable="pgrep",
+                        short=["-P"],
+                        params=[str(self.pid)]))
+            except linux.LinuxError:
+                children = []
+            else:
+                children = map(int, pgrep[0].splitlines())
+            return children
+
+        def die(self, grace=2):
+            if isinstance(self._obj, subprocess.Popen):
+                self._obj.terminate()
+                time.sleep(grace)
+                self._obj.kill()
+                time.sleep(0.1)
+                self._obj.poll()  # avoid leaving defunct processes
+            else:
+                try:
+                    os.kill(self.pid, signal.SIGTERM)
+                    time.sleep(grace)
+                    os.kill(self.pid, signal.SIGKILL)
+                except OSError, e:
+                    if e.errno == errno.ESRCH:
+                        pass  # no such process
+                    else:
+                        LOG.debug("Failed to stop pid %s" % self.pid)
+
+    victim = Victim(process)
+    children = victim.get_children()
+    victim.die()
+    map(eradicate, children)
