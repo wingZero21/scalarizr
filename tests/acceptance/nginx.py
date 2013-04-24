@@ -170,18 +170,18 @@ def given_i_have_a_server(step):
 
 @step(u'When I add proxy')
 def when_i_add_proxy(step):
-    world.api.make_proxy(hostname='uty.com',
-                        roles=world.roles,
-                        servers=world.servers,
-                        port=world.port,
-                        http=world.http,
-                        ssl=world.ssl,
-                        ssl_port=world.ssl_port,
-                        ssl_certificate_id=world.ssl_cert_id,
-                        backend_port=world.backend_port,
-                        backend_ip_hash=world.backend_ip_hash,
-                        backend_max_fails=world.backend_max_fails,
-                        backend_fail_timeout=world.backend_fail_timeout)
+    world.api.make_proxy(name='uty.com',
+                         roles=world.roles,
+                         servers=world.servers,
+                         port=world.port,
+                         http=world.http,
+                         ssl=world.ssl,
+                         ssl_port=world.ssl_port,
+                         ssl_certificate_id=world.ssl_cert_id,
+                         backend_port=world.backend_port,
+                         backend_ip_hash=world.backend_ip_hash,
+                         backend_max_fails=world.backend_max_fails,
+                         backend_fail_timeout=world.backend_fail_timeout)
     time.sleep(1)
 
 
@@ -379,9 +379,9 @@ def given_i_have_a_proxy_to_two_roles_master_and_backup(step):
 
     world.roles = [123, {'id': 321, 'backup': True}]
 
-    world.api.make_proxy(hostname='uty.com',
-                        roles=world.roles,
-                        port=8008)
+    world.api.make_proxy(name='uty.com',
+                         roles=world.roles,
+                         port=8008)
     time.sleep(1)
 
     responses = get_responses(3)
@@ -422,9 +422,9 @@ def given_i_have_a_proxy_to_two_servers(step):
     world.servers = [{'host': 'localhost', 'port': '8001'},
                      {'host': 'localhost', 'port': '8002'}]
 
-    world.api.make_proxy(hostname='uty.com',
-                        servers=world.servers,
-                        port=8008)
+    world.api.make_proxy(name='uty.com',
+                         servers=world.servers,
+                         port=8008)
     time.sleep(1)
 
     responses = get_responses(2)
@@ -436,9 +436,9 @@ def given_i_have_a_proxy_to_two_servers(step):
 def when_i_update_proxy_marking_one_server_as_down(step):
     server_to_update = world.servers[1]
     server_to_update['down'] = True
-    world.api.make_proxy(hostname='uty.com',
-                        servers=world.servers,
-                        port=8008)
+    world.api.make_proxy(name='uty.com',
+                         servers=world.servers,
+                         port=8008)
     time.sleep(1)
 
 

@@ -527,7 +527,7 @@ class NginxAPI(object):
         self.https_inc.append_conf(server_config)   
 
     def add_proxy(self,
-                  hostname,
+                  name,
                   roles=[],
                   servers=[],
                   port='80',
@@ -553,7 +553,7 @@ class NginxAPI(object):
             self.app_servers_inc.read(self.app_inc_path)
             self.https_inc.read(self.https_inc_path)
 
-        locations_and_backends = self._add_backends(hostname,
+        locations_and_backends = self._add_backends(name,
                                                     grouped_destinations,
                                                     port=backend_port,
                                                     ip_hash=backend_ip_hash,
@@ -564,7 +564,7 @@ class NginxAPI(object):
             in zip(grouped_destinations, locations_and_backends):
             self.backend_table[backend_name] = backend_destinations
 
-        self._add_confserver(hostname,
+        self._add_confserver(name,
                              locations_and_backends,
                              port=port,
                              http=http,
@@ -607,18 +607,18 @@ class NginxAPI(object):
                 self.https_inc.remove(server_xpath)
 
     @rpc.service_method
-    def remove_proxy(self, hostname, restart_service=True):
+    def remove_proxy(self, name, restart_service=True):
         """
-        Removes proxy for hostname. Removes created server and its backends.
+        Removes proxy with given name. Removes created server and its backends.
         """
         self.https_inc.read(self.https_inc_path)
         self.app_servers_inc.read(self.app_inc_path)
 
-        self._remove_confserver(hostname)
+        self._remove_confserver(name)
 
         # remove each backend that were in use by this proxy from backend_table
         for backend_name in self.backend_table:
-            if hostname in backend_name:
+            if name in backend_name:
                 self.backend_table.pop(backend_name)
 
         self.https_inc.write(self.https_inc_path)
