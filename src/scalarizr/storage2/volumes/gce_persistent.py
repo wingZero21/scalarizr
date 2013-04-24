@@ -33,90 +33,105 @@ class GcePersistentVolume(base.Volume):
 
         garbage_can = []
         zone = os.path.basename(__node__['gce']['zone'])
-        connection = __node__['gce']['compute_connection']
         project_id = __node__['gce']['project_id']
         server_name = __node__['server_id']
 
         try:
-            create = False
-            if not self.link:
-                # Disk does not exist, create it first
-                create_request_body = dict(name=self.name, sizeGb=self.size)
-                if self.snap:
-                    self.snap = storage2.snapshot(self.snap)
-                    create_request_body['sourceSnapshot'] = self.snap.link
-                create = True
-            else:
-                self._check_attr('zone')
-                if self.zone != zone:
-                    # Volume is in different zone, snapshot it,
-                    # create new volume from this snapshot, then attach
-                    temp_snap = self.snapshot('volume')
-                    garbage_can.append(temp_snap)
-                    new_name = self.name + zone
-                    create_request_body = dict(name=new_name,
-                                                                       sizeGb=self.size,
-                                                                       sourceSnapshot=temp_snap.link)
+            connection = __node__['gce']['compute_connection']
+        except:
+            """ No connection, implicit check """
+            try:
+                self._check_attr('name')
+            except:
+                raise storage2.StorageError('Disk is not created yet, and GCE connection'
+                                            ' is unavailable')
+            device = gce_util.devicename_to_device(self.name)
+            if not device:
+                raise storage2.StorageError("Disk is not attached and GCE connection is unavailable")
+
+            self.device = device
+        else:
+
+            try:
+                create = False
+                if not self.link:
+                    # Disk does not exist, create it first
+                    create_request_body = dict(name=self.name, sizeGb=self.size)
+                    if self.snap:
+                        self.snap = storage2.snapshot(self.snap)
+                        create_request_body['sourceSnapshot'] = self.snap.link
                     create = True
-
-            attach = False
-            if create:
-                disk_name = create_request_body['name']
-                LOG.debug('Creating new GCE disk %s' % disk_name)
-                op = connection.disks().insert(project=project_id,
-                                                                           zone=zone,
-                                                                           body=create_request_body).execute()
-                gce_util.wait_for_operation(connection, project_id, op['name'], zone)
-                disk_dict = connection.disks().get(disk=disk_name,
-                                                                                   project=project_id,
-                                                                                   zone=zone).execute()
-                self.id = disk_dict['id']
-                self.link = disk_dict['selfLink']
-                self.zone = zone
-                self.name = disk_name
-                attach = True
-
-            else:
-                if self.last_attached_to and self.last_attached_to != server_name:
-                    LOG.debug("Making sure that disk %s detached from previous attachment place." % self.name)
-                    gce_util.ensure_disk_detached(connection, project_id, zone, self.last_attached_to, self.link)
-
-                attachment_inf = self._attachment_info(connection)
-                if attachment_inf:
-                    disk_devicename = attachment_inf['deviceName']
                 else:
+                    self._check_attr('zone')
+                    if self.zone != zone:
+                        # Volume is in different zone, snapshot it,
+                        # create new volume from this snapshot, then attach
+                        temp_snap = self.snapshot('volume')
+                        garbage_can.append(temp_snap)
+                        new_name = self.name + zone
+                        create_request_body = dict(name=new_name,
+                                                   sizeGb=self.size,
+                                                   sourceSnapshot=temp_snap.link)
+                        create = True
+
+                attach = False
+                if create:
+                    disk_name = create_request_body['name']
+                    LOG.debug('Creating new GCE disk %s' % disk_name)
+                    op = connection.disks().insert(project=project_id,
+                                                   zone=zone,
+                                                   body=create_request_body).execute()
+                    gce_util.wait_for_operation(connection, project_id, op['name'], zone)
+                    disk_dict = connection.disks().get(disk=disk_name,
+                                                       project=project_id,
+                                                       zone=zone).execute()
+                    self.id = disk_dict['id']
+                    self.link = disk_dict['selfLink']
+                    self.zone = zone
+                    self.name = disk_name
                     attach = True
 
-            if attach:
-                LOG.debug('Attaching disk %s to current instance' % self.name)
-                op = connection.instances().attachDisk(
-                                        instance=server_name,
-                                        project=project_id,
-                                        zone=zone,
-                                        body=dict(
-                                                        deviceName=self.name,
-                                                        source=self.link,
-                                                        mode="READ_WRITE",
-                                                        type="PERSISTENT"
-                                        )).execute()
-                gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
-                disk_devicename = self.name
+                else:
+                    if self.last_attached_to and self.last_attached_to != server_name:
+                        LOG.debug("Making sure that disk %s detached from previous attachment place." % self.name)
+                        gce_util.ensure_disk_detached(connection, project_id, zone, self.last_attached_to, self.link)
 
-            device = gce_util.devicename_to_device(disk_devicename)
-            if not device:
-                raise storage2.StorageError("Disk should be attached, but corresponding"
-                                                                        " device not found in system")
-            self.device = device
-            self.last_attached_to = server_name
-            self.snap = None
+                    attachment_inf = self._attachment_info(connection)
+                    if attachment_inf:
+                        disk_devicename = attachment_inf['deviceName']
+                    else:
+                        attach = True
 
-        finally:
-            # Perform cleanup
-            for garbage in garbage_can:
-                try:
-                    garbage.destroy(force=True)
-                except:
-                    pass
+                if attach:
+                    LOG.debug('Attaching disk %s to current instance' % self.name)
+                    op = connection.instances().attachDisk(
+                                            instance=server_name,
+                                            project=project_id,
+                                            zone=zone,
+                                            body=dict(
+                                                            deviceName=self.name,
+                                                            source=self.link,
+                                                            mode="READ_WRITE",
+                                                            type="PERSISTENT"
+                                            )).execute()
+                    gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
+                    disk_devicename = self.name
+
+                device = gce_util.devicename_to_device(disk_devicename)
+                if not device:
+                    raise storage2.StorageError("Disk should be attached, but corresponding"
+                                                                            " device not found in system")
+                self.device = device
+                self.last_attached_to = server_name
+                self.snap = None
+
+            finally:
+                # Perform cleanup
+                for garbage in garbage_can:
+                    try:
+                        garbage.destroy(force=True)
+                    except:
+                        pass
 
 
     def _attachment_info(self, con):
