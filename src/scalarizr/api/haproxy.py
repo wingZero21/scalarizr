@@ -107,7 +107,7 @@ class HAProxyAPI(object):
         # allowing short servers & roles specification
         # creating new lists here also protects from side effects
         roles = map(lambda x: {"id": x} if isinstance(x, int) else x, roles)
-        servers = map(lambda x: {"host": x} if isinstance(x, str) else x, servers)
+        servers = map(lambda x: {"address": x} if isinstance(x, str) else x, servers)
 
         #
         listener_name = haproxy.naming('listen', "tcp", port)
@@ -140,7 +140,7 @@ class HAProxyAPI(object):
             role_id, role_params = role.pop("id"), role
 
             # get_servers(role_id) -> [ip] ?
-            role_servers = map(lambda ip: {"host": ip}, get_servers(role_id))
+            role_servers = map(lambda ip: {"address": ip}, get_servers(role_id))
             [server.update(role_params) for server in role_servers]
 
             roles_servers.extend(role_servers)
@@ -151,7 +151,7 @@ class HAProxyAPI(object):
 
         # update the backend
         for server in servers:
-            backend['server'][server["host"].replace('.', '-')] = rename(server)
+            backend['server'][server["address"].replace('.', '-')] = rename(server)
 
         # save to cfg
         self.cfg['listen'][listener_name] = listener
