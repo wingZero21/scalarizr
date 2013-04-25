@@ -150,6 +150,16 @@ class ScriptExecutor(Handler):
         if not scripts:
             return
 
+
+        # read logs_dir_prefix
+        ini = bus.cnf.rawini
+        try:
+            logs_dir = ini.get(self.name, 'logs_dir')
+            if not os.path.exists(logs_dir):
+                os.makedirs(logs_dir)
+        except ConfigParser.Error:
+            pass
+
         if scripts[0].event_name:
             phase = "Executing %d %s script(s)" % (len(scripts), scripts[0].event_name)
         else:

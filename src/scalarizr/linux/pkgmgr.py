@@ -101,11 +101,11 @@ class AptPackageMgr(PackageMgr):
 
 
     def updatedb(self):
-		coreutils.clean_dir('/var/lib/apt/lists', recursive=False)
-		try:
-			coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
-		except OSError:
-			pass
+        coreutils.clean_dir('/var/lib/apt/lists', recursive=False)
+        try:
+            coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
+        except OSError:
+            pass
         self.apt_get_command('update')
 
 

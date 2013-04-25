@@ -320,11 +320,11 @@ class NimbulaRebundleHandler(Handler):
 
             """ Creating and sending message """
             msg_data = dict(
-                    status                  = "ok",
-                    bundle_task_id  = message.bundle_task_id,
-                    ssh_user                = 'scalr',
-                    ssh_password    = scalr_password,
-                    snapshot_id             = image.name
+                status = "ok",
+                bundle_task_id = message.bundle_task_id,
+                ssh_user = 'scalr',
+                ssh_password = scalr_password,
+                snapshot_id = image.name
             )
             self._logger.debug("Updating message with OS and software info")
             msg_data.update(software.system_info())

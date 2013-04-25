@@ -457,6 +457,7 @@ class MysqlHandler(DBMSRHandler):
                     __mysql__['volume'].tags = self.resource_tags()
                     if 'backup' in __mysql__:
                         __mysql__['backup'].tags = self.resource_tags()
+                        __mysql__['backup'].description = self._data_bundle_description()
 
 
     def on_before_host_up(self, message):
@@ -619,7 +620,9 @@ class MysqlHandler(DBMSRHandler):
                         if compat_prior_backup_restore:
                             bak = backup.backup(
                                             type='snap_mysql',
-                                            volume=__mysql__['volume'])
+                                            volume=__mysql__['volume'],
+                                            description=self._data_bundle_description(),
+                                            tags=self.resource_tags())
                         else:
                             bak = backup.backup(backup_info['backup'])
 
@@ -692,8 +695,9 @@ class MysqlHandler(DBMSRHandler):
         bus.fire('before_slave_promote_to_master')
 
         __mysql__['compat_prior_backup_restore'] = mysql2.get('volume_config') or \
-                                                                                                mysql2.get('snapshot_config') or \
-                                                                                                message.body.get('volume_config')
+                                                    mysql2.get('snapshot_config') or \
+                                                    message.body.get('volume_config') and \
+                                                    not mysql2.get('volume')
         new_vol = None
         if __node__['platform'] == 'idcf':
             new_vol = None
@@ -792,7 +796,9 @@ class MysqlHandler(DBMSRHandler):
                     else:
                         bak = backup.backup(
                                         type='snap_mysql',
-                                        volume=__mysql__['volume'])
+                                        volume=__mysql__['volume'] ,
+                                        description=self._data_bundle_description(),
+                                        tags=self.resource_tags())
                     restore = bak.run()
 
                 # Send message to Scalr
@@ -862,7 +868,7 @@ class MysqlHandler(DBMSRHandler):
 
             LOG.debug("__mysql__['volume']: %s", __mysql__['volume'])
 
-			if __mysql__['volume'].type in ('eph', 'lvm') or __node__['platform'] == 'idcf':
+            if __mysql__['volume'].type in ('eph', 'lvm') or __node__['platform'] == 'idcf':
                 if 'restore' in mysql2:
                     restore = backup.restore(**mysql2['restore'])
                 else:

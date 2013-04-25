@@ -257,7 +257,7 @@ class Handler(object):
 
                 elif name == 'postgresql' and Version('9.0') <= version < Version('9.2'):
                     handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-				elif name == 'redis' and Version('2.2') <= version < Version('2.7'):
+                elif name == 'redis' and Version('2.2') <= version < Version('2.7'):
                     handlers.append(config.BuiltinBehaviours.REDIS)
                 elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.0'):
                     handlers.append(config.BuiltinBehaviours.RABBITMQ)
