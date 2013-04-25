@@ -428,10 +428,11 @@ def _apply_user_data(cnf):
 			'env_id' : g(UserDataOptions.ENV_ID), 
 			'farm_id' : g(UserDataOptions.FARM_ID),
 			'role_id' : g(UserDataOptions.ROLE_ID),
-			'region' : g(UserDataOptions.REGION) 
+			'region' : g(UserDataOptions.REGION)
 		},
 		messaging_p2p={
 			'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
+			'message_format': g(UserDataOptions.MESSAGE_FORMAT) or 'xml'
 		},
 		snmp={
 			'security_name' : 'notConfigUser',			
@@ -456,8 +457,6 @@ def _apply_user_data(cnf):
 	
 	logger.debug('Reloading configuration after user-data applying')
 	cnf.bootstrap(force_reload=True)
-
-
 
 
 def _detect_scalr_version():
