@@ -413,6 +413,7 @@ class Redis(BaseService):
         move_files = not self.working_directory.is_initialized(mpoint)
         self.working_directory.move_to(mpoint, move_files)
         self.redis_conf.requirepass = self.password
+        self.redis_conf.daemonize = True
         self.redis_conf.dir = mpoint
         self.redis_conf.bind = None
         self.redis_conf.port = self.port
@@ -717,6 +718,15 @@ class RedisConf(BaseRedisConfig):
         self.set('appendfilename', path)
 
 
+    def _get_daemonize(self):
+        return self.get('daemonize')
+
+
+    def _set_daemonize(self, yes=True):
+        self.set('daemonize', 'yes' if yes else 'no')
+
+
+    daemonize = property(_get_daemonize, _set_daemonize)
     appendfilename = property(_get_appendfilename, _set_appendfilename)
     pidfile = property(_get_pidfile, _set_pidfile)
     port = property(_get_port, _set_port)
