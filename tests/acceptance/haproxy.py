@@ -69,11 +69,56 @@ class SocketServer(Task):
                 pass
 
 
-def communicate(address_str):
-    # error: [Errno 111] Connection refused - random port
-    # error: [Errno 104] Connection reset by pier - dying server
-    ip, port = address_str.split(':')
-    address = (ip, int(port))
+class Server(SocketServer, threading.Thread):
+    """
+    SocketServer + Thread + server registration for test setup and teardown
+    """
+
+    _port = 27000
+    _servers = []
+
+    def __init__(self):
+        cls = self.__class__
+
+        cls._port += 1
+        super(Server, self).__init__(cls._port)
+        threading.Thread.__init__(self)  # bases.Task breaks super() chain
+
+        cls._servers.append(self)
+
+    @classmethod
+    def setup(cls):
+        cls.teardown()
+        cls._servers = []
+
+    @classmethod
+    def teardown(cls):
+        map(lambda server: server.kill(), cls._servers)
+        for server in cls._servers:
+            try:
+                server.join()
+            except RuntimeError:
+                pass
+
+
+def communicate(target):
+    """
+    Get response from a running :class:`Server` instance.
+
+    :param target: port(int), netloc(str) or address for socket as tuple
+
+    """
+
+    if isinstance(target, int):
+        address_str = "127.0.0.1:%s" % target
+        address = ("127.0.0.1", target)
+    elif isinstance(target, str):
+        address_str = target
+        ip, port = target.split(':')
+        address = (ip, int(port))
+    elif isinstance(target, tuple):
+        address_str = ':'.join(map(str, self.address))
+        address = target
 
     sock = socket.socket()
     try:
@@ -92,33 +137,33 @@ def communicate(address_str):
     return response
 
 
-class Server(SocketServer, threading.Thread):
+class Roles(object):
 
-    port = 27000
-    _servers = []
-
-    def __init__(self):
-        cls = self.__class__
-
-        cls.port += 1
-        super(Server, self).__init__(self.port)
-        threading.Thread.__init__(self)  # bases.Task breaks super() chain
-
-        cls._servers.append(self)
+    _id = 10
+    _role_servers = {}
 
     @classmethod
     def setup(cls):
-        cls.teardown()
-        cls._servers = []
+        cls._role_servers = {}
 
     @classmethod
-    def teardown(cls):
-        map(lambda server: server.kill(), cls._servers)
-        for server in cls._servers:
-            try:
-                server.join()
-            except RuntimeError:
-                pass
+    def create(cls, servers=None):
+        servers = servers or []
+
+        cls._id += 1
+        cls._role_servers[cls._id] = servers
+        return cls._id
+
+    @classmethod
+    def get_servers(cls, role_id):
+        return cls._role_servers[role_id]
+
+
+haproxy_api.get_servers = Roles.get_servers
+
+
+
+
 
 
 def minimal_haproxy_conf(path="/etc/haproxy/haproxy.cfg"):
@@ -148,13 +193,42 @@ def dont_fail(f):
     return wrapper
 
 
+
+
+
+
+
+
+
+
+
+def acceptable_responses():
+    # TODO: doc
+    # TODO: ignore down servers
+
+    responses = map(lambda server: server if isinstance(server, str) else \
+                                   server["address"],
+                    world.servers)
+
+    role_ids = map(lambda role: role if isinstance(role, int) else \
+                                role["id"],
+                   world.roles)
+    [responses.extend(Roles.get_servers(role_id)) for role_id in role_ids]
+
+    LOG.info("Acceptable responses: %s", ', '.join(['"' + response + '"'
+                                                    for response in responses]))
+    return responses
+
+
 @before.each_scenario
 def setup(scenario):
     Server.setup()
+    Roles.setup()
 
     world.servers = []
     world.roles = []
-    world.proxy = "127.0.0.1:27000"
+    world.proxy_port = 27000
+    world.acceptable_responses = []
 
     minimal_haproxy_conf()
     world.api = haproxy_api.HAProxyAPI()
@@ -175,28 +249,28 @@ def teardown(scenario):
 @step("i have a server")
 def i_have_a_server(step):
     server = Server()
-    world.servers.append(str(server))
     server.start()
+    world.servers.append(str(server))
 
 
 @step("i have a role")
 def i_have_a_role(step):
-    pass
+    servers = [Server() for i in range(2)]
+    [server.start() for server in servers]
+    role = Roles.create(map(str, servers))
+    world.roles.append(role)
 
 
 @step("i add proxy")
 @dont_fail
 def i_add_proxy(step):
-    port = int(world.proxy.split(':')[-1])
-    world.api.add_proxy(port=port,
+    world.api.add_proxy(port=world.proxy_port,
                         servers=world.servers,
                         roles=world.roles)
+    world.acceptable_responses = acceptable_responses()
 
 
 @step("i expect proxying")
 def i_expect_proxying(step):
-    acceptable_responses()
-    assert communicate(world.proxy) == str(world.servers[0])
-
-
+    assert communicate(world.proxy_port) in world.acceptable_responses
 

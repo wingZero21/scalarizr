@@ -23,6 +23,11 @@ _rule_backend = validate.rule(re=r'^role:\d+$')
 _rule_hc_target = validate.rule(re='^[tcp|http]+:\d+$')
 
 
+# for testing; TODO: import
+def get_servers(*args):
+    return []
+
+
 class HAProxyAPI(object):
     """
     Placeholder
