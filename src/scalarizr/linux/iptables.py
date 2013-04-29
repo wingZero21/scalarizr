@@ -193,18 +193,20 @@ class _Chain(object):
         ret = []
         try:
             out = iptables(**list_rules_kwargs)[0]
-        except linux.LinuxError, e:
-            if "Unknown arg `--list-rules'" in e.err:
+        except linux.LinuxError, list_rules_error:
+
+            general_error = list_rules_error
+
+            if "Unknown arg `--list-rules'" in list_rules_error.err:
+                general_error = None
                 try:
                     out = iptables(**list_kwargs)[0]
                     ret = self._parse_list(out)
-                    e = None
-                except linux.LinuxError, e:
-                    # This will redefine original exception
-                    pass
-            if e:
-                if "No chain/target" in e.err:
-                    pass
+                except linux.LinuxError, list_error:
+                    general_error = list_error
+
+            if "No chain/target" in general_error.err:
+                pass
             else:
                 raise
         else:
