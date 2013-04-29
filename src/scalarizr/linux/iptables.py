@@ -211,7 +211,7 @@ class _Chain(object):
                 else:
                     raise
         else:
-			ret = self._parse_list_rules(out)
+            ret = self._parse_list_rules(out)
 
         if table and table != 'filter':
             for rule in ret:
