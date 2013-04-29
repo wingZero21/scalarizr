@@ -472,4 +472,8 @@ class SystemAPI(object):
         max_threads = 10
         wrk_pool = pool.ThreadPool(processes=max_threads)
 
-        return wrk_pool.map_async(_ScalingMetricStrategy.get, scaling_metrics).get()
+        try:
+            return wrk_pool.map_async(_ScalingMetricStrategy.get, scaling_metrics).get()
+        finally:
+            wrk_pool.close()
+            wrk_pool.join()
