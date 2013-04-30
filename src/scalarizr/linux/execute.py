@@ -1,13 +1,11 @@
-import errno
-import signal
-from scalarizr.services.mysql2 import LOG
-
 __author__ = 'Nick'
 
 import re
 import os
 import sys
 import time
+import errno
+import signal
 import locale
 import logging
 import subprocess
@@ -44,11 +42,22 @@ class ProcessError(Exception):
 
 class Process(object):
 
-    stdout = stderr = returncode = None
+
+    result = (None, None, None)
 
     def __init__(self, executable, popen_obj):
         self.popen_obj = popen_obj
         self.executable = executable
+
+
+    @property
+    def stdin(self): return self.popen_obj.stdin
+
+    @property
+    def stdout(self): return self.popen_obj.stdout
+
+    @property
+    def stderr(self): return self.popen_obj.stderr
 
 
     def terminate(self):
@@ -67,17 +76,19 @@ class Process(object):
 
     def wait(self, timeout=None):
         if timeout is None:
-            self.stdout, self.stderr = self.popen_obj.communicate()
-            self.rcode = self.popen_obj.returncode
-            return self.rcode, self.stdout, self.stderr
+            stdout, stderr = self.popen_obj.communicate()
+            returncode = self.popen_obj.returncode
+            self.result = returncode, stdout, stderr
+            return self.result
 
         wait_start = time.time()
         while True:
-            self.rcode = self.popen_obj.poll()
-            if self.rcode is not None:
-                self.stdout = self._get_stream('stdout')
-                self.stderr = self._get_stream('stderr')
-                return self.rcode, self.stdout, self.stderr
+            returncode = self.popen_obj.poll()
+            if returncode is not None:
+                stdout = self._get_stream('stdout')
+                stderr = self._get_stream('stderr')
+                self.result = returncode, stdout, stderr
+                return self.result
             else:
                 if timeout:
                     now = time.time()
@@ -115,6 +126,24 @@ class BaseExec(object):
 
         3. Final list of command line arguments is passed to "_after_all_handlers" method, and result is considered
            to be final list of command line arguments
+
+
+    If started witn "start_nowait" method, executor will return corresponding Process object. It has self-explanatory
+    "wait" method, it will wait for process to finish, and will set stdout, stderr and returncode attributes of Process
+    instance. It also has "terminate" method, which will annihilate entire process tree starting from your process.
+
+    You can easily redefine standart stdin, stdout and stderr (subprocess.PIPE by default) by assigning them to
+    corresponding attributes of executor object, or by passing them to constructor:
+
+        dd = dd_executor(stdin=my_stdin, stdout=my_stdout)
+
+        or
+
+        firewall = iptables_exec()
+        firewall.stdin = MY_FILE_DESCRIPTOR
+
+    Remember that after each call, all three standart streams will be reset to default (subprocess.PIPE).
+
 
     """
     _handlers = dict()
@@ -396,7 +425,7 @@ def eradicate(process):
                     if e.errno == errno.ESRCH:
                         pass  # no such process
                     else:
-                        LOG.debug("Failed to stop pid %s" % self.pid)
+                       raise Exception("Failed to stop pid %s" % self.pid)
 
     victim = Victim(process)
     children = victim.get_children()
