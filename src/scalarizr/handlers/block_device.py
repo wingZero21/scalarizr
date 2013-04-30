@@ -104,7 +104,6 @@ class BlockDeviceHandler(handlers.Handler):
 		volumes = hir.body.get('volumes', [])
 		if volumes:
 			LOG.debug('HIR volumes: %s', volumes)
-			hostup.body['volumes'] = []
 			for vol in volumes:
 				vol = storage2.volume(**vol)
 				LOG.info('Ensuring %s volume %s', vol.type, dict(vol))
