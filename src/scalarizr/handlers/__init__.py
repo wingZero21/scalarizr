@@ -325,7 +325,7 @@ class MessageListener:
             def sort_fn(a, b):
                 return cmp(cls_weight(a), cls_weight(b))
 
-            self._handlers_chain = sorted(hds, sort_fn)
+            self._handlers_chain = reversed(sorted(hds, sort_fn))
             LOG.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
 
 
