@@ -326,6 +326,8 @@ class MessageListener:
 				return cmp(cls_weight(a), cls_weight(b))
 
 			self._handlers_chain = list(reversed(sorted(hds, sort_fn)))
+			bus._listeners['init'] = list(reversed(sorted(bus._listeners['init'], sort_fn)))
+			bus._listeners['start'] = list(reversed(sorted(bus._listeners['init'], sort_fn)))
 			LOG.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
 	
 	def __call__(self, message, queue):
