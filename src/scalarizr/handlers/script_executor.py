@@ -223,7 +223,7 @@ class ScriptExecutor(Handler):
 
 		if 'global_variables' in message.body and message.global_variables:
 			for kv in message.global_variables:
-				os.environ[kv['name']] = kv['value']
+				os.environ[kv['name']] = kv['value'] or ''
 
 		LOG.debug('Fetched %d scripts', len(scripts))
 		self.execute_scripts(scripts)
