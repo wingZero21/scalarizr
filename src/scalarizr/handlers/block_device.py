@@ -94,22 +94,27 @@ class BlockDeviceHandler(handlers.Handler):
 
 
 	def on_host_init_response(self, hir):
-		self._volumes = hir.body.get('volumes', [])
+		
 		LOG.info('Configuring block device mountpoints')
 		with bus.initialization_op as op:
 			with op.phase(self._phase_plug_volume):
 				wait_until(self._plug_all_volumes, sleep=10, timeout=600, 
 						error_text='Cannot attach and mount disks in a reasonable time')
-
-	def on_before_host_up(self, hostup):
-		if self._volumes:
-			LOG.debug('HIR volumes: %s', self._volumes)
+		
+		volumes = hir.body.get('volumes', [])
+		if volumes:
+			LOG.debug('HIR volumes: %s', volumes)
 			hostup.body['volumes'] = []
-			for vol in self._volumes:
+			for vol in volumes:
 				vol = storage2.volume(**vol)
 				LOG.info('Ensuring %s volume %s', vol.type, dict(vol))
 				vol.ensure(mount=bool(vol.mpoint), mkfs=True)
-				hostup.body['volumes'].append(dict(vol))
+				self._volumes.append(dict(vol))
+
+
+	def on_before_host_up(self, hostup):
+		if self._volumes:
+			hostup.body['volumes'] = self._volumes
 
 
 	def _plug_all_volumes(self):
