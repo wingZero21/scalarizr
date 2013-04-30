@@ -4,6 +4,7 @@ Created on Jan 6, 2010
 @author: marat
 @author: Dmytro Korsakov
 @author: spike
+@author: uty
 '''
 
 from __future__ import with_statement
@@ -141,11 +142,9 @@ class NginxHandler(ServiceCtlHandler):
         self.on_reload()
 
     def on_init(self):
-        bus.on(
-                start = self.on_start,
-                before_host_up = self.on_before_host_up,
-                host_init_response = self.on_host_init_response
-        )
+        bus.on(start=self.on_start,
+               before_host_up=self.on_before_host_up,
+               host_init_response=self.on_host_init_response)
 
         self._insert_iptables_rules()
 
@@ -185,70 +184,145 @@ class NginxHandler(ServiceCtlHandler):
 
     def get_initialization_phases(self, hir_message):
         self._phase = 'Configure Nginx'
-        self._step_update_vhosts = 'Update virtual hosts'
-        self._step_reload_upstream = 'Reload upstream'
+        # self._step_update_vhosts = 'Update virtual hosts'
+        # self._step_reload_upstream = 'Reload upstream'
+        self._step_setup_proxying = 'Setup proxying'
 
         return {'before_host_up': [{
-                'name': self._phase,
-                'steps': [self._step_update_vhosts, self._step_reload_upstream]
-        }]}
+                    'name': self._phase,
+                    # 'steps': [self._step_update_vhosts, self._step_reload_upstream]
+                    'steps': [self._step_setup_proxying]}]}
 
     def on_start(self):
         if __node__['state'] == 'running':
-            self._update_vhosts()
-            self._reload_upstream()
+            # self._update_vhosts()
+            # self._reload_upstream()
 
-            role_params = self._queryenv.list_role_params(__node__['farm_role_id'])
+            role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])
             if role_params and 'proxies' in role_params:
                 self.api.recreate_proxying(role_params['proxies'])
 
     def on_before_host_up(self, message):
+        # with bus.initialization_op as op:
+        #     with op.phase(self._phase):
+        #         with op.step(self._step_update_vhosts):
+        #             self._update_vhosts()
+
+        #         with op.step(self._step_reload_upstream):
+        #             self._reload_upstream()
+
+
         with bus.initialization_op as op:
             with op.phase(self._phase):
-                with op.step(self._step_update_vhosts):
-                    self._update_vhosts()
+                with op.step(self._step_setup_proxying):
+                    if self._proxies:
+                        self.api.recreate_proxying(self._proxies)
+                    else:
+                        # default behaviour
+                        roles_for_proxy = []
+                        if __nginx__['upstream_app_role']:
+                            roles_for_proxy = [__nginx__['upstream_app_role']]
+                        else:
+                            roles_for_proxy = self.get_all_app_roles()
+                        self.make_default_proxy(roles_for_proxy)
 
-                with op.step(self._step_reload_upstream):
-                    self._reload_upstream()
-
-        bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
-
-        if self._proxies:
-            self.api.recreate_proxying(self._proxies)
+        bus.fire('service_configured',
+                 service_name=SERVICE_NAME,
+                 preset=self.initial_preset)
 
     def on_HostUp(self, message):
-        self._reload_upstream()
+        # self._reload_upstream()
+        server = ''
+        role_id = message['farm_role_id']
+        behaviour = message['behaviour']
+        if message['cloud_location'] == __node__['cloud_location']:
+            server = message['local_ip']
+        else:
+            server = message['remote_ip']
+
+        # Assuming backend `backend` can be only in default behaviour mode
+        if 'backend' in self.api.backend_table:
+            upstream_role = __nginx__['upstream_app_role']
+            if (upstream_role and upstream_app_role == role_id) or \
+                (not upstream_role and behaviour is BuiltinBehaviours.APP):
+                self.api.add_server('backend', server)
+        else:
+            self.api.add_server_to_role(server, role_id)
 
 
     def on_HostDown(self, message):
-        self._reload_upstream()
+        # self._reload_upstream()
+        server = ''
+        role_id = message['farm_role_id']
+        behaviour = message['behaviour']
+        if message['cloud_location'] == __node__['cloud_location']:
+            server = message['local_ip']
+        else:
+            server = message['remote_ip']
 
+        # Assuming backend `backend` can be only in default behaviour mode
+        if 'backend' in self.api.backend_table:
+            upstream_role = __nginx__['upstream_app_role']
+            if (upstream_role and upstream_app_role == role_id) or \
+                (not upstream_role and behaviour is BuiltinBehaviours.APP):
+                self.api.remove_server('backend', server)
+        else:
+            self.api.remove_server_from_role(server, role_id)
 
     def on_BeforeHostTerminate(self, message):
-        if not os.access(self._app_inc_path, os.F_OK):
-            self._logger.debug('File %s not exists. Nothing to do', self._app_inc_path)
-            return
+        # if not os.access(self._app_inc_path, os.F_OK):
+        #     self._logger.debug('File %s not exists. Nothing to do', self._app_inc_path)
+        #     return
 
-        include = Configuration('nginx')
-        include.read(self._app_inc_path)
+        # include = Configuration('nginx')
+        # include.read(self._app_inc_path)
 
-        server_ip = '%s:%s' % (message.local_ip or message.remote_ip, self._app_port)
-        backends = include.get_list(self.backends_xpath)
-        if server_ip in backends:
-            include.remove(self.backends_xpath, server_ip)
-            # Add 127.0.0.1 If it was the last backend
-            if len(backends) == 1:
-                include.add(self.backends_xpath, self.localhost)
+        # server_ip = '%s:%s' % (message.local_ip or message.remote_ip, self._app_port)
+        # backends = include.get_list(self.backends_xpath)
+        # if server_ip in backends:
+        #     include.remove(self.backends_xpath, server_ip)
+        #     # Add 127.0.0.1 If it was the last backend
+        #     if len(backends) == 1:
+        #         include.add(self.backends_xpath, self.localhost)
 
-        include.write(self._app_inc_path)
-        self._reload_service('%s is to be terminated' % server_ip)
+        # include.write(self._app_inc_path)
+        # self._reload_service('%s is to be terminated' % server_ip)
 
+        # do the same as in on_HostDown?
+        self.on_HostDown(message) #?
 
     def on_VhostReconfigure(self, message):
-        self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
-        self._update_vhosts()
-        self._reload_upstream(True)
+        # self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
+        # self._update_vhosts()
+        # self._reload_upstream(True)
+        # if ssl certificate is updated:
+        #     write new ssl certificate
+        #     self.api.restart_service()
+        cert, key, cacert = self._queryenv.get_ssl_certificate()
+        self.api.update_ssl_certificate(None, cert, key, cacert)
+        self.api.restart_service()
 
+    def on_SSLCertificateUpdate(self, message):
+        ssl_cert_id = message['id'] # TODO: check datastructure
+        private_key = message['private_key']
+        certificate = message['certificate']
+        cacertificate = message['cacertificate']
+        self.api.update_ssl_certificate(ssl_cert_id,
+                                        certificate,
+                                        private_key,
+                                        cacertificate)
+        self.api.restart_service()
+
+    def make_default_proxy(self, roles):
+        received_vhosts = self._queryenv.list_virtual_hosts()
+        ssl_present = any(vhost.https for vhost in received_vhosts)
+        servers = []
+        for role in roles:
+            servers.extend(self.api.get_role_servers(role))
+        self.api.make_proxy('backend', servers=servers, ssl=ssl_present)
+
+    def get_all_app_roles(self):
+        return self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
 
     def _test_config(self):
         self._logger.debug("Testing new configuration")
@@ -508,13 +582,6 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('Writing virtualhosts to https.include')
             with open(self._https_inc_path, 'w') as fp:
                 fp.write(https_config)
-
-
-
-class NginxConf(BaseConfig):
-
-    config_type = 'www'
-    config_name = 'nginx.conf'
 
 
 

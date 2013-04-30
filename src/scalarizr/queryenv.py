@@ -155,7 +155,7 @@ class QueryEnvService(object):
             parameters['target_ip'] = target_ip
         if None != local_ip:
             parameters['local_ip'] = local_ip
-        return self._request("list-scripts",parameters, self._read_list_scripts_response)
+        return self._request("list-scripts", parameters, self._read_list_scripts_response)
 
     def list_virtual_hosts(self, name=None, https=None):
         """
@@ -166,7 +166,7 @@ class QueryEnvService(object):
             parameters["name"] = name
         if None != https:
             parameters["https"] = https
-        return self._request("list-virtualhosts",parameters, self._read_list_virtualhosts_response)
+        return self._request("list-virtualhosts", parameters, self._read_list_virtualhosts_response)
 
     def get_https_certificate(self):
         """
@@ -187,7 +187,7 @@ class QueryEnvService(object):
         """
         @return Mountpoint[]
         """
-        return self._request("list-ebs-mountpoints",{}, self._read_list_ebs_mountpoints_response)
+        return self._request("list-ebs-mountpoints", {}, self._read_list_ebs_mountpoints_response)
 
     def get_latest_version(self):
         """

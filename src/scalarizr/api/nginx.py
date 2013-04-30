@@ -47,13 +47,11 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                 pass
         '''
 
-        initdv2.ParametrizedInitScript.__init__(
-                self,
-                'nginx',
-                '/etc/init.d/nginx',
-                pid_file = pid_file,
-                socks=[initdv2.SockParam(80)]
-        )
+        initdv2.ParametrizedInitScript.__init__(self,
+                                                'nginx',
+                                                '/etc/init.d/nginx',
+                                                pid_file=pid_file,
+                                                socks=[initdv2.SockParam(80)])
 
     def status(self):
         status = initdv2.ParametrizedInitScript.status(self)
@@ -78,7 +76,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
     def stop(self):
         if not self.running:
             return True
-        ret =  initdv2.ParametrizedInitScript.stop(self)
+        ret = initdv2.ParametrizedInitScript.stop(self)
         time.sleep(1)
         return ret
 
@@ -158,7 +156,7 @@ class NginxAPI(object):
         if os.path.exists(self.app_inc_path):
             self.app_servers_inc.read(self.app_inc_path)
         else:
-            open(self.app_inc_path, 'w').close() 
+            open(self.app_inc_path, 'w').close()
 
         if not https_inc_dir:
             https_inc_dir = os.path.dirname(__nginx__[HTTPS_INC_PATH])
@@ -190,7 +188,7 @@ class NginxAPI(object):
 
         self.restart_service()
 
-    def _get_role_servers(self, role_id):
+    def get_role_servers(self, role_id):
         """ Method is used to get role servers from scalr """
         if type(role_id) is int:
             role_id = str(role_id)
@@ -207,6 +205,31 @@ class NginxAPI(object):
 
         return servers
 
+    def update_ssl_certificate(self, ssl_certificate_id, cert, key, cacert):
+        """
+        Updates ssl certificate. Returns paths to updated or created .key and
+        .crt files
+        """
+        cert = cert + '\n' + cacert
+        if ssl_certificate_id:
+            ssl_certificate_id = '_' + str(ssl_certificate_id)
+        else:
+            ssl_certificate_id = ''
+
+        keys_dir_path = os.path.join(bus.etc_path, "private.d/keys")
+        if not os.path.exists(keys_dir_path):
+            os.mkdir(keys_dir_path)
+
+        cert_path = os.path.join(keys_dir_path, 'https%s.crt' % ssl_certificate_id)
+        with open(cert_path, 'w') as fp:
+            fp.write(cert)
+
+        key_path = os.path.join(keys_dir_path, 'https%s.key' % ssl_certificate_id)
+        with open(key_path, 'w') as fp:
+            fp.write(key)
+
+        return (cert_path, key_path)
+
     def _get_ssl_cert(self, ssl_certificate_id):
         """
         Gets ssl certificate and key from Scalr, writes them to files and
@@ -214,21 +237,10 @@ class NginxAPI(object):
         """
         queryenv = bus.queryenv_service
         cert, key, cacert = queryenv.get_ssl_certificate(ssl_certificate_id)
-        cert = cert + '\n' + cacert
-
-        keys_dir_path = os.path.join(bus.etc_path, "private.d/keys")
-        if not os.path.exists(keys_dir_path):
-            os.mkdir(keys_dir_path)
-
-        cert_path = os.path.join(keys_dir_path, 'https_%s.crt' % ssl_certificate_id)
-        with open(cert_path, 'w') as fp:
-            fp.write(cert)
-
-        key_path = os.path.join(keys_dir_path, 'https_%s.key' % ssl_certificate_id)
-        with open(key_path, 'w') as fp:
-            fp.write(key)
-
-        return (cert_path, key_path)
+        return self.update_ssl_certificate(ssl_certificate_id,
+                                           cert,
+                                           key,
+                                           cacert)
 
     def _parse_roles(self, roles):
         """
@@ -262,7 +274,7 @@ class NginxAPI(object):
                 role.update(r)
                 if type(role['id']) is int:
                     role['id'] = str(role['id'])
-            role['servers'] = self._get_role_servers(role['id'])
+            role['servers'] = self.get_role_servers(role['id'])
             destinations.append(role)
 
         return destinations
@@ -734,7 +746,8 @@ class NginxAPI(object):
                            update_conf=True, 
                            restart_service=True):
         """
-        Adds server to each backend that uses given role
+        Adds server to each backend that uses given role. If role isn't used in
+        any backend, does nothing
         """
         if type(role_id) is not str:
             role_id = str(role_id)
@@ -742,6 +755,7 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
+        config_updated = False
         for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if dest.get('id') == role_id and server not in dest['servers']:
@@ -753,11 +767,13 @@ class NginxAPI(object):
 
                     self.add_server(backend_name, srv, False, False)
                     dest['servers'].append(server)
+                    config_updated = True
 
-        if update_conf:
-            self.app_servers_inc.write(self.app_inc_path)
-        if restart_service:
-            self.restart_service()
+        if config_updated:
+            if update_conf:
+                self.app_servers_inc.write(self.app_inc_path)
+            if restart_service:
+                self.restart_service()
 
     @rpc.service_method
     def remove_server_from_role(self,
@@ -766,7 +782,8 @@ class NginxAPI(object):
                                 update_conf=True,
                                 restart_service=True):
         """
-        Removes server from each backend that uses given role
+        Removes server from each backend that uses given role. If role isn't
+        used in any backend, does nothing
         """
         if type(role_id) is not str:
             role_id = str(role_id)
@@ -774,16 +791,19 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
+        config_updated = False
         for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if dest.get('id') == role_id and server in dest['servers']:
                     self.remove_server(backend_name, server, False, False)
                     dest['servers'].remove(server)
+                    config_updated = True
 
-        if update_conf:
-            self.app_servers_inc.write(self.app_inc_path)
-        if restart_service:
-            self.restart_service()
+        if config_updated:
+            if update_conf:
+                self.app_servers_inc.write(self.app_inc_path)
+            if restart_service:
+                self.restart_service()
 
 
     @rpc.service_method
@@ -793,18 +813,21 @@ class NginxAPI(object):
                                         restart_service=True):
         """
         Method is used to remove stand-alone servers, that aren't belong
-        to any role
+        to any role. If role isn't used in any backend, does nothing
         """
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
+        config_updated = False
         for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if server in dest['servers']:
                     self.remove_server(backend_name, server, False, False)
                     dest['servers'].remove(server)
+                    config_updated = True
 
-        if update_conf:
-            self.app_servers_inc.write(self.app_inc_path)
-        if restart_service:
-            self.restart_service()
+        if config_updated:
+            if update_conf:
+                self.app_servers_inc.write(self.app_inc_path)
+            if restart_service:
+                self.restart_service()
