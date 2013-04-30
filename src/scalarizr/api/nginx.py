@@ -317,6 +317,9 @@ class NginxAPI(object):
         Groups destinations by location in list of lists.
         If no location defined assumes that it'r '/' location.
         """
+        if not destinations:
+            return []
+
         sorted_destinations = sorted(destinations,
                                      key=lambda x: x.get('location'),
                                      reverse=True)
@@ -564,6 +567,8 @@ class NginxAPI(object):
         destinations.extend(self._parse_servers(servers))
 
         grouped_destinations = self._group_destinations(destinations)
+        if not grouped_destinations:
+            raise BaseException('No servers or roles given', servers, roles)
 
         if reread_conf:
             self.app_servers_inc.read(self.app_inc_path)
@@ -643,23 +648,21 @@ class NginxAPI(object):
             self.restart_service()
 
     @rpc.service_method
-    def make_proxy(self, **kwds):
+    def make_proxy(self, hostname, **kwds):
         """
         RPC method for adding or updating proxy configuration.
         """
         try:
             # trying to apply changes
-            hostname = kwds.get('hostname')
-            if hostname:
-                self.https_inc.read(self.https_inc_path)
-                self.app_servers_inc.read(self.app_inc_path)
+            self.https_inc.read(self.https_inc_path)
+            self.app_servers_inc.read(self.app_inc_path)
 
-                self.https_inc.write(self.https_inc_path + '.bak')
-                self.app_servers_inc.write(self.app_inc_path + '.bak')
+            self.https_inc.write(self.https_inc_path + '.bak')
+            self.app_servers_inc.write(self.app_inc_path + '.bak')
 
-                self._remove_confserver(hostname)
+            self._remove_confserver(hostname)
 
-                self.add_proxy(reread_conf=False, **kwds)
+            self.add_proxy(hostname, reread_conf=False, **kwds)
 
         except:
             # undo changes
