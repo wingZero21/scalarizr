@@ -233,12 +233,12 @@ class NginxHandler(ServiceCtlHandler):
     def on_HostUp(self, message):
         # self._reload_upstream()
         server = ''
-        role_id = message['farm_role_id']
-        behaviour = message['behaviour']
-        if message['cloud_location'] == __node__['cloud_location']:
-            server = message['local_ip']
+        role_id = message.farm_role_id
+        behaviour = message.behaviour
+        if message.cloud_location == __node__['cloud_location']:
+            server = message.local_ip
         else:
-            server = message['remote_ip']
+            server = message.remote_ip
 
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
@@ -253,12 +253,12 @@ class NginxHandler(ServiceCtlHandler):
     def on_HostDown(self, message):
         # self._reload_upstream()
         server = ''
-        role_id = message['farm_role_id']
-        behaviour = message['behaviour']
-        if message['cloud_location'] == __node__['cloud_location']:
-            server = message['local_ip']
+        role_id = message.farm_role_id
+        behaviour = message.behaviour
+        if message.cloud_location == __node__['cloud_location']:
+            server = message.local_ip
         else:
-            server = message['remote_ip']
+            server = message.remote_ip
 
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
@@ -303,10 +303,10 @@ class NginxHandler(ServiceCtlHandler):
         self.api.restart_service()
 
     def on_SSLCertificateUpdate(self, message):
-        ssl_cert_id = message['id'] # TODO: check datastructure
-        private_key = message['private_key']
-        certificate = message['certificate']
-        cacertificate = message['cacertificate']
+        ssl_cert_id = message.id # TODO: check datastructure
+        private_key = message.private_key
+        certificate = message.certificate
+        cacertificate = message.cacertificate
         self.api.update_ssl_certificate(ssl_cert_id,
                                         certificate,
                                         private_key,
