@@ -300,7 +300,8 @@ __node__ = {
         'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
         'state': File(private_dir + '/.state'),
         'rebooted': BoolFile(private_dir + '/.reboot'),
-        'halted': BoolFile(private_dir + '/.halt')
+        'halted': BoolFile(private_dir + '/.halt'),
+        'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
 }
 
 for behavior in ('mysql', 'mysql2', 'percona'):
