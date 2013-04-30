@@ -319,7 +319,14 @@ class NginxHandler(ServiceCtlHandler):
         ssl_present = any(vhost.https for vhost in received_vhosts)
         servers = []
         for role in roles:
-            servers.extend(self.api.get_role_servers(role))
+            if type(role) is dict:
+                cl = __node__['cloud_location']
+                servers_ips = [h.internal_ip if cl == h.cloud_location else
+                               h.external_ip
+                               for h in role.hosts]
+                servers.extend(servers_ips)
+            else:
+                servers.extend(self.api.get_role_servers(role))
         self.api.make_proxy('backend', servers=servers, ssl=ssl_present)
 
     def get_all_app_roles(self):
@@ -396,7 +403,7 @@ class NginxHandler(ServiceCtlHandler):
                     default_host = Configuration('nginx')
                     default_host.read(def_host_path)
                     default_host.comment('server')
-                    default_host.write(def_host_path)
+                    default_host.write(def_host_path)г
 
 
         if dump == self._dump_config(self._config):
