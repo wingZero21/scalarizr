@@ -301,21 +301,32 @@ class MessageListener:
 
 	def get_handlers_chain (self):
 		if self._handlers_chain is None:
-			self._handlers_chain = []
+			hds = []
 			LOG.debug("Collecting message handlers...");
-			
-			cnf = bus.cnf 
+
+			cnf = bus.cnf
 			for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
 				__import__(module_str)
 				try:
-					self._handlers_chain.extend(sys.modules[module_str].get_handlers())
+					hds.extend(sys.modules[module_str].get_handlers())
 				except:
 					LOG.error("Can't get module handlers (module: %s)", module_str)
 					raise
-						
+
+			def cls_weight(obj):
+				cls = obj.__class__.__name__
+				if cls in ('EbsHandler', 'BlockDeviceHandler'):
+					return 10
+				elif cls == 'DeploymentHandler':
+					return 1
+				else:
+					return 0
+
+			def sort_fn(a, b):
+				return cmp(cls_weight(a), cls_weight(b))
+
+			self._handlers_chain = list(reversed(sorted(hds, sort_fn)))
 			LOG.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
-						
-		return self._handlers_chain
 	
 	def __call__(self, message, queue):
 		LOG.debug("Handle '%s'" % (message.name))
@@ -342,7 +353,7 @@ class MessageListener:
 					pass
 				else:
 					with open(cnf.private_path('.scalr-version'), 'w') as fp:
-					    fp.write('.'.join(map(str, ver)))
+						fp.write('.'.join(map(str, ver)))
 					bus.scalr_version = ver
 			
 			accepted = False
