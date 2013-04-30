@@ -403,7 +403,7 @@ class NginxHandler(ServiceCtlHandler):
                     default_host = Configuration('nginx')
                     default_host.read(def_host_path)
                     default_host.comment('server')
-                    default_host.write(def_host_path)г
+                    default_host.write(def_host_path)
 
 
         if dump == self._dump_config(self._config):
