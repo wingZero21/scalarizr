@@ -224,6 +224,7 @@ class NginxHandler(ServiceCtlHandler):
                             roles_for_proxy = [__nginx__['upstream_app_role']]
                         else:
                             roles_for_proxy = self.get_all_app_roles()
+                            raise BaseException(roles_for_proxy)
                         self.make_default_proxy(roles_for_proxy)
 
         bus.fire('service_configured',
