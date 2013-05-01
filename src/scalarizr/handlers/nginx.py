@@ -225,6 +225,7 @@ class NginxHandler(ServiceCtlHandler):
                         else:
                             roles_for_proxy = self.get_all_app_roles()
                         self.make_default_proxy(roles_for_proxy)
+                    self._update_main_config()
 
         bus.fire('service_configured',
                  service_name=SERVICE_NAME,
