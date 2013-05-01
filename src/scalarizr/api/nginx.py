@@ -163,7 +163,7 @@ class NginxAPI(object):
         self.https_inc_path = os.path.join(https_inc_dir, 'https.include')
         self.https_inc = metaconf.Configuration('nginx')
         if os.path.exists(self.https_inc_path):
-            self.app_servers_inc.read(self.https_inc_path)
+            self.https_inc.read(self.https_inc_path)
         else:
             open(self.https_inc_path, 'w').close()
 
@@ -176,7 +176,10 @@ class NginxAPI(object):
         self.https_inc.read(self.https_inc_path)
 
     def restart_service(self):
-        self.service.reload()
+        if self.service.status() == initdv2.Status.NOT_RUNNING:
+            self.service.start()
+        else:
+            self.service.reload()
 
     @rpc.service_method
     def recreate_proxying(self, proxy_list):
