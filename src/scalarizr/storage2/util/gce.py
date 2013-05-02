@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 from scalarizr import util
 
@@ -60,22 +61,31 @@ def ensure_disk_detached(connection, project_id, zone, instance_name, disk_link)
                      - Instance doesn't exist
 
     """
-    try:
-        attached = attachment_info(connection, project_id, zone, instance_name, disk_link)
-        if not attached:
-            return
-        device_name = attached['deviceName']
-        op = connection.instances().detachDisk(project=project_id,
-                                                                                   zone=zone,
-                                                                                   instance=instance_name,
-                                                                                   deviceName=device_name).execute()
-        wait_for_operation(connection, project_id, op['name'], zone)
-    except:
-        e = str(sys.exc_info()[1])
-        if "Invalid value for field 'disk'" in e:
-            # Disk already detached
-            return
-        if "HttpError 404" in e:
-            # Instance is gone
-            return
-        raise
+    def try_detach():
+        try:
+            attached = attachment_info(connection, project_id, zone, instance_name, disk_link)
+            if not attached:
+                return
+            device_name = attached['deviceName']
+            op = connection.instances().detachDisk(project=project_id,
+                                                                                       zone=zone,
+                                                                                       instance=instance_name,
+                                                                                       deviceName=device_name).execute()
+            wait_for_operation(connection, project_id, op['name'], zone)
+        except:
+            e = str(sys.exc_info()[1])
+            if "Invalid value for field 'disk'" in e:
+                # Disk already detached
+                return
+            if "HttpError 404" in e:
+                # Instance is gone
+                return
+            raise
+
+    for _time in range(3):
+        try:
+            try_detach()
+        except:
+            if _time == 2:
+                raise
+            time.sleep(1)
