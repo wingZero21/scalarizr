@@ -88,4 +88,4 @@ def ensure_disk_detached(connection, project_id, zone, instance_name, disk_link)
         except:
             if _time == 2:
                 raise
-            time.sleep(1)
+            time.sleep(5)
