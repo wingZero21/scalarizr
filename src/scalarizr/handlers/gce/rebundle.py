@@ -62,11 +62,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
             try:
 
                 LOG.debug('Creating partition table on image')
-                system2(('parted', image_path, 'mklabel', 'msdos'))
-                system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))))
+                system2(('parted', image_path, 'mklabel', 'msdos'), shell=True)
+                system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))), shell=True)
 
                 # Map disk image
-                out = system2(('kpartx', '-av', image_path))[0]
+                out = system2(('kpartx', '-av', image_path), shell=True)[0]
                 try:
                     loop = re.search('(/dev/loop\d+)', out).group(1)
                     root_dev_name = '/dev/mapper/%sp1' % loop.split('/')[-1]
@@ -74,7 +74,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                     LOG.info('Creating filesystem')
                     storage2.filesystem('ext4').mkfs(root_dev_name)
                     dev_uuid = uuid.uuid4()
-                    system2(('tune2fs', '-U', str(dev_uuid), root_dev_name))
+                    system2(('tune2fs', '-U', str(dev_uuid), root_dev_name), shell=True)
 
                     mount.mount(root_dev_name, tmp_mount_dir)
                     try:
@@ -125,7 +125,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                     finally:
                         mount.umount(root_dev_name)
                 finally:
-                    system2(('kpartx', '-d', image_path))
+                    system2(('kpartx', '-d', image_path), shell=True)
 
                 LOG.info('Compressing image.')
                 arch_name = '%s.tar.gz' % self._role_name.lower()
@@ -228,4 +228,4 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
         for node in nodes:
             args = node.split()
             args[0] = os.path.join(root, 'dev', args[0])
-            system2(['mknod'] + args)
+            system2(['mknod'] + args, shell=True)
