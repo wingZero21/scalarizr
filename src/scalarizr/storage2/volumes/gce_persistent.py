@@ -1,6 +1,7 @@
 __author__ = 'Nick Demyanchuk'
 
 import os
+import time
 import sys
 import uuid
 import logging
@@ -149,12 +150,25 @@ class GcePersistentVolume(base.Volume):
             zone = os.path.basename(__node__['gce']['zone'])
             project_id = __node__['gce']['project_id']
             server_name = __node__['server_id']
-            op = connection.instances().detachDisk(instance=server_name,
+
+            def try_detach():
+                op = connection.instances().detachDisk(instance=server_name,
                                                                     project=project_id,
                                                                     zone=zone,
                                                                     deviceName=attachment_inf['deviceName']).execute()
 
-            gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
+                gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
+
+            for _time in range(3):
+                try:
+                    try_detach()
+                except:
+                    e = sys.exc_info()[1]
+                    LOG.debug('Detach disk attempt failed: %s' % e)
+                    if _time == 2:
+                        raise storage2.StorageError('Can not detach disk: %s' % e)
+                    time.sleep(1)
+                    LOG.debug('Trying to detach disk again.')
 
 
     def _destroy(self, force, **kwds):

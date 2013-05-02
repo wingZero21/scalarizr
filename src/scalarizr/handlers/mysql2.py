@@ -1064,8 +1064,10 @@ class MysqlHandler(DBMSRHandler):
                 # Patch configuration
                 self.mysql.my_cnf.expire_logs_days = 10
                 self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
-                if not os.listdir(__mysql__['data_dir']):
-                    linux.system(['mysql_install_db'])
+
+                #if not os.listdir(__mysql__['data_dir']):
+                if not storage_valid:
+                    linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
                     coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
                 if 'restore' in __mysql__ and \
                                 __mysql__['restore'].type == 'xtrabackup':
