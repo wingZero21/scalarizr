@@ -167,6 +167,31 @@ class NginxAPI(object):
         else:
             open(self.https_inc_path, 'w').close()
 
+        self._make_error_pages_include()
+
+    def _make_error_pages_include(self):
+
+        def _add_static_location(config, location, expires=None):
+            xpath = 'location'
+            locations_num = len(config.get_list(xpath))
+            config.add(xpath, location)
+
+            xpath = '%s[%i]' % (xpath, locations_num + 1)
+
+            if expires:
+                config.add('%s/expires' % xpath, expires)
+            config.add('%s/root' % xpath, '/usr/share/scalr/nginx/html')
+
+        error_pages_dir = os.path.dirname(__nginx__[APP_INC_PATH])
+        self.error_pages_inc = os.path.join(error_pages_dir,
+                                            'error-pages.include')
+
+        error_pages_conf = metaconf.Configuration('nginx')
+        _add_static_location(error_pages_conf, '/500.html', '0')
+        _add_static_location(error_pages_conf, '/502.html', '0')
+        _add_static_location(error_pages_conf, '/noapp.html')
+        error_pages_conf.write(self.error_pages_inc)
+
     def _clear_nginx_includes(self):
         with open(self.app_inc_path, 'w') as fp:
             fp.write('')
@@ -525,22 +550,7 @@ class NginxAPI(object):
                 config.add('%s/error_page' % location_xpath, '500 501 = /500.html')
                 config.add('%s/error_page' % location_xpath, '502 503 504 = /502.html')
 
-        def _add_static_location(config, location, expires=None):
-            xpath = '%s/location' % server_xpath
-            locations_num = len(config.get_list(xpath))
-            if not any(el[0] is location for el in locations_and_backends):
-                config.add(xpath, location)
-
-                xpath = '%s[%i]' % (xpath, locations_num + 1)
-
-                if expires:
-                    config.add('%s/expires' % xpath, expires)
-                config.add('%s/root' % xpath, '/usr/share/scalr/nginx/html')
-
-        # Adding error pages locations
-        _add_static_location(config, '/500.html', '0')
-        _add_static_location(config, '/502.html', '0')
-        _add_static_location(config, '/noapp.html')
+        config.add('%s/include' % server_xpath, self.error_pages_inc)
 
         return config
 

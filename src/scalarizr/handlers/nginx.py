@@ -328,7 +328,7 @@ class NginxHandler(ServiceCtlHandler):
                                for h in role.hosts]
                 servers.extend(servers_ips)
 
-        self.api.make_proxy('backend', servers=servers, ssl=ssl_present)
+        self.api.make_proxy('backend', servers=servers, ssl=ssl_present, backend_ip_hash=True)
 
     def get_all_app_roles(self):
         return self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
