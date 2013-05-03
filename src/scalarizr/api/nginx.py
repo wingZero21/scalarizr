@@ -397,7 +397,7 @@ class NginxAPI(object):
         config = metaconf.Configuration('nginx')
         config.add('upstream', name or 'backend')
         if ip_hash:
-            config.add('upstream/iphash', '')
+            config.add('upstream/ip_hash', '')
 
         for dest in destinations:
             for i, server in enumerate(dest['servers']):
