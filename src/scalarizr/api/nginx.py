@@ -525,27 +525,22 @@ class NginxAPI(object):
                 config.add('%s/error_page' % location_xpath, '500 501 = /500.html')
                 config.add('%s/error_page' % location_xpath, '502 503 504 = /502.html')
 
+        def _add_static_location(config, location, expires=None):
+            xpath = '%s/location' % server_xpath
+            locations_num = len(config.get_list(xpath))
+            if not any(el[0] is location for el in locations_and_backends):
+                config.add(xpath, location)
+
+                xpath = '%s[%i]' % (xpath, locations_num + 1)
+
+                if expires:
+                    config.add('%s/expires' % xpath, expires)
+                config.add('%s/root' % xpath, '/usr/share/scalr/nginx/html')
+
         # Adding error pages locations
-        locations_num = len(locations_and_backends)
-        if not any(el[0] is '500.html' for el in locations_and_backends):
-            location_xpath = '%s/location' % server_xpath
-            config.add(location_xpath, '500.html')
-
-            location_xpath = '%s[%i]' % (location_xpath, locations_num)
-
-            config.add('%s/expires' % location_xpath, '0')
-            config.add('%s/root' % location_xpath, '/usr/share/scalr/nginx/html')
-
-            locations_num += 1
-
-        if not any(el[0] is '502.html' for el in locations_and_backends):
-            location_xpath = '%s/location' % server_xpath
-            config.add(location_xpath, '502.html')
-
-            location_xpath = '%s[%i]' % (location_xpath, locations_num)
-
-            config.add('%s/expires' % location_xpath, '0')
-            config.add('%s/root' % location_xpath, '/usr/share/scalr/nginx/html')
+        _add_static_location(config, '/500.html', '0')
+        _add_static_location(config, '/502.html', '0')
+        _add_static_location(config, '/noapp.html')
 
         return config
 
