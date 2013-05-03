@@ -89,9 +89,15 @@ def eradicate(process):
 
         def die(self, grace=2):
             if isinstance(self._obj, subprocess.Popen):
-                self._obj.terminate()
-                time.sleep(grace)
-                self._obj.kill()
+                try:
+                    self._obj.terminate()
+                    time.sleep(grace)
+                    self._obj.kill()
+                except OSError, e:
+                    if e.errno == errno.ESRCH:
+                        pass  # no such process
+                    else:
+                        LOG.debug("Failed to stop pid %s" % self.pid)
                 time.sleep(0.1)
                 self._obj.poll()  # avoid leaving defunct processes
             else:
