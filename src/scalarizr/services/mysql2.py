@@ -46,7 +46,7 @@ __mysql__.update({
     'pma_user': 'pma',
     'debian.cnf': '/etc/mysql/debian.cnf',
     'my.cnf': '/etc/my.cnf' if linux.os['family'] in ('RedHat', 'Oracle') else '/etc/mysql/my.cnf',
-    'mysqldump_chunk_size': 200 * 1024 * 1024,
+    'mysqldump_chunk_size': 200,
     'stop_slave_timeout': 180,
     'change_master_timeout': 60,
     'defaults': {
