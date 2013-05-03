@@ -318,7 +318,7 @@ class NginxHandler(ServiceCtlHandler):
         if not roles:
             return
         received_vhosts = self._queryenv.list_virtual_hosts()
-        ssl_present = False  #any(vhost.https for vhost in received_vhosts)  #TODO: ??
+        ssl_present = any(vhost.https for vhost in received_vhosts)  #TODO: ??
         servers = []
         for role in roles:
             if type(role) is str:
