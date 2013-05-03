@@ -298,9 +298,8 @@ class NimbulaRebundleHandler(Handler):
 
             """ Grub installation """
             self._logger.info('Installing grub to the image %s' % image_name)
-            try:
-                grub_path = which('grub')
-            except LookupError:
+            grub_path = which('grub')
+            if not grub_path:
                 raise HandlerError("Grub executable was not found.")
             grub_path = self.tmp_root_dir + grub_path
             stdin = 'device (hd0) %s\nroot (hd0,0)\nsetup (hd0)\n' % image_path

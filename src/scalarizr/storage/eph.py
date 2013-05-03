@@ -342,9 +342,9 @@ class EphSnapshotProviderLite(object):
                 mount.mount(snap_lv, snap_mpoint, *opts)
                 tar_cmd = ['tar', 'cp', '-C', snap_mpoint, '.']
 
-                try:
+                if which('pigz'):
                     compress_cmd = [which('pigz'), '-5']
-                except LookupError:
+                else:
                     compress_cmd = ['gzip', '-5']
 
                 self._logger.debug("Creating and compressing snapshot data.")
@@ -649,9 +649,9 @@ class DataRestoreStrategy(RestoreStrategy):
 class DeviceRestoreStrategy(RestoreStrategy):
     def restore(self, queue, volume, download_finished):
         device_fp = open(volume.device, 'w')
-        try:
+        if which('pigz'):
             compress_cmd = [which('pigz'), '-d']
-        except LookupError:
+        else:
             compress_cmd = ['gzip', '-d']
         compressor = subprocess.Popen(compress_cmd, stdin=subprocess.PIPE, stdout=device_fp, stderr=subprocess.PIPE, close_fds=True)
         self.concat_chunks(queue, download_finished, compressor.stdin)
