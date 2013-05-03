@@ -315,6 +315,8 @@ class NginxHandler(ServiceCtlHandler):
         self.api.restart_service()
 
     def make_default_proxy(self, roles):
+        if not roles:
+            return
         received_vhosts = self._queryenv.list_virtual_hosts()
         ssl_present = False  #any(vhost.https for vhost in received_vhosts)  #TODO: ??
         servers = []
