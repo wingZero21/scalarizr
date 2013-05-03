@@ -45,7 +45,8 @@ def which(name, *extra_dirs):
         places.extend(extra_dirs)
         return [os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))][0]
     except IndexError:
-        raise LookupError("Command '%s' not found" % name)
+        return False
+        #raise LookupError("Command '%s' not found" % name)
 
 
 def system_info(verbose=False):

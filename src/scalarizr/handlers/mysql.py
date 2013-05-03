@@ -669,12 +669,11 @@ class MysqlHandler(ServiceCtlHandler):
             self._stop_service('Configuring')
 
             # Add SELinux rule
-            try:
-                if not system2((software.which('selinuxenabled'), ), raise_exc=False)[2]:
+            selinuxenabled_exec = software.which('selinuxenabled')
+            if selinuxenabled_exec:
+                if not system2((selinuxenabled_exec, ), raise_exc=False)[2]:
                     if not system2((software.which('getsebool'), 'mysqld_disable_trans'), raise_exc=False)[2]:
                         system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
-            except LookupError:
-                pass
 
 
         elif self._cnf.state == ScalarizrState.RUNNING:
@@ -1281,12 +1280,11 @@ class MysqlHandler(ServiceCtlHandler):
 
     def _change_selinux_ctx(self):
         if disttool.is_rhel():
-            try:
-                chcon = software.which('chcon')
-            except LookupError:
+            chcon_exec = software.which('chcon')
+            if not chcon_exec:
                 return
             LOG.debug('Changing SELinux file security context for new mysql home')
-            system2((chcon, '-R', '-u', 'system_u', '-r',
+            system2((chcon_exec, '-R', '-u', 'system_u', '-r',
                      'object_r', '-t', 'mysqld_db_t', os.path.dirname(STORAGE_PATH)), raise_exc=False)
 
     def _init_master(self, message):
@@ -1819,12 +1817,10 @@ class MysqlHandler(ServiceCtlHandler):
                 os.makedirs(directory)
                 src_dir = os.path.dirname(raw_value + "/") + "/"
                 if os.path.isdir(src_dir):
-                    try:
-                        set_se_path = software.which('setsebool')
+                    if software.which('setsebool'):
                         LOG.debug('Make SELinux rule for rsync')
-                        system2((set_se_path, 'rsync_disable_trans', 'on'), raise_exc=False)
-                    except LookupError:
-                        pass
+                        system2((software.which('setsebool'), 'rsync_disable_trans', 'on'), raise_exc=False)
+
                     LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
                     rsync(src_dir, directory, archive=True, exclude='ib_logfile*')
                     self._mysql_config.set(directive, dirname)
