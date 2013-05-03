@@ -221,7 +221,7 @@ class ScriptExecutor(Handler):
 						exec_timeout=s.exec_timeout, event_name=event_name, role_name=role_name) \
 						for s in queryenv_scripts]
 
-        global_variables = message.body.get('global_variables') or []
+		global_variables = message.body.get('global_variables') or []
 		for kv in global_variables:
 			os.environ[kv['name']] = kv['value'] or ''
 
@@ -304,7 +304,7 @@ class Script(object):
 			os.makedirs(exec_dir)
 
 		with open(self.exec_path, 'w') as fp:
-		    fp.write(self.body.encode('utf-8'))
+			fp.write(self.body.encode('utf-8'))
 		os.chmod(self.exec_path, stat.S_IREAD | stat.S_IEXEC)
 
 		stdout = open(self.stdout_path, 'w+')
