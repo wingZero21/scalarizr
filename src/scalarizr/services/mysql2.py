@@ -463,8 +463,10 @@ class MySQLDumpBackup(backup.Backup):
             'start_slave': False
         })
         self.transfer = None
+        self._popens = []
         self._killed = False
         self._run_lock = threading.Lock()
+        self._popen_creation_lock = threading.Lock()
 
     def _run(self):
         LOG.debug("Running MySQLDumpBackup")
@@ -479,6 +481,15 @@ class MySQLDumpBackup(backup.Backup):
             self.transfer = cloudfs.LargeTransfer(self._gen_src, self._dst,
                                     streamer=None, chunk_size=self.chunk_size)
         result = self.transfer.run()
+
+        def log_stderr(popen):
+            LOG.debug("mysqldump log_stderr communicate")
+            out, err = popen.communicate()
+            LOG.debug("mysqldump log_stderr communicate done")
+            if err:
+                LOG.debug("mysqldump stderr: %s", err)
+        map(log_stderr, self._popens)
+
         if self._killed:
             raise Error("Canceled")
 
@@ -491,12 +502,22 @@ class MySQLDumpBackup(backup.Backup):
                 self._current_db = db_name
                 params = __mysql__['mysqldump_options'].split() + [db_name]
                 _mysqldump.args(*params)
-                stream = _mysqldump.popen(stdin=None, bufsize=-1).stdout
+                with self._popen_creation_lock:
+                    if self._killed:
+                        return
+                    popen = _mysqldump.popen(stdin=None, bufsize=-1)
+                    self._popens.append(popen)
+                stream = popen.stdout
                 yield cloudfs.NamedStream(stream, db_name)
         else:
             params = __mysql__['mysqldump_options'].split() + ['--all-databases']
             _mysqldump.args(*params)
-            yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
+            with self._popen_creation_lock:
+                if self._killed:
+                    return
+                popen = _mysqldump.popen(stdin=None, bufsize=-1)
+                self._popens.append(popen)
+            yield popen.stdout
 
     @property
     def _dst(self):
@@ -504,11 +525,14 @@ class MySQLDumpBackup(backup.Backup):
 
     def _kill(self):
         LOG.debug("Killing MySQLDumpBackup")
-        self._killed = True
+        with self._popen_creation_lock:
+            self._killed = True
 
         with self._run_lock:
             if self.transfer:
                 self.transfer.kill()
+            map(eradicate, self._popens)
+        LOG.debug("...killed MySQLDumpBackup")
 
 
 backup.backup_types['mysqldump'] = MySQLDumpBackup
