@@ -147,6 +147,8 @@ class NginxAPI(object):
 
     def __init__(self, app_inc_dir=None, https_inc_dir=None):
         self.service = NginxInitScript()
+        self.service.start()
+
         self.backend_table = {}
 
         if not app_inc_dir:
@@ -168,6 +170,7 @@ class NginxAPI(object):
             open(self.https_inc_path, 'w').close()
 
         self._make_error_pages_include()
+
 
     def _make_error_pages_include(self):
 
