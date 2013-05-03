@@ -407,6 +407,7 @@ class NginxHandler(ServiceCtlHandler):
             if not os.path.exists(nginx_conf_path + '.save'):
                 shutil.copy(nginx_conf_path, nginx_conf_path + '.save')
             config.write(nginx_conf_path)
+            self.api.restart_service()
             
     def _reload_upstream(self, force_reload=False):
 

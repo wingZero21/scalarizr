@@ -170,7 +170,7 @@ def given_i_have_a_server(step):
 
 @step(u'When I add proxy')
 def when_i_add_proxy(step):
-    world.api.make_proxy(name='uty.com',
+    world.api.make_proxy(hostname='uty.com',
                          roles=world.roles,
                          servers=world.servers,
                          port=world.port,
@@ -202,7 +202,7 @@ def given_i_have_a_role(step):
     server1_port = 8001
     server2_port = 8002
     # Mocking up get role servers to return our Server adresses
-    world.api._get_role_servers = lambda x: ['localhost:%s' % server1_port,
+    world.api.get_role_servers = lambda x: ['localhost:%s' % server1_port,
                                              'localhost:%s' % server2_port]
 
     world.expected_response1 = 'Test1'
@@ -365,7 +365,7 @@ def given_i_have_a_proxy_to_two_roles_master_and_backup(step):
         else:
             return ['localhost:%s' % server3_port]
 
-    world.api._get_role_servers = get_role_servers
+    world.api.get_role_servers = get_role_servers
 
     world.expected_response1 = 'Test1'
     world.expected_response2 = 'Test2'
@@ -379,7 +379,7 @@ def given_i_have_a_proxy_to_two_roles_master_and_backup(step):
 
     world.roles = [123, {'id': 321, 'backup': True}]
 
-    world.api.make_proxy(name='uty.com',
+    world.api.make_proxy(hostname='uty.com',
                          roles=world.roles,
                          port=8008)
     time.sleep(1)
@@ -422,7 +422,7 @@ def given_i_have_a_proxy_to_two_servers(step):
     world.servers = [{'host': 'localhost', 'port': '8001'},
                      {'host': 'localhost', 'port': '8002'}]
 
-    world.api.make_proxy(name='uty.com',
+    world.api.make_proxy(hostname='uty.com',
                          servers=world.servers,
                          port=8008)
     time.sleep(1)
@@ -436,7 +436,7 @@ def given_i_have_a_proxy_to_two_servers(step):
 def when_i_update_proxy_marking_one_server_as_down(step):
     server_to_update = world.servers[1]
     server_to_update['down'] = True
-    world.api.make_proxy(name='uty.com',
+    world.api.make_proxy(hostname='uty.com',
                          servers=world.servers,
                          port=8008)
     time.sleep(1)
@@ -496,7 +496,7 @@ def and_i_have_a_regular_role_r(step):
             return ['localhost:%s' % 8007]
 
     # Mocking up get role servers to return our Server adresses
-    world.api._get_role_servers = get_role_servers
+    world.api.get_role_servers = get_role_servers
 
     world.R_role_response1 = 'R Role server 1'
     world.R_role_response2 = 'R Role server 2'

@@ -30,7 +30,6 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
     def __init__(self):
         self._nginx_binary = __nginx__['binary_path']
 
-
         pid_file = None
         '''
         Saw on 8.04:
@@ -147,7 +146,7 @@ class NginxAPI(object):
 
     def __init__(self, app_inc_dir=None, https_inc_dir=None):
         self.service = NginxInitScript()
-        self.service.start()
+        # self.service.start()
 
         self.backend_table = {}
 
