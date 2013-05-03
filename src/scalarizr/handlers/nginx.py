@@ -357,65 +357,55 @@ class NginxHandler(ServiceCtlHandler):
         return output.getvalue()
 
     def _update_main_config(self):
-        config_dir = os.path.dirname(self._app_inc_path)
+        config_dir = os.path.dirname(self.api.app_inc_path)
         nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
 
-        if not hasattr(self, '_config'):
-            try:
-                self._config = Configuration('nginx')
-                self._config.read(nginx_conf_path)
-            except (Exception, BaseException), e:
-                raise HandlerError('Cannot read/parse nginx main configuration file: %s' % str(e))
+        config = None
+        try:
+            config = Configuration('nginx')
+            config.read(nginx_conf_path)
+        except (Exception, BaseException), e:
+            raise HandlerError('Cannot read/parse nginx main configuration file: %s' % str(e))
 
-        # Patch nginx.conf
         self._logger.debug('Update main configuration file')
-        dump = self._dump_config(self._config)
+        dump = self._dump_config(config)
 
-        if self._app_inc_path in self._config.get_list('http/include'):
-            self._logger.debug('File %s already included into nginx main config %s'%
-                            (self._app_inc_path, nginx_conf_path))
+        include_list = config.get_list('http/include')
+        if not self.api.app_inc_path in include_list:
+            config.add('http/include', self.api.app_inc_path)
+        if not self.api.https_inc_path in include_list:
+            config.add('http/include', self.api.https_inc_path)
 
-            #preventing nginx from crashing if user removed upstream file
-            if not os.path.exists(self._app_inc_path):
-                self._config.remove('http/include', self._app_inc_path)
-                self._logger.debug('include %s removed as file does not exist.' % self._app_inc_path)
+        self._logger.debug('removing http/server section')
+        try:
+            config.remove('http/server')
+        except (ValueError, IndexError):
+            self._logger.debug('no http/server section')
+        
+        if disttool.is_debian_based():
+        # Comment /etc/nginx/sites-enabled/*
+            try:
+                i = config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
+                config.comment('http/include[%d]' % (i+1,))
+                self._logger.debug('comment site-enabled include')
+            except (ValueError, IndexError):
+                self._logger.debug('site-enabled include already commented')
+        elif disttool.is_redhat_based():
+            def_host_path = '/etc/nginx/conf.d/default.conf'
+            if os.path.exists(def_host_path):
+                default_host = Configuration('nginx')
+                default_host.read(def_host_path)
+                default_host.comment('server')
+                default_host.write(def_host_path)
 
-        elif os.path.exists(self._app_inc_path):
-            self._logger.debug("including path to upstream list into nginx main config")
-            self._config.add('http/include', self._app_inc_path)
-
-        if not 'http://backend' in self._config.get_list('http/server/location/proxy_pass') :
-            # Comment http/server
-            self._logger.debug('comment http/server section')
-            self._config.comment('http/server')
-            self._config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
-
-            if disttool.is_debian_based():
-            # Comment /etc/nginx/sites-enabled/*
-                try:
-                    i = self._config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
-                    self._config.comment('http/include[%d]' % (i+1,))
-                    self._logger.debug('comment site-enabled include')
-                except (ValueError, IndexError):
-                    self._logger.debug('site-enabled include already commented')
-            elif disttool.is_redhat_based():
-                def_host_path = '/etc/nginx/conf.d/default.conf'
-                if os.path.exists(def_host_path):
-                    default_host = Configuration('nginx')
-                    default_host.read(def_host_path)
-                    default_host.comment('server')
-                    default_host.write(def_host_path)
-
-
-        if dump == self._dump_config(self._config):
+        if dump == self._dump_config(config):
             self._logger.debug("Main nginx config wasn`t changed")
         else:
             # Write new nginx.conf
             if not os.path.exists(nginx_conf_path + '.save'):
                 shutil.copy(nginx_conf_path, nginx_conf_path + '.save')
-            self._config.write(nginx_conf_path)
-
-
+            config.write(nginx_conf_path)
+            
     def _reload_upstream(self, force_reload=False):
 
         backend_include = Configuration('nginx')

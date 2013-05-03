@@ -487,6 +487,7 @@ class NginxAPI(object):
         if port:
             config.add('%s/listen' % server_xpath, str(port))
 
+        # Configuring ssl
         if ssl:
             config.add('%s/listen' % server_xpath, '%s ssl' % (ssl_port or '443'))
             config.add('%s/ssl' % server_xpath, 'on')
@@ -501,10 +502,9 @@ class NginxAPI(object):
             config.add('%s/ssl_ciphers' % server_xpath, 'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
             config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
 
-        
-
         config.add('%s/server_name' % server_xpath, hostname)
 
+        # Adding locations leading to defined backends
         for i, (location, backend_name) in enumerate(locations_and_backends):
             location_xpath = '%s/location' % server_xpath
             config.add(location_xpath, location)
@@ -520,6 +520,32 @@ class NginxAPI(object):
             config.add('%s/proxy_buffering' % location_xpath, 'on')
             config.add('%s/proxy_connect_timeout' % location_xpath, '15')
             config.add('%s/proxy_intercept_errors' % location_xpath, 'on')
+
+            if location is '/':
+                config.add('%s/error_page' % location_xpath, '500 501 = /500.html')
+                config.add('%s/error_page' % location_xpath, '502 503 504 = /502.html')
+
+        # Adding error pages locations
+        locations_num = len(locations_and_backends)
+        if not any(el[0] is '500.html' for el in locations_and_backends):
+            location_xpath = '%s/location' % server_xpath
+            config.add(location_xpath, '500.html')
+
+            location_xpath = '%s[%i]' % (location_xpath, locations_num)
+
+            config.add('%s/expires' % location_xpath, '0')
+            config.add('%s/root' % location_xpath, '/usr/share/scalr/nginx/html')
+
+            locations_num += 1
+
+        if not any(el[0] is '502.html' for el in locations_and_backends):
+            location_xpath = '%s/location' % server_xpath
+            config.add(location_xpath, '502.html')
+
+            location_xpath = '%s[%i]' % (location_xpath, locations_num)
+
+            config.add('%s/expires' % location_xpath, '0')
+            config.add('%s/root' % location_xpath, '/usr/share/scalr/nginx/html')
 
         return config
 
