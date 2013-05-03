@@ -9,6 +9,7 @@ from scalarizr.util import firstmatched
 
 import re
 import os
+import sys
 import logging
 from scalarizr.util import disttool
 from scalarizr.util.initdv2 import ParametrizedInitScript
@@ -85,7 +86,10 @@ class SSHKeys(Handler):
             fp = open(self.sshd_config_path, 'w')
             fp.write(''.join(new_lines))
             fp.close()
-            self._sshd_init.restart()
+            try:
+                self._sshd_init.restart()
+            except:
+                self._logger.debug('Error during SSH restart', exc_info=sys.exc_info())
 
 
         # Setup .ssh directory structure

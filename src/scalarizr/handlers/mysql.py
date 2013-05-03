@@ -1020,7 +1020,7 @@ class MysqlHandler(ServiceCtlHandler):
                             mysql.sendline("STOP SLAVE;")
                             mysql.expect("mysql>", timeout=timeout)
                         except pexpect.TIMEOUT:
-                            raise HandlerError("Timeout (%d seconds) reached " +
+                            raise HandlerError("Timeout (%d seconds) reached " 
                                             "while waiting for slave stop" % (timeout,))
                         finally:
                             mysql.close()

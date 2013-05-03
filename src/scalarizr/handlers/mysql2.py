@@ -545,48 +545,76 @@ class MysqlHandler(DBMSRHandler):
 
     def on_DbMsr_CreateBackup(self, message):
         LOG.debug("on_DbMsr_CreateBackup")
+        tmp_basedir = __mysql__['tmp_dir']
+        if not os.path.exists(tmp_basedir):
+            os.makedirs(tmp_basedir)        
+        # Retrieve password for scalr mysql user
+        backup_path = None
+        tmpdir = None
+        try:
+            # Get databases list
+            databases = self.root_client.list_databases()
+            
+            op = operation(name=self._op_backup, phases=[{
+                'name': self._phase_backup
+            }])
+            op.define()         
 
-        def do_backup():
-            try:
-                op = operation(name=self._op_backup, phases=[{
-                        'name': self._phase_backup,
-                        "steps": [self._step_upload_to_cloud_storage],  #?
-                }])
-                op.define()
+            with op.phase(self._phase_backup):
+                # Dump all databases
+                LOG.info("Dumping all databases")
+                tmpdir = tempfile.mkdtemp(dir=tmp_basedir)
 
-                with op.phase(self._phase_backup):
-                    with op.step(self._step_upload_to_cloud_storage):
-                        cloud_storage_path = self._platform.scalrfs.backups('mysql')
-                        #? compressor?
-                        bak = mysql2_svc.MySQLDumpBackup(cloudfs_dir=cloud_storage_path)
+                backup_filename = 'mysql-backup-%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S') 
+                backup_path = os.path.join(tmpdir, backup_filename)
+                
+                # Creating archive 
+                backup = tarfile.open(backup_path, 'w:gz')
+                mysqldump = mysql_svc.MySQLDump(root_user=__mysql__['root_user'],
+                                    root_password=__mysql__['root_password'])
+                dump_options = __mysql__['mysqldump_options'].split(' ')
 
-                        self._current_backup = bak
-                        try:
-                            result = bak.run()
-                        finally:
-                            self._current_backup = None
+                def _single_backup(db_name):
+                    dump_path = os.path.join(tmpdir, db_name + '.sql') 
+                    mysqldump.create(db_name, dump_path, dump_options)
+                    backup.add(dump_path, os.path.basename(dump_path))
 
-                        # Notify Scalr
-                        self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                                db_type = __mysql__['behavior'],
-                                status = 'ok',
-                                backup_parts = result
-                        ))
-
-                op.ok(data=result)
-
-            except (Exception, BaseException), e:
-                LOG.exception(e)
-
-                # Notify Scalr about error
-                self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                        db_type = __mysql__['behavior'],
-                        status = 'error',
-                        last_error = str(e)
-                ))
-
-        LOG.debug("Starting backup_thread")
-        threading.Thread(target=do_backup, name="backup_thread").start()
+                make_backup_steps(databases, op, _single_backup)
+                        
+                backup.close()
+                
+            with op.step(self._step_upload_to_cloud_storage):
+                cloud_storage_path = self._platform.scalrfs.backups('mysql')
+                LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
+                trn = cloudfs.LargeTransfer(src=backup_path, dst=cloud_storage_path, compressor=None)
+                result = trn.run()
+                result = handlers.transfer_result_to_backup_result(result)
+                LOG.info('MySQL backup uploaded')
+                            
+            op.ok(data=result)
+            
+            # Notify Scalr
+            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+                db_type = __mysql__['behavior'],
+                status = 'ok',
+                backup_parts = result
+            ))
+                        
+        except (Exception, BaseException), e:
+            LOG.exception(e)
+            
+            # Notify Scalr about error
+            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+                db_type = __mysql__['behavior'],
+                status = 'error',
+                last_error = str(e)
+            ))
+            
+        finally:
+            if tmpdir:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+            if backup_path and os.path.exists(backup_path):
+                os.remove(backup_path)
 
 
     def on_DbMsr_CancelBackup(self, message):
@@ -1039,8 +1067,10 @@ class MysqlHandler(DBMSRHandler):
                 # Patch configuration
                 self.mysql.my_cnf.expire_logs_days = 10
                 self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
-                if not os.listdir(__mysql__['data_dir']):
-                    linux.system(['mysql_install_db'])
+
+                #if not os.listdir(__mysql__['data_dir']):
+                if not storage_valid:
+                    linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
                     coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
                 if 'restore' in __mysql__ and \
                                 __mysql__['restore'].type == 'xtrabackup':
