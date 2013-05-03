@@ -338,6 +338,17 @@ EOF
 fi
 
 
+if [ ! -f "$pub_cnf_dir/router.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/router.ini"
+[router]
+
+[handlers]
+
+router = scalarizr.handlers.router
+EOF
+fi
+
+
 if [ ! -f "$pub_cnf_dir/nimbula.ini" ]; then
         cat <<EOF > "$pub_cnf_dir/nimbula.ini"
 [nimbula]

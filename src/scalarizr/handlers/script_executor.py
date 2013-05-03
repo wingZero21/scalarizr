@@ -150,6 +150,16 @@ class ScriptExecutor(Handler):
         if not scripts:
             return
 
+
+        # read logs_dir_prefix
+        ini = bus.cnf.rawini
+        try:
+            logs_dir = ini.get(self.name, 'logs_dir')
+            if not os.path.exists(logs_dir):
+                os.makedirs(logs_dir)
+        except ConfigParser.Error:
+            pass
+
         if scripts[0].event_name:
             phase = "Executing %d %s script(s)" % (len(scripts), scripts[0].event_name)
         else:
@@ -212,9 +222,9 @@ class ScriptExecutor(Handler):
                                     exec_timeout=s.exec_timeout, event_name=event_name, role_name=role_name) \
                                     for s in queryenv_scripts]
 
-        if 'global_variables' in message.body and message.global_variables:
-            for kv in message.global_variables:
-                os.environ[kv['name']] = kv['value']
+        global_variables = message.body.get('global_variables') or []
+        for kv in global_variables:
+            os.environ[kv['name']] = kv['value'] or ''
 
         LOG.debug('Fetched %d scripts', len(scripts))
         self.execute_scripts(scripts)

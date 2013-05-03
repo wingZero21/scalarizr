@@ -71,7 +71,8 @@ class MySQLAPI(object):
         """ Reset password for MySQL user 'scalr'. Return new password """
         if not new_password:
             new_password = pwgen(20)
-        mysql_cli = mysql_svc.MySQLClient()
+        mysql_cli = mysql_svc.MySQLClient(__mysql__['root_user'],
+                                          __mysql__['root_password'])
         mysql_cli.set_user_password('scalr', 'localhost', new_password)
         mysql_cli.flush_privileges()
         __mysql__['root_password'] = new_password
@@ -79,7 +80,8 @@ class MySQLAPI(object):
 
     @rpc.service_method
     def replication_status(self):
-        mysql_cli = mysql_svc.MySQLClient()
+        mysql_cli = mysql_svc.MySQLClient(__mysql__['root_user'],
+                                          __mysql__['root_password'])
         if int(__mysql__['replication_master']):
             master_status = mysql_cli.master_status()
             result = {'master': {'status': 'up',

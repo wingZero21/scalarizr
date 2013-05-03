@@ -10,7 +10,7 @@ import threading
 
 from scalarizr import storage2
 from scalarizr.libs import metaconf
-from scalarizr.linux import coreutils
+from scalarizr.linux import coreutils, mount
 from scalarizr.storage2 import cloudfs
 from scalarizr.storage2.volumes import base
 
@@ -28,7 +28,7 @@ class EphVolume(base.Volume):
     """
 
 
-    def __init__(self, vg=None, disk=None, size=None, cloudfs_dir=None,     **kwds):
+    def __init__(self, vg=None, disk=None, size=None, cloudfs_dir=None, **kwds):
         # Compatibility with 1.0
         snap_backend = kwds.pop('snap_backend', None)
         if snap_backend:
@@ -39,8 +39,7 @@ class EphVolume(base.Volume):
                 cloudfs_dir += '/'
         kwds.pop('lvm_group_cfg', None)
 
-        super(EphVolume, self).__init__(vg=vg, disk=disk, size=size,
-                                                                                        cloudfs_dir=cloudfs_dir, **kwds)
+        super(EphVolume, self).__init__(vg=vg, disk=disk, size=size or '80%', cloudfs_dir=cloudfs_dir, **kwds)
 
         self._lvm_volume = None
 
@@ -57,14 +56,16 @@ class EphVolume(base.Volume):
             for attr in ('disk', 'fstype', 'size', 'vg', 'mpoint'):
                 if not getattr(self, attr, None):
                     if not self.snap or not getattr(self.snap, attr, None):
-                        raise storage2.StorageError('Missing ephemeral volume'
-                                                                                                ' attribute "%s"' % attr)
+                        raise storage2.StorageError('Missing ephemeral volume attribute "%s"' % attr)
                     setattr(self, attr, getattr(self.snap, attr))
 
             self.disk = storage2.volume(self.disk)
             # Compatibility with storage v1
-            if self.disk.device and self.disk.type == 'base' and self.disk.device.startswith('/dev/sd'):
-                self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
+            if self.disk.device and self.disk.type == 'base':
+                if self.disk.device.startswith('/dev/sd'):
+                    self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
+                elif 'google' in self.disk.device:
+                    self.disk = storage2.volume(type='gce_ephemeral', name='ephemeral-disk-0')
 
             self._lvm_volume = storage2.volume(
                             type='lvm',
@@ -192,18 +193,20 @@ class EphSnapshot(base.Snapshot):
         EphVolume runs this method in separate thread
         """
 
+
         try:
             self._snap_status = self.QUEUED
+            mpoint = tempfile.mkdtemp()
+            opts = []
+            if coreutils.blkid(lvm_snap.device).get('type') == 'xfs':
+                opts += ['-o', 'nouuid,ro']
+            mount.mount(lvm_snap.device, mpoint, *opts)
 
-            lvm_snap_vol = storage2.volume(
-                    device=lvm_snap.device,
-                    mpoint=tempfile.mkdtemp())
-            lvm_snap_vol.ensure(mount=True)
-            self.data_size = coreutils.statvfs(lvm_snap_vol.mpoint)['used']
+            self.data_size = coreutils.statvfs(mpoint)['used']
 
             try:
                 transfer = cloudfs.LargeTransfer(
-                        src=lvm_snap_vol.mpoint + '/',
+					src=mpoint + '/',
                         dst=path,
                         tar_it=True,
                         gzip_it=True,
@@ -215,80 +218,16 @@ class EphSnapshot(base.Snapshot):
                 self._snap_status = self.COMPLETED
 
             finally:
-                lvm_snap_vol.umount()
-                os.rmdir(lvm_snap_vol.mpoint)
+                mount.umount(mpoint)
+                os.rmdir(mpoint)
 
         except:
             self._snap_status = self.FAILED
+            LOG.exception('Caught error while uploading LVM snapshot')
         finally:
             lvm_snap.destroy()
 
-"""
-class EphVolumeAdapter(EphVolume):
-
-        def __init__(self, **kwds):
-                super(EphVolumeAdapter, self).__init__(**kwds)
-                self.snap_backend = self._config.pop('cloudfs_dir')
-                self._eph_vol = None
-                self._eph_pvd = old_eph.EphVolumeProvider()
-
-
-        def _ensure(self):
-                if self.snap:
-                        config = self.snap \
-                                        if isinstance(self.snap, dict) \
-                                        else self.snap.config()
-                else:
-                        config = self.config()
-
-                disk = storage2.volume(config['disk'])
-                if disk.device and disk.device.startswith('/dev/sd'):
-                        disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
-                disk.ensure()
-                self.disk = config['disk'] = disk
-
-                if self.snap:
-                        if self._eph_vol:
-                                self._eph_vol.detach(force=True)
-                        self._eph_vol = self._eph_pvd.create_from_snapshot(**config)
-                        self.snap = None
-                else:
-                        self._eph_vol = self._eph_pvd.create(**config)
-
-                self.device = self._eph_vol.device
-                # To allow ensure(mkfs=True, mount=True) after volume passed
-                # scalarizr 1st initialization
-                self.fscreated = self.is_fs_created()
-
-
-        def _snapshot(self, description, tags, **kwds):
-                conf = self._eph_vol.config()
-                del conf['id']
-                eph_snap = self._eph_pvd.snapshot_factory(description, **conf)
-                eph_snap = self._eph_pvd.create_snapshot(self._eph_vol, eph_snap, **kwds)
-
-                snap = storage2.snapshot(type='eph')
-                snap._config.update(eph_snap.config())
-                snap._eph_pvd = self._eph_pvd
-                return snap
-
-
-        def _destroy(self, force, **kwds):
-                self._eph_pvd.destroy(self._eph_vol, force, **kwds)
-
-
-        def _detach(self, force, **kwds):
-                self._eph_pvd.detach(self._eph_vol, force)
-
-
-class EphSnapshotAdapter(base.Snapshot):
-        _eph_pvd = None
-
-        def _status(self):
-                return self._eph_pvd.get_snapshot_state(self)
-"""
 
 storage2.volume_types['eph'] = EphVolume
-#storage2.volume_types['eph'] = EphVolumeAdapter
 storage2.snapshot_types['eph'] = EphSnapshot
-#storage2.snapshot_types['eph'] = EphSnapshotAdapter
+

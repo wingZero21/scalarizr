@@ -257,7 +257,7 @@ class Handler(object):
 
                 elif name == 'postgresql' and Version('9.0') <= version < Version('9.2'):
                     handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-                elif name == 'redis' and Version('2.2') <= version < Version('2.6'):
+                elif name == 'redis' and Version('2.2') <= version < Version('2.7'):
                     handlers.append(config.BuiltinBehaviours.REDIS)
                 elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.0'):
                     handlers.append(config.BuiltinBehaviours.RABBITMQ)
@@ -301,19 +301,35 @@ class MessageListener:
 
     def get_handlers_chain (self):
         if self._handlers_chain is None:
-            self._handlers_chain = []
+            hds = []
             LOG.debug("Collecting message handlers...");
 
             cnf = bus.cnf
             for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
                 __import__(module_str)
                 try:
-                    self._handlers_chain.extend(sys.modules[module_str].get_handlers())
+                    hds.extend(sys.modules[module_str].get_handlers())
                 except:
                     LOG.error("Can't get module handlers (module: %s)", module_str)
                     raise
 
+            def cls_weight(obj):
+                cls = obj.__class__.__name__
+                if cls in ('EbsHandler', 'BlockDeviceHandler'):
+                    return 10
+                elif cls == 'DeploymentHandler':
+                    return 1
+                else:
+                    return 0
+
+            def sort_fn(a, b):
+                return cmp(cls_weight(a), cls_weight(b))
+
+            self._handlers_chain = list(reversed(sorted(hds, sort_fn)))
+            bus._listeners['init'] = list(reversed(sorted(bus._listeners['init'], sort_fn)))
+            bus._listeners['start'] = list(reversed(sorted(bus._listeners['start'], sort_fn)))
             LOG.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
+
 
         return self._handlers_chain
 

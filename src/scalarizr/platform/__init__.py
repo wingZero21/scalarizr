@@ -41,6 +41,7 @@ class UserDataOptions:
     FARMROLE_ID = 'farm_roleid'
     ROLE_ID = 'roleid'
     REGION = 'region'
+    MESSAGE_FORMAT = 'message_format'
 
 class PlatformFactory(object):
     _platforms = {}

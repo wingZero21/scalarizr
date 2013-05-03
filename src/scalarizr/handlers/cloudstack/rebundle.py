@@ -40,7 +40,7 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
 
     def rebundle(self):
         now = time.strftime('%Y%m%d%H%M%S')
-        if len(self._role_name) > self.IMAGE_NAME_MAXLEN - len(now):
+        if len(self._role_name) > self.IMAGE_NAME_MAXLEN - len(now) - 1:
             image_name = self._role_name[0:16] + '--' + now
         else:
             image_name = self._role_name + "-" + now
