@@ -241,6 +241,7 @@ class NginxHandler(ServiceCtlHandler):
             server = message.local_ip
         else:
             server = message.remote_ip
+        server = str(server)
 
         self._logger.debug('message: %s \nbehaviour: %s\nbackend_table: %s' % 
             (message, message.behaviour, self.api.backend_table))
@@ -265,6 +266,7 @@ class NginxHandler(ServiceCtlHandler):
             server = message.local_ip
         else:
             server = message.remote_ip
+        server = str(server)
 
         self._logger.debug('removing server %s' % server)
         # Assuming backend `backend` can be only in default behaviour mode

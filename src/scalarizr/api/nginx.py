@@ -711,7 +711,7 @@ class NginxAPI(object):
 
     # TODO: use this method in backend conf making or smth.
     def _server_to_str(self, server):
-        if type(server) == str:
+        if type(server) is str:
             return server
 
         result = server['host']
