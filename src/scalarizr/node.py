@@ -288,7 +288,7 @@ class ScalrVersion(Store):
 
 
 __node__ = {
-        'server_id,role_id,farm_id,farm_role_id,env_id,role_name':
+        'server_id,role_id,farm_id,farm_role_id,env_id,role_name,server_index':
                                 Ini(private_dir + '/config.ini', 'general'),
         'message_format': Ini(private_dir + '/config.ini', 'messaging_p2p'),
         'platform': Ini(public_dir + '/config.ini', 'general'),

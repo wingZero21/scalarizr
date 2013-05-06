@@ -421,6 +421,7 @@ def _apply_user_data(cnf):
 	updates = dict(
 		general={
 			'server_id' : g(UserDataOptions.SERVER_ID),
+			'server_index': g('server_index'),
 			'role_name' : g(UserDataOptions.ROLE_NAME),
 			'queryenv_url' : g(UserDataOptions.QUERYENV_URL),
 			'cloud_storage_path': g(UserDataOptions.CLOUD_STORAGE_PATH),
