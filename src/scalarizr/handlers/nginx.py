@@ -225,6 +225,7 @@ class NginxHandler(ServiceCtlHandler):
                         else:
                             roles_for_proxy = self.get_all_app_roles()
                         self.make_default_proxy(roles_for_proxy)
+                    self._logger.debug('Updating main config')
                     self._update_main_config()
 
         bus.fire('service_configured',
@@ -316,8 +317,7 @@ class NginxHandler(ServiceCtlHandler):
         self.api.restart_service()
 
     def make_default_proxy(self, roles):
-        if not roles:
-            return
+        self._logger.debug('Making default proxy')
         received_vhosts = self._queryenv.list_virtual_hosts()
         ssl_present = any(vhost.https for vhost in received_vhosts)
         servers = []
@@ -332,10 +332,12 @@ class NginxHandler(ServiceCtlHandler):
                 servers.extend(servers_ips)
 
         if not servers:
+            self._logger.debug('No app roles in farm, making mock backend')
             servers = [{'host': '127.0.0.1',
                         'port': '80'}]
 
         self.api.make_proxy('backend', servers=servers, ssl=ssl_present, backend_ip_hash=True)
+        self._logger.debug('Default proxy maked')
 
     def get_all_app_roles(self):
         return self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
