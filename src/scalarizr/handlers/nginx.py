@@ -242,13 +242,15 @@ class NginxHandler(ServiceCtlHandler):
         else:
             server = message.remote_ip
 
-        self._logger.debug('message: %s \nbehaviour: %s\nbackend_table: %s' % (message, message.behaviour, self.api.backend_table))
+        self._logger.debug('message: %s \nbehaviour: %s\nbackend_table: %s' % 
+            (message, message.behaviour, self.api.backend_table))
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
-                self.api.remove_server('backend', '127.0.0.1')
+                self.api.remove_server('backend', '127.0.0.1', 
+                                       restart_service=False)
                 self.api.add_server('backend', server)
         else:
             self.api.add_server_to_role(server, role_id)
@@ -269,7 +271,11 @@ class NginxHandler(ServiceCtlHandler):
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
+                if len(self.api.backend_table) == 1:
+                    self.api.add_server('backend', '127.0.0.1',
+                                        restart_service=False)
                 self.api.remove_server('backend', server)
+
         else:
             self.api.remove_server_from_role(server, role_id)
 
