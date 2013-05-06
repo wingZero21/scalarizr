@@ -236,17 +236,18 @@ class NginxHandler(ServiceCtlHandler):
         # self._reload_upstream()
         server = ''
         role_id = message.farm_role_id
-        behaviour = message.behaviour
+        behaviours = message.behaviour
         if message.cloud_location == __node__['cloud_location']:
             server = message.local_ip
         else:
             server = message.remote_ip
 
+        self._logger.debug('message: %s \nbehaviour: %s\nbackend_table: %s' % (message, message.behaviour, self.api.backend_table))
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
-                (not upstream_role and behaviour is BuiltinBehaviours.APP):
+                (not upstream_role and BuiltinBehaviours.APP in behaviours):
                 self.api.remove_server('backend', '127.0.0.1')
                 self.api.add_server('backend', server)
         else:
@@ -257,7 +258,7 @@ class NginxHandler(ServiceCtlHandler):
         # self._reload_upstream()
         server = ''
         role_id = message.farm_role_id
-        behaviour = message.behaviour
+        behaviours = message.behaviour
         if message.cloud_location == __node__['cloud_location']:
             server = message.local_ip
         else:
@@ -267,7 +268,7 @@ class NginxHandler(ServiceCtlHandler):
         if 'backend' in self.api.backend_table:
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
-                (not upstream_role and behaviour is BuiltinBehaviours.APP):
+                (not upstream_role and BuiltinBehaviours.APP in behaviours):
                 self.api.remove_server('backend', server)
         else:
             self.api.remove_server_from_role(server, role_id)
