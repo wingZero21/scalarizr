@@ -244,8 +244,9 @@ class NginxHandler(ServiceCtlHandler):
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
             upstream_role = __nginx__['upstream_app_role']
-            if (upstream_role and upstream_app_role == role_id) or \
+            if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and behaviour is BuiltinBehaviours.APP):
+                self.api.remove_server('backend', '127.0.0.1')
                 self.api.add_server('backend', server)
         else:
             self.api.add_server_to_role(server, role_id)
@@ -264,7 +265,7 @@ class NginxHandler(ServiceCtlHandler):
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
             upstream_role = __nginx__['upstream_app_role']
-            if (upstream_role and upstream_app_role == role_id) or \
+            if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and behaviour is BuiltinBehaviours.APP):
                 self.api.remove_server('backend', server)
         else:
@@ -318,7 +319,7 @@ class NginxHandler(ServiceCtlHandler):
         if not roles:
             return
         received_vhosts = self._queryenv.list_virtual_hosts()
-        ssl_present = any(vhost.https for vhost in received_vhosts)  #TODO: ??
+        ssl_present = any(vhost.https for vhost in received_vhosts)
         servers = []
         for role in roles:
             if type(role) is str:
@@ -329,6 +330,10 @@ class NginxHandler(ServiceCtlHandler):
                                h.external_ip
                                for h in role.hosts]
                 servers.extend(servers_ips)
+
+        if not servers:
+            servers = [{'host': '127.0.0.1',
+                        'port': '80'}]
 
         self.api.make_proxy('backend', servers=servers, ssl=ssl_present, backend_ip_hash=True)
 
