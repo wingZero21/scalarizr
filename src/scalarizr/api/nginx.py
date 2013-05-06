@@ -240,7 +240,8 @@ class NginxAPI(object):
         Updates ssl certificate. Returns paths to updated or created .key and
         .crt files
         """
-        cert = cert + '\n' + cacert
+        if cacert:
+            cert = cert + '\n' + cacert
         if ssl_certificate_id:
             ssl_certificate_id = '_' + str(ssl_certificate_id)
         else:
