@@ -149,11 +149,11 @@ def mysql_software_info():
 explore('mysql', mysql_software_info)
 
 def nginx_software_info():
-    binaries = which('nginx')
-    if not binaries:
+    binary = which('nginx')
+    if not binary:
         raise SoftwareError("Can't find executable for Nginx server")
 
-    out = system2((binaries[0], '-V'))[1]
+    out = system2((binary, '-V'))[1]
     if not out:
         raise SoftwareError
 
@@ -168,11 +168,11 @@ def nginx_software_info():
 explore('nginx', nginx_software_info)
 
 def memcached_software_info():
-    binaries = which('memcached')
-    if not binaries:
+    binary = which('memcached')
+    if not binary:
         raise SoftwareError("Can't find executable for Memcached")
 
-    out = system2((binaries[0], '-h'))[0]
+    out = system2((binary, '-h'))[0]
     if not out:
         raise SoftwareError
 
@@ -187,11 +187,11 @@ def memcached_software_info():
 explore('memcached', memcached_software_info)
 
 def php_software_info():
-    binaries = which('php')
-    if not binaries:
+    binary = which('php')
+    if not binary:
         raise SoftwareError("Can't find executable for php interpreter")
 
-    out = system2((binaries[0], '-v'))[0]
+    out = system2((binary, '-v'))[0]
     if not out:
         raise SoftwareError
 
@@ -207,11 +207,11 @@ def php_software_info():
 explore('php', php_software_info)
 
 def python_software_info():
-    binaries = which('python')
-    if not binaries:
+    binary = which('python')
+    if not binary:
         raise SoftwareError("Can't find executable for python interpreter")
 
-    version_string = system2((binaries[0], '-V'))[1].strip()
+    version_string = system2((binary, '-V'))[1].strip()
     if not version_string:
         raise SoftwareError
 
@@ -228,11 +228,11 @@ def python_software_info():
 explore('python', python_software_info)
 
 def mysqlproxy_software_info():
-    binaries = which('mysql-proxy')
-    if not binaries:
+    binary = which('mysql-proxy')
+    if not binary:
         raise SoftwareError("Can't find executable for mysql-proxy")
 
-    version_string = system2((binaries[0], '-V'))[0].strip()
+    version_string = system2((binary, '-V'))[0].strip()
     if not version_string:
         raise SoftwareError
 
@@ -251,11 +251,11 @@ explore('mysql-proxy', mysqlproxy_software_info)
 def apache_software_info():
 
     binary_name = "httpd" if disttool.is_redhat_based() else "apache2"
-    binaries = which(binary_name)
-    if not binaries:
+    binary = which(binary_name)
+    if not binary:
         raise SoftwareError("Can't find executable for apache http server")
 
-    out = system2((binaries[0], '-V'))[0]
+    out = system2((binary, '-V'))[0]
     if not out:
         raise SoftwareError
 
@@ -303,11 +303,11 @@ def tomcat_software_info():
 explore('tomcat', tomcat_software_info)
 
 def varnish_software_info():
-    binaries = which('varnishd')
-    if not binaries:
+    binary = which('varnishd')
+    if not binary:
         raise SoftwareError("Can't find executable for varnish HTTP accelerator")
 
-    out = system2((binaries[0], '-V'))[1].strip()
+    out = system2((binary, '-V'))[1].strip()
     if not out:
         raise SoftwareError
 
@@ -324,12 +324,12 @@ def varnish_software_info():
 explore('varnish', varnish_software_info)
 
 def rails_software_info():
-    binaries = which('gem')
+    binary = which('gem')
 
-    if not binaries:
+    if not binary:
         raise SoftwareError("Can't find executable for ruby gem packet manager")
 
-    out = system2((binaries[0], 'list', 'rails'))[0].strip()
+    out = system2((binary, 'list', 'rails'))[0].strip()
 
     if not out:
         raise SoftwareError
@@ -384,11 +384,11 @@ explore('rabbitmq', rabbitmq_software_info)
 def redis_software_info():
 
     binary_name = "redis-server" # if disttool.is_redhat_based() else "redis-cli"
-    binaries = which(binary_name)
-    if not binaries:
+    binary = which(binary_name)
+    if not binary:
         raise SoftwareError("Can't find executable for redis server")
 
-    out = system2((binaries[0], '-v'))[0]
+    out = system2((binary, '-v'))[0]
     if not out:
         raise SoftwareError()
 
@@ -403,11 +403,11 @@ explore('redis', redis_software_info)
 
 
 def chef_software_info():
-    binaries = which('chef-client')
-    if not binaries:
+    binary = which('chef-client')
+    if not binary:
         raise SoftwareError("Can't find executable for chef client")
 
-    version_string = system2((binaries[0], '-v'))[0].strip()
+    version_string = system2((binary, '-v'))[0].strip()
     if not version_string:
         raise SoftwareError
 
