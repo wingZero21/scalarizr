@@ -496,6 +496,12 @@ class NginxAPI(object):
 
         return config
 
+    def _add_noapp_handler(self, config):
+        """ Adding proxy to noapp.html location if no app servers are found """
+        config.add('server/if', '( $remote_addr = 127.0.0.1 )')
+        config.add('server/if/rewrite', '^(.*)$ /noapp.html last')
+        config.add('server/if/return', '302')
+
     def _make_server_conf(self,
                           hostname,
                           locations_and_backends,
@@ -530,10 +536,7 @@ class NginxAPI(object):
 
         config.add('server/server_name', hostname)
 
-        # Adding proxy to noapp.html location if no app servers are found
-        config.add('server/if', '( $remote_addr = 127.0.0.1 )')
-        config.add('server/if/rewrite', '^(.*)$ /noapp.html last')
-        config.add('server/if/return', '302')
+        self._add_noapp_handler(config)
 
         # Adding locations leading to defined backends
         for i, (location, backend_name) in enumerate(locations_and_backends):

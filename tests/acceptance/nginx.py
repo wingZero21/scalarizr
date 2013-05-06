@@ -131,6 +131,7 @@ def get_responses(qty):
 @before.each_scenario
 def create_api(feature=None):
     world.api = nginx.NginxAPI()
+    world.api._add_noapp_handler = lambda x: None
 
 
 @before.each_scenario
