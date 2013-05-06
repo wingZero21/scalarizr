@@ -242,8 +242,6 @@ class NginxHandler(ServiceCtlHandler):
         else:
             server = message.remote_ip
 
-        self._logger.debug('message: %s \nbehaviour: %s\nbackend_table: %s' % 
-            (message, message.behaviour, self.api.backend_table))
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
             upstream_role = __nginx__['upstream_app_role']
@@ -251,8 +249,12 @@ class NginxHandler(ServiceCtlHandler):
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
                 self.api.remove_server('backend', '127.0.0.1', 
                                        restart_service=False)
+                self._logger.debug('adding new app server %s to default '
+                                    'backend' % server)
                 self.api.add_server('backend', server)
         else:
+            self._logger.debug('adding new app server %s to backends that are '
+                               'using role %s' % (server, role_id))
             self.api.add_server_to_role(server, role_id)
 
 

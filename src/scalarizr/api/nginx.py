@@ -779,7 +779,8 @@ class NginxAPI(object):
         server_xpath = self._find_xpath(self.app_servers_inc,
                                         '%s/server' % backend_xpath,
                                         server + '*')
-        self.app_servers_inc.remove(server_xpath)
+        if server_xpath:
+            self.app_servers_inc.remove(server_xpath)
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
