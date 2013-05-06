@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 
+from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.util import system2
 from scalarizr.util.software import which
@@ -140,7 +141,19 @@ class ChefHandler(Handler):
         cmd = [self._chef_client_bin]
         if first_run and self._with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
-        system2(cmd, close_fds=True, log_level=logging.INFO, preexec_fn=os.setsid)
+        system2(cmd, 
+            close_fds=True, 
+            log_level=logging.INFO, 
+            preexec_fn=os.setsid, 
+            environ={
+                'SCALR_INSTANCE_INDEX': __node__['server_index'],
+                'SCALR_FARM_ID': __node__['farm_id'],
+                'SCALR_ROLE_ID': __node__['role_id'],
+                'SCALR_FARM_ROLE_ID': __node__['farm_role_id'],
+                'SCALR_BEHAVIORS': ','.join(__node__['behaviors']),
+                'SCALR_SERVER_ID': __node__['server_id']
+            }
+        )
 
 
     def get_node_name(self):
