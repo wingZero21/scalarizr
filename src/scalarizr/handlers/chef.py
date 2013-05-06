@@ -140,7 +140,7 @@ class ChefHandler(Handler):
         cmd = [self._chef_client_bin]
         if first_run and self._with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
-        system2(cmd, close_fds=True, preexec_fn=os.setsid)
+        system2(cmd, close_fds=True, log_level=logging.INFO, preexec_fn=os.setsid)
 
 
     def get_node_name(self):

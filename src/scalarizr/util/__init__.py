@@ -218,13 +218,14 @@ class PopenError(BaseException):
 def system2(*popenargs, **kwargs):
     import subprocess, cStringIO
     
-    silent          = kwargs.get('silent', False)
-    logger          = kwargs.get('logger', logging.getLogger(__name__))
+    silent = kwargs.get('silent', False)
+    logger = kwargs.get('logger', logging.getLogger(__name__))
+    log_level = kwargs.get('log_level', logging.DEBUG)
     warn_stderr = kwargs.get('warn_stderr')
-    raise_exc   = kwargs.get('raise_exc', kwargs.get('raise_error',  True))
-    ExcClass        = kwargs.get('exc_class', PopenError)
-    error_text      = kwargs.get('error_text')
-    input           = None
+    raise_exc = kwargs.get('raise_exc', kwargs.get('raise_error',  True))
+    ExcClass = kwargs.get('exc_class', PopenError)
+    error_text = kwargs.get('error_text')
+    input = None
     
     if kwargs.get('err2out'):
         # Redirect stderr -> stdout
@@ -277,9 +278,9 @@ def system2(*popenargs, **kwargs):
         return out, err, p.returncode
 
     if out:
-        logger.debug('stdout: ' + out)
+        logging.log(log_level, 'stdout: ' + out)
     if err:
-        logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
+        logger.log(logging.WARN if warn_stderr else log_level, 'stderr: ' + err)
 
     return out, err, p.returncode
 
