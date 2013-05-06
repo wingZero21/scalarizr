@@ -266,6 +266,7 @@ class NginxHandler(ServiceCtlHandler):
         else:
             server = message.remote_ip
 
+        self._logger.debug('removing server %s' % server)
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
             upstream_role = __nginx__['upstream_app_role']
