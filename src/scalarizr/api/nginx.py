@@ -711,6 +711,8 @@ class NginxAPI(object):
 
     # TODO: use this method in backend conf making or smth.
     def _server_to_str(self, server):
+        if type(server) is unicode:
+            return str(server)
         if type(server) is str:
             return server
 
@@ -747,7 +749,12 @@ class NginxAPI(object):
                                  'upstream',
                                  backend + '*')
 
-        self.app_servers_inc.add('%s/server' % xpath, self._server_to_str(server))
+        server = self._server_to_str(server)
+        already_added = self._find_xpath(self.app_servers_inc,
+                                         '%s/server' % xpath,
+                                         server)
+        if not already_added:
+            self.app_servers_inc.add('%s/server' % xpath, server)
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
@@ -804,7 +811,7 @@ class NginxAPI(object):
                     srv.update(dest)
                     srv.pop('servers')
                     srv.pop('id')
-
+                    
                     self.add_server(backend_name, srv, False, False)
                     dest['servers'].append(server)
                     config_updated = True
