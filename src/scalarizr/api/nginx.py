@@ -486,14 +486,13 @@ class NginxAPI(object):
         nginx config that is used to redirect http to https
         """
         config = metaconf.Configuration('nginx')
-        server_xpath = 'server'
         config.add('server', '')
 
-        config.add('%s/listen' % server_xpath, str(port))
-        config.add('%s/server_name' % server_xpath, hostname + '_redirector')
+        config.add('server/listen', str(port))
+        config.add('server/server_name', hostname + '_redirector')
 
         redirect_regex = '^(.*)$ https://localhost:%s$1 permanent' % (ssl_port)
-        config.add('%s/rewrite' % server_xpath, redirect_regex)
+        config.add('server/rewrite', redirect_regex)
 
         return config
 
@@ -509,32 +508,36 @@ class NginxAPI(object):
         nginx config
         """
         config = metaconf.Configuration('nginx')
-        server_xpath = 'server'
         config.add('server', '')
 
         if port:
-            config.add('%s/listen' % server_xpath, str(port))
+            config.add('server/listen', str(port))
 
         # Configuring ssl
         if ssl:
-            config.add('%s/listen' % server_xpath, '%s ssl' % (ssl_port or '443'))
-            config.add('%s/ssl' % server_xpath, 'on')
+            config.add('server/listen', '%s ssl' % (ssl_port or '443'))
+            config.add('server/ssl', 'on')
             ssl_cert_path, ssl_cert_key_path = self._get_ssl_cert(ssl_certificate_id)
-            config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
-            config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
+            config.add('server/ssl_certificate', ssl_cert_path)
+            config.add('server/ssl_certificate_key', ssl_cert_key_path)
 
             # TODO: move next hardcoded strings to some constants
-            config.add('%s/ssl_session_timeout' % server_xpath, '10m')
-            config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
-            config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
-            config.add('%s/ssl_ciphers' % server_xpath, 'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-            config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
+            config.add('server/ssl_session_timeout', '10m')
+            config.add('server/ssl_session_cache', 'shared:SSL:10m')
+            config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
+            config.add('server/ssl_ciphers', 'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
+            config.add('server/ssl_prefer_server_ciphers', 'on')
 
-        config.add('%s/server_name' % server_xpath, hostname)
+        config.add('server/server_name', hostname)
+
+        # Adding proxy to noapp.html location if no app servers are found
+        config.add('server/if', '( $remote_addr = 127.0.0.1 )')
+        config.add('server/if/rewrite', '^(.*)$ /noapp.html last')
+        config.add('server/if/return', '302')
 
         # Adding locations leading to defined backends
         for i, (location, backend_name) in enumerate(locations_and_backends):
-            location_xpath = '%s/location' % server_xpath
+            location_xpath = 'server/location'
             config.add(location_xpath, location)
 
             location_xpath = '%s[%i]' % (location_xpath, i + 1)
@@ -553,7 +556,7 @@ class NginxAPI(object):
                 config.add('%s/error_page' % location_xpath, '500 501 = /500.html')
                 config.add('%s/error_page' % location_xpath, '502 503 504 = /502.html')
 
-        config.add('%s/include' % server_xpath, self.error_pages_inc)
+        config.add('server/include', self.error_pages_inc)
 
         return config
 
