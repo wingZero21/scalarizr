@@ -14,17 +14,17 @@ class TestNginxAPI(object):
     def setup(self):
         self.api = nginx.NginxAPI()
 
-    def test_parse_roles(self):
+    def test_normalize_roles_arg(self):
         roles = [123, '456', {'id': '098', 'down': True}]
-        parsed_roles = self.api._parse_roles(roles)
+        parsed_roles = self.api._normalize_roles_arg(roles)
         assert parsed_roles == [
             {'id': '123', 'servers': []},
             {'id': '456', 'servers': []},
             {'id': '098', 'servers': [], 'down': True}], "%s" % parsed_roles
 
-    def test_parse_servers(self):
+    def test_normalize_servers_arg(self):
         servers = ['123.123.132.321', {'host': '10.10.10.10', 'backup': True}]
-        parsed_servers = self.api._parse_servers(servers)
+        parsed_servers = self.api._normalize_servers_arg(servers)
         assert parsed_servers == [{'servers': ['123.123.132.321']},
                                   {'host': '10.10.10.10', 'servers': ['10.10.10.10'], 'backup': True}], \
             "%s" % parsed_servers

@@ -7,7 +7,7 @@ import time
 
 from scalarizr import rpc
 from scalarizr.bus import bus
-import scalarizr.libs.metaconf as metaconf
+from scalarizr.libs import metaconf
 from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
@@ -17,6 +17,7 @@ from scalarizr.util import system2
 # self.app_servers_inc.write_fp(str_fp, close=False)
 # raise BaseException('%s' % str_fp.getvalue())
 
+# TODO(uty): Get rid of these consts
 APP_INC_PATH = 'app_include_path'
 HTTPS_INC_PATH = 'https_include_path'
 
@@ -52,6 +53,9 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                                                 pid_file=pid_file,
                                                 socks=[initdv2.SockParam(80)])
 
+    # TODO(uty): inherit and extend start() with workers check (ps -C nginx --noheaders).
+    # remove socks check
+
     def status(self):
         status = initdv2.ParametrizedInitScript.status(self)
         if not status and self.socks:
@@ -85,7 +89,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
         time.sleep(1)
         return ret
 
-
+# TODO(uty): add start/stop/restart methods to control nginx service with API
 class NginxAPI(object):
 
     _instance = None
@@ -93,56 +97,6 @@ class NginxAPI(object):
         if not cls._instance:
             cls._instance = super(NginxAPI, cls).__new__(cls, *args, **kwargs)
         return cls._instance
-
-    # TODO: move next method to Configuration class
-    def _find_xpath(self, conf, element_xpath, value):
-        """
-        Finds first xpath of certain element by given value.
-
-        Use this method when you need to find certain element in list of 
-        elements with same name. Example:
-
-        config contents:
-
-        ``server 12.23.34.45;``
-        ``server 10.10.12.11 backend;``
-        ``server 10.10.12.12 backend;``
-
-        ``api._find_xpath(conf, 'server', '12.23.34.45')`` will find first
-        element (its xpath will be 'server[1]').
-
-        Wildcards can be used:
-
-        ``api._find_xpath(conf, 'server', '10.10.12.11*')`` will find second
-        element ('server[2]')
-        """
-        for i, val in enumerate(conf.get_list(element_xpath)):
-            if fnmatch(val, value):
-                return '%s[%i]' % (element_xpath, i + 1)
-        return None
-
-    # TODO: move next method to Configuration class
-    def _find_all_xpaths(self, conf, element_xpath, value):
-        """
-        Much like ``_find_xpath()`` this method finds xpaths by given value,
-        but returns all matches in list.
-
-        Example:
-
-        config contents:
-
-        ``server 12.23.34.45;``
-        ``server 10.10.12.11 backend;``
-        ``server 10.10.12.12 backend;``
-
-        ``api._find_all_xpaths(conf, 'server', '10.10.12.11*')`` will return
-        ``['server[2]', 'server[3]'']``.
-        """
-        result = []
-        for i, val in enumerate(conf.get_list(element_xpath)):
-            if fnmatch(val, value):
-                result.append('%s[%i]' % (element_xpath, i + 1))
-        return result or None
 
     def __init__(self, app_inc_dir=None, https_inc_dir=None):
         self.service = NginxInitScript()
@@ -261,7 +215,7 @@ class NginxAPI(object):
 
         return (cert_path, key_path)
 
-    def _get_ssl_cert(self, ssl_certificate_id):
+    def _fetch_ssl_certificate(self, ssl_certificate_id):
         """
         Gets ssl certificate and key from Scalr, writes them to files and
         returns paths to files.
@@ -273,7 +227,7 @@ class NginxAPI(object):
                                            key,
                                            cacert)
 
-    def _parse_roles(self, roles):
+    def _normalize_roles_arg(self, roles):
         """
         Parses list of roles. Role can be either int (role id)
         or dictionary. Dictionary example:
@@ -310,7 +264,7 @@ class NginxAPI(object):
 
         return destinations
 
-    def _parse_servers(self, servers):
+    def _normalize_servers_arg(self, servers):
         """
         Parses list of servers. Servers can be either str (server ip)
         or dictionary. Dictionary example:
@@ -523,7 +477,7 @@ class NginxAPI(object):
         if ssl:
             config.add('server/listen', '%s ssl' % (ssl_port or '443'))
             config.add('server/ssl', 'on')
-            ssl_cert_path, ssl_cert_key_path = self._get_ssl_cert(ssl_certificate_id)
+            ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
             config.add('server/ssl_certificate', ssl_cert_path)
             config.add('server/ssl_certificate_key', ssl_cert_key_path)
 
@@ -563,7 +517,7 @@ class NginxAPI(object):
 
         return config
 
-    def _add_confserver(self,
+    def _add_nginx_server(self,
                         hostname,
                         locations_and_backends,
                         port='80',
@@ -588,6 +542,8 @@ class NginxAPI(object):
                                                ssl_certificate_id)
         self.https_inc.append_conf(server_config)   
 
+    # TODO(uty): name can be a set of wildcards, ie: *.example.com www.example.*. 
+    # i think its better use sha1 of proxy name for backend name 
     def add_proxy(self,
                   name,
                   roles=[],
@@ -606,8 +562,8 @@ class NginxAPI(object):
         """
         Adds proxy
         """
-        destinations = self._parse_roles(roles)
-        destinations.extend(self._parse_servers(servers))
+        destinations = self._normalize_roles_arg(roles)
+        destinations.extend(self._normalize_servers_arg(servers))
 
         grouped_destinations = self._group_destinations(destinations)
         if not grouped_destinations:
@@ -628,7 +584,7 @@ class NginxAPI(object):
             in zip(grouped_destinations, locations_and_backends):
             self.backend_table[backend_name] = backend_destinations
 
-        self._add_confserver(name,
+        self._add_nginx_server(name,
                              locations_and_backends,
                              port=port,
                              http=http,
@@ -646,10 +602,10 @@ class NginxAPI(object):
         """
         Removes backend with given name from app-servers config.
         """
-        xpath = self._find_xpath(self.app_servers_inc, 'upstream', name)
+        xpath = metaconf.xpath_of(self.app_servers_inc, 'upstream', name)
         self.app_servers_inc.remove(xpath)
 
-    def _remove_confserver(self, name):
+    def _remove_nginx_server(self, name):
         """
         Removes server from https.include config. Also removes used backends.
         """
@@ -678,7 +634,7 @@ class NginxAPI(object):
         self.https_inc.read(self.https_inc_path)
         self.app_servers_inc.read(self.app_inc_path)
 
-        self._remove_confserver(name)
+        self._remove_nginx_server(name)
 
         # remove each backend that were in use by this proxy from backend_table
         for backend_name in self.backend_table:
@@ -703,7 +659,7 @@ class NginxAPI(object):
             self.https_inc.write(self.https_inc_path + '.bak')
             self.app_servers_inc.write(self.app_inc_path + '.bak')
 
-            self._remove_confserver(hostname)
+            self._remove_nginx_server(hostname)
 
             self.add_proxy(hostname, reread_conf=False, **kwds)
 
@@ -751,12 +707,12 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
-        xpath = self._find_xpath(self.app_servers_inc,
+        xpath = metaconf.xpath_of(self.app_servers_inc,
                                  'upstream',
                                  backend + '*')
 
         server = self._server_to_str(server)
-        already_added = self._find_xpath(self.app_servers_inc,
+        already_added = metaconf.xpath_of(self.app_servers_inc,
                                          '%s/server' % xpath,
                                          server)
         if not already_added:
@@ -779,10 +735,10 @@ class NginxAPI(object):
         if type(server) is dict:
             server = server['host']
 
-        backend_xpath = self._find_xpath(self.app_servers_inc,
+        backend_xpath = metaconf.xpath_of(self.app_servers_inc,
                                          'upstream',
                                          backend + '*')
-        server_xpath = self._find_xpath(self.app_servers_inc,
+        server_xpath = metaconf.xpath_of(self.app_servers_inc,
                                         '%s/server' % backend_xpath,
                                         server + '*')
         if server_xpath:
