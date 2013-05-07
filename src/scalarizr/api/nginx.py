@@ -411,6 +411,7 @@ class NginxAPI(object):
             if location.startswith('/'):
                 location = location[1:]
 
+            name = hostname
             if hash_name:
                 name = sha1(hostname).hexdigest()
             name = '%s%s__%s' % (name, 
