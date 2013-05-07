@@ -13,6 +13,7 @@ Primary goal: support Ini, Xml, Yaml, ProtocolBuffers, Nginx, Apache2
 import sys
 import re
 import os
+from fnmatch import fnmatch
 
 from utils import quote, unquote, indent, strip_quotes
 

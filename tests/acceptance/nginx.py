@@ -298,7 +298,7 @@ def and_i_have_ssl_keypair(step):
 
         return (cert_path, key_path)
 
-    world.api._get_ssl_cert = get_ssl_cert
+    world.api._fetch_ssl_certificate = get_ssl_cert
     world.ssl = True
     world.ssl_cert_id = 123
 

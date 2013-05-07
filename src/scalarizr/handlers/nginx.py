@@ -247,7 +247,7 @@ class NginxHandler(ServiceCtlHandler):
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
-                self.api.remove_server('backend', '127.0.0.1', 
+                self.api.remove_server('backend', '127.0.0.1',
                                        restart_service=False)
                 self._logger.debug('adding new app server %s to default '
                                     'backend' % server)
@@ -346,7 +346,11 @@ class NginxHandler(ServiceCtlHandler):
             servers = [{'host': '127.0.0.1',
                         'port': '80'}]
 
-        self.api.make_proxy('backend', servers=servers, ssl=ssl_present, backend_ip_hash=True)
+        self.api.make_proxy('backend',
+                            servers=servers,
+                            ssl=ssl_present,
+                            backend_ip_hash=True,
+                            hash_backend_name=False)
         self._logger.debug('Default proxy maked')
 
     def get_all_app_roles(self):

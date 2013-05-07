@@ -1,9 +1,9 @@
 from __future__ import with_statement
 
 import os
-from fnmatch import fnmatch
 from telnetlib import Telnet
 import time
+from hashlib import sha1
 
 from scalarizr import rpc
 from scalarizr.bus import bus
@@ -11,15 +11,6 @@ from scalarizr.libs import metaconf
 from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
-
-# import StringIO
-# str_fp = StringIO.StringIO()
-# self.app_servers_inc.write_fp(str_fp, close=False)
-# raise BaseException('%s' % str_fp.getvalue())
-
-# TODO(uty): Get rid of these consts
-APP_INC_PATH = 'app_include_path'
-HTTPS_INC_PATH = 'https_include_path'
 
 
 __nginx__ = __node__['nginx']
@@ -100,12 +91,11 @@ class NginxAPI(object):
 
     def __init__(self, app_inc_dir=None, https_inc_dir=None):
         self.service = NginxInitScript()
-        # self.service.start()
 
         self.backend_table = {}
 
         if not app_inc_dir:
-            app_inc_dir = os.path.dirname(__nginx__[APP_INC_PATH])
+            app_inc_dir = os.path.dirname(__nginx__['app_include_path'])
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
         self.app_servers_inc = metaconf.Configuration('nginx')
         if os.path.exists(self.app_inc_path):
@@ -114,7 +104,7 @@ class NginxAPI(object):
             open(self.app_inc_path, 'w').close()
 
         if not https_inc_dir:
-            https_inc_dir = os.path.dirname(__nginx__[HTTPS_INC_PATH])
+            https_inc_dir = os.path.dirname(__nginx__['https_include_path'])
         self.https_inc_path = os.path.join(https_inc_dir, 'https.include')
         self.https_inc = metaconf.Configuration('nginx')
         if os.path.exists(self.https_inc_path):
@@ -138,7 +128,7 @@ class NginxAPI(object):
                 config.add('%s/expires' % xpath, expires)
             config.add('%s/root' % xpath, '/usr/share/scalr/nginx/html')
 
-        error_pages_dir = os.path.dirname(__nginx__[APP_INC_PATH])
+        error_pages_dir = os.path.dirname(__nginx__['app_include_path'])
         self.error_pages_inc = os.path.join(error_pages_dir,
                                             'error-pages.include')
 
@@ -239,6 +229,7 @@ class NginxAPI(object):
             'backup': True,
             # ...
             # other backend params
+            # ...
             }
 
         Returns destination dictionaries with format like above
@@ -276,6 +267,7 @@ class NginxAPI(object):
             'backup': True,
             # ...
             # other backend params
+            # ...
             }
 
         Returns destination dictionaries with format like above
@@ -385,7 +377,8 @@ class NginxAPI(object):
                       port=None,
                       ip_hash=True,
                       max_fails=None,
-                      fail_timeout=None):
+                      fail_timeout=None,
+                      hash_name=True):
         """
         Makes backend for each group of destinations and writes it to
         app-servers config file.
@@ -418,7 +411,9 @@ class NginxAPI(object):
             if location.startswith('/'):
                 location = location[1:]
 
-            name = '%s%s__%s' % (hostname, 
+            if hash_name:
+                name = sha1(hostname).hexdigest()
+            name = '%s%s__%s' % (name, 
                                  ('_' + location.replace('/', '_')).rstrip('_'),
                                  role_namepart)
             name = name.rstrip('_')
@@ -518,13 +513,13 @@ class NginxAPI(object):
         return config
 
     def _add_nginx_server(self,
-                        hostname,
-                        locations_and_backends,
-                        port='80',
-                        http=True,
-                        ssl=False,
-                        ssl_port=None,
-                        ssl_certificate_id=None):
+                          hostname,
+                          locations_and_backends,
+                          port='80',
+                          http=True,
+                          ssl=False,
+                          ssl_port=None,
+                          ssl_certificate_id=None):
         """
         Adds server to https config, but without writing it to file.
         """
@@ -542,8 +537,6 @@ class NginxAPI(object):
                                                ssl_certificate_id)
         self.https_inc.append_conf(server_config)   
 
-    # TODO(uty): name can be a set of wildcards, ie: *.example.com www.example.*. 
-    # i think its better use sha1 of proxy name for backend name 
     def add_proxy(self,
                   name,
                   roles=[],
@@ -558,7 +551,8 @@ class NginxAPI(object):
                   backend_max_fails=None,
                   backend_fail_timeout=None,
                   reread_conf=True,
-                  restart_service=True):
+                  restart_service=True,
+                  hash_backend_name=True):
         """
         Adds proxy
         """
@@ -578,19 +572,20 @@ class NginxAPI(object):
                                                     port=backend_port,
                                                     ip_hash=backend_ip_hash,
                                                     max_fails=backend_max_fails,
-                                                    fail_timeout=backend_fail_timeout)
+                                                    fail_timeout=backend_fail_timeout,
+                                                    hash_name=hash_backend_name)
 
         for backend_destinations, (_, backend_name) \
             in zip(grouped_destinations, locations_and_backends):
             self.backend_table[backend_name] = backend_destinations
 
         self._add_nginx_server(name,
-                             locations_and_backends,
-                             port=port,
-                             http=http,
-                             ssl=ssl,
-                             ssl_port=ssl_port,
-                             ssl_certificate_id=ssl_certificate_id)
+                               locations_and_backends,
+                               port=port,
+                               http=http,
+                               ssl=ssl,
+                               ssl_port=ssl_port,
+                               ssl_certificate_id=ssl_certificate_id)
 
         self.app_servers_inc.write(self.app_inc_path)
         self.https_inc.write(self.https_inc_path)
