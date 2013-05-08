@@ -101,12 +101,16 @@ class AptPackageMgr(PackageMgr):
 	
 
 	def updatedb(self):
-		coreutils.clean_dir('/var/lib/apt/lists', recursive=False)
 		try:
 			coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
 		except OSError:
 			pass
-		self.apt_get_command('update')	
+		path = '/var/lib/apt/lists'
+		for name in os.listdir(path):
+			filename = os.path.join(path, name)
+			if name != 'lock' and os.path.isfile(filename):
+				os.remove(filename)
+		self.apt_get_command('update')
 
 
 	def install(self, name, version=None, updatedb=False, **kwds):
