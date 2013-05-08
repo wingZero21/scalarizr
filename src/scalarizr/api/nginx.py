@@ -12,6 +12,7 @@ from scalarizr.libs import metaconf
 from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
+from scalarizr.util import PopenError
 
 
 __nginx__ = __node__['nginx']
@@ -45,8 +46,20 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                                                 pid_file=pid_file,
                                                 socks=[initdv2.SockParam(80)])
 
-    # TODO(uty): inherit and extend start() with workers check (ps -C nginx --noheaders).
-    # remove socks check
+    def _wait_workers(self):
+        conf_dir = os.path.dirname(__nginx__['app_include_path'])
+        conf_path = os.path.append(conf_dir, 'nginx.conf')
+        conf = metaconf.Configuration('nginx')
+        conf.read(conf_path)
+
+        expected_workers_num = int(conf.get('worker_processes'))
+
+        out = system2(['ps -C nginx --noheaders'], shell=True)[1]
+
+        while len(out.splitlines()) - 1 < expected_workers_num:
+            time.sleep(1)
+            out = system2(['ps -C nginx --noheaders'], shell=True)[1]
+
 
     def status(self):
         status = initdv2.ParametrizedInitScript.status(self)
@@ -81,7 +94,26 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
         time.sleep(1)
         return ret
 
-# TODO(uty): add start/stop/restart methods to control nginx service with API
+    def start(self):
+        self.configtest()
+        try:
+            args = [self.initd_script] \
+                if isinstance(self.initd_script, basestring) \
+                else list(self.initd_script)
+            args.append('start')
+            out, err, returncode = system2(args,
+                                           close_fds=True,
+                                           preexec_fn=os.setsid)
+        except PopenError, e:
+            raise initdv2.InitdError("Popen failed with error %s" % (e,))
+
+        if returncode:
+            raise initdv2.InitdError("Cannot start nginx. output= %s. %s" % (out, err),
+                             returncode)
+
+        self._wait_workers()
+
+
 class NginxAPI(object):
 
     _instance = None
@@ -162,11 +194,27 @@ class NginxAPI(object):
         self.app_servers_inc.read(self.app_inc_path)
         self.https_inc.read(self.https_inc_path)
 
-    def restart_service(self):
+    def _restart_service(self):
         if self.service.status() == initdv2.Status.NOT_RUNNING:
             self.service.start()
         else:
             self.service.reload()
+
+    @rpc.service_method
+    def start_service(self):
+        self.servece.start()
+
+    @rpc.service_method
+    def stop_service(self):
+        self.service.stop()
+
+    @rpc.service_method
+    def reload_service(self):
+        self.servece.reload()
+
+    @rpc.service_method
+    def restart2_service(self):
+        self.service.restart()
 
     @rpc.service_method
     def recreate_proxying(self, proxy_list):
@@ -176,7 +224,7 @@ class NginxAPI(object):
         for proxy_parms in proxy_list:
             self.add_proxy(restart_service=False, **proxy_parms)
 
-        self.restart_service()
+        self._restart_service()
 
     def get_role_servers(self, role_id):
         """ Method is used to get role servers from scalr """
@@ -608,7 +656,7 @@ class NginxAPI(object):
         self.https_inc.write(self.https_inc_path)
 
         if restart_service:
-            self.restart_service()
+            self._restart_service()
 
     def _remove_backend(self, name):
         """
@@ -656,7 +704,7 @@ class NginxAPI(object):
         self.https_inc.write(self.https_inc_path)
         self.app_servers_inc.write(self.app_inc_path)
         if restart_service:
-            self.restart_service()
+            self._restart_service()
 
     @rpc.service_method
     def make_proxy(self, hostname, **kwds):
@@ -733,7 +781,7 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
         if restart_service:
-            self.restart_service()
+            self._restart_service()
 
     @rpc.service_method
     def remove_server(self, backend, server, update_conf=True, restart_service=True):
@@ -759,7 +807,7 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
         if restart_service:
-            self.restart_service()
+            self._restart_service()
 
     @rpc.service_method
     def add_server_to_role(self, 
@@ -799,7 +847,7 @@ class NginxAPI(object):
             if update_conf:
                 self.app_servers_inc.write(self.app_inc_path)
             if restart_service:
-                self.restart_service()
+                self._restart_service()
 
     @rpc.service_method
     def remove_server_from_role(self,
@@ -834,7 +882,7 @@ class NginxAPI(object):
             if update_conf:
                 self.app_servers_inc.write(self.app_inc_path)
             if restart_service:
-                self.restart_service()
+                self._restart_service()
 
 
     @rpc.service_method
@@ -865,4 +913,4 @@ class NginxAPI(object):
             if update_conf:
                 self.app_servers_inc.write(self.app_inc_path)
             if restart_service:
-                self.restart_service()
+                self._restart_service()
