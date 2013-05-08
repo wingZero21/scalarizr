@@ -54,6 +54,7 @@ class GcePersistentVolume(base.Volume):
         else:
 
             try:
+                # TODO(spike) raise VolumeNotExistsError when link passed disk not exists
                 create = False
                 if not self.link:
                     # Disk does not exist, create it first

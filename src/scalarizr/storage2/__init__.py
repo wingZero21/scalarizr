@@ -151,6 +151,8 @@ class StorageError(linux.LinuxError):
 class NoOpError(StorageError):
     pass
 
+class VolumeNotExistsError(StorageError):
+    pass
 
 class OperationError(StorageError):
     pass
