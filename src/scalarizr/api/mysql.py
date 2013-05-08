@@ -93,8 +93,8 @@ class MySQLAPI(object):
                 slave_status = mysql_cli.slave_status()
                 slave_status = dict(zip(map(string.lower, slave_status.keys()),
                                         slave_status.values()))
-                slave_running = slave_status['Slave_IO_Running'] == 'Yes' and \
-                    slave_status['Slave_SQL_Running'] == 'Yes'
+                slave_running = slave_status['slave_io_running'] == 'Yes' and \
+                    slave_status['slave_sql_running'] == 'Yes'
                 slave_status['status'] = 'up' if slave_running else 'down'
                 return {'slave': slave_status}
             except ServiceError:
