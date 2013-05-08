@@ -41,7 +41,6 @@ def which(name, *extra_dirs):
     '''
     try:
         places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
-        places += ['/usr/local/nginx/sbin']  # XXX: hack for samsung
         places.extend(extra_dirs)
         return [os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))][0]
     except IndexError:
@@ -149,7 +148,7 @@ def mysql_software_info():
 explore('mysql', mysql_software_info)
 
 def nginx_software_info():
-    binary = which('nginx')
+    binary = which('nginx', '/usr/local/nginx/sbin')
     if not binary:
         raise SoftwareError("Can't find executable for Nginx server")
 
