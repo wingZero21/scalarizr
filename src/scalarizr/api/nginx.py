@@ -1,6 +1,7 @@
 from __future__ import with_statement
 
 import os
+import shutil
 from telnetlib import Telnet
 import time
 from hashlib import sha1
@@ -91,7 +92,7 @@ class NginxAPI(object):
 
     def __init__(self, app_inc_dir=None, https_inc_dir=None):
         self.service = NginxInitScript()
-
+        self.error_pages_inc = None
         self.backend_table = {}
 
         if not app_inc_dir:
@@ -116,6 +117,14 @@ class NginxAPI(object):
 
 
     def _make_error_pages_include(self):
+        pages_source = '/usr/share/scalr/nginx/html/'
+        pages_destination = '/var/www/scalr/nginx/html/'
+
+        current_dir = ''
+        for d in pages_destination.split(os.path.sep)[1:-1]:
+            current_dir = current_dir + '/' + d
+            if not os.path.exists(current_dir):
+                os.makedirs(current_dir)
 
         def _add_static_location(config, location, expires=None):
             xpath = 'location'
@@ -126,11 +135,18 @@ class NginxAPI(object):
 
             if expires:
                 config.add('%s/expires' % xpath, expires)
-            config.add('%s/root' % xpath, '/usr/share/scalr/nginx/html')
+            config.add('%s/root' % xpath, pages_destination[:-1])
 
         error_pages_dir = os.path.dirname(__nginx__['app_include_path'])
         self.error_pages_inc = os.path.join(error_pages_dir,
                                             'error-pages.include')
+
+        if not os.path.exists(pages_source + '500.html'):
+            shutil.copy(pages_source + '500.html', pages_destination)
+        if not os.path.exists(pages_source + '502.html'):
+            shutil.copy(pages_source + '502.html', pages_destination)
+        if not os.path.exists(pages_source + 'hoapp.html'):
+            shutil.copy(pages_source + 'hoapp.html', pages_destination)
 
         error_pages_conf = metaconf.Configuration('nginx')
         _add_static_location(error_pages_conf, '/500.html', '0')
@@ -598,7 +614,7 @@ class NginxAPI(object):
         """
         Removes backend with given name from app-servers config.
         """
-        xpath = metaconf.xpath_of(self.app_servers_inc, 'upstream', name)
+        xpath = self.app_servers_inc.xpath_of('upstream', name)
         self.app_servers_inc.remove(xpath)
 
     def _remove_nginx_server(self, name):
@@ -703,14 +719,14 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
-        xpath = metaconf.xpath_of(self.app_servers_inc,
-                                 'upstream',
-                                 backend + '*')
+        if not server:
+            return
+
+        xpath = self.app_servers_inc.xpath_of('upstream', backend + '*')
 
         server = self._server_to_str(server)
-        already_added = metaconf.xpath_of(self.app_servers_inc,
-                                         '%s/server' % xpath,
-                                         server)
+        already_added = self.app_servers_inc.xpath_of('%s/server' % xpath,
+                                                      server)
         if not already_added:
             self.app_servers_inc.add('%s/server' % xpath, server)
 
@@ -728,15 +744,15 @@ class NginxAPI(object):
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
 
+        if not server:
+            return
+
         if type(server) is dict:
             server = server['host']
 
-        backend_xpath = metaconf.xpath_of(self.app_servers_inc,
-                                         'upstream',
-                                         backend + '*')
-        server_xpath = metaconf.xpath_of(self.app_servers_inc,
-                                        '%s/server' % backend_xpath,
-                                        server + '*')
+        backend_xpath = self.app_servers_inc.xpath_of('upstream', backend + '*')
+        server_xpath = self.app_servers_inc.xpath_of('%s/server' % backend_xpath,
+                                                     server + '*')
         if server_xpath:
             self.app_servers_inc.remove(server_xpath)
 
@@ -755,11 +771,15 @@ class NginxAPI(object):
         Adds server to each backend that uses given role. If role isn't used in
         any backend, does nothing
         """
-        if type(role_id) is not str:
-            role_id = str(role_id)
-
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
+
+        if not server:
+            return
+        if not role_id:
+            return
+        if type(role_id) is not str:
+            role_id = str(role_id)
 
         config_updated = False
         for backend_name, backend_destinations in self.backend_table.items():
@@ -791,11 +811,16 @@ class NginxAPI(object):
         Removes server from each backend that uses given role. If role isn't
         used in any backend, does nothing
         """
-        if type(role_id) is not str:
-            role_id = str(role_id)
-
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
+
+        # TODO: ensure that this is fine behaviour
+        if not server:
+            return
+        if not role_id:
+            return
+        if type(role_id) is not str:
+            role_id = str(role_id)
 
         config_updated = False
         for backend_name, backend_destinations in self.backend_table.items():
@@ -823,6 +848,10 @@ class NginxAPI(object):
         """
         if update_conf:
             self.app_servers_inc.read(self.app_inc_path)
+
+        # TODO: ensure that this is fine behaviour
+        if not server:
+            return
 
         config_updated = False
         for backend_name, backend_destinations in self.backend_table.items():

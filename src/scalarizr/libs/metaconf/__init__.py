@@ -572,61 +572,55 @@ root_path=path+"/"
         return not bool(list(self.etree.getroot()))
 
 
-# TODO: move next method to Configuration class
-def xpath_of(conf, element_xpath, value):
-    """
-    Like list.indexof but returns xpath.
+    def xpath_of(self, element_xpath, value):
+        """
+        Like list.indexof but returns xpath.
 
-    Finds first xpath of certain element by given value.
+        Finds first xpath of certain element by given value.
 
-    Use this method when you need to find certain element in list of 
-    elements with same name. Example:
+        Use this method when you need to find certain element in list of 
+        elements with same name. Example:
 
-    config contents:
+        config contents:
 
-    ``server 12.23.34.45;``
-    ``server 10.10.12.11 backend;``
-    ``server 10.10.12.12 backend;``
+        ``server 12.23.34.45;``
+        ``server 10.10.12.11 backend;``
+        ``server 10.10.12.12 backend;``
 
-    ``api._find_xpath(conf, 'server', '12.23.34.45')`` will find first
-    element (its xpath will be 'server[1]').
+        ``conf.xpath_of('server', '12.23.34.45')`` will find first
+        element (its xpath will be 'server[1]').
 
-    Wildcards can be used:
+        Wildcards can be used:
 
-    ``api._find_xpath(conf, 'server', '10.10.12.11*')`` will find second
-    element ('server[2]')
-    """
-    for i, val in enumerate(conf.get_list(element_xpath)):
-        if fnmatch(val, value):
-            return '%s[%i]' % (element_xpath, i + 1)
-    return None
+        ``conf.xpath_of('server', '10.10.12.11*')`` will find second
+        element ('server[2]')
+        """
+        for i, val in enumerate(self.get_list(element_xpath)):
+            if fnmatch(val, value):
+                return '%s[%i]' % (element_xpath, i + 1)
+        return None
 
-# TODO: move next method to Configuration class
-def xpath_all_of(conf, element_xpath, value):
-    """
-    Much like ``_find_xpath()`` this method finds xpaths by given value,
-    but returns all matches in list.
+    def xpath_all_of(self, element_xpath, value):
+        """
+        Much like ``_find_xpath()`` this method finds xpaths by given value,
+        but returns all matches in list.
 
-    Example:
+        Example:
 
-    config contents:
+        config contents:
 
-    ``server 12.23.34.45;``
-    ``server 10.10.12.11 backend;``
-    ``server 10.10.12.12 backend;``
+        ``server 12.23.34.45;``
+        ``server 10.10.12.11 backend;``
+        ``server 10.10.12.12 backend;``
 
-    ``api._find_all_xpaths(conf, 'server', '10.10.12.11*')`` will return
-    ``['server[2]', 'server[3]'']``.
-    """
-    result = []
-    for i, val in enumerate(conf.get_list(element_xpath)):
-        if fnmatch(val, value):
-            result.append('%s[%i]' % (element_xpath, i + 1))
-    return result or None
-
-
-
-
+        ``conf.xpath_all_of('server', '10.10.12.11*')`` will return
+        ``['server[2]', 'server[3]'']``.
+        """
+        result = []
+        for i, val in enumerate(self.get_list(element_xpath)):
+            if fnmatch(val, value):
+                result.append('%s[%i]' % (element_xpath, i + 1))
+        return result or None
 
 """
 class PyConfigParserAdapter:

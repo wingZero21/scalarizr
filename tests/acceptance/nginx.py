@@ -5,6 +5,7 @@ from urllib2 import urlopen
 from httplib import HTTPSConnection
 import time
 from threading import Thread
+from mock import patch
 
 from lettuce import step
 from lettuce import world
@@ -128,10 +129,36 @@ def get_responses(qty):
     return [urlopen('http://localhost:8008').read() for _ in xrange(qty)]
 
 
+@before.each_feature
+def patch_node(feature):
+    patcher = patch.object(nginx, 
+                           '__node__',
+                           new={'nginx': {'binary_path': '/usr/sbin/nginx',
+                                          'app_include_path': '/etc/nginx/app-servers.include',
+                                          'https_include_path': '/etc/nginx/https.include',
+                                          'app_port': '80',
+                                          'main_handler': 'nginx'},
+                                'behavior': ['nginx']})
+    patcher.start()
+    world.patchers = [patcher]
+
+    open('/etc/nginx/ep.include', 'w').close()
+    patcher = patch.object(nginx.NginxAPI, '_make_error_pages_include')
+    patcher.start()
+    world.patchers.append(patcher)
+
+
+@after.each_feature
+def unpatch_node(feature):
+    for patcher in world.patchers:
+        patcher.stop()
+
+
 @before.each_scenario
 def create_api(feature=None):
     world.api = nginx.NginxAPI()
     world.api._add_noapp_handler = lambda x: None
+    world.api.error_pages_inc = '/etc/nginx/error-pages.include'
 
 
 @before.each_scenario

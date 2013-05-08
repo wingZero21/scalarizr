@@ -311,7 +311,7 @@ class NginxHandler(ServiceCtlHandler):
         # if ssl certificate is updated:
         #     write new ssl certificate
         #     self.api.restart_service()
-        cert, key, cacert = self._queryenv.get_ssl_certificate()
+        cert, key, cacert = self._queryenv.get_https_certificate()
         self.api.update_ssl_certificate(None, cert, key, cacert)
         self.api.restart_service()
 
