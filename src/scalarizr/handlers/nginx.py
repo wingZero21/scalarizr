@@ -310,10 +310,10 @@ class NginxHandler(ServiceCtlHandler):
         # self._reload_upstream(True)
         # if ssl certificate is updated:
         #     write new ssl certificate
-        #     self.api.restart_service()
+        #     self.api._restart_service()
         cert, key, cacert = self._queryenv.get_https_certificate()
         self.api.update_ssl_certificate(None, cert, key, cacert)
-        self.api.restart_service()
+        self.api._restart_service()
 
     def on_SSLCertificateUpdate(self, message):
         ssl_cert_id = message.id # TODO: check datastructure
@@ -324,7 +324,7 @@ class NginxHandler(ServiceCtlHandler):
                                         certificate,
                                         private_key,
                                         cacertificate)
-        self.api.restart_service()
+        self.api._restart_service()
 
     def make_default_proxy(self, roles):
         self._logger.debug('Making default proxy')
@@ -428,7 +428,7 @@ class NginxHandler(ServiceCtlHandler):
             if not os.path.exists(nginx_conf_path + '.save'):
                 shutil.copy(nginx_conf_path, nginx_conf_path + '.save')
             config.write(nginx_conf_path)
-            self.api.restart_service()
+            self.api._restart_service()
             
     def _reload_upstream(self, force_reload=False):
 

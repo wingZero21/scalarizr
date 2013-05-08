@@ -213,7 +213,7 @@ class NginxAPI(object):
         self.servece.reload()
 
     @rpc.service_method
-    def restart2_service(self):
+    def restart_service(self):
         self.service.restart()
 
     @rpc.service_method
