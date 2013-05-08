@@ -54,11 +54,11 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
         expected_workers_num = int(conf.get('worker_processes'))
 
-        out = system2(['ps -C nginx --noheaders'], shell=True)[1]
+        out = system2(['ps -C nginx --noheaders'], shell=True)[0]
 
         while len(out.splitlines()) - 1 < expected_workers_num:
             time.sleep(1)
-            out = system2(['ps -C nginx --noheaders'], shell=True)[1]
+            out = system2(['ps -C nginx --noheaders'], shell=True)[0]
 
 
     def status(self):
