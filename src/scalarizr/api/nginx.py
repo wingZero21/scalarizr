@@ -177,8 +177,8 @@ class NginxAPI(object):
             shutil.copy(pages_source + '500.html', pages_destination)
         if not os.path.exists(pages_source + '502.html'):
             shutil.copy(pages_source + '502.html', pages_destination)
-        if not os.path.exists(pages_source + 'hoapp.html'):
-            shutil.copy(pages_source + 'hoapp.html', pages_destination)
+        if not os.path.exists(pages_source + 'noapp.html'):
+            shutil.copy(pages_source + 'noapp.html', pages_destination)
 
         error_pages_conf = metaconf.Configuration('nginx')
         _add_static_location(error_pages_conf, '/500.html', '0')
