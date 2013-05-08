@@ -551,7 +551,8 @@ class NginxAPI(object):
         config.add('server/server_name', hostname)
 
         self._add_noapp_handler(config)
-
+        config.add('server/include', self.error_pages_inc)
+        
         # Adding locations leading to defined backends
         for i, (location, backend_name) in enumerate(locations_and_backends):
             location_xpath = 'server/location'
@@ -573,7 +574,7 @@ class NginxAPI(object):
                 config.add('%s/error_page' % location_xpath, '500 501 = /500.html')
                 config.add('%s/error_page' % location_xpath, '502 503 504 = /502.html')
 
-        config.add('server/include', self.error_pages_inc)
+        
 
         return config
 
