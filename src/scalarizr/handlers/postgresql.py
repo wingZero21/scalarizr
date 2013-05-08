@@ -178,9 +178,9 @@ class PostgreSqlHander(ServiceCtlHandler):
             
             if disttool.is_redhat_based():      
                     
-                checkmodule_paths = software.whereis('checkmodule')
-                semodule_package_paths = software.whereis('semodule_package')
-                semodule_paths = software.whereis('semodule')
+                checkmodule_paths = software.which('checkmodule')
+                semodule_package_paths = software.which('semodule_package')
+                semodule_paths = software.which('semodule')
             
                 if all((checkmodule_paths, semodule_package_paths, semodule_paths)):
                     
