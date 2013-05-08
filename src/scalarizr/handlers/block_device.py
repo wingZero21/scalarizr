@@ -103,6 +103,8 @@ class BlockDeviceHandler(handlers.Handler):
 		
 		volumes = hir.body.get('volumes') or []
 		volume_templates = hir.body.get('volume_templates')
+		if volume_templates and len(volume_templates) != len(volumes):
+			LOG.warn('len(volumes) != len(volume_templates), skip volume_templates')
 		volume_from_template_if_missing = hir.body.get('volume_from_template_if_missing')
 		if volumes:
 			LOG.debug('HIR volumes: %s', volumes)
@@ -113,7 +115,7 @@ class BlockDeviceHandler(handlers.Handler):
 				try:
 					vol.ensure(mount=bool(vol.mpoint), mkfs=True)
 				except storage2.VolumeNotExistsError, e:
-					if volume_templates:
+					if volume_templates and volume_from_template_if_missing:
 						vol = storage2.volume(**volume_templates[i])
 						LOG.warn('Volume %d not exists, re-creating %s volume from config: %d', 
 								str(e), vol.type, dict(vol))
