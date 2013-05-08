@@ -48,7 +48,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def _wait_workers(self):
         conf_dir = os.path.dirname(__nginx__['app_include_path'])
-        conf_path = os.path.append(conf_dir, 'nginx.conf')
+        conf_path = os.path.join(conf_dir, 'nginx.conf')
         conf = metaconf.Configuration('nginx')
         conf.read(conf_path)
 
