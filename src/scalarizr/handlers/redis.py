@@ -18,6 +18,7 @@ from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
+from scalarizr.linux import iptables
 from scalarizr.linux.coreutils import split
 from scalarizr.util import system2, cryptotool, software, initdv2
 from scalarizr.services import redis, backup
@@ -189,6 +190,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 		if self._cnf.state == ScalarizrState.RUNNING:
 
+			# Fix to enable access outside farm when use_passwords=True
+			if self.use_passwords:
+				self.security_off()
+
 			vol = storage2.volume(__redis__['volume'])
 			if not vol.tags:
 				vol.tags = self.redis_tags
@@ -307,6 +312,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 					ports = ports or [redis.DEFAULT_PORT,]
 					passwords = passwords or [self.get_main_password(),]
 					self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)
+
+					if self.use_passwords:
+						self.security_off()
 
 
 	def on_before_host_up(self, message):

@@ -748,10 +748,11 @@ class DbMsrMessages:
 
 
 class FarmSecurityMixin(object):
-	def __init__(self, ports):
+	def __init__(self, ports, enabled=True):
 		self._logger = logging.getLogger(__name__)
 		self._ports = ports
 		self._iptables = iptables
+		self._enabled = enabled
 		if self._iptables.enabled():
 			bus.on('init', self.__on_init)			
 		else:
@@ -768,8 +769,19 @@ class FarmSecurityMixin(object):
 		self._queryenv = bus.queryenv_service
 		self._platform = bus.platform
 	
-	
+	def security_off(self):
+		self._enabled = False
+		for port in self._ports:
+			self._iptables.FIREWALL.remove({
+				"protocol": "tcp", 
+				"match": "tcp", 
+				"dport": port,
+				"jump": "DROP"
+			})
+
 	def on_HostInit(self, message):
+		if not self._enabled:
+			return
 		# Append new server to allowed list
 		if not self._iptables.enabled():
 			return
@@ -782,6 +794,8 @@ class FarmSecurityMixin(object):
 		
 
 	def on_HostDown(self, message):
+		if not self._enabled:
+			return
 		# Remove terminated server from allowed list
 		if not self._iptables.enabled():
 			return
