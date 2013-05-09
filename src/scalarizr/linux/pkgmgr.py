@@ -63,7 +63,8 @@ class AptPackageMgr(PackageMgr):
 							'-o Dpkg::Options::=--force-confold') + \
 							tuple(filter(None, command.split())), **kwds)
 			if code:
-				if 'is another process using it?' in err:
+				if 'is another process using it?' in err \
+					or 'Could not get lock' in err:
 					LOG.debug('Could not get dpkg lock (perhaps, another process is using it.)')
 					time.sleep(10)
 					continue
