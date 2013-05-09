@@ -188,6 +188,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
         if self._cnf.state == ScalarizrState.RUNNING:
+            if self.use_passwords:
+                self.security_off()
 
             vol = storage2.volume(__redis__['volume'])
             if not vol.tags:
@@ -307,6 +309,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     ports = ports or [redis.DEFAULT_PORT,]
                     passwords = passwords or [self.get_main_password(),]
                     self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)
+
+                    if self.use_passwords:
+                        self.security_off()
 
 
     def on_before_host_up(self, message):
