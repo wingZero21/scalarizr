@@ -392,6 +392,16 @@ class NginxHandler(ServiceCtlHandler):
 		backend_include = Configuration('nginx')
 		if os.path.exists(self._app_inc_path):
 			backend_include.read(self._app_inc_path)
+			try:
+				backend_include.get("upstream[@value='backend']")
+			except NoPathError:
+				# Sorry, metaconf, backend_include.add() doesn't work as expected
+				with open(self._app_inc_path, 'a') as fp:
+					fp.write('\nupstream backend {')
+					fp.write('\n    ip_hash;')
+					fp.write('\n}')
+				backend_include = Configuration('nginx')
+				backend_include.read(self._app_inc_path)
 		else:
 			backend_include.read(os.path.join(bus.share_path, 'nginx/app-servers.tpl'))
 
