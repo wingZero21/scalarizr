@@ -763,7 +763,8 @@ class FarmSecurityMixin(object):
 			reload=self.__on_reload
 		)
 		self.__on_reload()
-		self.__insert_iptables_rules()		
+		if self._enabled:
+			self.__insert_iptables_rules()		
 	
 	def __on_reload(self):
 		self._queryenv = bus.queryenv_service
@@ -772,12 +773,15 @@ class FarmSecurityMixin(object):
 	def security_off(self):
 		self._enabled = False
 		for port in self._ports:
-			self._iptables.FIREWALL.remove({
-				"protocol": "tcp", 
-				"match": "tcp", 
-				"dport": port,
-				"jump": "DROP"
-			})
+			try:
+				self._iptables.FIREWALL.remove({
+					"protocol": "tcp", 
+					"match": "tcp", 
+					"dport": port,
+					"jump": "DROP"
+				})
+			except:
+				self._logger.debug('caught from iptables', exc_info=sys.exc_info())
 
 	def on_HostInit(self, message):
 		if not self._enabled:
