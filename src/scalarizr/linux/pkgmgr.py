@@ -57,13 +57,14 @@ class AptPackageMgr(PackageMgr):
                         'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
                         raise_exc=False
         )
-        for _ in range(6):
+        for _ in range(10):
             out, err, code = linux.system(('/usr/bin/apt-get',
                                             '-q', '-y', '--force-yes',
                                             '-o Dpkg::Options::=--force-confold') + \
                                             tuple(filter(None, command.split())), **kwds)
             if code:
-                if 'is another process using it?' in err:
+                if 'is another process using it?' in err \
+                    or 'Could not get lock' in err:
                     LOG.debug('Could not get dpkg lock (perhaps, another process is using it.)')
                     time.sleep(10)
                     continue
