@@ -221,10 +221,10 @@ def system2(*popenargs, **kwargs):
     silent = kwargs.pop('silent', False)
     logger = kwargs.pop('logger', logging.getLogger(__name__))
     log_level = kwargs.pop('log_level', logging.DEBUG)
-    warn_stderr = kwargs.pop('warn_stderr')
+    warn_stderr = kwargs.pop('warn_stderr', False)
     raise_exc = kwargs.pop('raise_exc', kwargs.pop('raise_error',  True))
     ExcClass = kwargs.pop('exc_class', PopenError)
-    error_text = kwargs.pop('error_text')
+    error_text = kwargs.pop('error_text', '')
     input = None
     
     if kwargs.get('err2out'):
