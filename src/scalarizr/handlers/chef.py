@@ -150,7 +150,7 @@ class ChefHandler(Handler):
                 'SCALR_FARM_ID': __node__['farm_id'],
                 'SCALR_ROLE_ID': __node__['role_id'],
                 'SCALR_FARM_ROLE_ID': __node__['farm_role_id'],
-                'SCALR_BEHAVIORS': ','.join(__node__['behaviors']),
+                'SCALR_BEHAVIORS': ','.join(__node__['behavior']),
                 'SCALR_SERVER_ID': __node__['server_id']
             }
         )
