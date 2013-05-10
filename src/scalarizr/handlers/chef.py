@@ -159,7 +159,7 @@ class ChefHandler(Handler):
             close_fds=True, 
             log_level=logging.INFO, 
             preexec_fn=os.setsid, 
-            environ=environ
+            env=environ
         )
 
 
