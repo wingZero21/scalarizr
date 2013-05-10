@@ -361,6 +361,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                 LOG.info('Destroying volume %s' % __redis__['volume'].id)
                 __redis__['volume'].destroy(remove_disks=True)
                 LOG.info('Volume %s was destroyed.' % __redis__['volume'].id)
+            else:
+                __redis__['volume'].umount()
 
 
     def on_DbMsr_CreateDataBundle(self, message):

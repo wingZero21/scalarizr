@@ -498,6 +498,8 @@ class MysqlHandler(DBMSRHandler):
                 LOG.info('Destroying volume %s', vol.id)
                 vol.destroy(remove_disks=True)
                 LOG.info('Volume %s has been destroyed.' % vol.id)
+            else:
+                vol.umount()
 
 
     def on_Mysql_CreatePmaUser(self, message):

@@ -443,6 +443,8 @@ class PostgreSqlHander(ServiceCtlHandler):
                 LOG.info('Destroying volume %s' % __postgresql__['volume'].id)
                 __postgresql__['volume'].destroy(remove_disks=True)
                 LOG.info('Volume %s has been destroyed.' % __postgresql__['volume'].id)
+            else:
+                __postgresql__['volume'].umount()
 
 
     def on_DbMsr_CreateDataBundle(self, message):
