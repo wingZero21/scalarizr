@@ -76,8 +76,7 @@ def restart_udev(fn):
             try:
                 return fn(*args, **kwds)
             finally:
-                if not sys.exc_info():
-                    linux.system('service udev restart', shell=True, raise_exc=False)
+                linux.system('service udev restart', shell=True, raise_exc=False)
         return wrapper
     return fn
 
