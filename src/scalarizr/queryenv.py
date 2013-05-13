@@ -295,7 +295,7 @@ class QueryEnvService(object):
 
     def _read_get_https_certificate_response(self, xml):
         result = xml2dict(ET.XML(xml))
-        if 'virtualhost' in result:
+        if result and 'virtualhost' in result:
             data = result['virtualhost']
             cert = data['cert'] if 'cert' in data else None
             pkey = data['pkey'] if 'pkey' in data else None

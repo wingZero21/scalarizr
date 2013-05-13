@@ -318,8 +318,9 @@ class NginxHandler(ServiceCtlHandler):
         #     write new ssl certificate
         #     self.api._restart_service()
         cert, key, cacert = self._queryenv.get_https_certificate()
-        self.api.update_ssl_certificate(None, cert, key, cacert)
-        self.api._restart_service()
+        if cert and key:
+            self.api.update_ssl_certificate(None, cert, key, cacert)
+            self.api._restart_service()
 
     def on_SSLCertificateUpdate(self, message):
         ssl_cert_id = message.id # TODO: check datastructure
