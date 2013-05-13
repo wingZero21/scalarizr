@@ -68,7 +68,7 @@ class NginxOptions(Configurator.Container):
         @cached
         def default(self):
             return firstmatched(lambda p: os.access(p, os.F_OK | os.X_OK),
-                            ('/usr/sbin/nginx',     '/usr/local/nginx/sbin/nginx'), '')
+                                ('/usr/sbin/nginx', '/usr/local/nginx/sbin/nginx'), '')
 
         @validators.validate(validators.executable)
         def _set_value(self, v):
@@ -187,11 +187,13 @@ class NginxHandler(ServiceCtlHandler):
         # self._step_update_vhosts = 'Update virtual hosts'
         # self._step_reload_upstream = 'Reload upstream'
         self._step_setup_proxying = 'Setup proxying'
+        self._step_copy_error_pages = 'Copy default html error pages'
 
         return {'before_host_up': [{
                     'name': self._phase,
                     # 'steps': [self._step_update_vhosts, self._step_reload_upstream]
-                    'steps': [self._step_setup_proxying]}]}
+                    'steps': [self._step_copy_error_pages,
+                              self._step_setup_proxying]}]}
 
     def on_start(self):
         if __node__['state'] == 'running':
@@ -214,6 +216,10 @@ class NginxHandler(ServiceCtlHandler):
 
         with bus.initialization_op as op:
             with op.phase(self._phase):
+
+                with op.step(self._step_copy_error_pages):
+                    self._copy_error_pages()
+
                 with op.step(self._step_setup_proxying):
                     if self._proxies:
                         self.api.recreate_proxying(self._proxies)
@@ -325,6 +331,23 @@ class NginxHandler(ServiceCtlHandler):
                                         private_key,
                                         cacertificate)
         self.api._restart_service()
+
+    def _copy_error_pages(self):
+        pages_source = '/usr/share/scalr/nginx/html/'
+        pages_destination = '/usr/share/nginx/html/'
+
+        current_dir = ''
+        for d in pages_destination.split(os.path.sep)[1:-1]:
+            current_dir = current_dir + '/' + d
+            if not os.path.exists(current_dir):
+                os.makedirs(current_dir)
+
+        if not os.path.exists(pages_source + '500.html'):
+            shutil.copy(pages_source + '500.html', pages_destination)
+        if not os.path.exists(pages_source + '502.html'):
+            shutil.copy(pages_source + '502.html', pages_destination)
+        if not os.path.exists(pages_source + 'noapp.html'):
+            shutil.copy(pages_source + 'noapp.html', pages_destination)
 
     def make_default_proxy(self, roles):
         self._logger.debug('Making default proxy')

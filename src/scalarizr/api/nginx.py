@@ -149,14 +149,6 @@ class NginxAPI(object):
 
 
     def _make_error_pages_include(self):
-        pages_source = '/usr/share/scalr/nginx/html/'
-        pages_destination = '/var/www/scalr/nginx/html/'
-
-        current_dir = ''
-        for d in pages_destination.split(os.path.sep)[1:-1]:
-            current_dir = current_dir + '/' + d
-            if not os.path.exists(current_dir):
-                os.makedirs(current_dir)
 
         def _add_static_location(config, location, expires=None):
             xpath = 'location'
@@ -167,18 +159,11 @@ class NginxAPI(object):
 
             if expires:
                 config.add('%s/expires' % xpath, expires)
-            config.add('%s/root' % xpath, pages_destination[:-1])
+            config.add('%s/root' % xpath, '/usr/share/nginx/html')
 
         error_pages_dir = os.path.dirname(__nginx__['app_include_path'])
         self.error_pages_inc = os.path.join(error_pages_dir,
                                             'error-pages.include')
-
-        if not os.path.exists(pages_source + '500.html'):
-            shutil.copy(pages_source + '500.html', pages_destination)
-        if not os.path.exists(pages_source + '502.html'):
-            shutil.copy(pages_source + '502.html', pages_destination)
-        if not os.path.exists(pages_source + 'noapp.html'):
-            shutil.copy(pages_source + 'noapp.html', pages_destination)
 
         error_pages_conf = metaconf.Configuration('nginx')
         _add_static_location(error_pages_conf, '/500.html', '0')
@@ -552,7 +537,7 @@ class NginxAPI(object):
 
         self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
-        
+
         # Adding locations leading to defined backends
         for i, (location, backend_name) in enumerate(locations_and_backends):
             location_xpath = 'server/location'
