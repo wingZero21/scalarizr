@@ -125,7 +125,7 @@ class PostgreSql(BaseService):
             ver = __postgresql__[OPT_PG_VERSION]
         except KeyError:
             pg_info = software.postgresql_software_info()
-            ver = pg_info.version or '9.0'
+            ver = '%s.%s' % (pg_info.version[0], pg_info.version[1]) or '9.0'
             __postgresql__[OPT_PG_VERSION] = ver
         return ver
 
