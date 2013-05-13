@@ -342,11 +342,11 @@ class NginxHandler(ServiceCtlHandler):
             if not os.path.exists(current_dir):
                 os.makedirs(current_dir)
 
-        if not os.path.exists(pages_source + '500.html'):
+        if not os.path.exists(pages_destination + '500.html'):
             shutil.copy(pages_source + '500.html', pages_destination)
-        if not os.path.exists(pages_source + '502.html'):
+        if not os.path.exists(pages_destination + '502.html'):
             shutil.copy(pages_source + '502.html', pages_destination)
-        if not os.path.exists(pages_source + 'noapp.html'):
+        if not os.path.exists(pages_destination + 'noapp.html'):
             shutil.copy(pages_source + 'noapp.html', pages_destination)
 
     def make_default_proxy(self, roles):
