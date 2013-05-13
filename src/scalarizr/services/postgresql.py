@@ -596,7 +596,7 @@ class PSQL(object):
     
 class ClusterDir(object):
     
-    base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
+    base_path = glob.glob('/var/lib/p*sql*/9.*/')[0]
     default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
     
     def __init__(self, path=None):
