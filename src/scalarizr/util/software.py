@@ -432,7 +432,7 @@ def postgresql_software_info():
         if os.path.isfile(bin_path):
             binaries.append(bin_path)
 
-    if os.path.isfile(bin_path):
+    if os.path.isfile(amazon_linux_binpath):
         binaries.append(amazon_linux_binpath) #Amazon Linux support
 
     for bin_path in binaries:
