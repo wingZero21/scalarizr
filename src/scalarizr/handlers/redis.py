@@ -188,6 +188,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
         if self._cnf.state == ScalarizrState.RUNNING:
+            # Fix to enable access outside farm when use_passwords=True
             if self.use_passwords:
                 self.security_off()
 
