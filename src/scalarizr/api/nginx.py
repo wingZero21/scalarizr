@@ -94,24 +94,24 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
         time.sleep(1)
         return ret
 
-    def start(self):
-        self.configtest()
-        try:
-            args = [self.initd_script] \
-                if isinstance(self.initd_script, basestring) \
-                else list(self.initd_script)
-            args.append('start')
-            out, err, returncode = system2(args,
-                                           close_fds=True,
-                                           preexec_fn=os.setsid)
-        except PopenError, e:
-            raise initdv2.InitdError("Popen failed with error %s" % (e,))
+    # def start(self):
+    #     self.configtest()
+    #     try:
+    #         args = [self.initd_script] \
+    #             if isinstance(self.initd_script, basestring) \
+    #             else list(self.initd_script)
+    #         args.append('start')
+    #         out, err, returncode = system2(args,
+    #                                        close_fds=True,
+    #                                        preexec_fn=os.setsid)
+    #     except PopenError, e:
+    #         raise initdv2.InitdError("Popen failed with error %s" % (e,))
 
-        if returncode:
-            raise initdv2.InitdError("Cannot start nginx. output= %s. %s" % (out, err),
-                             returncode)
+    #     if returncode:
+    #         raise initdv2.InitdError("Cannot start nginx. output= %s. %s" % (out, err),
+    #                          returncode)
 
-        self._wait_workers()
+    #     self._wait_workers()
 
 
 class NginxAPI(object):
