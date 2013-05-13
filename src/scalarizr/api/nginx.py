@@ -501,6 +501,21 @@ class NginxAPI(object):
         config.add('server/if/rewrite', '^(.*)$ /noapp.html last')
         config.add('server/if/return', '302')
 
+    def _add_ssl_params(self, config, server_xpath, ssl_port, ssl_certificate_id):
+        config.add('%s/listen' % server_xpath, '%s ssl' % (ssl_port or '443'))
+        config.add('%s/ssl' % server_xpath, 'on')
+        ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
+        config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
+        config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
+
+        # TODO: move next hardcoded strings to some constants
+        config.add('%s/ssl_session_timeout' % server_xpath, '10m')
+        config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
+        config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
+        config.add('%s/ssl_ciphers' % server_xpath, 
+                   'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
+        config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
+
     def _make_server_conf(self,
                           hostname,
                           locations_and_backends,
@@ -520,18 +535,7 @@ class NginxAPI(object):
 
         # Configuring ssl
         if ssl:
-            config.add('server/listen', '%s ssl' % (ssl_port or '443'))
-            config.add('server/ssl', 'on')
-            ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
-            config.add('server/ssl_certificate', ssl_cert_path)
-            config.add('server/ssl_certificate_key', ssl_cert_key_path)
-
-            # TODO: move next hardcoded strings to some constants
-            config.add('server/ssl_session_timeout', '10m')
-            config.add('server/ssl_session_cache', 'shared:SSL:10m')
-            config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
-            config.add('server/ssl_ciphers', 'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-            config.add('server/ssl_prefer_server_ciphers', 'on')
+            self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id)
 
         config.add('server/server_name', hostname)
 
@@ -898,5 +902,70 @@ class NginxAPI(object):
         if config_updated:
             if update_conf:
                 self.app_servers_inc.write(self.app_inc_path)
+            if restart_service:
+                self._restart_service()
+
+    @rpc.service_method
+    def enable_ssl(self,
+                   hostname,
+                   ssl_port=None,
+                   ssl_certificate_id=None,
+                   update_conf=True,
+                   restart_service=True):
+        if update_conf:
+            self.https_inc.read(self.https_inc_path)
+
+        if not hostname:
+            return
+
+        config_updated = False
+        for i, _ in enumerate(self.https_inc.get_list('server')):
+            server_xpath = 'server[%i]' % (i + 1)
+            server_name = self.https_inc.get('%s/server_name' % server_xpath)
+
+            if hostname == server_name:
+                try:
+                    # trying get ssl param from config
+                    # if it raises exception, then we need to set up ssl
+                    # like in first time
+                    self.https_inc.get('%s/ssl' % server_xpath)
+                    self.https_inc.set('%s/ssl' % server_xpath, 'on')
+                except metaconf.NoPathError:
+                    self._add_ssl_params(self.https_inc,
+                                         server_xpath,
+                                         ssl_port,
+                                         ssl_certificate_id)
+                break
+
+        if config_updated:
+            if update_conf:
+                self.https_inc.write(self.https_inc_path)
+            if restart_service:
+                self._restart_service()
+
+    @rpc.service_method
+    def disable_ssl(self, hostname, update_conf=True, restart_service=True):
+        if update_conf:
+            self.https_inc.read(self.https_inc_path)
+
+        if not hostname:
+            return
+
+        config_updated = False
+        for i, _ in enumerate(self.https_inc.get_list('server')):
+            server_xpath = 'server[%i]' % (i + 1)
+            server_name = self.https_inc.get('%s/server_name' % server_xpath)
+
+            if hostname == server_name:
+                try:
+                    if self.https_inc.get('%s/ssl' % server_xpath) is 'on':
+                        self.https_inc.set('%s/ssl' % server_xpath, 'off')
+                except metaconf.NoPathError:
+                    pass
+                break
+
+        if config_updated:
+            if update_conf:
+                self.https_inc.write(self.https_inc_path)
             if restart_service:
                 self._restart_service()

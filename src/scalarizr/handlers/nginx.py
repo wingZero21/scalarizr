@@ -317,13 +317,28 @@ class NginxHandler(ServiceCtlHandler):
         # if ssl certificate is updated:
         #     write new ssl certificate
         #     self.api._restart_service()
-        cert, key, cacert = self._queryenv.get_https_certificate()
-        if cert and key:
-            self.api.update_ssl_certificate(None, cert, key, cacert)
-            self.api._restart_service()
+
+        # TODO: maybe uncomment next 9 lines if message actually contains
+        #       vhost name and its ssl status
+        # self._logger.debug('Trying to update ssl certificate on vhost reconfigure')
+        # cert, key, cacert = self._queryenv.get_https_certificate()
+        # self._logger.debud('Got cert: \n%s\n\nkey:\n%s\n\ncacert:\n%s\n' % 
+        #                    (cert, key, cacert))
+        # if cert and key:
+        #     self.api.update_ssl_certificate(None, cert, key, cacert)
+        #     self.api.enable_ssl()
+        # else:
+        #     self.api.disable_ssl()
+        if 'backend' in self.api.backend_table:
+            roles_for_proxy = []
+            if __nginx__['upstream_app_role']:
+                roles_for_proxy = [__nginx__['upstream_app_role']]
+            else:
+                roles_for_proxy = self.get_all_app_roles()
+            self.make_default_proxy(roles_for_proxy)
 
     def on_SSLCertificateUpdate(self, message):
-        ssl_cert_id = message.id # TODO: check datastructure
+        ssl_cert_id = message.id  # TODO: check datastructure
         private_key = message.private_key
         certificate = message.certificate
         cacertificate = message.cacertificate
@@ -375,7 +390,7 @@ class NginxHandler(ServiceCtlHandler):
                             ssl=ssl_present,
                             backend_ip_hash=True,
                             hash_backend_name=False)
-        self._logger.debug('Default proxy maked')
+        self._logger.debug('Default proxy is made')
 
     def get_all_app_roles(self):
         return self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
