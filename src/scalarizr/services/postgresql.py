@@ -649,7 +649,12 @@ class ConfigDir(object):
     
     @classmethod
     def get_sysconf_path(cls):
-        return '/etc/sysconfig/pgsql/postgresql-%s' % cls.version or '9.0'
+        if 'Amazon' == linux.os['name'] and "9.2" == cls.version:
+            path = '/etc/sysconfig/pgsql/postgresql'
+        else:
+            path = '/etc/sysconfig/pgsql/postgresql-%s' % cls.version or '9.0'
+        return path
+
     
     
     def __init__(self, path, version=None):
