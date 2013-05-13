@@ -22,6 +22,7 @@ from scalarizr.linux.coreutils import chown_r
 from scalarizr.services import BaseService, BaseConfig, lazy, PresetProvider, backup
 from scalarizr.node import __node__, private_dir
 from scalarizr import storage2
+from scalarizr import linux
 
 SERVICE_NAME = BuiltinBehaviours.POSTGRESQL
 
@@ -595,8 +596,9 @@ class PSQL(object):
                     
     
 class ClusterDir(object):
-    
-    base_path = glob.glob('/var/lib/p*sql*/9.*/')[0]
+
+    _pathname_pattern = '/var/lib/pgsql9/' if 'Amazon' == linux.os['name'] else '/var/lib/p*sql/9.*/'
+    base_path = glob.glob(_pathname_pattern)[0]
     default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
     
     def __init__(self, path=None):
