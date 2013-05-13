@@ -130,11 +130,11 @@ software_list = dict()
 
 def mysql_software_info():
 
-    binaries = which('mysqld')
-    if not binaries:
+    binary = which('mysqld')
+    if not binary:
         raise SoftwareError("Can't find executable for MySQL server")
 
-    version_string = system2((binaries[0], '-V'))[0].strip()
+    version_string = system2((binary, '-V'))[0].strip()
     if not version_string:
         raise SoftwareError
 
