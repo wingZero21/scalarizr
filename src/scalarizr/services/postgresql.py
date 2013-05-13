@@ -50,7 +50,10 @@ OPT_REPLICATION_MASTER = "replication_master"
 LOG = logging.getLogger(__name__)
 __postgresql__ = __node__[SERVICE_NAME]
 
-pg_pathname_pattern = '/var/lib/pgsql9/' if 'Amazon' == linux.os['name'] else '/var/lib/p*sql/9.*/'
+if 'Amazon' == linux.os['name'] and software.postgresql_software_info().version[:2] == (9,2):
+    pg_pathname_pattern = '/var/lib/pgsql9/'
+else:
+    pg_pathname_pattern = '/var/lib/p*sql/9.*/'
 
 
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
