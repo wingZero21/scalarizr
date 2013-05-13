@@ -154,6 +154,7 @@ class ChefHandler(Handler):
             'SCALR_BEHAVIORS': ','.join(__node__['behavior']),
             'SCALR_SERVER_ID': __node__['server_id']
         }
+        environ.update(os.environ)
         environ.update(self._global_variables)
         system2(cmd, 
             close_fds=True, 
