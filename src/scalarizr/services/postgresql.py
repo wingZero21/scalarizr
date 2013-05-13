@@ -17,7 +17,7 @@ from M2Crypto import RSA
 
 from scalarizr.util import disttool, firstmatched, wait_until
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.util import initdv2, system2, PopenError
+from scalarizr.util import initdv2, system2, PopenError, software
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services import BaseService, BaseConfig, lazy, PresetProvider, backup
 from scalarizr.node import __node__, private_dir
@@ -49,6 +49,8 @@ OPT_REPLICATION_MASTER = "replication_master"
 
 LOG = logging.getLogger(__name__)
 __postgresql__ = __node__[SERVICE_NAME]
+
+pg_pathname_pattern = '/var/lib/pgsql9/' if 'Amazon' == linux.os['name'] else '/var/lib/p*sql/9.*/'
 
 
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
@@ -122,18 +124,9 @@ class PostgreSql(BaseService):
         try:
             ver = __postgresql__[OPT_PG_VERSION]
         except KeyError:
-            ver = None
-        if not ver:
-            try:
-                path_list = glob.glob('/var/lib/p*sql/9.*')
-                path_list.sort()
-                path = path_list[-1]
-                ver = os.path.basename(path)
-            except IndexError:
-                LOG.warning('Postgresql default directory not found. Assuming that PostgreSQL 9.0 is installed.')
-                ver = '9.0'
-            finally:
-                __postgresql__[OPT_PG_VERSION] = ver
+            pg_info = software.postgresql_software_info()
+            ver = pg_info.version or '9.0'
+            __postgresql__[OPT_PG_VERSION] = ver
         return ver
 
 
@@ -597,8 +590,7 @@ class PSQL(object):
     
 class ClusterDir(object):
 
-    _pathname_pattern = '/var/lib/pgsql9/' if 'Amazon' == linux.os['name'] else '/var/lib/p*sql/9.*/'
-    base_path = glob.glob(_pathname_pattern)[0]
+    base_path = glob.glob(pg_pathname_pattern)[0]
     default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
     
     def __init__(self, path=None):
@@ -670,7 +662,7 @@ class ConfigDir(object):
         cls.version = version or '9.0'
         path = cls.get_sysconfig_pgdata()
         if not path:
-            path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
+            path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else glob.glob(pg_pathname_pattern)[0]
         return cls(path, version)
         
     

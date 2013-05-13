@@ -421,6 +421,8 @@ explore('chef', chef_software_info)
 
 
 def postgresql_software_info():
+    binaries = []
+    amazon_linux_binpath = '/usr/bin/postgres'
     versions_dirs = glob.glob('/usr/lib/p*sql/*')
     versions_dirs.extend(glob.glob('/usr/p*sql*/'))
     versions_dirs.sort()
@@ -428,9 +430,15 @@ def postgresql_software_info():
     for version in versions_dirs:
         bin_path = os.path.join(version, 'bin/postgres')
         if os.path.isfile(bin_path):
-            version_string = system2((bin_path, '--version'))[0].strip()
-            version = version_string.split()[-1]
-            return SoftwareInfo('postgresql', version, version_string)
+            binaries.append(bin_path)
+
+    if os.path.isfile(bin_path):
+        binaries.append(amazon_linux_binpath) #Amazon Linux support
+
+    for bin_path in binaries:
+        version_string = system2((bin_path, '--version'))[0].strip()
+        version = version_string.split()[-1]
+        return SoftwareInfo('postgresql', version, version_string)
     else:
         raise SoftwareError
 
