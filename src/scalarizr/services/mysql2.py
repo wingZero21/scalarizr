@@ -32,28 +32,26 @@ __behavior__ = 'percona' \
 
 __mysql__ = __node__[__behavior__]
 __mysql__.update({
-	'behavior': __behavior__,
-	'port': 3306,
-	'storage_dir': '/mnt/dbstorage',
-	'data_dir': '/mnt/dbstorage/mysql-data',
-	'binlog_dir': '/mnt/dbstorage/mysql-misc',
-	'tmp_dir': '/mnt/dbstorage/tmp',
-	'root_user': 'scalr',
-	'repl_user': 'scalr_repl',
-	'stat_user': 'scalr_stat',
-	'pma_user': 'pma',
-	'debian.cnf': '/etc/mysql/debian.cnf',
-	'my.cnf': '/etc/my.cnf' if linux.os['family'] in ('RedHat', 'Oracle') else '/etc/mysql/my.cnf',
-	'mysqldump_chunk_size': 200 * 1024 * 1024,
-	'stop_slave_timeout': 180,
-	'change_master_timeout': 60,
-	'defaults': {
-		'datadir': '/var/lib/mysql',
-		'log_bin': 'mysql_bin'
-	}
+    'behavior': __behavior__,
+    'port': 3306,
+    'storage_dir': '/mnt/dbstorage',
+    'data_dir': '/mnt/dbstorage/mysql-data',
+    'binlog_dir': '/mnt/dbstorage/mysql-misc',
+    'tmp_dir': '/mnt/dbstorage/tmp',
+    'root_user': 'scalr',
+    'repl_user': 'scalr_repl',
+    'stat_user': 'scalr_stat',
+    'pma_user': 'pma',
+    'debian.cnf': '/etc/mysql/debian.cnf',
+    'my.cnf': '/etc/my.cnf' if linux.os['family'] in ('RedHat', 'Oracle') else '/etc/mysql/my.cnf',
+    'mysqldump_chunk_size': 200,
+    'stop_slave_timeout': 180,
+    'change_master_timeout': 60,
+    'defaults': {
+        'datadir': '/var/lib/mysql',
+        'log_bin': 'mysql_bin'
+    }
 })
-
-
 
 
 class MySQLSnapBackup(backup.SnapBackup):
@@ -387,73 +385,97 @@ backup.restore_types['xtrabackup'] = XtrabackupStreamRestore
 
 
 class MySQLDumpBackup(backup.Backup):
-	'''
-	Example:
-		bak = backup.backup(
-				type='mysqldump',
-				cloudfs_dir='s3://scalr-1a8f341e/backups/mysql/1265/')
-		bak.run()
-	'''
+    '''
+    Example:
+        bak = backup.backup(
+                type='mysqldump',
+                cloudfs_dir='s3://scalr-1a8f341e/backups/mysql/1265/')
+        bak.run()
+    '''
 
-	def __init__(self,
-				cloudfs_dir=None,
-				file_per_database=True,
-				chunk_size=None,
-				**kwds):
-		super(MySQLDumpBackup, self).__init__(cloudfs_dir=cloudfs_dir,
-				file_per_database=file_per_database,
-				chunk_size=chunk_size or __mysql__['mysqldump_chunk_size'],
-				**kwds)
-		self.features.update({
-			'start_slave': False
-		})
-		self.transfer = None
-		self._killed = False
-		self._run_lock = threading.Lock()
+    def __init__(self,
+                cloudfs_dir=None,
+                file_per_database=True,
+                chunk_size=None,
+                **kwds):
+        super(MySQLDumpBackup, self).__init__(cloudfs_dir=cloudfs_dir,
+                file_per_database=file_per_database,
+                chunk_size=chunk_size or __mysql__['mysqldump_chunk_size'],
+                **kwds)
+        self.features.update({
+            'start_slave': False
+        })
+        self.transfer = None
+        self._popens = []
+        self._killed = False
+        self._run_lock = threading.Lock()
+        self._popen_creation_lock = threading.Lock()
 
-	def _run(self):
-		LOG.debug("Running MySQLDumpBackup")
-		client = mysql_svc.MySQLClient(
-					__mysql__['root_user'],
-					__mysql__['root_password'])
-		self._databases = client.list_databases()
+    def _run(self):
+        LOG.debug("Running MySQLDumpBackup")
+        client = mysql_svc.MySQLClient(
+                    __mysql__['root_user'],
+                    __mysql__['root_password'])
+        self._databases = client.list_databases()
 
-		with self._run_lock:
-			if self._killed:
-				raise Error("Canceled")
-			self.transfer = cloudfs.LargeTransfer(self._gen_src, self._dst,
-									streamer=None, chunk_size=self.chunk_size)
-		result = self.transfer.run()
-		if self._killed:
-			raise Error("Canceled")
+        with self._run_lock:
+            if self._killed:
+                raise Error("Canceled")
+            self.transfer = cloudfs.LargeTransfer(self._gen_src, self._dst,
+                                    streamer=None, chunk_size=self.chunk_size)
+        result = self.transfer.run()
 
-		result = transfer_result_to_backup_result(result)
-		return result
+        def log_stderr(popen):
+            LOG.debug("mysqldump log_stderr communicate")
+            out, err = popen.communicate()
+            LOG.debug("mysqldump log_stderr communicate done")
+            if err:
+                LOG.debug("mysqldump stderr: %s", err)
+        map(log_stderr, self._popens)
 
-	def _gen_src(self):
-		if self.file_per_database:
-			for db_name in self._databases:
-				self._current_db = db_name
-				params = __mysql__['mysqldump_options'].split() + [db_name]
-				_mysqldump.args(*params)
-				stream = _mysqldump.popen(stdin=None, bufsize=-1).stdout
-				yield cloudfs.NamedStream(stream, db_name)
-		else:
-			params = __mysql__['mysqldump_options'].split() + ['--all-databases']
-			_mysqldump.args(*params)
-			yield _mysqldump.popen(stdin=None, bufsize=-1).stdout
+        if self._killed:
+            raise Error("Canceled")
 
-	@property
-	def _dst(self):
-		return os.path.join(self.cloudfs_dir, 'mysql')
+        result = transfer_result_to_backup_result(result)
+        return result
 
-	def _kill(self):
-		LOG.debug("Killing MySQLDumpBackup")
-		self._killed = True
+    def _gen_src(self):
+        if self.file_per_database:
+            for db_name in self._databases:
+                self._current_db = db_name
+                params = __mysql__['mysqldump_options'].split() + [db_name]
+                _mysqldump.args(*params)
+                with self._popen_creation_lock:
+                    if self._killed:
+                        return
+                    popen = _mysqldump.popen(stdin=None, bufsize=-1)
+                    self._popens.append(popen)
+                stream = popen.stdout
+                yield cloudfs.NamedStream(stream, db_name)
+        else:
+            params = __mysql__['mysqldump_options'].split() + ['--all-databases']
+            _mysqldump.args(*params)
+            with self._popen_creation_lock:
+                if self._killed:
+                    return
+                popen = _mysqldump.popen(stdin=None, bufsize=-1)
+                self._popens.append(popen)
+            yield popen.stdout
 
-		with self._run_lock:
-			if self.transfer:
-				self.transfer.kill()
+    @property
+    def _dst(self):
+        return os.path.join(self.cloudfs_dir, 'mysql')
+
+    def _kill(self):
+        LOG.debug("Killing MySQLDumpBackup")
+        with self._popen_creation_lock:
+            self._killed = True
+
+        with self._run_lock:
+            if self.transfer:
+                self.transfer.kill()
+            map(eradicate, self._popens)
+        LOG.debug("...killed MySQLDumpBackup")
 
 
 backup.backup_types['mysqldump'] = MySQLDumpBackup

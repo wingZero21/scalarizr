@@ -472,10 +472,9 @@ class LargeTransfer(bases.Task):
         self.manifest_path = manifest
         self.manifest = None
         self._transfer = FileTransfer(src=self._src_generator,
-                                                        dst=self._dst_generator, **kwds)
-        self._tranzit_vol = storage2.volume(
-                                                        type='tmpfs',
-                                                        mpoint=tempfile.mkdtemp())
+                dst=self._dst_generator, **kwds)
+        self._tranzit_vol = storage2.volume(type='tmpfs',
+                mpoint=tempfile.mkdtemp())
 
         events = self._transfer.list_events()
         self.define_events(*events)
@@ -626,7 +625,9 @@ class LargeTransfer(bases.Task):
                     LOG.debug("LargeTransfer src_generator yield %s", filename)
                     yield filename
                 if cmd:
-                    cmd.communicate()
+                    out, err = cmd.communicate()
+                    if err:
+                        LOG.debug("LargeTransfer src_generator cmd pipe stderr: %s", err)
 
             # send manifest to file transfer
             if not self.multipart:
@@ -903,20 +904,20 @@ class Manifest(object):
 
     ::
 
-            {
-                    version: 2.0,
-                    description,
-                    tags,
-                    created_at,
-                    files: [
-                            {
-                                    name,
-                                    streamer,  # "tar" | python function | None
-                                    compressor,  # "gzip" | python function | None
-                                    chunks: [(basename001, md5sum, size_in_bytes)]
-                            }
-                    ]
-            }
+        {
+            version: 2.0,
+            description,
+            tags,
+            created_at,
+            files: [
+                {
+                    name,
+                    streamer,  # "tar" | python function | None
+                    compressor,  # "gzip" | python function | None
+                    chunks: [(basename001, md5sum, size_in_bytes)]
+                }
+            ]
+        }
 
 
     Supports reading of old ini-manifests and represents their data in the

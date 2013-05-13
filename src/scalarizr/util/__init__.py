@@ -218,13 +218,13 @@ class PopenError(BaseException):
 def system2(*popenargs, **kwargs):
     import subprocess, cStringIO
     
-    silent = kwargs.get('silent', False)
-    logger = kwargs.get('logger', logging.getLogger(__name__))
-    log_level = kwargs.get('log_level', logging.DEBUG)
-    warn_stderr = kwargs.get('warn_stderr')
-    raise_exc = kwargs.get('raise_exc', kwargs.get('raise_error',  True))
-    ExcClass = kwargs.get('exc_class', PopenError)
-    error_text = kwargs.get('error_text')
+    silent = kwargs.pop('silent', False)
+    logger = kwargs.pop('logger', logging.getLogger(__name__))
+    log_level = kwargs.pop('log_level', logging.DEBUG)
+    warn_stderr = kwargs.pop('warn_stderr', False)
+    raise_exc = kwargs.pop('raise_exc', kwargs.pop('raise_error',  True))
+    ExcClass = kwargs.pop('exc_class', PopenError)
+    error_text = kwargs.pop('error_text', '')
     input = None
     
     if kwargs.get('err2out'):
@@ -260,12 +260,6 @@ def system2(*popenargs, **kwargs):
             kwargs['env']['LANG'] = 'en_US.UTF-8'
         else:
             kwargs['env']['LANG'] = 'C'
-
-    for k in ('logger', 'err2out', 'warn_stderr', 'raise_exc', 'raise_error', 'exc_class', 'error_text', 'silent'):
-        try:
-            del kwargs[k]
-        except KeyError:
-            pass
     
     logger.debug('system: %s' % (popenargs[0],))
     p = subprocess.Popen(*popenargs, **kwargs)

@@ -9,6 +9,8 @@ import subprocess
 import time
 import os
 import tempfile
+import string
+import random
 
 from lettuce import before, after, world, step
 import yaml
@@ -142,7 +144,7 @@ def flood_db(n):
     fetchall("use testdb")
     fetchall("CREATE TABLE testtable (one MEDIUMTEXT)")
 
-    z = 'z' * 1024 * 1023
+    z = ''.join(random.choice(string.lowercase) for i in xrange(1024*1023))
 
     [fetchall("INSERT INTO testtable VALUES ('%s')" % z) for i in range(n)]
 

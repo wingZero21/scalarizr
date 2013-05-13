@@ -188,6 +188,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
         if self._cnf.state == ScalarizrState.RUNNING:
+            if self.use_passwords:
+                self.security_off()
 
             vol = storage2.volume(__redis__['volume'])
             if not vol.tags:
@@ -308,6 +310,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     passwords = passwords or [self.get_main_password(),]
                     self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)
 
+                    if self.use_passwords:
+                        self.security_off()
+
 
     def on_before_host_up(self, message):
         """
@@ -356,6 +361,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                 LOG.info('Destroying volume %s' % __redis__['volume'].id)
                 __redis__['volume'].destroy(remove_disks=True)
                 LOG.info('Volume %s was destroyed.' % __redis__['volume'].id)
+            else:
+                __redis__['volume'].umount()
 
 
     def on_DbMsr_CreateDataBundle(self, message):
