@@ -247,6 +247,7 @@ class NginxHandler(ServiceCtlHandler):
         else:
             server = message.remote_ip
 
+        self._logger.debug('on host up backend table is %s' % self.api.backend_table)
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
             upstream_role = __nginx__['upstream_app_role']
@@ -261,6 +262,7 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('adding new app server %s to backends that are '
                                'using role %s' % (server, role_id))
             self.api.add_server_to_role(server, role_id)
+        self._logger.debug('after host up backend table is %s' % self.api.backend_table)
 
 
     def on_HostDown(self, message):
@@ -273,6 +275,7 @@ class NginxHandler(ServiceCtlHandler):
         else:
             server = message.remote_ip
 
+        self._logger.debug('on host down backend table is %s' % self.api.backend_table)
         self._logger.debug('removing server %s from backends' % server)
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
@@ -293,6 +296,7 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('trying to remove server %s from backends that '
                                'are using role %s' % (server, role_id))
             self.api.remove_server_from_role(server, role_id)
+        self._logger.debug('after host down backend table is %s' % self.api.backend_table)
 
     def on_BeforeHostTerminate(self, message):
         # if not os.access(self._app_inc_path, os.F_OK):
@@ -336,12 +340,14 @@ class NginxHandler(ServiceCtlHandler):
         # else:
         #     self.api.disable_ssl()
         if 'backend' in self.api.backend_table:
+            self._logger.debug('before vhost reconf backend table is %s' % self.api.backend_table)
             roles_for_proxy = []
             if __nginx__['upstream_app_role']:
                 roles_for_proxy = [__nginx__['upstream_app_role']]
             else:
                 roles_for_proxy = self.get_all_app_roles()
             self.make_default_proxy(roles_for_proxy)
+            self._logger.debug('after vhost reconf backend table is %s' % self.api.backend_table)
 
     def on_SSLCertificateUpdate(self, message):
         ssl_cert_id = message.id  # TODO: check datastructure
@@ -391,11 +397,13 @@ class NginxHandler(ServiceCtlHandler):
             servers = [{'host': '127.0.0.1',
                         'port': '80'}]
 
+        self._logger.debug('backend table is %s' % self.api.backend_table)
         self.api.make_proxy('backend',
                             servers=servers,
                             ssl=ssl_present,
                             backend_ip_hash=True,
                             hash_backend_name=False)
+        self._logger.debug('After making proxy backend table is %s' % self.api.backend_table)
         self._logger.debug('Default proxy is made')
 
     def get_all_app_roles(self):
