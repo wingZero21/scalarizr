@@ -184,6 +184,7 @@ class NginxAPI(object):
             self.service.start()
         else:
             self.service.reload()
+            time.sleep(1)
 
     @rpc.service_method
     def start_service(self):
