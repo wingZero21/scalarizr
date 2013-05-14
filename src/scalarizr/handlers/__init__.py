@@ -7,7 +7,6 @@ from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
 from scalarizr.linux import iptables
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
-from scalarizr.node import __node__
 
 import os
 import logging
@@ -255,7 +254,7 @@ class Handler(object):
                 elif name == 'memcached':
                     handlers.append(config.BuiltinBehaviours.MEMCACHED)
 
-                elif name == 'postgresql' and Version('9.0') <= version < Version('9.2'):
+                elif name == 'postgresql' and Version('9.0') <= version < Version('9.3'):
                     handlers.append(config.BuiltinBehaviours.POSTGRESQL)
                 elif name == 'redis' and Version('2.2') <= version < Version('2.7'):
                     handlers.append(config.BuiltinBehaviours.REDIS)
@@ -749,9 +748,10 @@ class DbMsrMessages:
 
 
 class FarmSecurityMixin(object):
-    def __init__(self, ports):
+    def __init__(self, ports, enabled=True):
         self._logger = logging.getLogger(__name__)
         self._ports = ports
+        self._enabled = enabled
         self._iptables = iptables
         if self._iptables.enabled():
             bus.on('init', self.__on_init)
@@ -763,14 +763,29 @@ class FarmSecurityMixin(object):
                 reload=self.__on_reload
         )
         self.__on_reload()
-        self.__insert_iptables_rules()
+        if self._enabled:
+        	self.__insert_iptables_rules()
 
     def __on_reload(self):
         self._queryenv = bus.queryenv_service
         self._platform = bus.platform
 
+    def security_off(self):
+        self._enabled = False
+        for port in self._ports:
+            try:
+                self._iptables.FIREWALL.remove({
+                    "protocol": "tcp", 
+                    "match": "tcp", 
+                    "dport": port,
+                    "jump": "DROP"
+                })
+            except:
+                self._logger.debug('caught from iptables', exc_info=sys.exc_info())
 
     def on_HostInit(self, message):
+    	if not self._enabled:
+    		return
         # Append new server to allowed list
         if not self._iptables.enabled():
             return
@@ -783,6 +798,8 @@ class FarmSecurityMixin(object):
 
 
     def on_HostDown(self, message):
+    	if not self._enabled:
+    		return
         # Remove terminated server from allowed list
         if not self._iptables.enabled():
             return

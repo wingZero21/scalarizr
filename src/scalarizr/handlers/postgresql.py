@@ -178,25 +178,25 @@ class PostgreSqlHander(ServiceCtlHandler):
             
             if disttool.is_redhat_based():      
                     
-                checkmodule_paths = software.whereis('checkmodule')
-                semodule_package_paths = software.whereis('semodule_package')
-                semodule_paths = software.whereis('semodule')
+                checkmodule_path = software.which('checkmodule')
+                semodule_package_path = software.which('semodule_package')
+                semodule_path = software.which('semodule')
             
-                if all((checkmodule_paths, semodule_package_paths, semodule_paths)):
+                if all((checkmodule_path, semodule_package_path, semodule_path)):
                     
                     with open('/tmp/sshkeygen.te', 'w') as fp:
                         fp.write(SSH_KEYGEN_SELINUX_MODULE)
                     
                     self._logger.debug('Compiling SELinux policy for ssh-keygen')
-                    system2((checkmodule_paths[0], '-M', '-m', '-o',
+                    system2((checkmodule_path, '-M', '-m', '-o',
                              '/tmp/sshkeygen.mod', '/tmp/sshkeygen.te'), logger=self._logger)
                     
                     self._logger.debug('Building SELinux package for ssh-keygen')
-                    system2((semodule_package_paths[0], '-o', '/tmp/sshkeygen.pp',
+                    system2((semodule_package_path, '-o', '/tmp/sshkeygen.pp',
                              '-m', '/tmp/sshkeygen.mod'), logger=self._logger)
                     
                     self._logger.debug('Loading ssh-keygen SELinux package')                    
-                    system2((semodule_paths[0], '-i', '/tmp/sshkeygen.pp'), logger=self._logger)
+                    system2((semodule_path, '-i', '/tmp/sshkeygen.pp'), logger=self._logger)
 
 
         if __node__['state'] == 'running':
@@ -443,6 +443,8 @@ class PostgreSqlHander(ServiceCtlHandler):
                 LOG.info('Destroying volume %s' % __postgresql__['volume'].id)
                 __postgresql__['volume'].destroy(remove_disks=True)
                 LOG.info('Volume %s has been destroyed.' % __postgresql__['volume'].id)
+            else:
+                __postgresql__['volume'].umount()
 
 
     def on_DbMsr_CreateDataBundle(self, message):

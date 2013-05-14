@@ -421,6 +421,7 @@ def _apply_user_data(cnf):
 	updates = dict(
 		general={
 			'server_id' : g(UserDataOptions.SERVER_ID),
+			'server_index': g('server_index'),
 			'role_name' : g(UserDataOptions.ROLE_NAME),
 			'queryenv_url' : g(UserDataOptions.QUERYENV_URL),
 			'cloud_storage_path': g(UserDataOptions.CLOUD_STORAGE_PATH),
@@ -889,9 +890,12 @@ def main():
 		_init_services()
 		if cnf.state == ScalarizrState.RUNNING:
 			# ReSync user-data
-			cnf.fire('apply_user_data', cnf)		
-		
-		bus.fire('init')
+			cnf.fire('apply_user_data', cnf)
+		try:
+			bus.fire('init')
+		except:
+			logger.warn('Caught exception in "init": %s', sys.exc_info()[1], 
+						exc_info=sys.exc_info())
 		
 		# Install signal handlers
 		signal.signal(signal.SIGCHLD, onSIGCHILD)	
@@ -904,9 +908,10 @@ def main():
 		globals()["_running"] = True
 		try:
 			bus.fire("start")
-		except (BaseException, Exception), e:
-			logger.exception(e)
-	
+		except:
+			logger.warn('Caught exception in "start": %s', sys.exc_info()[1], 
+						exc_info=sys.exc_info())
+
 		try:
 			while _running:
 				# Recover SNMP 

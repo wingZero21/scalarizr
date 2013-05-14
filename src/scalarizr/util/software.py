@@ -41,7 +41,6 @@ def which(name, *extra_dirs):
     '''
     try:
         places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
-        places += ['/usr/local/nginx/sbin']  # XXX: hack for samsung
         places.extend(extra_dirs)
         return [os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))][0]
     except IndexError:
@@ -131,11 +130,11 @@ software_list = dict()
 
 def mysql_software_info():
 
-    binaries = which('mysqld')
-    if not binaries:
+    binary = which('mysqld')
+    if not binary:
         raise SoftwareError("Can't find executable for MySQL server")
 
-    version_string = system2((binaries[0], '-V'))[0].strip()
+    version_string = system2((binary, '-V'))[0].strip()
     if not version_string:
         raise SoftwareError
 
@@ -149,7 +148,7 @@ def mysql_software_info():
 explore('mysql', mysql_software_info)
 
 def nginx_software_info():
-    binary = which('nginx')
+    binary = which('nginx', '/usr/local/nginx/sbin')
     if not binary:
         raise SoftwareError("Can't find executable for Nginx server")
 
@@ -422,6 +421,8 @@ explore('chef', chef_software_info)
 
 
 def postgresql_software_info():
+    binaries = []
+    amazon_linux_binpath = '/usr/bin/postgres'
     versions_dirs = glob.glob('/usr/lib/p*sql/*')
     versions_dirs.extend(glob.glob('/usr/p*sql*/'))
     versions_dirs.sort()
@@ -429,9 +430,15 @@ def postgresql_software_info():
     for version in versions_dirs:
         bin_path = os.path.join(version, 'bin/postgres')
         if os.path.isfile(bin_path):
-            version_string = system2((bin_path, '--version'))[0].strip()
-            version = version_string.split()[-1]
-            return SoftwareInfo('postgresql', version, version_string)
+            binaries.append(bin_path)
+
+    if os.path.isfile(amazon_linux_binpath):
+        binaries.append(amazon_linux_binpath) #Amazon Linux support
+
+    for bin_path in binaries:
+        version_string = system2((bin_path, '--version'))[0].strip()
+        version = version_string.split()[-1]
+        return SoftwareInfo('postgresql', version, version_string)
     else:
         raise SoftwareError
 

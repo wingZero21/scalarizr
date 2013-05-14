@@ -57,13 +57,14 @@ class AptPackageMgr(PackageMgr):
                         'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
                         raise_exc=False
         )
-        for _ in range(3):
+        for _ in range(10):
             out, err, code = linux.system(('/usr/bin/apt-get',
                                             '-q', '-y', '--force-yes',
                                             '-o Dpkg::Options::=--force-confold') + \
                                             tuple(filter(None, command.split())), **kwds)
             if code:
-                if 'is another process using it?' in err:
+                if 'is another process using it?' in err \
+                    or 'Could not get lock' in err:
                     LOG.debug('Could not get dpkg lock (perhaps, another process is using it.)')
                     time.sleep(10)
                     continue
@@ -101,11 +102,15 @@ class AptPackageMgr(PackageMgr):
 
 
     def updatedb(self):
-        coreutils.clean_dir('/var/lib/apt/lists', recursive=False)
         try:
             coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
         except OSError:
             pass
+        path = '/var/lib/apt/lists'
+        for name in os.listdir(path):
+            filename = os.path.join(path, name)
+            if name != 'lock' and os.path.isfile(filename):
+                os.remove(filename)
         self.apt_get_command('update')
 
 

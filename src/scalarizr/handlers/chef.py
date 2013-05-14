@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 
+from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.util import system2
 from scalarizr.util.software import which
@@ -56,6 +57,7 @@ class ChefHandler(Handler):
         self._json_attributes_path = '/etc/chef/first-run.json'
         self._with_json_attributes = False
         self._platform = bus.platform
+        self._global_variables = {}
 
 
     def get_initialization_phases(self, hir_message):
@@ -69,6 +71,10 @@ class ChefHandler(Handler):
             }]}
 
     def on_host_init_response(self, message):
+        global_variables = message.body.get('global_variables') or []
+        for kv in global_variables:
+            self._global_variables[kv['name']] = kv['value'] or ''
+
         if 'chef' in message.body:
             self._chef_data = message.chef.copy()
             if not self._chef_data.get('node_name'):
@@ -140,7 +146,22 @@ class ChefHandler(Handler):
         cmd = [self._chef_client_bin]
         if first_run and self._with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
-        system2(cmd, close_fds=True, preexec_fn=os.setsid)
+        environ={
+            'SCALR_INSTANCE_INDEX': __node__['server_index'],
+            'SCALR_FARM_ID': __node__['farm_id'],
+            'SCALR_ROLE_ID': __node__['role_id'],
+            'SCALR_FARM_ROLE_ID': __node__['farm_role_id'],
+            'SCALR_BEHAVIORS': ','.join(__node__['behavior']),
+            'SCALR_SERVER_ID': __node__['server_id']
+        }
+        environ.update(os.environ)
+        environ.update(self._global_variables)
+        system2(cmd, 
+            close_fds=True, 
+            log_level=logging.INFO, 
+            preexec_fn=os.setsid, 
+            env=environ
+        )
 
 
     def get_node_name(self):

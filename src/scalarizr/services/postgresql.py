@@ -17,11 +17,12 @@ from M2Crypto import RSA
 
 from scalarizr.util import disttool, firstmatched, wait_until
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.util import initdv2, system2, PopenError
+from scalarizr.util import initdv2, system2, PopenError, software
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services import BaseService, BaseConfig, lazy, PresetProvider, backup
 from scalarizr.node import __node__, private_dir
 from scalarizr import storage2
+from scalarizr import linux
 
 SERVICE_NAME = BuiltinBehaviours.POSTGRESQL
 
@@ -49,6 +50,11 @@ OPT_REPLICATION_MASTER = "replication_master"
 LOG = logging.getLogger(__name__)
 __postgresql__ = __node__[SERVICE_NAME]
 
+if 'Amazon' == linux.os['name'] and software.postgresql_software_info().version[:2] == (9,2):
+    pg_pathname_pattern = '/var/lib/pgsql9/'
+else:
+    pg_pathname_pattern = '/var/lib/p*sql/9.*/'
+
 
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
     socket_file = None
@@ -66,8 +72,10 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
         else:
             initd_script = firstmatched(os.path.exists, (
                         '/etc/init.d/postgresql-9.0', 
-                        '/etc/init.d/postgresql-9.1', 
+                        '/etc/init.d/postgresql-9.1',
+                        '/etc/init.d/postgresql-9.2',
                         '/etc/init.d/postgresql'))
+        assert initd_script is not None
         initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
                 initd_script=initd_script)
         
@@ -119,18 +127,9 @@ class PostgreSql(BaseService):
         try:
             ver = __postgresql__[OPT_PG_VERSION]
         except KeyError:
-            ver = None
-        if not ver:
-            try:
-                path_list = glob.glob('/var/lib/p*sql/9.*')
-                path_list.sort()
-                path = path_list[-1]
-                ver = os.path.basename(path)
-            except IndexError:
-                LOG.warning('Postgresql default directory not found. Assuming that PostgreSQL 9.0 is installed.')
-                ver = '9.0'
-            finally:
-                __postgresql__[OPT_PG_VERSION] = ver
+            pg_info = software.postgresql_software_info()
+            ver = '%s.%s' % (pg_info.version[0], pg_info.version[1]) or '9.0'
+            __postgresql__[OPT_PG_VERSION] = ver
         return ver
 
 
@@ -593,8 +592,8 @@ class PSQL(object):
                     
     
 class ClusterDir(object):
-    
-    base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
+
+    base_path = glob.glob(pg_pathname_pattern)[0]
     default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
     
     def __init__(self, path=None):
@@ -653,7 +652,12 @@ class ConfigDir(object):
     
     @classmethod
     def get_sysconf_path(cls):
-        return '/etc/sysconfig/pgsql/postgresql-%s' % cls.version or '9.0'
+        if 'Amazon' == linux.os['name'] and "9.2" == cls.version:
+            path = '/etc/sysconfig/pgsql/postgresql'
+        else:
+            path = '/etc/sysconfig/pgsql/postgresql-%s' % cls.version or '9.0'
+        return path
+
     
     
     def __init__(self, path, version=None):
@@ -666,7 +670,10 @@ class ConfigDir(object):
         cls.version = version or '9.0'
         path = cls.get_sysconfig_pgdata()
         if not path:
-            path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
+            if disttool.is_ubuntu():
+                path = '/etc/postgresql/%s/main' % version
+            else:
+                path = os.path.join(glob.glob(pg_pathname_pattern)[0],'data')
         return cls(path, version)
         
     
