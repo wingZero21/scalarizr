@@ -274,18 +274,25 @@ class NginxHandler(ServiceCtlHandler):
         else:
             server = message.remote_ip
 
-        self._logger.debug('removing server %s' % server)
+        self._logger.debug('removing server %s from backends' % server)
         # Assuming backend `backend` can be only in default behaviour mode
         if 'backend' in self.api.backend_table:
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
+
+                self._logger.debug('removing server %s from default backend' %
+                                   server)
+
                 if len(self.api.backend_table) == 1:
+                    self._logger.debug('adding localhost to default backend')
                     self.api.add_server('backend', '127.0.0.1',
                                         restart_service=False)
                 self.api.remove_server('backend', server)
 
         else:
+            self._logger.debug('trying to remove server %s from backends that '
+                               'are using role %s' % (server, role_id))
             self.api.remove_server_from_role(server, role_id)
 
     def on_BeforeHostTerminate(self, message):

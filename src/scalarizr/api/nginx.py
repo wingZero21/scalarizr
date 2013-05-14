@@ -203,7 +203,7 @@ class NginxAPI(object):
     @rpc.service_method
     def recreate_proxying(self, proxy_list):
         self._clear_nginx_includes()
-        self.backend_table = []
+        self.backend_table = {}
 
         for proxy_parms in proxy_list:
             self.add_proxy(restart_service=False, **proxy_parms)
