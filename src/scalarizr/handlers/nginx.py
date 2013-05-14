@@ -213,7 +213,6 @@ class NginxHandler(ServiceCtlHandler):
         #         with op.step(self._step_reload_upstream):
         #             self._reload_upstream()
 
-
         with bus.initialization_op as op:
             with op.phase(self._phase):
 

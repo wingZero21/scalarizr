@@ -551,7 +551,8 @@ class NginxAPI(object):
             # TODO: move next hardcoded strings to some constants
             config.add('%s/proxy_set_header' % location_xpath, 'Host $host')
             config.add('%s/proxy_set_header' % location_xpath, 'X-Real-IP $remote_addr')
-            config.add('%s/proxy_set_header' % location_xpath, 'X-Forwarded-For $proxy_add_x_forwarded_for')
+            config.add('%s/proxy_set_header' % location_xpath,
+                       'X-Forwarded-For $proxy_add_x_forwarded_for')
             config.add('%s/client_max_body_size' % location_xpath, '10m')
             config.add('%s/client_body_buffer_size' % location_xpath, '128k')
             config.add('%s/proxy_buffering' % location_xpath, 'on')
@@ -709,6 +710,9 @@ class NginxAPI(object):
             self.app_servers_inc.write(self.app_inc_path + '.bak')
 
             self._remove_nginx_server(hostname)
+            for backend_name in self.backend_table:
+                if hostname in backend_name:
+                    self.backend_table.pop(backend_name)
 
             self.add_proxy(hostname, reread_conf=False, **kwds)
 
