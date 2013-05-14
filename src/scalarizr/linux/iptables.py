@@ -459,7 +459,7 @@ def enabled():
         else:  # 6.4 and higher
             # Upgrading iptables-1.4.18-1.16 to iptables-1.4.18-1.19 did
             # the job
-            pkgmgr.installed("iptables")
+            pkgmgr.latest("iptables")
 
     if linux.os['family'] in ('RedHat', 'Oracle'):
         out = redhat.chkconfig(list="iptables")[0]

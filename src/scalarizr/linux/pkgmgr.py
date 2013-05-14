@@ -193,13 +193,13 @@ class YumPackageMgr(PackageMgr):
         # explicit exclude was added after yum tried to install iptables.i686
         # on x86_64 amzn
         exclude = ()
-        if linux.os["arch"] == 'i386':
+        if linux.os["arch"] == "x86_64":
             exclude = (
                 "--exclude", "*.i386",
                 "--exclude", "*.i486",
                 "--exclude", "*.i686",
             )
-        elif linux.os["arch"] == "x86_64":
+        elif linux.os["arch"] == "i386":
             exclude = ("--exclude", "x86_64")
 
         return linux.system((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None, command.split())) + exclude), **kwds)
