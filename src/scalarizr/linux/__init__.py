@@ -154,7 +154,8 @@ class __os(dict):
                 self['name'] = 'Amazon'
                 code = data[-7:]
                 bases = {
-                '2012.09': '6.3'
+                '2012.09': '6.3',
+                '2013.03': '6.4'
                 }
                 self['release'] = Version(bases.get(code, '6.3'))
                 self['codename'] = code
