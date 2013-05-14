@@ -57,7 +57,7 @@ class AptPackageMgr(PackageMgr):
 				'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
 				raise_exc=False
 		)
-		for _ in range(3):
+		for _ in range(18):   # approx 3 minutes timeout
 			out, err, code = linux.system(('/usr/bin/apt-get',
 							'-q', '-y', '--force-yes',
 							'-o Dpkg::Options::=--force-confold') + \
@@ -119,25 +119,11 @@ class AptPackageMgr(PackageMgr):
 			name += '=%s' % version
 		if updatedb:
 			self.updatedb()
-		for _ in range(0, 30):
-			try:
-				self.apt_get_command('install %s' % name, raise_exc=True)
-				break
-			except linux.LinuxError, e:
-				if not 'E: Could not get lock' in e.err:
-					raise
-				time.sleep(2)
+		self.apt_get_command('install %s' % name, raise_exc=True)
 
 	def remove(self, name, purge=False):
 		command = 'purge' if purge else 'remove'
-		for _ in xrange(0, 30):
-			try:
-				self.apt_get_command('%s %s' % (command, name), raise_exc=True)
-				break
-			except linux.LinuxError, e:
-				if not 'E: Could not get lock' in e.err:
-					raise
-				time.sleep(2)
+		self.apt_get_command('%s %s' % (command, name), raise_exc=True)
 
 	def info(self, name):
 		installed, candidate = self.apt_policy(name)
