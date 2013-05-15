@@ -254,10 +254,12 @@ class NginxHandler(ServiceCtlHandler):
             if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
                 self.api.remove_server('backend', '127.0.0.1',
-                                       restart_service=False)
+                                       restart_service=False,
+                                       update_backend_table=True)
                 self._logger.debug('adding new app server %s to default '
                                     'backend' % server)
-                self.api.add_server('backend', server)
+                self.api.add_server('backend', server,
+                                     update_backend_table=True)
         else:
             self._logger.debug('adding new app server %s to backends that are '
                                'using role %s' % (server, role_id))
@@ -286,11 +288,13 @@ class NginxHandler(ServiceCtlHandler):
                 self._logger.debug('removing server %s from default backend' %
                                    server)
 
-                if len(self.api.backend_table) == 1:
+                if len(self.api.backend_table['backend']['servers']) == 1:
                     self._logger.debug('adding localhost to default backend')
                     self.api.add_server('backend', '127.0.0.1',
-                                        restart_service=False)
-                self.api.remove_server('backend', server)
+                                        restart_service=False,
+                                        update_backend_table=True)
+                self.api.remove_server('backend', server, 
+                                       update_backend_table=True)
 
         else:
             self._logger.debug('trying to remove server %s from backends that '

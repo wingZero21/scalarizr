@@ -419,6 +419,36 @@ class NginxAPI(object):
 
         return config
 
+    def _backend_nameparts(self, backend_name):
+        """ Takes name, location and roles from backend_name """
+        parts = backend_name.split('_')
+        name = parts[0]
+
+        location = ''
+        roles_index = -1
+        for i, part in enumerate(parts[1:]):
+            if part == '':
+                roles_index = i + 2
+                break
+            location += part + '/'
+
+        roles = []
+        if roles_index != -1:
+            roles = parts[roles_index:]
+
+        return name, location, roles
+
+    def _make_backend_name(self, name, location, roles, hash_name=True):
+        role_namepart = '_'.join(roles)
+        if hash_name:
+            name = sha1(name).hexdigest()
+        name = '%s%s__%s' % (name, 
+                             ('_' + location.replace('/', '_')).rstrip('_'),
+                             role_namepart)
+        name = name.rstrip('_')
+
+        return name
+
     def _add_backends(self,
                       hostname,
                       grouped_destinations,
@@ -454,18 +484,11 @@ class NginxAPI(object):
             # Find role ids that will be used in backend
             role_ids = set([dest.get('id') for dest in backend_destinations])
             role_ids.discard(None)
-            role_namepart = '_'.join(role_ids)
 
             if location.startswith('/'):
                 location = location[1:]
 
-            name = hostname
-            if hash_name:
-                name = sha1(hostname).hexdigest()
-            name = '%s%s__%s' % (name, 
-                                 ('_' + location.replace('/', '_')).rstrip('_'),
-                                 role_namepart)
-            name = name.rstrip('_')
+            name = self._make_backend_name(hostname, location, role_ids, hash_name)
 
             self._add_backend(name,
                               backend_destinations,
@@ -752,7 +775,12 @@ class NginxAPI(object):
         return result
 
     @rpc.service_method
-    def add_server(self, backend, server, update_conf=True, restart_service=True):
+    def add_server(self,
+                   backend,
+                   server,
+                   update_conf=True,
+                   restart_service=True,
+                   update_backend_table=False):
         """
         Adds server to backend with given name pattern.
         Parameter server can be dict or string (ip addr)
@@ -771,13 +799,28 @@ class NginxAPI(object):
         if not already_added:
             self.app_servers_inc.add('%s/server' % xpath, server)
 
+            if update_backend_table:
+                if self.backend_table[backend]:
+                    dest = self.backend_table[backend][0]
+                    dest['servers'].append(server)
+                else:
+                    location = self._backend_nameparts(backend)[1] or '/'
+                    dest = {'location': location,
+                            'servers': [server]}
+                    self.backend_table[backend] = [dest]
+
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
         if restart_service:
             self._restart_service()
 
     @rpc.service_method
-    def remove_server(self, backend, server, update_conf=True, restart_service=True):
+    def remove_server(self,
+                      backend,
+                      server,
+                      update_conf=True,
+                      restart_service=True,
+                      update_backend_table=False):
         """
         Removes server from backend with given name pattern.
         Parameter server can be dict or string (ip addr)
@@ -796,6 +839,11 @@ class NginxAPI(object):
                                                      server + '*')
         if server_xpath:
             self.app_servers_inc.remove(server_xpath)
+
+            if update_backend_table:
+                for destination in self.backend_table[backend]:
+                    if server in destination['servers']:
+                        destination['servers'].remove(server)
 
         if update_conf:
             self.app_servers_inc.write(self.app_inc_path)
