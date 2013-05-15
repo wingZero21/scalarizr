@@ -57,7 +57,7 @@ class AptPackageMgr(PackageMgr):
                         'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
                         raise_exc=False
         )
-        for _ in range(10):
+        for _ in range(18):  # timeout approx 3 minutes
             out, err, code = linux.system(('/usr/bin/apt-get',
                                             '-q', '-y', '--force-yes',
                                             '-o Dpkg::Options::=--force-confold') + \
@@ -100,7 +100,6 @@ class AptPackageMgr(PackageMgr):
 
         return installed, candidate
 
-
     def updatedb(self):
         try:
             coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
@@ -113,31 +112,16 @@ class AptPackageMgr(PackageMgr):
                 os.remove(filename)
         self.apt_get_command('update')
 
-
     def install(self, name, version=None, updatedb=False, **kwds):
         if version:
             name += '=%s' % version
         if updatedb:
             self.updatedb()
-        for _ in range(0, 30):
-            try:
-                self.apt_get_command('install %s' % name, raise_exc=True)
-                break
-            except linux.LinuxError, e:
-                if not 'E: Could not get lock' in e.err:
-                    raise
-                time.sleep(2)
+        self.apt_get_command('install %s' % name, raise_exc=True)
 
     def remove(self, name, purge=False):
         command = 'purge' if purge else 'remove'
-        for _ in xrange(0, 30):
-            try:
-                self.apt_get_command('%s %s' % (command, name), raise_exc=True)
-                break
-            except linux.LinuxError, e:
-                if not 'E: Could not get lock' in e.err:
-                    raise
-                time.sleep(2)
+        self.apt_get_command('%s %s' % (command, name), raise_exc=True)
 
     def info(self, name):
         installed, candidate = self.apt_policy(name)
@@ -206,7 +190,19 @@ class RpmVersion(object):
 class YumPackageMgr(PackageMgr):
 
     def yum_command(self, command, **kwds):
-        return linux.system((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None, command.split()))), **kwds)
+        # explicit exclude was added after yum tried to install iptables.i686
+        # on x86_64 amzn
+        exclude = ()
+        if linux.os["arch"] == "x86_64":
+            exclude = (
+                "--exclude", "*.i386",
+                "--exclude", "*.i486",
+                "--exclude", "*.i686",
+            )
+        elif linux.os["arch"] == "i386":
+            exclude = ("--exclude", "x86_64")
+
+        return linux.system((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None, command.split())) + exclude), **kwds)
 
 
     def rpm_ver_cmp(self, v1, v2):

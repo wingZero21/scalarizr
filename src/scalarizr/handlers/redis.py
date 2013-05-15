@@ -188,6 +188,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
         if self._cnf.state == ScalarizrState.RUNNING:
+            # Fix to enable access outside farm when use_passwords=True
             if self.use_passwords:
                 self.security_off()
 
@@ -305,7 +306,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     if self.default_service.running:
                         self.default_service.stop('Terminating default redis instance')
 
-                    self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
+                    self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type, self.use_passwords)
                     ports = ports or [redis.DEFAULT_PORT,]
                     passwords = passwords or [self.get_main_password(),]
                     self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)

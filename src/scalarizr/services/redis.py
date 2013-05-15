@@ -259,7 +259,12 @@ class RedisInstances(object):
         raise ServiceError('Redis instance with port %s not found' % port)
 
 
-    def init_processes(self, num, ports=[], passwords=[]):
+    def init_processes(self, num, ports=None, passwords=None):
+        ports = ports or []
+        passwords = passwords or []
+        if not self.use_passwords:
+            # Ignoring passwords from HostInitResponse if use_password=0
+            passwords = [None for password in passwords]
         if len(ports) < num:
             diff = num-len(ports)
             LOG.debug("Passed ports: %s. Need to find %s more." % (str(ports), diff))
