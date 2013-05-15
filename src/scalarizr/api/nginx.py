@@ -710,7 +710,7 @@ class NginxAPI(object):
         self._remove_nginx_server(name)
 
         # remove each backend that were in use by this proxy from backend_table
-        for backend_name in self.backend_table:
+        for backend_name in self.backend_table.keys():
             if name in backend_name:
                 self.backend_table.pop(backend_name)
 
@@ -733,7 +733,7 @@ class NginxAPI(object):
             self.app_servers_inc.write(self.app_inc_path + '.bak')
 
             self._remove_nginx_server(hostname)
-            for backend_name in self.backend_table:
+            for backend_name in self.backend_table.keys():
                 if hostname in backend_name:
                     self.backend_table.pop(backend_name)
 
