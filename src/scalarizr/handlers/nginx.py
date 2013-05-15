@@ -288,7 +288,7 @@ class NginxHandler(ServiceCtlHandler):
                 self._logger.debug('removing server %s from default backend' %
                                    server)
 
-                if len(self.api.backend_table['backend']['servers']) == 1:
+                if len(self.api.backend_table['backend'][0]['servers']) == 1:
                     self._logger.debug('adding localhost to default backend')
                     self.api.add_server('backend', '127.0.0.1',
                                         restart_service=False,
