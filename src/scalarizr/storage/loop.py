@@ -83,7 +83,7 @@ class LoopVolumeProvider(VolumeProvider):
 			if existed:
 				kwargs['device'] = existed[0][0]
 			else:
-				kwargs['device'] = mkloop(file, size=size, quick=not kwargs.get('zerofill'))
+				kwargs['device'] = mkloop(file, device=device, size=size, quick=not kwargs.get('zerofill'))
 			
 		return super(LoopVolumeProvider, self).create(**kwargs)
 
