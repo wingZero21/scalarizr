@@ -322,7 +322,8 @@ class NginxHandler(ServiceCtlHandler):
         # self._reload_service('%s is to be terminated' % server_ip)
 
         # do the same as in on_HostDown?
-        self.on_HostDown(message) #?
+        # self.on_HostDown(message) #?
+        pass
 
     def on_VhostReconfigure(self, message):
         # self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
@@ -382,9 +383,9 @@ class NginxHandler(ServiceCtlHandler):
             shutil.copy(pages_source + 'noapp.html', pages_destination)
 
     def make_default_proxy(self, roles):
-        self._logger.debug('Making default proxy')
         received_vhosts = self._queryenv.list_virtual_hosts()
         ssl_present = any(vhost.https for vhost in received_vhosts)
+        self._logger.debug('Making default proxy with ssl is %s' % ssl_present)
         servers = []
         for role in roles:
             if type(role) is str:
