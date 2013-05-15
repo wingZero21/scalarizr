@@ -249,17 +249,23 @@ class NginxHandler(ServiceCtlHandler):
 
         self._logger.debug('on host up backend table is %s' % self.api.backend_table)
         # Assuming backend `backend` can be only in default behaviour mode
-        if 'backend' in self.api.backend_table:
+        if self._in_default_mode():
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
-                self.api.remove_server('backend', '127.0.0.1',
-                                       restart_service=False,
-                                       update_backend_table=True)
-                self._logger.debug('adding new app server %s to default '
-                                    'backend' % server)
-                self.api.add_server('backend', server,
-                                     update_backend_table=True)
+
+                for default_backend in ['backend', 'backend.ssl']:
+                    if default_backend not in self.api.backend_table:
+                        continue
+
+                    self.api.remove_server(default_backend, '127.0.0.1',
+                                           restart_service=False,
+                                           update_backend_table=True)
+                    self._logger.debug('adding new app server %s to default '
+                                        'backend' % server)
+                    self.api.add_server(default_backend, server,
+                                         update_backend_table=True)
+                    
         else:
             self._logger.debug('adding new app server %s to backends that are '
                                'using role %s' % (server, role_id))
@@ -280,7 +286,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('on host down backend table is %s' % self.api.backend_table)
         self._logger.debug('removing server %s from backends' % server)
         # Assuming backend `backend` can be only in default behaviour mode
-        if 'backend' in self.api.backend_table:
+        if self._in_default_mode():
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
@@ -288,13 +294,16 @@ class NginxHandler(ServiceCtlHandler):
                 self._logger.debug('removing server %s from default backend' %
                                    server)
 
-                if len(self.api.backend_table['backend'][0]['servers']) == 1:
-                    self._logger.debug('adding localhost to default backend')
-                    self.api.add_server('backend', '127.0.0.1',
-                                        restart_service=False,
-                                        update_backend_table=True)
-                self.api.remove_server('backend', server, 
-                                       update_backend_table=True)
+                for default_backend in ['backend', 'backend.ssl']:
+                    if default_backend not in self.api.backend_table:
+                        continue
+                    if len(self.api.backend_table[default_backend][0]['servers']) == 1:
+                        self._logger.debug('adding localhost to default backend')
+                        self.api.add_server(default_backend, '127.0.0.1',
+                                            restart_service=False,
+                                            update_backend_table=True)
+                    self.api.remove_server(default_backend, server, 
+                                           update_backend_table=True)
 
         else:
             self._logger.debug('trying to remove server %s from backends that '
@@ -344,7 +353,7 @@ class NginxHandler(ServiceCtlHandler):
         #     self.api.enable_ssl()
         # else:
         #     self.api.disable_ssl()
-        if 'backend' in self.api.backend_table:
+        if self._in_default_mode():
             self._logger.debug('before vhost reconf backend table is %s' % self.api.backend_table)
             roles_for_proxy = []
             if __nginx__['upstream_app_role']:
@@ -364,6 +373,10 @@ class NginxHandler(ServiceCtlHandler):
                                         private_key,
                                         cacertificate)
         self.api._restart_service()
+
+    def _in_default_mode(self):
+        return 'backend' in self.api.backend_table or \
+            'backend.ssl' in self.api.backend_table
 
     def _copy_error_pages(self):
         pages_source = '/usr/share/scalr/nginx/html/'
@@ -385,6 +398,7 @@ class NginxHandler(ServiceCtlHandler):
     def make_default_proxy(self, roles):
         received_vhosts = self._queryenv.list_virtual_hosts()
         ssl_present = any(vhost.https for vhost in received_vhosts)
+        nossl_present = any(not vhost.https for vhost in received_vhosts)
         self._logger.debug('Making default proxy with ssl is %s' % ssl_present)
         servers = []
         for role in roles:
@@ -403,11 +417,18 @@ class NginxHandler(ServiceCtlHandler):
                         'port': '80'}]
 
         self._logger.debug('backend table is %s' % self.api.backend_table)
-        self.api.make_proxy('backend',
-                            servers=servers,
-                            ssl=ssl_present,
-                            backend_ip_hash=True,
-                            hash_backend_name=False)
+        if nossl_present:
+            self.api.make_proxy('backend',
+                                servers=servers,
+                                ssl=False,
+                                backend_ip_hash=True,
+                                hash_backend_name=False)
+        if ssl_present:
+            self.api.make_proxy('backend.ssl',
+                                servers=servers,
+                                ssl=True,
+                                backend_ip_hash=True,
+                                hash_backend_name=False)
         self._logger.debug('After making proxy backend table is %s' % self.api.backend_table)
         self._logger.debug('Default proxy is made')
 
