@@ -28,11 +28,6 @@ from scalarizr.linux import redhat, pkgmgr
 LOG = logging.getLogger(__name__)
 
 
-if linux.os['name'] == 'Amazon':
-	from scalarizr.linux import pkgmgr
-	pkgmgr.installed('iptables-services')
-
-
 IPTABLES_BIN = '/sbin/iptables'
 IPTABLES_SAVE = '/sbin/iptables-save'
 IPTABLES_RESTORE = '/sbin/iptables-restore'
@@ -456,8 +451,15 @@ def ensure(chain_rules, append=False):
 def enabled():
     # amazon linux doesn't have iptables service installed by default,
     # which makes "chkconfig --list iptables" fail
+    # update: amzn >= 6.4 doesn't allow installing iptables-services;
+    # however, the latest version of iptables itself suits all or needs
     if linux.os["name"] == "Amazon":
-        pkgmgr.installed("iptables-services")
+        if linux.os["release"] == "6.3":
+            pkgmgr.installed("iptables-services")
+        else:  # 6.4 and higher
+            # Upgrading iptables-1.4.18-1.16 to iptables-1.4.18-1.19 did
+            # the job
+            pkgmgr.latest("iptables")
 
     if linux.os['family'] in ('RedHat', 'Oracle'):
         out = redhat.chkconfig(list="iptables")[0]
