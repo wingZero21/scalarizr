@@ -265,7 +265,7 @@ class NginxHandler(ServiceCtlHandler):
                                         'backend' % server)
                     self.api.add_server(default_backend, server,
                                          update_backend_table=True)
-                    
+
         else:
             self._logger.debug('adding new app server %s to backends that are '
                                'using role %s' % (server, role_id))
@@ -399,7 +399,10 @@ class NginxHandler(ServiceCtlHandler):
         received_vhosts = self._queryenv.list_virtual_hosts()
         ssl_present = any(vhost.https for vhost in received_vhosts)
         nossl_present = any(not vhost.https for vhost in received_vhosts)
+        self._logger.debug('virtual hosts https status: %s' % [vhost.https for vhost in received_vhosts])
+        self._logger.debug('virtual hosts: %s' % received_vhosts)
         self._logger.debug('Making default proxy with ssl is %s' % ssl_present)
+        self._logger.debug('Making default proxy with nossl is %s' % nossl_present)
         servers = []
         for role in roles:
             if type(role) is str:
@@ -426,6 +429,7 @@ class NginxHandler(ServiceCtlHandler):
         if ssl_present:
             self.api.make_proxy('backend.ssl',
                                 servers=servers,
+                                port=None,
                                 ssl=True,
                                 backend_ip_hash=True,
                                 hash_backend_name=False)
