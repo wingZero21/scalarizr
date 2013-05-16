@@ -14,12 +14,12 @@ Scenario: Proxy to a role
 Scenario: Proxy to a role, and new server up
     Given i have a proxy to a role
     When i launch new server of this role
-    Then server appears in backend
+    Then server appears in the backend
 
 Scenario: Proxy to a role, and server goes down
     Given i have a proxy to a role
     When i terminate one server of this role
-    Then server removed from backend
+    Then server is removed from the backend
 
 Scenario: Proxy to backup role
     Given i have a proxy to two roles: master and backup

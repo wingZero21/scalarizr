@@ -40,8 +40,8 @@ class HAProxyAPI(object):
 
     def _server_name(self, ipaddr):
         '''@rtype: str'''
-        if ':' in ipaddr:
-            ipaddr = ipaddr.strip().split(':')[0]
+        # if ':' in ipaddr:
+        #    ipaddr = ipaddr.strip().split(':')[0]
         return ipaddr.replace('.', '-')
 
 
@@ -111,8 +111,8 @@ class HAProxyAPI(object):
 
         # allowing short servers & roles specification
         # creating new lists here also protects from side effects
-        roles = map(lambda x: {"id": x} if isinstance(x, int) else x, roles)
-        servers = map(lambda x: {"address": x} if isinstance(x, str) else x, servers)
+        roles = map(lambda x: {"id": x} if isinstance(x, int) else dict(x), roles)
+        servers = map(lambda x: {"address": x} if isinstance(x, str) else dict(x), servers)
 
         #
         listener_name = haproxy.naming('listen', "tcp", port)
@@ -170,6 +170,69 @@ class HAProxyAPI(object):
             )
         except Exception, e:
             raise exceptions.Duplicate(e)
+
+        self.cfg.save()
+        self.svc.reload()
+
+
+    @rpc.service_method
+    @validate.param('ipaddr', type='ipv4')
+    @validate.param('backend', optional=_rule_backend)
+    def add_server(self, ipaddr=None, backend=None):
+        '''Add server with ipaddr in backend section'''
+        self.cfg.reload()
+
+        if backend:
+            backend = backend.strip()
+        if ipaddr:
+            ipaddr = ipaddr.strip()
+
+        LOG.debug('HAProxyAPI.add_server')
+        LOG.debug('     %s' % haproxy.naming('backend', backend=backend))
+        bnds = self.cfg.sections(haproxy.naming('backend', backend=backend))
+
+        if not bnds:
+            if backend:
+                raise exceptions.NotFound('Backend not found: %s' % (backend, ))
+            else:
+                raise exceptions.Empty('No listeners to add server to')
+
+        #with self.svc.trans(exit='running'):
+            #with self.cfg.trans(exit='working'):
+
+        if True:
+            for bnd in bnds:
+
+                #? TEMPORARY
+                if ':' in ipaddr:
+                    hostname = ipaddr
+                    ipaddr, port = ipaddr.split(':')
+
+                server = {
+                    'address': ipaddr,
+                    'port': port or bnd.split(':')[-1],
+                    'check': True,
+                }
+                self.cfg.backends[bnd]['server'][hostname.replace('.', '-')] = server
+
+            self.cfg.save()
+            self.svc.reload()
+
+
+    @rpc.service_method
+    @validate.param('ipaddr', type='ipv4')
+    @validate.param('backend', optional=_rule_backend)
+    def remove_server(self, ipaddr, backend=None):
+        '''Remove server from backend section with ipaddr'''
+        if ipaddr: 
+            ipaddr = ipaddr.strip()
+        if backend: 
+            backend = backend.strip()
+
+        srv_name = self._server_name(ipaddr)
+        for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
+            if ipaddr and srv_name in self.cfg.backends[bd]['server']:
+                del self.cfg.backends[bd]['server'][srv_name]
 
         self.cfg.save()
         self.svc.reload()
@@ -309,36 +372,7 @@ class HAProxyAPI(object):
         self.svc.reload()
 
 
-    @rpc.service_method
-    @validate.param('ipaddr', type='ipv4')
-    @validate.param('backend', optional=_rule_backend)
-    def add_server(self, ipaddr=None, backend=None):
-        '''Add server with ipaddr in backend section'''
-        self.cfg.reload()
-        if backend: backend=backend.strip()
-        if ipaddr: ipaddr=ipaddr.strip()
-        LOG.debug('HAProxyAPI.add_server')
-        LOG.debug('     %s' % haproxy.naming('backend', backend=backend))
-        bnds = self.cfg.sections(haproxy.naming('backend', backend=backend))
-
-        if not bnds:
-            if backend:
-                raise exceptions.NotFound('Backend not found: %s' % (backend, ))
-            else:
-                raise exceptions.Empty('No listeners to add server to')
-        #with self.svc.trans(exit='running'):
-            #with self.cfg.trans(exit='working'):
-        if True:
-            for bnd in bnds:
-                server = {
-                        'address': ipaddr,
-                        'port': bnd.split(':')[-1],
-                        'check': True
-                }
-                self.cfg.backends[bnd]['server'][ipaddr.replace('.', '-')] = server
-
-            self.cfg.save()
-            self.svc.reload()
+    
 
 
     @rpc.service_method
@@ -417,21 +451,6 @@ class HAProxyAPI(object):
         #with self.svc.trans(exit='running'):
             #       with self.cfg.trans(enter='reload', exit='working'):
             #TODO: with...
-        self.cfg.save()
-        self.svc.reload()
-
-
-    @rpc.service_method
-    @validate.param('ipaddr', type='ipv4')
-    @validate.param('backend', optional=_rule_backend)
-    def remove_server(self, ipaddr, backend=None):
-        '''Remove server from backend section with ipaddr'''
-        if ipaddr: ipaddr = ipaddr.strip()
-        if backend: backend = backend.strip()
-        srv_name = self._server_name(ipaddr)
-        for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
-            if ipaddr and srv_name in self.cfg.backends[bd]['server']:
-                del self.cfg.backends[bd]['server'][srv_name]
         self.cfg.save()
         self.svc.reload()
 

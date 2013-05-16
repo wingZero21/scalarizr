@@ -16,7 +16,24 @@ haproxy_api.iptables = mock.MagicMock()
 
 
 LOG = logging.getLogger(__name__)
-logging.getLogger().setLevel(logging.INFO)
+logging.getLogger().setLevel(logging.DEBUG)
+
+
+class IdDict(dict):
+    """
+    Allows adding without a key.
+    Try to avoid using ints as keys.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(IdDict, self).__init__(*args, **kwargs)
+
+        self._id = 0
+
+    def add(self, item):
+        self._id += 1
+
+        self[self._id] = item
 
 
 class SocketServer(Task):
@@ -51,7 +68,7 @@ class SocketServer(Task):
         address_str = ':'.join(map(str, address))
 
         if not self._killed:
-            LOG.info("[%s] Got connection from %s", self, address_str)
+            LOG.debug("[%s] Got connection from %s", self, address_str)
             client_sock.send(str(self))
         else:
             # we expect client_sock to be the one created by self._kill()
@@ -137,6 +154,33 @@ def communicate(target):
     return response
 
 
+class Role(object):
+
+    _id = 10
+    _instances = {}
+
+    def __init__(self, servers=None):
+        cls = self.__class__
+        cls._id += 1
+
+        self.id = cls._id
+        self.servers = servers or []
+
+        cls._instances[self.id] = self
+
+    @classmethod
+    def setup(cls):
+        cls._instances = {}
+
+    @classmethod
+    def get_servers(cls, role_id):
+        #? should the ports be stripped?
+        return map(str, cls._instances[role_id].servers)
+
+
+haproxy_api.get_servers = Role.get_servers
+
+
 class Roles(object):
 
     _id = 10
@@ -158,8 +202,13 @@ class Roles(object):
     def get_servers(cls, role_id):
         return cls._role_servers[role_id]
 
+    @classmethod
+    def add_servers(cls, role_id, servers=None):
+        servers = servers or []
+        cls._role_servers[role_id].extend(servers)
 
-haproxy_api.get_servers = Roles.get_servers
+
+#haproxy_api.get_servers = Roles.get_servers
 
 
 
@@ -206,14 +255,12 @@ def acceptable_responses():
     # TODO: doc
     # TODO: ignore down servers
 
-    responses = map(lambda server: server if isinstance(server, str) else \
-                                   server["address"],
-                    world.servers)
+    responses = map(str, world.servers.values())
 
-    role_ids = map(lambda role: role if isinstance(role, int) else \
-                                role["id"],
-                   world.roles)
-    [responses.extend(Roles.get_servers(role_id)) for role_id in role_ids]
+    # role_ids = map(lambda role: role if isinstance(role, int) else \
+    #                             role["id"],
+    #                world.roles)
+    # [responses.extend(Roles.get_servers(role_id)) for role_id in role_ids]
 
     LOG.info("Acceptable responses: %s", ', '.join(['"' + response + '"'
                                                     for response in responses]))
@@ -223,12 +270,15 @@ def acceptable_responses():
 @before.each_scenario
 def setup(scenario):
     Server.setup()
-    Roles.setup()
+    Role.setup()
 
-    world.servers = []
-    world.roles = []
+    world.servers = IdDict()
+    world.roles = IdDict()
     world.proxy_port = 27000
     world.acceptable_responses = []
+
+    # for 'server goes down' scenario
+    world.terminated = []
 
     minimal_haproxy_conf()
     world.api = haproxy_api.HAProxyAPI()
@@ -246,31 +296,97 @@ def teardown(scenario):
     LOG.info("-" * 17)
 
 
-@step("i have a server")
-def i_have_a_server(step):
+@step("i have a ?(\w*) server ?(\w*)")
+def i_have_a_server(step, desc, name):
+    # desc == ''
+    # name == ''
     server = Server()
     server.start()
-    world.servers.append(str(server))
+    world.servers.add(server)
 
 
-@step("i have a role")
-def i_have_a_role(step):
+@step("i have a ?(\w*) role ?(\w*)")
+def i_have_a_role(step, desc, name):
     servers = [Server() for i in range(2)]
     [server.start() for server in servers]
-    role = Roles.create(map(str, servers))
-    world.roles.append(role)
+
+    role = Role(servers)
+    world.roles.add(role)
+
+@step("i have a backup role")
+def i_have_a_backup_role(step):
+    role_id = make_role()
+    world.roles.append({"id": role_id, "backup": True})
 
 
 @step("i add proxy")
 @dont_fail
 def i_add_proxy(step):
+    servers = map(str, world.servers.values())
+    roles = map(str, world.roles.values())
+
     world.api.add_proxy(port=world.proxy_port,
-                        servers=world.servers,
-                        roles=world.roles)
+                        servers=servers,
+                        roles=roles)
     world.acceptable_responses = acceptable_responses()
+
+
+@step("i have a proxy to a role")
+def i_have_a_proxy_to_a_role(step):
+    step.given("i have a role")
+    step.given("i add proxy")
 
 
 @step("i expect proxying")
 def i_expect_proxying(step):
-    assert communicate(world.proxy_port) in world.acceptable_responses
+    for i in range(10):
+        assert communicate(world.proxy_port) in world.acceptable_responses
+
+
+@step("i launch new server of this role")
+def i_launch_new_server_of_this_role(step):
+    step.given("i have a server")
+    server = world.servers[-1]
+
+    role_id = world.roles[-1]
+    Roles.add_servers(role_id, [server])
+
+    #? how do we associate role with a backend?
+    world.api.add_server(server, "tcp:27000")
+
+
+@step("i terminate one server of this role")
+def i_terminate_one_server_of_this_role(step):
+    role_id = world.roles[-1]
+    role_servers = Roles.get_servers(role_id)
+
+    server = role_servers.pop()
+    world.api.remove_server(server)
+
+    world.terminated.append(server)
+    world.acceptable_responses.remove(server)
+
+
+@step("server appears in the backend")
+def server_appears_in_the_backend(step):
+    server = world.servers[-1]
+    assert server.replace('.', '-') in world.api.cfg.backends["scalr:backend:tcp:27000"]['server']
+
+
+@step("server is removed from the backend")
+def server_is_removed_from_the_backend(step):
+    server = world.terminated[-1]
+    assert not server.replace('.', '-') in world.api.cfg.backends["scalr:backend:tcp:27000"]['server']
+
+
+@step("i have a proxy to two roles: master and backup")
+def i_have_a_proxy_to_two_roles(step):
+    step.given("i have a role")
+    step.given("i have a backup role")
+    step.given("i add proxy")
+
+
+@step("i terminate master servers")
+def i_terminate_master_servers(step):
+    pass
 
