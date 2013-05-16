@@ -184,35 +184,21 @@ class NginxHandler(ServiceCtlHandler):
 
     def get_initialization_phases(self, hir_message):
         self._phase = 'Configure Nginx'
-        # self._step_update_vhosts = 'Update virtual hosts'
-        # self._step_reload_upstream = 'Reload upstream'
         self._step_setup_proxying = 'Setup proxying'
         self._step_copy_error_pages = 'Copy default html error pages'
 
         return {'before_host_up': [{
                     'name': self._phase,
-                    # 'steps': [self._step_update_vhosts, self._step_reload_upstream]
                     'steps': [self._step_copy_error_pages,
                               self._step_setup_proxying]}]}
 
     def on_start(self):
         if __node__['state'] == 'running':
-            # self._update_vhosts()
-            # self._reload_upstream()
-
             role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])
             if role_params and 'proxies' in role_params:
                 self.api.recreate_proxying(role_params['proxies'])
 
     def on_before_host_up(self, message):
-        # with bus.initialization_op as op:
-        #     with op.phase(self._phase):
-        #         with op.step(self._step_update_vhosts):
-        #             self._update_vhosts()
-
-        #         with op.step(self._step_reload_upstream):
-        #             self._reload_upstream()
-
         with bus.initialization_op as op:
             with op.phase(self._phase):
 
@@ -238,7 +224,6 @@ class NginxHandler(ServiceCtlHandler):
                  preset=self.initial_preset)
 
     def on_HostUp(self, message):
-        # self._reload_upstream()
         server = ''
         role_id = message.farm_role_id
         behaviours = message.behaviour
@@ -274,7 +259,6 @@ class NginxHandler(ServiceCtlHandler):
 
 
     def on_HostDown(self, message):
-        # self._reload_upstream()
         server = ''
         role_id = message.farm_role_id
         behaviours = message.behaviour
@@ -312,36 +296,9 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('after host down backend table is %s' % self.api.backend_table)
 
     def on_BeforeHostTerminate(self, message):
-        # if not os.access(self._app_inc_path, os.F_OK):
-        #     self._logger.debug('File %s not exists. Nothing to do', self._app_inc_path)
-        #     return
-
-        # include = Configuration('nginx')
-        # include.read(self._app_inc_path)
-
-        # server_ip = '%s:%s' % (message.local_ip or message.remote_ip, self._app_port)
-        # backends = include.get_list(self.backends_xpath)
-        # if server_ip in backends:
-        #     include.remove(self.backends_xpath, server_ip)
-        #     # Add 127.0.0.1 If it was the last backend
-        #     if len(backends) == 1:
-        #         include.add(self.backends_xpath, self.localhost)
-
-        # include.write(self._app_inc_path)
-        # self._reload_service('%s is to be terminated' % server_ip)
-
-        # do the same as in on_HostDown?
-        # self.on_HostDown(message) #?
         pass
 
     def on_VhostReconfigure(self, message):
-        # self._logger.info("Received virtual hosts update notification. Reloading virtual hosts configuration")
-        # self._update_vhosts()
-        # self._reload_upstream(True)
-        # if ssl certificate is updated:
-        #     write new ssl certificate
-        #     self.api._restart_service()
-
         # TODO: maybe uncomment next 9 lines if message actually contains
         #       vhost name and its ssl status
         # self._logger.debug('Trying to update ssl certificate on vhost reconfigure')
@@ -396,13 +353,11 @@ class NginxHandler(ServiceCtlHandler):
             shutil.copy(pages_source + 'noapp.html', pages_destination)
 
     def make_default_proxy(self, roles):
-        received_vhosts = self._queryenv.list_virtual_hosts()
-        ssl_present = any(vhost.https for vhost in received_vhosts)
-        nossl_present = any(not vhost.https for vhost in received_vhosts)
-        self._logger.debug('virtual hosts https status: %s' % [vhost.https for vhost in received_vhosts])
-        self._logger.debug('virtual hosts: %s' % received_vhosts)
-        self._logger.debug('Making default proxy with ssl is %s' % ssl_present)
-        self._logger.debug('Making default proxy with nossl is %s' % nossl_present)
+        # actually list_virtual_hosts() returns only 1 virtual host if it's
+        # ssl virtual host. If there are no ssl vhosts in farm, it returns
+        # empty list
+        ssl_vhosts = self._queryenv.list_virtual_hosts()
+        self._logger.debug('Making default proxy')
         servers = []
         for role in roles:
             if type(role) is str:
@@ -420,13 +375,13 @@ class NginxHandler(ServiceCtlHandler):
                         'port': '80'}]
 
         self._logger.debug('backend table is %s' % self.api.backend_table)
-        if nossl_present:
-            self.api.make_proxy('backend',
-                                servers=servers,
-                                ssl=False,
-                                backend_ip_hash=True,
-                                hash_backend_name=False)
-        if ssl_present:
+        self.api.make_proxy('backend',
+                            servers=servers,
+                            ssl=False,
+                            backend_ip_hash=True,
+                            hash_backend_name=False)
+        if ssl_vhosts:
+            self._logger.debug('addidg default ssl nginx server')
             self.api.make_proxy('backend.ssl',
                                 servers=servers,
                                 port=None,
@@ -512,105 +467,6 @@ class NginxHandler(ServiceCtlHandler):
                 shutil.copy(nginx_conf_path, nginx_conf_path + '.save')
             config.write(nginx_conf_path)
             self.api._restart_service()
-            
-    def _reload_upstream(self, force_reload=False):
-
-        backend_include = Configuration('nginx')
-        if os.path.exists(self._app_inc_path):
-            backend_include.read(self._app_inc_path)
-            try:
-                backend_include.get("upstream[@value='backend']")
-            except NoPathError:
-                # Sorry, metaconf, backend_include.add() doesn't work as expected
-                with open(self._app_inc_path, 'a') as fp:
-                    fp.write('\nupstream backend {')
-                    fp.write('\n    ip_hash;')
-                    fp.write('\n}')
-                backend_include = Configuration('nginx')
-                backend_include.read(self._app_inc_path)
-        else:
-            backend_include.read(os.path.join(bus.share_path, 'nginx/app-servers.tpl'))
-
-        # Create upstream hosts configuration
-        if not self._upstream_app_role:
-            kwds = dict(behaviour=BuiltinBehaviours.APP)
-        else:
-            kwds = dict(role_name=self._upstream_app_role)
-        list_roles = self._queryenv.list_roles(**kwds)
-        servers = []
-
-        for app_serv in list_roles:
-            for app_host in app_serv.hosts :
-                server_str = '%s:%s' % (app_host.internal_ip or app_host.external_ip, self._app_port)
-                servers.append(server_str)
-        self._logger.debug("QueryEnv returned list of app servers: %s" % servers)
-
-        # Add cloudfoundry routers
-        for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.CF_ROUTER):
-            for host in role.hosts:
-                servers.append('%s:%s' % (host.internal_ip or host.external_ip, 2222))
-
-        for entry in backend_include.get_list(self.backends_xpath):
-            for server in servers:
-                if entry.startswith(server):
-                    self._logger.debug("Server %s already in upstream list" % server)
-                    servers.remove(server)
-                    break
-            else:
-                self._logger.debug("Removing old entry %s from upstream list" % entry)
-                backend_include.remove(self.backends_xpath, entry)
-
-        for server in servers:
-            self._logger.debug("Adding new server %s to upstream list" % server)
-            backend_include.add(self.backends_xpath, server)
-
-        if not backend_include.get_list(self.backends_xpath):
-            self._logger.debug("Scalr returned empty app hosts list. Adding localhost only")
-            backend_include.add(self.backends_xpath, self.localhost)
-        self._logger.info('Upstream servers: %s', ' '.join(backend_include.get_list(self.backends_xpath)))
-
-        # Https configuration
-        # openssl req -new -x509 -days 9999 -nodes -out cert.pem -keyout cert.key
-        if os.access(self._https_inc_path, os.F_OK) \
-                        and os.access(self._cnf.key_path("https.crt"), os.F_OK) \
-                        and os.access(self._cnf.key_path("https.key"), os.F_OK):
-            self._logger.debug('Add https include %s', self._https_inc_path)
-            backend_include.set('include', self._https_inc_path, force=True)
-        else:
-            self._logger.debug('Removing https include %s', self._https_inc_path)
-            try:
-                backend_include.remove('include', self._https_inc_path)
-            except NoPathError:
-                pass
-
-
-        old_include = None
-        if os.path.isfile(self._app_inc_path):
-            self._logger.debug("Reading old configuration from %s" % self._app_inc_path)
-            old_include = Configuration('nginx')
-            old_include.read(self._app_inc_path)
-
-        if old_include \
-                        and not force_reload \
-                        and     backend_include.get_list(self.backends_xpath) == old_include.get_list(self.backends_xpath) :
-            self._logger.debug("nginx upstream configuration unchanged")
-        else:
-            self._logger.debug("nginx upstream configuration was changed")
-
-            if os.access(self._app_inc_path, os.F_OK):
-                self._logger.debug('Backup file %s as %s', self._app_inc_path, self._app_inc_path + '.save')
-                shutil.move(self._app_inc_path, self._app_inc_path+".save")
-
-            self._logger.debug('Write new %s', self._app_inc_path)
-            backend_include.write(self._app_inc_path)
-
-            self._update_main_config()
-
-            self._test_config()
-
-        bus.fire("nginx_upstream_reload")
-
-
 
     def _insert_iptables_rules(self, *args, **kwargs):
         if iptables.enabled():
@@ -618,87 +474,6 @@ class NginxHandler(ServiceCtlHandler):
                     {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "80"},
                     {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "443"},
             ])
-
-
-    def _update_vhosts(self):
-        self._logger.debug("Requesting virtual hosts list")
-        received_vhosts = self._queryenv.list_virtual_hosts()
-        self._logger.debug("Virtual hosts list obtained (num: %d)", len(received_vhosts))
-
-        https_config = ''
-        cert_path = self._cnf.key_path("https.crt")
-        pk_path = self._cnf.key_path("https.key")
-        ssl_present = any(vhost.https for vhost in received_vhosts)
-
-        if ssl_present:
-            https_certificate = self._queryenv.get_https_certificate()
-
-            if https_certificate[0]:
-                cert = https_certificate[0]
-                self._logger.debug('Writing ssl cert')
-                with open(cert_path, 'w') as fp:
-                    fp.write(cert)
-            else:
-                self._logger.error('Scalr returned empty SSL Cert')
-                return
-
-            if len(https_certificate)>1 and https_certificate[1]:
-                pk = https_certificate[1]
-                self._logger.debug('Writing ssl key')
-                with open(pk_path, 'w') as fp:
-                    fp.write(pk)
-            else:
-                self._logger.error('Scalr returned empty SSL Cert')
-                return
-
-            if https_certificate[2]:
-                cert = https_certificate[2]
-                self._logger.debug('Appending CA cert to cert file')
-                with open(cert_path, 'a') as fp:
-                    fp.write('\n' + https_certificate[2])
-        else:
-            self._logger.debug('No SSL vhosts obtained. Removing old SSL keys.')
-            for key_path in (cert_path, pk_path):
-                if os.path.exists(key_path):
-                    os.remove(key_path)
-                    self._logger.debug('%s deleted' % key_path)
-
-        if received_vhosts:
-
-            for vhost in received_vhosts:
-                if vhost.hostname and vhost.type == 'nginx': #and vhost.https
-                    raw = vhost.raw.replace('/etc/aws/keys/ssl/https.crt',cert_path)
-                    raw = raw.replace('/etc/aws/keys/ssl/https.key',pk_path)
-                    https_config += raw + '\n'
-
-            if https_config:
-                if os.path.exists(self._https_inc_path):
-                    file_content = None
-                    with open(self._https_inc_path, 'r') as fp:
-                        file_content = fp.read()
-                    if file_content:
-                        time_suffix = str(datetime.now()).replace(' ','.')
-                        shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
-
-                with open(self._https_inc_path, 'w') as fp:
-                    fp.write(https_config)
-
-        else:
-            self._logger.debug('Scalr returned empty virtualhost list. Removing junk files.')
-            if os.path.exists(self._https_inc_path):
-                os.remove(self._https_inc_path)
-                self._logger.debug('%s deleted' % self._https_inc_path)
-
-        if https_config:
-            if os.path.exists(self._https_inc_path) \
-                            and open(self._https_inc_path, 'r').read():
-                time_suffix = str(datetime.now()).replace(' ','.')
-                shutil.move(self._https_inc_path, self._https_inc_path + time_suffix)
-
-            self._logger.debug('Writing virtualhosts to https.include')
-            with open(self._https_inc_path, 'w') as fp:
-                fp.write(https_config)
-
 
 
 class NginxConf(BaseConfig):
