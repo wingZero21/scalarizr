@@ -40,9 +40,9 @@ Scenario: Proxy with advancend configuration
     And i have a backup role RB
     And i have a down role RD
     When i add proxy
-    Then i expect S and R servers are regular in backend
-    And i expect SD and RD servers are down in backend
-    And i expect SB and RB servers are backup in backend 
+    Then i expect S and R servers are regular in the backend
+    And i expect SD and RD servers are down in the backend
+    And i expect SB and RB servers are backup in the backend 
 
 Scenario: Healthcheck application
     Given i have a role R1

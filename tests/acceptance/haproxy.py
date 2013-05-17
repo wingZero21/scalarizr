@@ -21,8 +21,7 @@ logging.getLogger().setLevel(logging.DEBUG)
 
 class IdDict(dict):
     """
-    Allows adding without a key.
-    Try to avoid using ints as keys.
+    Allows adding multiple items with '' as the key, uses an int instead.
     """
 
     def __init__(self, *args, **kwargs):
@@ -30,10 +29,12 @@ class IdDict(dict):
 
         self._id = 0
 
-    def add(self, item):
-        self._id += 1
+    def __setitem__(self, key, val):
+        if key == '':
+            self._id += 1
+            key = self._id
 
-        self[self._id] = item
+        super(IdDict, self).__setitem__(key, val)
 
 
 class SocketServer(Task):
@@ -103,6 +104,8 @@ class Server(SocketServer, threading.Thread):
 
         cls._servers.append(self)
 
+        self.as_arg = str(self)
+
     @classmethod
     def setup(cls):
         cls.teardown()
@@ -164,6 +167,7 @@ class Role(object):
         cls._id += 1
 
         self.id = cls._id
+        self.as_arg = self.id
         self.servers = servers or []
 
         cls._instances[self.id] = self
@@ -181,38 +185,11 @@ class Role(object):
 haproxy_api.get_servers = Role.get_servers
 
 
-class Roles(object):
-
-    _id = 10
-    _role_servers = {}
-
-    @classmethod
-    def setup(cls):
-        cls._role_servers = {}
-
-    @classmethod
-    def create(cls, servers=None):
-        servers = servers or []
-
-        cls._id += 1
-        cls._role_servers[cls._id] = servers
-        return cls._id
-
-    @classmethod
-    def get_servers(cls, role_id):
-        return cls._role_servers[role_id]
-
-    @classmethod
-    def add_servers(cls, role_id, servers=None):
-        servers = servers or []
-        cls._role_servers[role_id].extend(servers)
-
-
-#haproxy_api.get_servers = Roles.get_servers
-
-
-
-
+PARAMS = {
+    "down": {"disabled": True},
+    "backup": {"backup": True},
+    "regular": {},
+}
 
 
 def minimal_haproxy_conf(path="/etc/haproxy/haproxy.cfg"):
@@ -238,17 +215,8 @@ def dont_fail(f):
         except:
             # after.each_scenario doesn't execute for some reason if
             # we let this exception pop out
-            LOG.info("STEP FAILED", exc_info=sys.exc_info())
+            LOG.error("STEP FAILED", exc_info=sys.exc_info())
     return wrapper
-
-
-
-
-
-
-
-
-
 
 
 def acceptable_responses():
@@ -257,14 +225,15 @@ def acceptable_responses():
 
     responses = map(str, world.servers.values())
 
-    # role_ids = map(lambda role: role if isinstance(role, int) else \
-    #                             role["id"],
-    #                world.roles)
-    # [responses.extend(Roles.get_servers(role_id)) for role_id in role_ids]
+    role_ids = map(lambda role: role.id, world.roles.values())
+    [responses.extend(map(str, Role.get_servers(role_id))) for role_id in role_ids]
 
+    return responses
+
+def log_acceptable_responses():
+    responses = world.acceptable_responses
     LOG.info("Acceptable responses: %s", ', '.join(['"' + response + '"'
                                                     for response in responses]))
-    return responses
 
 
 @before.each_scenario
@@ -277,6 +246,8 @@ def setup(scenario):
     world.proxy_port = 27000
     world.acceptable_responses = []
 
+    # for 'new server up'
+    world.new_server = None
     # for 'server goes down' scenario
     world.terminated = []
 
@@ -298,37 +269,41 @@ def teardown(scenario):
 
 @step("i have a ?(\w*) server ?(\w*)")
 def i_have_a_server(step, desc, name):
-    # desc == ''
-    # name == ''
     server = Server()
     server.start()
-    world.servers.add(server)
+
+    if desc:
+        # server.as_arg = {"address": server.address[0], "port": server.address[1]}
+        server.as_arg = {"address": str(server)}
+        server.as_args.update(PARAMS[desc])
+
+    world.servers[name] = server
 
 
 @step("i have a ?(\w*) role ?(\w*)")
 def i_have_a_role(step, desc, name):
     servers = [Server() for i in range(2)]
     [server.start() for server in servers]
-
     role = Role(servers)
-    world.roles.add(role)
 
-@step("i have a backup role")
-def i_have_a_backup_role(step):
-    role_id = make_role()
-    world.roles.append({"id": role_id, "backup": True})
+    if desc:
+        role.as_arg = {"id": role.id}
+        role.as_arg.update(PARAMS[desc])
+
+    world.roles[name] = role
 
 
 @step("i add proxy")
 @dont_fail
 def i_add_proxy(step):
-    servers = map(str, world.servers.values())
-    roles = map(str, world.roles.values())
+    servers = map(lambda server: server.as_arg, world.servers.values())
+    roles = map(lambda role: role.as_arg, world.roles.values())
 
     world.api.add_proxy(port=world.proxy_port,
                         servers=servers,
                         roles=roles)
     world.acceptable_responses = acceptable_responses()
+    log_acceptable_responses()
 
 
 @step("i have a proxy to a role")
@@ -345,48 +320,67 @@ def i_expect_proxying(step):
 
 @step("i launch new server of this role")
 def i_launch_new_server_of_this_role(step):
-    step.given("i have a server")
-    server = world.servers[-1]
+    role = world.roles.values()[0]
+    server = Server()
+    server.start()
+    role.servers.append(server)
 
-    role_id = world.roles[-1]
-    Roles.add_servers(role_id, [server])
+    world.new_server = server
 
     #? how do we associate role with a backend?
-    world.api.add_server(server, "tcp:27000")
+    world.api.add_server(str(server), "tcp:27000")
 
 
 @step("i terminate one server of this role")
 def i_terminate_one_server_of_this_role(step):
-    role_id = world.roles[-1]
-    role_servers = Roles.get_servers(role_id)
-
-    server = role_servers.pop()
-    world.api.remove_server(server)
+    role = world.roles.values()[0]
+    server = role.servers.pop()
 
     world.terminated.append(server)
-    world.acceptable_responses.remove(server)
+    world.acceptable_responses.remove(str(server))
+
+    world.api.remove_server(str(server))
 
 
 @step("server appears in the backend")
 def server_appears_in_the_backend(step):
-    server = world.servers[-1]
-    assert server.replace('.', '-') in world.api.cfg.backends["scalr:backend:tcp:27000"]['server']
+    assert world.new_server, world.new_server
+    server_name = str(world.new_server).replace('.', '-')
+    assert server_name in world.api.cfg.backends["scalr:backend:tcp:27000"]['server']
 
 
 @step("server is removed from the backend")
 def server_is_removed_from_the_backend(step):
+    assert len(world.terminated) == 1, world.terminated
     server = world.terminated[-1]
-    assert not server.replace('.', '-') in world.api.cfg.backends["scalr:backend:tcp:27000"]['server']
+    server_name = str(server).replace('.', '-')
+    assert not server_name in world.api.cfg.backends["scalr:backend:tcp:27000"]['server']
 
 
 @step("i have a proxy to two roles: master and backup")
 def i_have_a_proxy_to_two_roles(step):
-    step.given("i have a role")
-    step.given("i have a backup role")
+    step.given("i have a role master")
+    step.given("i have a backup role backup")
     step.given("i add proxy")
 
 
 @step("i terminate master servers")
 def i_terminate_master_servers(step):
-    pass
+    master_role = world.roles["master"]
+
+    for server in master_role.servers:
+        world.api.remove_server(str(server))
+        world.acceptable_responses.remove(str(server))
+    log_acceptable_responses()
+
+
+@step("i expect (\w+) and (\w+) servers are (\w+) in the backend")
+def i_expect_servers_in_backend(step, name1, name2, desc):
+    server = world.servers[name1]
+
+    server_name = str(server).replace('.', '-')
+
+    x = world.api.cfg.backends["scalr:backend:tcp:27000"]['server'][server_name]
+    LOG.info(str(x))
+    raise 1
 

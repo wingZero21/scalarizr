@@ -87,6 +87,7 @@ class HAProxyAPI(object):
         http://cbonte.github.com/haproxy-dconv/configuration-1.4.html
 
         """
+        # TODO: handle address-host-port mess
 
         # default values
         if not backend_port:
