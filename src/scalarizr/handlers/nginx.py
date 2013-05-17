@@ -394,7 +394,7 @@ class NginxHandler(ServiceCtlHandler):
         if ssl_vhosts:
             self._logger.debug('adding default ssl nginx server')
             strio = StringIO.StringIO()
-            self.api.httpr_inc.write_fp(strio, False)
+            self.api.https_inc.write_fp(strio, False)
             self._logger.debug('~~https.include: %s' % strio.getvalue())
             self.api.make_proxy('backend.ssl',
                                 servers=servers,
