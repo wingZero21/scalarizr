@@ -635,7 +635,7 @@ class NginxAPI(object):
                                                ssl_certificate_id)
 
         strio = StringIO.StringIO()
-        server_config.writefp(strio, False)
+        server_config.write_fp(strio, False)
         _logger.debug('adding nginx server:\n%s' % strio.getvalue())
 
         self.https_inc.append_conf(server_config)
@@ -779,7 +779,7 @@ class NginxAPI(object):
             self._remove_nginx_server(hostname)
 
             strio = StringIO.StringIO()
-            self.https_inc.writefp(strio, False)
+            self.https_inc.write_fp(strio, False)
             _logger.debug('after deleting https.include is:\n%s' % strio.getvalue())
 
             for backend_name in self.backend_table.keys():
@@ -788,7 +788,7 @@ class NginxAPI(object):
 
             self.add_proxy(hostname, reread_conf=False, **kwds)
 
-            self.https_inc.writefp(strio, False)
+            self.https_inc.write_fp(strio, False)
             _logger.debug('after dding proxy https.include is:\n%s' % strio.getvalue())
 
         except:

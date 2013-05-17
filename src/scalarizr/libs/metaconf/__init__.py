@@ -146,7 +146,7 @@ class Configuration:
                 self.etree.getroot().append(child)
         """
 
-    def write_fp(self, fp, close = True):
+    def write_fp(self, fp, close=True):
         """
         Writes configuration to fp with provider's method 'write'.
         If 'close' parameter passed with 'False' value, fp won't be closed.
