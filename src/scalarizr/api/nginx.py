@@ -1,7 +1,6 @@
 from __future__ import with_statement
 
 import os
-import shutil
 from telnetlib import Telnet
 import time
 from hashlib import sha1
@@ -13,6 +12,7 @@ from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
+from scalarizr.linux import iptables
 
 
 __nginx__ = __node__['nginx']
@@ -112,6 +112,18 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                                      returncode)
 
         self._wait_workers()
+
+
+def _open_port(port):
+    if iptables.enabled():
+        rule = {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)}
+        iptables.FIREWALL.ensure([rule])
+
+
+def _close_port(port):
+    if iptables.enabled():
+        rule = {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)}
+        iptables.FIREWALL.remove(rule)
 
 
 class NginxAPI(object):
@@ -665,6 +677,11 @@ class NginxAPI(object):
                                ssl_port=ssl_port,
                                ssl_certificate_id=ssl_certificate_id)
 
+        if port:
+            _open_port(port)
+        if ssl_port:
+            _open_port(ssl_port)
+
         self.app_servers_inc.write(self.app_inc_path)
         self.https_inc.write(self.https_inc_path)
 
@@ -682,6 +699,9 @@ class NginxAPI(object):
         """
         Removes server from https.include config. Also removes used backends.
         """
+
+        xpaths_to_remove = []
+
         for i, _ in enumerate(self.https_inc.get_list('server')):
 
             server_xpath = 'server[%i]' % (i + 1)
@@ -697,7 +717,13 @@ class NginxAPI(object):
                     backend = backend.replace('http://', '')
                     self._remove_backend(backend)
 
-                self.https_inc.remove(server_xpath)
+                for port in self.https_inc.get_list('%s/listen' % server_xpath):
+                    port = port.split()[0]
+                    _close_port(port)
+
+                xpaths_to_remove.append(server_xpath)
+        for xpath in reversed(xpaths_to_remove):
+            self.https_inc.remove(xpath)
 
     @rpc.service_method
     def remove_proxy(self, name, restart_service=True):
@@ -711,7 +737,7 @@ class NginxAPI(object):
 
         # remove each backend that were in use by this proxy from backend_table
         for backend_name in self.backend_table.keys():
-            if name in backend_name:
+            if name == self._backend_nameparts(backend_name)[0]:
                 self.backend_table.pop(backend_name)
 
         self.https_inc.write(self.https_inc_path)
@@ -734,7 +760,7 @@ class NginxAPI(object):
 
             self._remove_nginx_server(hostname)
             for backend_name in self.backend_table.keys():
-                if hostname in backend_name:
+                if hostname == self._backend_nameparts(backend_name)[0]:
                     self.backend_table.pop(backend_name)
 
             self.add_proxy(hostname, reread_conf=False, **kwds)

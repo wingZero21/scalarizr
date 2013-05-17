@@ -135,6 +135,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger = logging.getLogger(__name__)
         self.preset_provider = NginxPresetProvider()
         self.api = NginxAPI()
+        self._terminating_servers = []
         preset_service.services[BEHAVIOUR] = self.preset_provider
 
         bus.define_events("nginx_upstream_reload")
@@ -295,8 +296,17 @@ class NginxHandler(ServiceCtlHandler):
             self.api.remove_server_from_role(server, role_id)
         self._logger.debug('after host down backend table is %s' % self.api.backend_table)
 
+        self._terminating_servers.append(server)
+
     def on_BeforeHostTerminate(self, message):
-        pass
+        server = ''
+        if message.cloud_location == __node__['cloud_location']:
+            server = message.local_ip
+        else:
+            server = message.remote_ip
+        if server not in self._terminating_servers:
+            self.on_HostDown(message)
+        self._terminating_servers.remove(server)
 
     def on_VhostReconfigure(self, message):
         # TODO: maybe uncomment next 9 lines if message actually contains
