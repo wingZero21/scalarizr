@@ -737,8 +737,14 @@ class NginxAPI(object):
                     _close_port(port)
 
                 xpaths_to_remove.append(server_xpath)
+
+        _logger.debug('~~removing nginx servers one by one')
         for xpath in reversed(xpaths_to_remove):
+            strio = StringIO.StringIO()
+            self.https_inc.write_fp(strio, False)
+            _logger.debug('~~before deleting %s https.include is:\n%s' % (xpath, strio.getvalue()))
             self.https_inc.remove(xpath)
+            _logger.debug('~~after deleting %s https.include is:\n%s' % (xpath, strio.getvalue()))
 
     @rpc.service_method
     def remove_proxy(self, name, restart_service=True):
@@ -789,7 +795,7 @@ class NginxAPI(object):
             self.add_proxy(hostname, reread_conf=False, **kwds)
 
             self.https_inc.write_fp(strio, False)
-            _logger.debug('after dding proxy https.include is:\n%s' % strio.getvalue())
+            _logger.debug('after adding proxy https.include is:\n%s' % strio.getvalue())
 
         except:
             # undo changes
