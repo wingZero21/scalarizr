@@ -693,7 +693,8 @@ class NginxAPI(object):
         Removes backend with given name from app-servers config.
         """
         xpath = self.app_servers_inc.xpath_of('upstream', name)
-        self.app_servers_inc.remove(xpath)
+        if xpath:
+            self.app_servers_inc.remove(xpath)
 
     def _remove_nginx_server(self, name):
         """
@@ -711,8 +712,8 @@ class NginxAPI(object):
                 location_xpath = '%s/location' % server_xpath
                 location_qty = len(self.https_inc.get_list(location_xpath))
                 
-                for i in xrange(location_qty):
-                    xpath = location_xpath + ('[%i]' % (i + 1))
+                for j in xrange(location_qty):
+                    xpath = location_xpath + ('[%i]' % (j + 1))
                     backend = self.https_inc.get(xpath + '/proxy_pass')
                     backend = backend.replace('http://', '')
                     self._remove_backend(backend)
