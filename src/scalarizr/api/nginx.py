@@ -13,7 +13,7 @@ from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
 from scalarizr.linux import iptables
-
+from scalarizr.linux import LinuxError
 
 __nginx__ = __node__['nginx']
 
@@ -123,7 +123,10 @@ def _open_port(port):
 def _close_port(port):
     if iptables.enabled():
         rule = {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)}
-        iptables.FIREWALL.remove(rule)
+        try:
+            iptables.FIREWALL.remove(rule)
+        except LinuxError:
+            pass
 
 
 class NginxAPI(object):
