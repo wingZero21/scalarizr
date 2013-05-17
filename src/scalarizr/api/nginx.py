@@ -722,6 +722,10 @@ class NginxAPI(object):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.https_inc.get('%s/server_name' % server_xpath)
 
+            strio = StringIO.StringIO()
+            self.https_inc.write_fp(strio, False)
+            _logger.debug('~~after each https_inc.get server name inc: %s' % strio.getvalue())
+
             if name == server_name or name == server_name + '_redirector':
                 location_xpath = '%s/location' % server_xpath
                 location_qty = len(self.https_inc.get_list(location_xpath))
@@ -738,12 +742,16 @@ class NginxAPI(object):
 
                 xpaths_to_remove.append(server_xpath)
 
-        _logger.debug('~~removing nginx servers one by one')
+        strio = StringIO.StringIO()
+        self.https_inc.write_fp(strio, False)
+        _logger.debug('~~removing nginx servers one by one. inc: %s' % strio.getvalue())
         for xpath in reversed(xpaths_to_remove):
             strio = StringIO.StringIO()
             self.https_inc.write_fp(strio, False)
             _logger.debug('~~before deleting %s https.include is:\n%s' % (xpath, strio.getvalue()))
             self.https_inc.remove(xpath)
+            strio = StringIO.StringIO()
+            self.https_inc.write_fp(strio, False)
             _logger.debug('~~after deleting %s https.include is:\n%s' % (xpath, strio.getvalue()))
 
     @rpc.service_method
@@ -794,6 +802,7 @@ class NginxAPI(object):
 
             self.add_proxy(hostname, reread_conf=False, **kwds)
 
+            strio = StringIO.StringIO()
             self.https_inc.write_fp(strio, False)
             _logger.debug('after adding proxy https.include is:\n%s' % strio.getvalue())
 

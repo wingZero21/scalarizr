@@ -19,6 +19,7 @@ from scalarizr.api import service as preset_service
 from scalarizr.node import __node__
 from scalarizr.api.nginx import NginxAPI
 from scalarizr.api.nginx import NginxInitScript
+import StringIO
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
@@ -391,7 +392,10 @@ class NginxHandler(ServiceCtlHandler):
                             backend_ip_hash=True,
                             hash_backend_name=False)
         if ssl_vhosts:
-            self._logger.debug('addidg default ssl nginx server')
+            self._logger.debug('adding default ssl nginx server')
+            strio = StringIO.StringIO()
+            self.api.httpr_inc.write_fp(strio, False)
+            self._logger.debug('~~https.include: %s' % strio.getvalue())
             self.api.make_proxy('backend.ssl',
                                 servers=servers,
                                 port=None,
