@@ -1,9 +1,11 @@
 from __future__ import with_statement
 
 import os
+import logging
 from telnetlib import Telnet
 import time
 from hashlib import sha1
+import StringIO
 
 from scalarizr import rpc
 from scalarizr.bus import bus
@@ -16,6 +18,9 @@ from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 
 __nginx__ = __node__['nginx']
+
+
+_logger = logging.getLogger(__name__)
 
 
 class NginxInitScript(initdv2.ParametrizedInitScript):
@@ -628,7 +633,12 @@ class NginxAPI(object):
                                                ssl,
                                                ssl_port,
                                                ssl_certificate_id)
-        self.https_inc.append_conf(server_config)   
+
+        strio = StringIO.StringIO()
+        server_config.writefp(strio, False)
+        _logger.debug('adding nginx server:\n%s' % strio.getvalue())
+
+        self.https_inc.append_conf(server_config)
 
     def add_proxy(self,
                   name,
@@ -649,6 +659,7 @@ class NginxAPI(object):
         """
         Adds proxy
         """
+        _logger.debug('adding proxy name: %s' % name)
         destinations = self._normalize_roles_arg(roles)
         destinations.extend(self._normalize_servers_arg(servers))
 
@@ -754,6 +765,7 @@ class NginxAPI(object):
         """
         RPC method for adding or updating proxy configuration.
         """
+        _logger.debug('making proxy: %s' % hostname)
         try:
             # trying to apply changes
             self.https_inc.read(self.https_inc_path)
@@ -762,12 +774,22 @@ class NginxAPI(object):
             self.https_inc.write(self.https_inc_path + '.bak')
             self.app_servers_inc.write(self.app_inc_path + '.bak')
 
+            _logger.debug('deleting previously existed proxy')
+
             self._remove_nginx_server(hostname)
+
+            strio = StringIO.StringIO()
+            self.https_inc.writefp(strio, False)
+            _logger.debug('after deleting https.include is:\n%s' % strio.getvalue())
+
             for backend_name in self.backend_table.keys():
                 if hostname == self._backend_nameparts(backend_name)[0]:
                     self.backend_table.pop(backend_name)
 
             self.add_proxy(hostname, reread_conf=False, **kwds)
+
+            self.https_inc.writefp(strio, False)
+            _logger.debug('after dding proxy https.include is:\n%s' % strio.getvalue())
 
         except:
             # undo changes
