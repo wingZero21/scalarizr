@@ -409,7 +409,7 @@ class NginxAPI(object):
             config.add('upstream/ip_hash', '')
 
         for dest in destinations:
-            for i, server in enumerate(dest['servers']):
+            for server in dest['servers']:
                 if 'port' in dest or port:
                     server = '%s:%s' % (server, dest.get('port', port))
 
@@ -712,7 +712,7 @@ class NginxAPI(object):
                 location_qty = len(self.https_inc.get_list(location_xpath))
                 
                 for i in xrange(location_qty):
-                    xpath = location_xpath + ('[%i]' % i)
+                    xpath = location_xpath + ('[%i]' % (i + 1))
                     backend = self.https_inc.get(xpath + '/proxy_pass')
                     backend = backend.replace('http://', '')
                     self._remove_backend(backend)
