@@ -782,10 +782,12 @@ class NginxAPI(object):
         _logger.debug('making proxy: %s' % hostname)
         try:
             # trying to apply changes
-            strio = StringIO.StringIO()
-            self.https_inc.write_fp(strio, False)
-            _logger.debug('before read https.include is:\n%s' % strio.getvalue())
-            
+            try:
+                strio = StringIO.StringIO()
+                self.https_inc.write_fp(strio, False)
+                _logger.debug('before read https.include is:\n%s' % strio.getvalue())
+            except:
+                pass
             self.https_inc.read(self.https_inc_path)
 
             strio = StringIO.StringIO()
