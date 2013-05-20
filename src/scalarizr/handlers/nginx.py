@@ -390,18 +390,18 @@ class NginxHandler(ServiceCtlHandler):
                             servers=servers,
                             ssl=False,
                             backend_ip_hash=True,
-                            hash_backend_name=False)
+                            hash_backend_name=False,
+                            restart_service=False)
         if ssl_vhosts:
-            self._logger.debug('adding default ssl nginx server:\nssl vhosts:%s' % ssl_vhosts)
-            strio = StringIO.StringIO()
-            self.api.https_inc.write_fp(strio, False)
-            self._logger.debug('~~https.include: %s' % strio.getvalue())
+            self._logger.debug('adding default ssl nginx server')
             self.api.make_proxy('backend.ssl',
                                 servers=servers,
                                 port=None,
                                 ssl=True,
                                 backend_ip_hash=True,
                                 hash_backend_name=False)
+        else:
+            self.api.remove_proxy('backend.ssl')
         self._logger.debug('After making proxy backend table is %s' % self.api.backend_table)
         self._logger.debug('Default proxy is made')
 
