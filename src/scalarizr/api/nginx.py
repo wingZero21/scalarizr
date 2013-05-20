@@ -152,7 +152,7 @@ class NginxAPI(object):
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
         self.app_servers_inc = metaconf.Configuration('nginx')
         if os.path.exists(self.app_inc_path):
-            self.app_servers_inc.read(self.app_inc_path)
+            self._load_app_servers_inc()
         else:
             open(self.app_inc_path, 'w').close()
 
@@ -161,7 +161,7 @@ class NginxAPI(object):
         self.https_inc_path = os.path.join(https_inc_dir, 'https.include')
         self.https_inc = metaconf.Configuration('nginx')
         if os.path.exists(self.https_inc_path):
-            self.https_inc.read(self.https_inc_path)
+            self._load_https_inc()
         else:
             open(self.https_inc_path, 'w').close()
 
@@ -191,13 +191,41 @@ class NginxAPI(object):
         _add_static_location(error_pages_conf, '/noapp.html')
         error_pages_conf.write(self.error_pages_inc)
 
+    def _save_https_inc(self):
+        strio = StringIO.StringIO()
+        self.https_inc.write_fp(strio, False)
+        _logger.debug('before write https.include is:\n%s' % strio.getvalue())
+
+        self.https_inc.write(self.https_inc_path)
+
+        strio = StringIO.StringIO()
+        self.https_inc.write_fp(strio, False)
+        _logger.debug('after write https.include is:\n%s' % strio.getvalue())
+
+    def _load_https_inc(self):
+        strio = StringIO.StringIO()
+        self.https_inc.write_fp(strio, False)
+        _logger.debug('before read https.include is:\n%s' % strio.getvalue())
+
+        self.https_inc.read(self.https_inc_path)
+
+        strio = StringIO.StringIO()
+        self.https_inc.write_fp(strio, False)
+        _logger.debug('after read https.include is:\n%s' % strio.getvalue())
+
+    def _save_app_servers_inc(self):
+        self.app_servers_inc.write(self.app_inc_path)
+
+    def _load_app_servers_inc(self):
+        self.app_servers_inc.read(self.app_inc_path)
+
     def _clear_nginx_includes(self):
         with open(self.app_inc_path, 'w') as fp:
             fp.write('')
         with open(self.https_inc_path, 'w') as fp:
             fp.write('')
-        self.app_servers_inc.read(self.app_inc_path)
-        self.https_inc.read(self.https_inc_path)
+        self._load_app_servers_inc()
+        self._load_https_inc()
 
     def _restart_service(self):
         if self.service.status() == initdv2.Status.NOT_RUNNING:
@@ -634,10 +662,6 @@ class NginxAPI(object):
                                                ssl_port,
                                                ssl_certificate_id)
 
-        strio = StringIO.StringIO()
-        server_config.write_fp(strio, False)
-        _logger.debug('adding nginx server:\n%s' % strio.getvalue())
-
         self.https_inc.append_conf(server_config)
 
     def add_proxy(self,
@@ -668,8 +692,8 @@ class NginxAPI(object):
             raise BaseException('No servers or roles given', servers, roles)
 
         if reread_conf:
-            self.app_servers_inc.read(self.app_inc_path)
-            self.https_inc.read(self.https_inc_path)
+            self._load_app_servers_inc()
+            self._load_https_inc()
 
         locations_and_backends = self._add_backends(name,
                                                     grouped_destinations,
@@ -696,8 +720,8 @@ class NginxAPI(object):
         if ssl_port:
             _open_port(ssl_port)
 
-        self.app_servers_inc.write(self.app_inc_path)
-        self.https_inc.write(self.https_inc_path)
+        self._save_app_servers_inc()
+        self._save_https_inc()
 
         if restart_service:
             self._restart_service()
@@ -722,10 +746,6 @@ class NginxAPI(object):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.https_inc.get('%s/server_name' % server_xpath)
 
-            strio = StringIO.StringIO()
-            self.https_inc.write_fp(strio, False)
-            _logger.debug('~~after each https_inc.get server name inc: %s' % strio.getvalue())
-
             if name == server_name or name == server_name + '_redirector':
                 location_xpath = '%s/location' % server_xpath
                 location_qty = len(self.https_inc.get_list(location_xpath))
@@ -742,25 +762,16 @@ class NginxAPI(object):
 
                 xpaths_to_remove.append(server_xpath)
 
-        strio = StringIO.StringIO()
-        self.https_inc.write_fp(strio, False)
-        _logger.debug('~~removing nginx servers one by one. inc: %s' % strio.getvalue())
         for xpath in reversed(xpaths_to_remove):
-            strio = StringIO.StringIO()
-            self.https_inc.write_fp(strio, False)
-            _logger.debug('~~before deleting %s https.include is:\n%s' % (xpath, strio.getvalue()))
             self.https_inc.remove(xpath)
-            strio = StringIO.StringIO()
-            self.https_inc.write_fp(strio, False)
-            _logger.debug('~~after deleting %s https.include is:\n%s' % (xpath, strio.getvalue()))
 
     @rpc.service_method
     def remove_proxy(self, name, restart_service=True):
         """
         Removes proxy with given name. Removes created server and its backends.
         """
-        self.https_inc.read(self.https_inc_path)
-        self.app_servers_inc.read(self.app_inc_path)
+        self._load_https_inc()
+        self._load_app_servers_inc()
 
         self._remove_nginx_server(name)
 
@@ -769,8 +780,8 @@ class NginxAPI(object):
             if name == self._backend_nameparts(backend_name)[0]:
                 self.backend_table.pop(backend_name)
 
-        self.https_inc.write(self.https_inc_path)
-        self.app_servers_inc.write(self.app_inc_path)
+        self._save_https_inc()
+        self._save_app_servers_inc()
         if restart_service:
             self._restart_service()
 
@@ -782,19 +793,8 @@ class NginxAPI(object):
         _logger.debug('making proxy: %s' % hostname)
         try:
             # trying to apply changes
-            try:
-                strio = StringIO.StringIO()
-                self.https_inc.write_fp(strio, False)
-                _logger.debug('before read https.include is:\n%s' % strio.getvalue())
-            except:
-                pass
-            self.https_inc.read(self.https_inc_path)
-
-            strio = StringIO.StringIO()
-            self.https_inc.write_fp(strio, False)
-            _logger.debug('after read https.include is:\n%s' % strio.getvalue())
-
-            self.app_servers_inc.read(self.app_inc_path)
+            self._load_https_inc()
+            self._load_app_servers_inc()
 
             self.https_inc.write(self.https_inc_path + '.bak')
             self.app_servers_inc.write(self.app_inc_path + '.bak')
@@ -803,26 +803,18 @@ class NginxAPI(object):
 
             self._remove_nginx_server(hostname)
 
-            strio = StringIO.StringIO()
-            self.https_inc.write_fp(strio, False)
-            _logger.debug('after deleting https.include is:\n%s' % strio.getvalue())
-
             for backend_name in self.backend_table.keys():
                 if hostname == self._backend_nameparts(backend_name)[0]:
                     self.backend_table.pop(backend_name)
 
             self.add_proxy(hostname, reread_conf=False, **kwds)
 
-            strio = StringIO.StringIO()
-            self.https_inc.write_fp(strio, False)
-            _logger.debug('after adding proxy https.include is:\n%s' % strio.getvalue())
-
         except:
             # undo changes
             self.https_inc.read(self.https_inc_path + '.bak')
             self.app_servers_inc.read(self.app_inc_path + '.bak')
-            self.https_inc.write(self.https_inc_path)
-            self.app_servers_inc.write(self.app_inc_path)
+            self._save_https_inc()
+            self._save_app_servers_inc()
             raise
 
     # TODO: use this method in backend conf making or smth.
@@ -864,7 +856,7 @@ class NginxAPI(object):
         Parameter server can be dict or string (ip addr)
         """
         if update_conf:
-            self.app_servers_inc.read(self.app_inc_path)
+            self._load_app_servers_inc()
 
         if not server:
             return
@@ -888,7 +880,7 @@ class NginxAPI(object):
                     self.backend_table[backend] = [dest]
 
         if update_conf:
-            self.app_servers_inc.write(self.app_inc_path)
+            self._save_app_servers_inc()
         if restart_service:
             self._restart_service()
 
@@ -904,7 +896,7 @@ class NginxAPI(object):
         Parameter server can be dict or string (ip addr)
         """
         if update_conf:
-            self.app_servers_inc.read(self.app_inc_path)
+            self._load_app_servers_inc()
 
         if not server:
             return
@@ -924,7 +916,7 @@ class NginxAPI(object):
                         destination['servers'].remove(server)
 
         if update_conf:
-            self.app_servers_inc.write(self.app_inc_path)
+            self._save_app_servers_inc()
         if restart_service:
             self._restart_service()
 
@@ -939,7 +931,7 @@ class NginxAPI(object):
         any backend, does nothing
         """
         if update_conf:
-            self.app_servers_inc.read(self.app_inc_path)
+            self._load_app_servers_inc()
 
         if not server:
             return
@@ -964,7 +956,7 @@ class NginxAPI(object):
 
         if config_updated:
             if update_conf:
-                self.app_servers_inc.write(self.app_inc_path)
+                self._save_app_servers_inc()
             if restart_service:
                 self._restart_service()
 
@@ -979,7 +971,7 @@ class NginxAPI(object):
         used in any backend, does nothing
         """
         if update_conf:
-            self.app_servers_inc.read(self.app_inc_path)
+            self._load_app_servers_inc()
 
         # TODO: ensure that this is fine behaviour
         if not server:
@@ -999,7 +991,7 @@ class NginxAPI(object):
 
         if config_updated:
             if update_conf:
-                self.app_servers_inc.write(self.app_inc_path)
+                self._save_app_servers_inc()
             if restart_service:
                 self._restart_service()
 
@@ -1014,7 +1006,7 @@ class NginxAPI(object):
         to any role. If role isn't used in any backend, does nothing
         """
         if update_conf:
-            self.app_servers_inc.read(self.app_inc_path)
+            self._load_app_servers_inc()
 
         # TODO: ensure that this is fine behaviour
         if not server:
@@ -1030,7 +1022,7 @@ class NginxAPI(object):
 
         if config_updated:
             if update_conf:
-                self.app_servers_inc.write(self.app_inc_path)
+                self._save_app_servers_inc()
             if restart_service:
                 self._restart_service()
 
@@ -1042,7 +1034,7 @@ class NginxAPI(object):
                    update_conf=True,
                    restart_service=True):
         if update_conf:
-            self.https_inc.read(self.https_inc_path)
+            self._load_https_inc()
 
         if not hostname:
             return
@@ -1068,14 +1060,14 @@ class NginxAPI(object):
 
         if config_updated:
             if update_conf:
-                self.https_inc.write(self.https_inc_path)
+                self._save_https_inc()
             if restart_service:
                 self._restart_service()
 
     @rpc.service_method
     def disable_ssl(self, hostname, update_conf=True, restart_service=True):
         if update_conf:
-            self.https_inc.read(self.https_inc_path)
+            self._load_https_inc()
 
         if not hostname:
             return
@@ -1095,6 +1087,6 @@ class NginxAPI(object):
 
         if config_updated:
             if update_conf:
-                self.https_inc.write(self.https_inc_path)
+                self._save_https_inc()
             if restart_service:
                 self._restart_service()
