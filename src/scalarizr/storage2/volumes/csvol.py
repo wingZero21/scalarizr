@@ -22,18 +22,14 @@ from scalarizr.storage2.volumes import base
 __cloudstack__ = node.__node__['cloudstack']
 LOG = logging.getLogger(__name__)
 
-# TODO: we should test this solution
-#if linux.os['kernel_release'] >= (2, 6, 38):
-#    _device_prefix = '/dev/xvd'
-#else:
-#    _device_prefix = '/dev/sd'
 
-if linux.os['family'] == 'RedHat' and linux.os['release'] >= (6, 0) \
-    or linux.os['name'] == 'Ubuntu' and linux.os['release'] >= (11, 4) \
-    or os.path.exists('/dev/xvda1'):
+if os.path.exists('/dev/xvda1'):
     _device_prefix = '/dev/xvd'
+elif glob.glob('/dev/vda*'):
+    _device_prefix = '/dev/vd'
 else:
     _device_prefix = '/dev/sd'
+
 
 def get_system_devname(letter):
     return _device_prefix + letter
