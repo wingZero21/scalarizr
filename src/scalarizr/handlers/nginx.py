@@ -192,6 +192,7 @@ class NginxHandler(ServiceCtlHandler):
         return {'before_host_up': [{
                     'name': self._phase,
                     'steps': [self._step_copy_error_pages,
+                              self._step_copy_error_pages,
                               self._step_setup_proxying]}]}
 
     def on_start(self):

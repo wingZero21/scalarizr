@@ -150,20 +150,12 @@ class NginxAPI(object):
         if not app_inc_dir:
             app_inc_dir = os.path.dirname(__nginx__['app_include_path'])
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
-        self.app_servers_inc = metaconf.Configuration('nginx')
-        if os.path.exists(self.app_inc_path):
-            self._load_app_servers_inc()
-        else:
-            open(self.app_inc_path, 'w').close()
+        self._load_app_servers_inc()
 
         if not https_inc_dir:
             https_inc_dir = os.path.dirname(__nginx__['https_include_path'])
         self.https_inc_path = os.path.join(https_inc_dir, 'https.include')
-        self.https_inc = metaconf.Configuration('nginx')
-        if os.path.exists(self.https_inc_path):
-            self._load_https_inc()
-        else:
-            open(self.https_inc_path, 'w').close()
+        self._load_https_inc()
 
         self._make_error_pages_include()
 
@@ -192,36 +184,24 @@ class NginxAPI(object):
         error_pages_conf.write(self.error_pages_inc)
 
     def _save_https_inc(self):
-        strio = StringIO.StringIO()
-        self.https_inc.write_fp(strio, False)
-        _logger.debug('before write https.include is:\n%s' % strio.getvalue())
-
         self.https_inc.write(self.https_inc_path)
 
-        strio = StringIO.StringIO()
-        self.https_inc.write_fp(strio, False)
-        _logger.debug('after write https.include is:\n%s' % strio.getvalue())
-
     def _load_https_inc(self):
-        try:
-            strio = StringIO.StringIO()
-            self.https_inc.write_fp(strio, False)
-            _logger.debug('before read https.include is:\n%s' % strio.getvalue())
-        except:
-            pass
-
         self.https_inc = metaconf.Configuration('nginx')
-        self.https_inc.read(self.https_inc_path)
-
-        strio = StringIO.StringIO()
-        self.https_inc.write_fp(strio, False)
-        _logger.debug('after read https.include is:\n%s' % strio.getvalue())
+        if os.path.exists(self.https_inc_path):
+            self.https_inc.read(self.https_inc_path)
+        else:
+            open(self.https_inc_path, 'w').close()
 
     def _save_app_servers_inc(self):
         self.app_servers_inc.write(self.app_inc_path)
 
     def _load_app_servers_inc(self):
-        self.app_servers_inc.read(self.app_inc_path)
+        self.app_servers_inc = metaconf.Configuration('nginx')
+        if os.path.exists(self.app_inc_path):
+            self.app_servers_inc.read(self.app_inc_path)
+        else:
+            open(self.app_inc_path, 'w').close()
 
     def _clear_nginx_includes(self):
         with open(self.app_inc_path, 'w') as fp:
