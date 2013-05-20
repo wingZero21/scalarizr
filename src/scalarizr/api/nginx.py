@@ -203,10 +203,13 @@ class NginxAPI(object):
         _logger.debug('after write https.include is:\n%s' % strio.getvalue())
 
     def _load_https_inc(self):
-        strio = StringIO.StringIO()
-        self.https_inc.write_fp(strio, False)
-        _logger.debug('before read https.include is:\n%s' % strio.getvalue())
-
+        try:
+            strio = StringIO.StringIO()
+            self.https_inc.write_fp(strio, False)
+            _logger.debug('before read https.include is:\n%s' % strio.getvalue())
+        except:
+            pass
+            
         self.https_inc.read(self.https_inc_path)
 
         strio = StringIO.StringIO()
