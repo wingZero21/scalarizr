@@ -128,13 +128,12 @@ class MySQL(BaseService):
                     src_dir = os.path.dirname(raw_value + "/") + "/"
                     LOG.debug('source path: %s' % src_dir)
                     if os.path.isdir(src_dir) and src_dir != dest:
-                        try:
-                            if not system2((software.which('selinuxenabled'), ), raise_exc=False)[2]:
+                        selinuxenabled = software.which('selinuxenabled')
+                        if selinuxenabled:
+                            if not system2((selinuxenabled, ), raise_exc=False)[2]:
                                 if not system2((software.which('getsebool'), 'mysqld_disable_trans'), raise_exc=False)[2]:
                                     LOG.debug('Make SELinux rule for rsync')
                                     system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
-                        except LookupError:
-                            pass
 
                         LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
                         rsync(src_dir, dest, archive=True, exclude=['ib_logfile*', '*.sock'])
