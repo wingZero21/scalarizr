@@ -88,6 +88,7 @@ class HAProxyAPI(object):
 
         """
         # TODO: handle address-host-port mess
+        # -> {'check': True, 'port': '27001', 'address': '127.0.0.1'}
 
         # default values
         if not backend_port:
@@ -177,21 +178,20 @@ class HAProxyAPI(object):
 
 
     @rpc.service_method
-    @validate.param('ipaddr', type='ipv4')
+    #@validate.param('ipaddr', type='ipv4')
     @validate.param('backend', optional=_rule_backend)
-    def add_server(self, ipaddr=None, backend=None):
+    def add_server(self, server=None, backend=None):
         '''Add server with ipaddr in backend section'''
         self.cfg.reload()
 
         if backend:
             backend = backend.strip()
-        if ipaddr:
-            ipaddr = ipaddr.strip()
 
         LOG.debug('HAProxyAPI.add_server')
         LOG.debug('     %s' % haproxy.naming('backend', backend=backend))
-        bnds = self.cfg.sections(haproxy.naming('backend', backend=backend))
 
+
+        bnds = self.cfg.sections(haproxy.naming('backend', backend=backend))
         if not bnds:
             if backend:
                 raise exceptions.NotFound('Backend not found: %s' % (backend, ))
@@ -201,23 +201,14 @@ class HAProxyAPI(object):
         #with self.svc.trans(exit='running'):
             #with self.cfg.trans(exit='working'):
 
-        if True:
-            for bnd in bnds:
+        server.setdefault("check", True)
+        server_name = ':'.join([server["address"], str(server["port"])]).replace('.', '-')
+        
+        for bnd in bnds:
+            self.cfg.backends[bnd]['server'][server_name] = server
 
-                #? TEMPORARY
-                if ':' in ipaddr:
-                    hostname = ipaddr
-                    ipaddr, port = ipaddr.split(':')
-
-                server = {
-                    'address': ipaddr,
-                    'port': port or bnd.split(':')[-1],
-                    'check': True,
-                }
-                self.cfg.backends[bnd]['server'][hostname.replace('.', '-')] = server
-
-            self.cfg.save()
-            self.svc.reload()
+        self.cfg.save()
+        self.svc.reload()
 
 
     @rpc.service_method

@@ -275,7 +275,7 @@ def i_have_a_server(step, desc, name):
     if desc:
         # server.as_arg = {"address": server.address[0], "port": server.address[1]}
         server.as_arg = {"address": str(server)}
-        server.as_args.update(PARAMS[desc])
+        server.as_arg.update(PARAMS[desc])
 
     world.servers[name] = server
 
@@ -328,7 +328,13 @@ def i_launch_new_server_of_this_role(step):
     world.new_server = server
 
     #? how do we associate role with a backend?
-    world.api.add_server(str(server), "tcp:27000")
+    # world.api.add_server(str(server), "tcp:27000")
+    world.api.add_server(
+        {
+            'port': server.address[1],
+            'address': server.address[0]
+        },
+        "tcp:27000")
 
 
 @step("i terminate one server of this role")
@@ -364,6 +370,13 @@ def i_have_a_proxy_to_two_roles(step):
     step.given("i add proxy")
 
 
+@step("i have a proxy to two servers")
+def i_have_a_proxy_to_two_servers(step):
+    step.given("i have a server")
+    step.given("i have a server")
+    step.given("i add proxy")
+
+
 @step("i terminate master servers")
 def i_terminate_master_servers(step):
     master_role = world.roles["master"]
@@ -374,13 +387,44 @@ def i_terminate_master_servers(step):
     log_acceptable_responses()
 
 
+@step("i update proxy marking one server as down")
+def i_update_proxy_marking_one_server_as_down(step):
+    server = world.servers.values()[0]
+
+    server_spec = {
+        'port': server.address[1],
+        'address': server.address[0],
+    }
+    server_spec.update(PARAMS["down"])
+
+    world.api.add_server(server_spec, "tcp:27000")
+
+    world.acceptable_responses.remove(str(server))
+    log_acceptable_responses()
+
+
 @step("i expect (\w+) and (\w+) servers are (\w+) in the backend")
 def i_expect_servers_in_backend(step, name1, name2, desc):
-    server = world.servers[name1]
 
-    server_name = str(server).replace('.', '-')
+    def get_servers(name):
+        if name in world.servers:
+            return [world.servers[name]]
+        elif name in world.roles:
+            return world.roles[name].servers
+        else:
+            raise Exception("No server or role with the name %s" % name)
 
-    x = world.api.cfg.backends["scalr:backend:tcp:27000"]['server'][server_name]
-    LOG.info(str(x))
-    raise 1
+    servers = get_servers(name1) + get_servers(name2)
+
+    def test_server(server):
+        server_name = str(server).replace('.', '-')
+
+        record = world.api.cfg.backends["scalr:backend:tcp:27000"]['server'][server_name]
+        record.pop("check", None)
+        assert record.pop("address") == server.address[0]
+        assert record.pop("port") == str(server.address[1])
+
+        assert record == PARAMS[desc], str(server)
+
+    map(test_server, servers)
 
