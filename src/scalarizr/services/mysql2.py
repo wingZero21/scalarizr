@@ -559,7 +559,7 @@ class PerconaExec(Exec):
 				url = 'http://www.percona.com/downloads/percona-release/percona-release-0.0-1.%s.rpm' % linux.os['arch']
 				pkgmgr.RpmPackageMgr().install(url)
 			else:
-				codename = linux.ubuntu_release_to_codename[linux.os['lsb_release']]
+				codename = linux.os.get('lsb_codename', linux.ubuntu_release_to_codename[linux.os['lsb_release']])
 				pkgmgr.apt_source(
 						'percona.list', 
 						['deb http://repo.percona.com/apt %s main' % codename],
