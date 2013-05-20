@@ -209,7 +209,8 @@ class NginxAPI(object):
             _logger.debug('before read https.include is:\n%s' % strio.getvalue())
         except:
             pass
-            
+
+        self.https_inc = metaconf.Configuration('nginx')
         self.https_inc.read(self.https_inc_path)
 
         strio = StringIO.StringIO()
