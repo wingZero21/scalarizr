@@ -15,53 +15,52 @@ from scalarizr.util import initdv2, system2, PopenError, wait_until, Singleton
 from scalarizr.services import backup
 from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, PresetProvider
 from scalarizr.util import disttool, cryptotool, firstmatched
+from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
 __redis__ = node.__node__['redis']
 __redis__.update({
-        'storage_dir': '/mnt/redisstorage'
+    'storage_dir': '/mnt/redisstorage',
+    'redis-cli': '/usr/bin/redis-cli',
+    'pid_dir': '/var/run/redis' if os.path.isdir('/var/run/redis') else '/var/run',
+    'defaults': {
+        'dir': '/var/lib/redis',
+        'port': 6379,
+        'user': 'redis'
+    },
+    'su': '/bin/su',
+    'bash': '/bin/bash',
+    'db_filename': 'dump.rdb',
+    'aof_filename': 'appendonly.aof',
+    'preset_filename': 'redis.conf',
+    'start_timeout': 30  # In seconds
+})
+if linux.os.debian_family:
+    __redis__.update({
+        'redis-server': '/usr/bin/redis-server',
+        'pid_file': os.path.join(__redis__['pid_dir'], 'redis-server.pid')
+    })
+    __redis__['defaults'].update({
+        'redis.conf': '/etc/redis/redis.conf',
+    })
+else:
+    __redis__.update({
+        'redis-server': '/usr/sbin/redis-server',
+        'pid_file': os.path.join(__redis__['pid_dir'], 'redis.pid')
+    })
+    __redis__['defaults'].update({
+        'redis.conf': '/etc/redis.conf',
+    })
+__redis__.update({
+    'config_dir': os.path.dirname(__redis__['redis.conf']),
+    'ports_range': range(__redis__['defaults']['port'], 
+                         __redis__['defaults']['port'] + 16)
 })
 
-SERVICE_NAME = CNF_SECTION = DEFAULT_USER = 'redis'
 
-SU_EXEC = '/bin/su'
-BASH    = '/bin/bash'
-
-UBUNTU_BIN_PATH          = '/usr/bin/redis-server'
-CENTOS_BIN_PATH          = '/usr/sbin/redis-server'
-BIN_PATH = UBUNTU_BIN_PATH if disttool.is_ubuntu() else CENTOS_BIN_PATH
-
-PRESET_FNAME = 'redis.conf'
-UBUNTU_CONFIG_DIR = '/etc/redis'
-CENTOS_CONFIG_DIR = '/etc/'
-CONFIG_DIR = UBUNTU_CONFIG_DIR if disttool.is_ubuntu() else CENTOS_CONFIG_DIR
-DEFAULT_CONF_PATH = os.path.join(CONFIG_DIR, 'redis.conf')
-
-
-OPT_REPLICATION_MASTER  = "replication_master"
-
-REDIS_CLI_PATH = '/usr/bin/redis-cli'
-DEFAULT_DIR_PATH = '/var/lib/redis'
-
-DEFAULT_PID_DIR = '/var/run/redis' if os.path.isdir('/var/run/redis') else '/var/run'
-CENTOS_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR, 'redis.pid')
-UBUNTU_DEFAULT_PIDFILE = os.path.join(DEFAULT_PID_DIR, 'redis-server.pid')
-DEFAULT_PIDFILE = UBUNTU_DEFAULT_PIDFILE if disttool.is_ubuntu() else CENTOS_DEFAULT_PIDFILE
-
-REDIS_USER = 'redis'
-DB_FILENAME = 'dump.rdb'
-AOF_FILENAME = 'appendonly.aof'
-
-AOF_TYPE = 'aof'
-SNAP_TYPE = 'snapshotting'
-
-MAX_CUSTOM_PROCESSES = 16
-MAX_START_TIMEOUT = 30
-DEFAULT_PORT = 6379
-PORTS_RANGE = range(DEFAULT_PORT, DEFAULT_PORT+MAX_CUSTOM_PROCESSES)
-
+SERVICE_NAME = CNF_SECTION = 'redis'
 LOG = logging.getLogger(__name__)
 
 
@@ -85,7 +84,7 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 
     @property
     def _processes(self):
-        return [p for p in get_redis_processes() if p == DEFAULT_CONF_PATH]
+        return [p for p in get_redis_processes() if p == __redis__['defaults']['redis.conf']]
 
 
     def status(self):
@@ -137,24 +136,29 @@ class Redisd(object):
             if not self.running:
 
                 #TODO: think about moving this code elsewhere
-                if self.port == DEFAULT_PORT:
+                if self.port == __redis__['defaults']['port']:
                     base_dir = self.redis_conf.dir
-                    snap_src = os.path.join(base_dir, DB_FILENAME)
-                    snap_dst = os.path.join(base_dir, get_snap_db_filename(DEFAULT_PORT))
+                    snap_src = os.path.join(base_dir, __redis__['db_filename'])
+                    snap_dst = os.path.join(base_dir, get_snap_db_filename(__redis__['defaults']['port']))
                     if os.path.exists(snap_src) and not os.path.exists(snap_dst):
                         shutil.move(snap_src, snap_dst)
                         self.redis_conf.dbfilename = snap_dst
-                    aof_src = os.path.join(base_dir, AOF_FILENAME)
-                    aof_dst = os.path.join(base_dir, get_aof_db_filename(DEFAULT_PORT))
+                    aof_src = os.path.join(base_dir, __redis__['aof_filename'])
+                    aof_dst = os.path.join(base_dir, get_aof_db_filename(__redis__['defaults']['port']))
                     if os.path.exists(aof_src) and not os.path.exists(aof_dst):
                         shutil.move(aof_src, aof_dst)
                         self.redis_conf.appendfilename = aof_dst
 
 
                 LOG.debug('Starting %s on port %s' % (BIN_PATH, self.port))
-                system2('%s %s -s %s -c "%s %s"'%(SU_EXEC, DEFAULT_USER, BASH, BIN_PATH, self.config_path), shell=True, close_fds=True, preexec_fn=os.setsid)
-                wait_until(lambda: self.running, timeout=MAX_START_TIMEOUT)
-                wait_until(lambda: self.cli.test_connection(), timeout=MAX_START_TIMEOUT)
+                system2('%s %s -s %s -c "%s %s"' % (
+                    __redis__['su'], 
+                    __redis__['defaults']['user'], 
+                    __redis__['bash'], 
+                    __redis__['redis-server'], 
+                    self.config_path), shell=True, close_fds=True, preexec_fn=os.setsid)
+                wait_until(lambda: self.running, timeout=__redis__['start_timeout'])
+                wait_until(lambda: self.cli.test_connection(), timeout=__redis__['start_timeout'])
                 LOG.debug('%s process has been started.' % SERVICE_NAME)
 
         except PopenError, e:
@@ -166,7 +170,7 @@ class Redisd(object):
         if self.running:
             LOG.info('Stopping redis server on port %s (pid %s). Reason: %s' % (self.port, self.pid, reason))
             os.kill(int(self.pid), signal.SIGTERM)
-            wait_until(lambda: not self.running, timeout=MAX_START_TIMEOUT)
+            wait_until(lambda: not self.running, timeout=__redis__['start_timeout'])
 
 
     def restart(self, reason=None, force=True):
@@ -187,7 +191,7 @@ class Redisd(object):
         for config_path in get_redis_processes():
             if config_path == self.config_path:
                 process_matches = True
-            elif config_path == DEFAULT_CONF_PATH and int(self.port) == DEFAULT_PORT:
+            elif config_path == __redis__['defaults']['redis.conf'] and int(self.port) == __redis__['defaults']['port']:
                 process_matches = True
         return process_matches
 
@@ -198,10 +202,10 @@ class Redisd(object):
         pidfile = self.redis_conf.pidfile
         LOG.debug('Got pidfile %s from redis config %s' % (pidfile, self.redis_conf.path))
 
-        if pidfile == get_pidfile(DEFAULT_PORT):
+        if pidfile == get_pidfile(__redis__['defaults']['port']):
             if not os.path.exists(pidfile) or not open(pidfile).read().strip():
-                LOG.debug('Pidfile is empty. Trying default pidfile %s' % DEFAULT_PIDFILE)
-                pidfile = DEFAULT_PIDFILE
+                LOG.debug('Pidfile is empty. Trying default pidfile %s' % __redis__['pid_file'])
+                pidfile = __redis__['pid_file']
 
         if os.path.exists(pidfile):
             pid = open(pidfile).read().strip()
@@ -219,7 +223,7 @@ class RedisInstances(object):
     master = None
     persistence_type = None
 
-    def __init__(self, master=False, persistence_type=SNAP_TYPE, use_passwords=True):
+    def __init__(self, master=False, persistence_type='snapshotting', use_passwords=True):
         self.master = master
         self.persistence_type = persistence_type
         self.use_passwords = use_passwords
@@ -249,7 +253,7 @@ class RedisInstances(object):
 
 
     def get_default_process(self):
-        return self.get_instance(port=DEFAULT_PORT).service
+        return self.get_instance(port=__redis__['defaults']['port']).service
 
 
     def get_instance(self, port=None):
@@ -365,7 +369,7 @@ class Redis(BaseService):
     port = None
     password = None
 
-    def __init__(self, master=False, persistence_type=SNAP_TYPE, port=DEFAULT_PORT, password=None):
+    def __init__(self, master=False, persistence_type='snapshotting', port=__redis__['defaults']['port'], password=None):
         self._objects = {}
         self.is_replication_master = master
         self.persistence_type = persistence_type
@@ -425,9 +429,9 @@ class Redis(BaseService):
         self.redis_conf.dbfilename = get_snap_db_filename(self.port)
         self.redis_conf.appendfilename = get_aof_db_filename(self.port)
         self.redis_conf.pidfile = get_pidfile(self.port)
-        if self.persistence_type == SNAP_TYPE:
+        if self.persistence_type == 'snapshotting':
             self.redis_conf.appendonly = False
-        elif self.persistence_type == AOF_TYPE:
+        elif self.persistence_type == 'aof':
             self.redis_conf.appendonly = True
             self.redis_conf.save = {}
 
@@ -444,7 +448,7 @@ class Redis(BaseService):
 
 
     def _get_redis_conf(self):
-        return self._get('redis_conf', RedisConf.find, CONFIG_DIR, self.port)
+        return self._get('redis_conf', RedisConf.find, __redis__['config_dir'], self.port)
 
 
     def _set_redis_conf(self, obj):
@@ -483,7 +487,7 @@ class Redis(BaseService):
 
 class WorkingDirectory(object):
 
-    default_db_fname = DB_FILENAME
+    default_db_fname = __redis__['db_filename']
 
     def __init__(self, db_path=None, user = "redis"):
         self.db_path = db_path
@@ -494,7 +498,7 @@ class WorkingDirectory(object):
     def find(cls, redis_conf):
         dir = redis_conf.dir
         if not dir:
-            dir = DEFAULT_DIR_PATH
+            dir = __redis__['defaults']['dir']
 
         db_fname = redis_conf.appendfilename if redis_conf.appendonly else redis_conf.dbfilename
         if not db_fname:
@@ -617,9 +621,9 @@ class RedisConf(BaseRedisConfig):
     config_name = 'redis.conf'
 
     @classmethod
-    def find(cls, config_dir=None, port=DEFAULT_PORT):
+    def find(cls, config_dir=None, port=__redis__['defaults']['port']):
         conf_name = get_redis_conf_basename(port)
-        conf_path = os.path.join(CONFIG_DIR, conf_name)
+        conf_path = os.path.join(__redis__['config_dir'], conf_name)
         return cls(os.path.join(config_dir, conf_name) if config_dir else conf_path)
 
 
@@ -744,16 +748,16 @@ class RedisConf(BaseRedisConfig):
     requirepass = property(_get_requirepass, _set_requirepass)
     appendonly = property(_get_appendonly, _set_appendonly)
     dbfilename = property(_get_dbfilename, _set_dbfilename)
-    dbfilename_default = DB_FILENAME
-    appendfilename_default = AOF_FILENAME
-    port_default = DEFAULT_PORT
+    dbfilename_default = __redis__['db_filename']
+    appendfilename_default = __redis__['aof_filename']
+    port_default = __redis__['defaults']['port']
 
 
 class RedisCLI(object):
 
     port = None
     password = None
-    path = REDIS_CLI_PATH
+    path = __redis__['redis-cli']
 
 
     class no_keyerror_dict(dict):
@@ -764,7 +768,7 @@ class RedisCLI(object):
                 return None
 
 
-    def __init__(self, password=None, port=DEFAULT_PORT):
+    def __init__(self, password=None, port=__redis__['defaults']['port']):
         self.port = port
         self.password = password
 
@@ -939,14 +943,14 @@ class RedisPresetProvider(PresetProvider):
 
     def get_preset(self, manifest):
         for provider in self.providers:
-            if provider.service.port == DEFAULT_PORT:
+            if provider.service.port == __redis__['defaults']['port']:
                 return provider.get_preset(manifest)
 
 
     def set_preset(self, settings, manifest):
         for provider in self.providers:
             for fname in settings:
-                if fname == PRESET_FNAME:
+                if fname == __redis__['preset_filename']:
                     provider.set_preset(settings, manifest)
 
 
@@ -956,7 +960,7 @@ class RedisPresetProvider(PresetProvider):
         LOG.debug('Getting list of redis preset providers')
         for port in get_busy_ports():
             service = Redisd(get_redis_conf_path(port), int(port))
-            config_mapping = {PRESET_FNAME: service.redis_conf}
+            config_mapping = {__redis__['preset_filename']: service.redis_conf}
             providers.append(PresetProvider(service, config_mapping))
         return providers
 
@@ -989,38 +993,38 @@ backup.backup_types['snap_redis'] = RedisSnapBackup
 backup.restore_types['snap_redis'] = RedisSnapRestore
 
 
-def get_snap_db_filename(port=DEFAULT_PORT):
+def get_snap_db_filename(port=__redis__['defaults']['port']):
     return 'dump.%s.rdb' % port
 
-def get_aof_db_filename(port=DEFAULT_PORT):
+def get_aof_db_filename(port=__redis__['defaults']['port']):
     return 'appendonly.%s.aof' % port
 
-def get_redis_conf_basename(port=DEFAULT_PORT):
+def get_redis_conf_basename(port=__redis__['defaults']['port']):
     return 'redis.%s.conf' % port
 
 
-def get_port(conf_path=DEFAULT_CONF_PATH):
+def get_port(conf_path=__redis__['defaults']['redis.conf']):
     '''
     returns number from config filename
     e.g. 6380 from redis.6380.conf
     '''
-    if conf_path == DEFAULT_CONF_PATH:
-        return DEFAULT_PORT
+    if conf_path == __redis__['defaults']['redis.conf']:
+        return __redis__['defaults']['port']
     raw = conf_path.split('.')
     return int(raw[-2]) if len(raw) > 2 else None
 
 
-def get_redis_conf_path(port=DEFAULT_PORT):
-    return os.path.join(CONFIG_DIR, get_redis_conf_basename(port))
+def get_redis_conf_path(port=__redis__['defaults']['port']):
+    return os.path.join(__redis__['config_dir'], get_redis_conf_basename(port))
 
 
-def get_log_path(port=DEFAULT_PORT):
+def get_log_path(port=__redis__['defaults']['port']):
     return '/var/log/redis/redis-server.%s.log' % port
 
 
-def get_pidfile(port=DEFAULT_PORT):
+def get_pidfile(port=__redis__['defaults']['port']):
 
-    pid_file = os.path.join(DEFAULT_PID_DIR,'redis-server.%s.pid' % port)
+    pid_file = os.path.join(__redis__['pid_dir'], 'redis-server.%s.pid' % port)
     '''
     fix for ubuntu1004
     '''
@@ -1030,13 +1034,13 @@ def get_pidfile(port=DEFAULT_PORT):
     return pid_file
 
 
-def create_redis_conf_copy(port=DEFAULT_PORT):
-    if not os.path.exists(DEFAULT_CONF_PATH):
-        raise ServiceError('Default redis config %s does not exist' % DEFAULT_CONF_PATH)
+def create_redis_conf_copy(port=__redis__['defaults']['port']):
+    if not os.path.exists(__redis__['defaults']['redis.conf']):
+        raise ServiceError('Default redis config %s does not exist' % __redis__['defaults']['redis.conf'])
     dst = get_redis_conf_path(port)
     if not os.path.exists(dst):
-        LOG.debug('Copying %s to %s.' % (DEFAULT_CONF_PATH,dst))
-        shutil.copy(DEFAULT_CONF_PATH, dst)
+        LOG.debug('Copying %s to %s.' % (__redis__['defaults']['redis.conf'],dst))
+        shutil.copy(__redis__['defaults']['redis.conf'], dst)
     else:
         LOG.debug('%s already exists.' % dst)
 
@@ -1050,7 +1054,7 @@ def get_redis_processes():
     if out:
         for line in out.split('\n'):
             words = line.split()
-            if len(words) == 2 and words[0] == BIN_PATH:
+            if len(words) == 2 and words[0] == __redis__['redis-server']:
                 config_files.append(words[1])
     return config_files
 
@@ -1060,16 +1064,16 @@ def get_busy_ports():
     args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
     try:
         out = system2(args, silent=True)[0].split('\n')
-        p = [x for x in out if x and BIN_PATH in x]
+        p = [x for x in out if x and __redis__['redis-server'] in x]
     except PopenError,e:
         p = []
     LOG.debug('Running redis processes: %s' % p)
     for redis_process in p:
-        for port in PORTS_RANGE:
+        for port in __redis__['ports_range']:
             conf_name = get_redis_conf_basename(port)
             if conf_name in redis_process:
                 busy_ports.append(port)
-            elif DEFAULT_PORT == port and DEFAULT_CONF_PATH in redis_process:
+            elif __redis__['defaults']['port'] == port and __redis__['defaults']['redis.conf'] in redis_process:
                 busy_ports.append(port)
     LOG.debug('busy_ports: %s' % busy_ports)
     return busy_ports
@@ -1077,6 +1081,6 @@ def get_busy_ports():
 
 def get_available_ports():
     busy_ports = get_busy_ports()
-    available = [port for port in PORTS_RANGE if port not in busy_ports]
+    available = [port for port in __redis__['ports_range'] if port not in busy_ports]
     LOG.debug("Available ports: %s" % available)
     return available
