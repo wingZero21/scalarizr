@@ -40,6 +40,8 @@ class GcePersistentVolume(base.Volume):
         try:
             connection = __node__['gce']['compute_connection']
         except:
+            e = sys.exc_info()[1]
+            LOG.debug('Can not get GCE connection: %s' % e)
             """ No connection, implicit check """
             try:
                 self._check_attr('name')
