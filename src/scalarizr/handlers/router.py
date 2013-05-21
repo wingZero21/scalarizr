@@ -85,7 +85,7 @@ class RouterHandler(handlers.Handler):
         if os.path.exists(solo_home):
             shutil.rmtree(solo_home)
         linux.system('git clone https://github.com/Scalr/cookbooks.git %s' % solo_home, shell=True)
-        with open(  , 'w+') as fp:
+        with open(solo_attr, 'w+') as fp:
             json.dump({
                 'run_list': ['recipe[scalarizr_proxy]'],
                 'normal': {
