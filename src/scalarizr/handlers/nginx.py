@@ -245,6 +245,9 @@ class NginxHandler(ServiceCtlHandler):
                 for default_backend in ['backend', 'backend.ssl']:
                     if default_backend not in self.api.backend_table:
                         continue
+                    server_list = self.api.backend_table[default_backend][0]['servers']
+                    if server in server_list:
+                        continue
 
                     self.api.remove_server(default_backend, '127.0.0.1',
                                            restart_service=False,
@@ -284,7 +287,11 @@ class NginxHandler(ServiceCtlHandler):
                 for default_backend in ['backend', 'backend.ssl']:
                     if default_backend not in self.api.backend_table:
                         continue
-                    if len(self.api.backend_table[default_backend][0]['servers']) == 1:
+                    server_list = self.api.backend_table[default_backend][0]['servers']
+                    if server not in server_list:
+                        continue
+
+                    if len(server_list) == 1:
                         self._logger.debug('adding localhost to default backend')
                         self.api.add_server(default_backend, '127.0.0.1',
                                             restart_service=False,
