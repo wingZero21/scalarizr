@@ -1040,6 +1040,7 @@ class MysqlHandler(DBMSRHandler):
 
                 # Patch configuration
                 self.mysql.my_cnf.expire_logs_days = 10
+                self.mysql.my_cnf.bind_address = '0.0.0.0'
                 self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
 
                 #if not os.listdir(__mysql__['data_dir']):
@@ -1147,6 +1148,7 @@ class MysqlHandler(DBMSRHandler):
                 LOG.info("Changing configuration files")
                 self.mysql.my_cnf.datadir = __mysql__['data_dir']
                 self.mysql.my_cnf.expire_logs_days = 10
+                self.mysql.my_cnf.bind_address = '0.0.0.0'
                 self.mysql.my_cnf.read_only = True
                 self._fix_percona_debian_cnf()
 
