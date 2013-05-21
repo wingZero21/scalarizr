@@ -85,12 +85,14 @@ class RouterHandler(handlers.Handler):
         if os.path.exists(solo_home):
             shutil.rmtree(solo_home)
         linux.system('git clone https://github.com/Scalr/cookbooks.git %s' % solo_home, shell=True)
-        with open(solo_attr, 'w+') as fp:
+        with open(  , 'w+') as fp:
             json.dump({
                 'run_list': ['recipe[scalarizr_proxy]'],
                 'normal': {
-                    'scalr_addr': self._data['scalr_addr'],
-                    'whitelist': self._data['whitelist']
+                    'scalarizr_proxy': {
+                        'scalr_addr': self._data['scalr_addr'],
+                        'whitelist': self._data['whitelist']
+                    }
                 }
             }, fp)
         with open(solo_rb, 'w+') as fp:
@@ -99,5 +101,5 @@ class RouterHandler(handlers.Handler):
                 'cookbook_path "%s/cookbooks"' % (solo_home, solo_home)
             )
         linux.system(('chef-solo', '-c', solo_rb, '-j', solo_attr), 
-                close_fds=True, preexec_fn=os.setsid)
+                close_fds=True, preexec_fn=os.setsid, log_level=logging.INFO)
 
