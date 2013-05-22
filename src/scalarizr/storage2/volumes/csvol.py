@@ -180,8 +180,7 @@ class CSVolume(base.Volume):
                     LOG.debug('Volume %s has been already created', self.id)
                     vol_list = self._conn.listVolumes(id=self.id)
                     if len(vol_list) == 0:
-                        raise storage2.StorageError("Volume %s doesn't exist" %
-                                                    self.id)
+                        raise storage2.VolumeNotExistsError(self.id)
                     self._native_vol = vol_list[0]
                     self._check_attachement()                    
 
