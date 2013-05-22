@@ -50,9 +50,9 @@ Scenario: Healthcheck application
     And i have a role R2 with custom healthcheck C1
     And i have a server S2 with custom healthcheck C2
     When i add proxy
-    Then i expect server S1 and R1 servers having default healthcheck
-    And i expect server S2 having custom healthcheck C1
-    And i expect R2 servers having custom healthcheck C2
+    Then i expect S1 and R1 servers having default healthcheck
+    And i expect S2 server having custom healthcheck C2
+    And i expect R2 servers having custom healthcheck C1
 
 Scenario: Get health
     Given i have a proxy P1 to a running servers

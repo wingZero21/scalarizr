@@ -230,7 +230,7 @@ class HAProxyAPI(object):
         self.svc.reload()
 
 
-    def health():
+    def health(self):
         try:
             if self.cfg.defaults['stats'][''] == 'enable' and \
                     self.cfg.globals['stats']['socket'] == '/var/run/haproxy-stats.sock':
@@ -243,7 +243,7 @@ class HAProxyAPI(object):
 
         stats = haproxy.StatSocket().show_stat()
 
-        print stats
+        return stats
 
 
     @rpc.service_method

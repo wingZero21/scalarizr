@@ -104,7 +104,8 @@ class Server(SocketServer, threading.Thread):
 
         cls._servers.append(self)
 
-        self.as_arg = str(self)
+        self.as_arg = {"address": str(self)}
+        # server.as_arg = {"address": server.address[0], "port": server.address[1]}
 
     @classmethod
     def setup(cls):
@@ -167,7 +168,7 @@ class Role(object):
         cls._id += 1
 
         self.id = cls._id
-        self.as_arg = self.id
+        self.as_arg = {"id": self.id}
         self.servers = servers or []
 
         cls._instances[self.id] = self
@@ -186,9 +187,27 @@ haproxy_api.get_servers = Role.get_servers
 
 
 PARAMS = {
+    '': {},
     "down": {"disabled": True},
     "backup": {"backup": True},
     "regular": {},
+}
+
+
+HC_PARAMS = {
+    None: {},
+    "C1": {
+        "fall_threshold": '3',
+        "rise_threshold": '6',
+        "check_interval": '7s',
+        #? 'check_timeout': '4s',
+    },
+    "C2": {
+        "fall_threshold": '4',
+        "rise_threshold": '7',
+        "check_interval": '8s',
+        #'check_timeout': '5s',
+    },
 }
 
 
@@ -204,6 +223,10 @@ listen init
     bind *:26998
 
 """
+    
+    # healthcheck scenario fails when there is no 'global' section
+    contents = "\nglobal\n\n" + contents
+
     with open(path, 'w') as f:
         f.write(contents)
 
@@ -267,28 +290,32 @@ def teardown(scenario):
     LOG.info("-" * 17)
 
 
-@step("i have a ?(\w*) server ?(\w*)")
-def i_have_a_server(step, desc, name):
+@step("i have a ?(\w*) server ?(\w*) ?(with custom healthcheck (\w+))?")
+def i_have_a_server(step, desc, name, _, hc_name):
     server = Server()
     server.start()
 
-    if desc:
-        # server.as_arg = {"address": server.address[0], "port": server.address[1]}
-        server.as_arg = {"address": str(server)}
-        server.as_arg.update(PARAMS[desc])
+    server.as_arg.update(PARAMS[desc])
+    server.as_arg.update(HC_PARAMS[hc_name])
+
+    if server.as_arg.keys() == ["address"]:
+        server.as_arg = server.as_arg["address"]
 
     world.servers[name] = server
 
 
-@step("i have a ?(\w*) role ?(\w*)")
-def i_have_a_role(step, desc, name):
+@step("i have a ?(\w*) role ?(\w*) ?(with custom healthcheck (\w+))?")
+def i_have_a_role(step, desc, name, _, hc_name):
     servers = [Server() for i in range(2)]
     [server.start() for server in servers]
     role = Role(servers)
 
-    if desc:
-        role.as_arg = {"id": role.id}
-        role.as_arg.update(PARAMS[desc])
+    role.as_arg.update(PARAMS[desc])
+    role.as_arg.update(HC_PARAMS[hc_name])
+
+    # if id is the only key, test the short form
+    if role.as_arg.keys() == ["id"]:
+        role.as_arg = role.as_arg["id"]
 
     world.roles[name] = role
 
@@ -403,28 +430,51 @@ def i_update_proxy_marking_one_server_as_down(step):
     log_acceptable_responses()
 
 
+def get_servers(name):
+    if name is None:
+        return []
+    elif name in world.servers:
+        return [world.servers[name]]
+    elif name in world.roles:
+        return world.roles[name].servers
+    else:
+        raise Exception("No server or role with the name %s" % name)
+
+def server_params(server):
+    server_name = str(server).replace('.', '-')
+
+    record = world.api.cfg.backends["scalr:backend:tcp:27000"]['server'][server_name]
+    record.pop("check", None)
+    assert record.pop("address") == server.address[0]
+    assert record.pop("port") == str(server.address[1])
+
+    return record
+
+
 @step("i expect (\w+) and (\w+) servers are (\w+) in the backend")
 def i_expect_servers_in_backend(step, name1, name2, desc):
 
-    def get_servers(name):
-        if name in world.servers:
-            return [world.servers[name]]
-        elif name in world.roles:
-            return world.roles[name].servers
-        else:
-            raise Exception("No server or role with the name %s" % name)
+    servers = get_servers(name1) + get_servers(name2)
+
+    records = map(server_params, servers)
+
+    for record in records:
+        assert record == PARAMS[desc]
+
+
+@step("i expect (\w+)( and (\w+))? servers? having (default|custom) healthcheck ?(\w+)?")
+def i_expect_servers_having_healthcheck(step, name1, _, name2, __, hc_name):
 
     servers = get_servers(name1) + get_servers(name2)
 
-    def test_server(server):
-        server_name = str(server).replace('.', '-')
+    records = map(server_params, servers)
 
-        record = world.api.cfg.backends["scalr:backend:tcp:27000"]['server'][server_name]
-        record.pop("check", None)
-        assert record.pop("address") == server.address[0]
-        assert record.pop("port") == str(server.address[1])
+    # TODO: use param names mapping from the api
+    for record in records:
+        assert record == HC_PARAMS[hc_name], str(record) + '  !=  ' + str(HC_PARAMS[hc_name])
 
-        assert record == PARAMS[desc], str(server)
+    
 
-    map(test_server, servers)
+
+    
 
