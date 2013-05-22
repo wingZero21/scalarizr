@@ -115,7 +115,7 @@ class BlockDeviceHandler(handlers.Handler):
 				except storage2.VolumeNotExistsError, e:
 					if template and from_template_if_missing:
 						vol = storage2.volume(**template)
-						LOG.warn('Volume %d not exists, re-creating %s volume from config: %d', 
+						LOG.warn('Volume %s not exists, re-creating %s volume from config: %s', 
 								str(e), vol.type, dict(vol))
 						vol.ensure(mount=bool(vol.mpoint), mkfs=True)
 					else:
