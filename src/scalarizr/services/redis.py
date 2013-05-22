@@ -54,7 +54,7 @@ else:
         'redis.conf': '/etc/redis.conf',
     })
 __redis__.update({
-    'config_dir': os.path.dirname(__redis__['redis.conf']),
+    'config_dir': os.path.dirname(__redis__['defaults']['redis.conf']),
     'ports_range': range(__redis__['defaults']['port'], 
                          __redis__['defaults']['port'] + 16)
 })
