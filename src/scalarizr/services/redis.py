@@ -150,7 +150,7 @@ class Redisd(object):
                         self.redis_conf.appendfilename = aof_dst
 
 
-                LOG.debug('Starting %s on port %s' % (BIN_PATH, self.port))
+                LOG.debug('Starting %s on port %s' % (__redis__['redis-server'], self.port))
                 system2('%s %s -s %s -c "%s %s"' % (
                     __redis__['su'], 
                     __redis__['defaults']['user'], 
