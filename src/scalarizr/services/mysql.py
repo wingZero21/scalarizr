@@ -27,6 +27,7 @@ from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy, PresetProvider
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
 from scalarizr.util.initdv2 import wait_sock, InitdError
+from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
@@ -36,7 +37,7 @@ LOG = logging.getLogger(__name__)
 
 MYSQL_DEFAULT_PORT=3306
 MYSQL_PATH  = '/usr/bin/mysql' # old mysql_path
-MYCNF_PATH      = '/etc/mysql/my.cnf' if disttool.is_ubuntu() else '/etc/my.cnf'
+MYCNF_PATH      = '/etc/mysql/my.cnf' if linux.os.debian_family else '/etc/my.cnf'
 MYSQLD_PATH = firstmatched(lambda x: os.access(x, os.X_OK), ('/usr/sbin/mysqld', '/usr/libexec/mysqld'))
 MYSQLDUMP_PATH = '/usr/bin/mysqldump'
 DEFAULT_DATADIR = "/var/lib/mysql"
