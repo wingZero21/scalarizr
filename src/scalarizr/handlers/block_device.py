@@ -102,21 +102,19 @@ class BlockDeviceHandler(handlers.Handler):
 						error_text='Cannot attach and mount disks in a reasonable time')
 		
 		volumes = hir.body.get('volumes') or []
-		volume_templates = hir.body.get('volume_templates')
-		if volume_templates and len(volume_templates) != len(volumes):
-			LOG.warn('len(volumes) != len(volume_templates), skip volume_templates')
-		volume_from_template_if_missing = hir.body.get('volume_from_template_if_missing')
 		if volumes:
 			LOG.debug('HIR volumes: %s', volumes)
 			for i in range(0, len(volumes)):
 				vol = volumes[i]
+				template = vol.pop('template', None)
+				from_template_if_missing = vol.pop('from_template_if_missing', None)
 				vol = storage2.volume(**vol)
 				LOG.info('Ensuring %s volume %s', vol.type, dict(vol))
 				try:
 					vol.ensure(mount=bool(vol.mpoint), mkfs=True)
 				except storage2.VolumeNotExistsError, e:
-					if volume_templates and volume_from_template_if_missing:
-						vol = storage2.volume(**volume_templates[i])
+					if template and from_template_if_missing:
+						vol = storage2.volume(**template)
 						LOG.warn('Volume %d not exists, re-creating %s volume from config: %d', 
 								str(e), vol.type, dict(vol))
 						vol.ensure(mount=bool(vol.mpoint), mkfs=True)
