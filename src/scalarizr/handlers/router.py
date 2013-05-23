@@ -88,11 +88,9 @@ class RouterHandler(handlers.Handler):
         with open(solo_attr, 'w+') as fp:
             json.dump({
                 'run_list': ['recipe[scalarizr_proxy]'],
-                'normal': {
-                    'scalarizr_proxy': {
-                        'scalr_addr': self._data['scalr_addr'],
-                        'whitelist': self._data['whitelist']
-                    }
+                'scalarizr_proxy': {
+                    'scalr_addr': self._data['scalr_addr'],
+                    'whitelist': self._data['whitelist']
                 }
             }, fp)
         with open(solo_rb, 'w+') as fp:
