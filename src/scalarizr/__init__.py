@@ -299,7 +299,10 @@ def _init_platform():
 	logger = logging.getLogger(__name__)
 	cnf = bus.cnf; ini = cnf.rawini
 	
-	pkgmgr.updatedb()
+	try:
+		pkgmgr.updatedb()
+	except:
+		logger.warn(str(sys.exc_info()[1]))
 
 	# Initialize platform
 	logger.debug("Initialize platform")
