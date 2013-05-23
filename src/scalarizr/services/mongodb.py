@@ -11,6 +11,7 @@ import glob
 import shutil
 import logging
 import functools
+import resource
 
 
 from scalarizr.config import BuiltinBehaviours
@@ -682,11 +683,19 @@ class Mongod(object):
 
 		return s
 	
+	def _preexec_fn(self):
+		unlimited = (resource.RLIM_INFINITY, resource.RLIM_INFINITY)
+		resource.setrlimit(resource.RLIMIT_NOFILE, (64000, 64000))
+		resource.setrlimit(resource.RLIMIT_NPROC, (32000, 32000))
+		resource.setrlimit(resource.RLIMIT_FSIZE, unlimited)
+		resource.setrlimit(resource.RLIMIT_CPU, unlimited)
+		os.setsid()
+
 	def start(self):
 		try:
 			if not self.is_running:
 				self._logger.debug('Starting %s' % MONGOD)
-				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args, close_fds=True, preexec_fn=os.setsid)
+				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args, close_fds=True, preexec_fn=self._preexec_fn)
 				'''
 				mongod process takes some time before it actualy starts accepting connections
 				it can easily be as long as 160 seconds on a Large instance
