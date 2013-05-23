@@ -62,7 +62,9 @@ class S3FileSystem(CloudFileSystem):
 
             if not self._bucket_check_cache(bucket_name):
                 try:
-                    bck = connection.get_bucket(bucket_name, validate=False)  #?
+                    bck = connection.get_bucket(bucket_name, validate=False)
+                    # TODO: http://boto.readthedocs.org/en/latest/ref/s3.html
+                    # get_bucket doc here: remove validate=False or try lookup first
                 except S3ResponseError, e:
                     if e.code == 'NoSuchBucket':
                         bck = connection.create_bucket(
