@@ -706,7 +706,7 @@ class Mongod(object):
         resource.setrlimit(resource.RLIMIT_NPROC, (32000, 32000))
         resource.setrlimit(resource.RLIMIT_FSIZE, unlimited)
         resource.setrlimit(resource.RLIMIT_CPU, unlimited)
-        resource.setrlimit(resource.RLIMIT_VMEM, unlimited)
+        #resource.setrlimit(resource.RLIMIT_VMEM, unlimited)  # 'module' object has no attribute 'RLIMIT_VMEM'
         os.setsid()
 
 
