@@ -260,7 +260,7 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.REDIS)
                 elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.0'):
                     handlers.append(config.BuiltinBehaviours.RABBITMQ)
-                elif name == 'mongodb' and Version('2.0') <= version < Version('2.3'):
+                elif name == 'mongodb' and Version('2.0') <= version < Version('2.5'):
                     handlers.append(config.BuiltinBehaviours.MONGODB)
                 elif name == 'apache' and Version('2.0') <= version < Version('2.3'):
                     handlers.append(config.BuiltinBehaviours.APP)
