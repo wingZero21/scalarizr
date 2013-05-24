@@ -6,6 +6,9 @@ from httplib import HTTPSConnection
 import time
 from threading import Thread
 from mock import patch
+import os
+from shutil import copyfile
+
 
 from lettuce import step
 from lettuce import world
@@ -129,10 +132,19 @@ def get_responses(qty):
     return [urlopen('http://localhost:8008').read() for _ in xrange(qty)]
 
 
-# @mock.patch.object(ebs, '__node__', new={'ec2': {
-#                                 'instance_id': 'i-12345678',
-#                                 'instance_type': 'm1.small',
-#                                 'avail_zone': 'us-east-1a'}})
+@before.each_feature
+def patch_nginx_conf(feature):
+    current_dir = os.path.dirname(__file__)
+    patch_conf_path = os.path.join(current_dir, 'nginx_fixtures/nginx.conf')
+    world.nginx_conf_backup = '/etc/nginx/nginx.conf.%s' % time.time()
+    copyfile('/etc/nginx/nginx.conf', world.nginx_conf_backup)
+    copyfile(patch_conf_path, '/etc/nginx/nginx.conf')
+
+@after.each_feature
+def unpatch_nginx_conf(feature):
+    copyfile(world.nginx_conf_backup, '/etc/nginx/nginx.conf')
+    os.remove(world.nginx_conf_backup)
+
 @before.each_feature
 def patch_node(feature):
     open('/etc/nginx/tetetetets.include', 'w').close()
