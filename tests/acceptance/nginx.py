@@ -92,6 +92,9 @@ class Server(BaseHTTPServer.HTTPServer):
                 self.send_header("Content-type", "text/html")
                 self.end_headers()
                 self.wfile.write(get_response)
+                
+            def log_message(self, format, *args):
+                return
 
         self.port = port
 
@@ -110,6 +113,8 @@ class Server(BaseHTTPServer.HTTPServer):
     def go_down(self):
         self.shutdown()
         self.server_close()
+
+
 
 
 def clear_nginx_includes():
