@@ -39,12 +39,6 @@ BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.WWW
 CNF_NAME = BEHAVIOUR
 CNF_SECTION = BEHAVIOUR
 
-BIN_PATH = 'binary_path'
-APP_PORT = 'app_port'
-HTTPS_INC_PATH = 'https_include_path'
-APP_INC_PATH = 'app_include_path'
-UPSTREAM_APP_ROLE = 'upstream_app_role'
-
 __nginx__ = __node__['nginx']
 
 
@@ -116,7 +110,7 @@ def get_handlers():
 
 class NginxCnfController(CnfController):
     def __init__(self):
-        nginx_conf_path = os.path.join(os.path.dirname(__nginx__[APP_INC_PATH]), 'nginx.conf')
+        nginx_conf_path = os.path.join(os.path.dirname(__nginx__['app_include_path']), 'nginx.conf')
         CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx', {"on":'1',"'off'":'0','off':'0'})
 
     @property
@@ -156,12 +150,12 @@ class NginxHandler(ServiceCtlHandler):
     def on_reload(self):
         self._queryenv = bus.queryenv_service
 
-        self._nginx_binary = __nginx__[BIN_PATH]
-        self._https_inc_path = __nginx__[HTTPS_INC_PATH]
-        self._app_inc_path = __nginx__[APP_INC_PATH]
-        self._app_port = __nginx__[APP_PORT]
+        self._nginx_binary = __nginx__['binary_path']
+        self._https_inc_path = __nginx__['https_include_path']
+        self._app_inc_path = __nginx__['app_include_path']
+        self._app_port = __nginx__['app_port']
         try:
-            self._upstream_app_role = __nginx__[UPSTREAM_APP_ROLE]
+            self._upstream_app_role = __nginx__['upstream_app_role']
         except ConfigParser.Error:
             self._upstream_app_role = None
 
@@ -508,7 +502,7 @@ class NginxPresetProvider(PresetProvider):
 
     def __init__(self):
 
-        nginx_conf_path = os.path.join(os.path.dirname(__nginx__[APP_INC_PATH]), 'nginx.conf')
+        nginx_conf_path = os.path.join(os.path.dirname(__nginx__['app_include_path']), 'nginx.conf')
         config_mapping = {'nginx.conf':NginxConf(nginx_conf_path)}
         service = initdv2.lookup('nginx')
         PresetProvider.__init__(self, service, config_mapping)

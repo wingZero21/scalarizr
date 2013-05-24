@@ -129,8 +129,13 @@ def get_responses(qty):
     return [urlopen('http://localhost:8008').read() for _ in xrange(qty)]
 
 
+# @mock.patch.object(ebs, '__node__', new={'ec2': {
+#                                 'instance_id': 'i-12345678',
+#                                 'instance_type': 'm1.small',
+#                                 'avail_zone': 'us-east-1a'}})
 @before.each_feature
 def patch_node(feature):
+    open('/etc/nginx/tetetetets.include', 'w').close()
     patcher = patch.object(nginx, 
                            '__node__',
                            new={'nginx': {'binary_path': '/usr/sbin/nginx',
@@ -141,6 +146,15 @@ def patch_node(feature):
                                 'behavior': ['nginx']})
     patcher.start()
     world.patchers = [patcher]
+    patcher = patch.object(nginx, 
+                           '__nginx__',
+                           new={'binary_path': '/usr/sbin/nginx',
+                                'app_include_path': '/etc/nginx/app-servers.include',
+                                'https_include_path': '/etc/nginx/https.include',
+                                'app_port': '80',
+                                'main_handler': 'nginx'})
+    patcher.start()
+    world.patchers.append(patcher)
 
     open('/etc/nginx/error-pages.include', 'w').close()
     patcher = patch.object(nginx.NginxAPI, '_make_error_pages_include')
