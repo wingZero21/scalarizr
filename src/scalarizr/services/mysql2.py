@@ -488,7 +488,7 @@ class MySQLDumpBackup(backup.Backup):
                                     streamer=None, chunk_size=self.chunk_size)
         result = self.transfer.run()
         if not result:
-            raise Error("Failed")
+            raise Error("Error while transfering to cloud storage")
 
         def log_stderr(popen):
             LOG.debug("mysqldump log_stderr communicate")
