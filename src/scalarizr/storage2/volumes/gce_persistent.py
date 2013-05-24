@@ -40,6 +40,8 @@ class GcePersistentVolume(base.Volume):
         try:
             connection = __node__['gce']['compute_connection']
         except:
+            e = sys.exc_info()[1]
+            LOG.debug('Can not get GCE connection: %s' % e)
             """ No connection, implicit check """
             try:
                 self._check_attr('name')
@@ -54,6 +56,7 @@ class GcePersistentVolume(base.Volume):
         else:
 
             try:
+                # TODO(spike) raise VolumeNotExistsError when link passed disk not exists
                 create = False
                 if not self.link:
                     # Disk does not exist, create it first

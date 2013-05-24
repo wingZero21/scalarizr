@@ -334,7 +334,7 @@ class HttpSource(Source):
 					unar = ['tar']
 					if mime[1] == 'gzip':
 						unar += ['-xzf']
-					elif mime[2] in ('bzip', 'bzip2'):
+					elif mime[1] in ('bzip', 'bzip2'):
 						unar += ['-xjf']
 					else:
 						raise UndefinedSourceError()

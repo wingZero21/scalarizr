@@ -775,8 +775,14 @@ NAME="scalarizr"
 INIT_SCRIPT="/etc/init.d/$NAME"
 
 if [ -x $INIT_SCRIPT ]; then
-	update-rc.d $NAME defaults 99 >/dev/null
-	update-rc.d scalarizr_update defaults 98 >/dev/null
+	if which insserv > /dev/null; then
+		insserv scalarizr_update
+		insserv $NAME
+	else
+		update-rc.d scalarizr_update defaults 98 >/dev/null
+		update-rc.d $NAME defaults 99 >/dev/null
+	fi
+
 
 	snmp_pid=$(netstat -anp | grep ^udp | grep 0\.0\.0\.0:8014 | awk '{ print $6 }' | cut -d/ -f1)
 

@@ -27,6 +27,7 @@ from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy, PresetProvider
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
 from scalarizr.util.initdv2 import wait_sock, InitdError
+from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
@@ -36,7 +37,7 @@ LOG = logging.getLogger(__name__)
 
 MYSQL_DEFAULT_PORT=3306
 MYSQL_PATH  = '/usr/bin/mysql' # old mysql_path
-MYCNF_PATH      = '/etc/mysql/my.cnf' if disttool.is_ubuntu() else '/etc/my.cnf'
+MYCNF_PATH      = '/etc/mysql/my.cnf' if linux.os.debian_family else '/etc/my.cnf'
 MYSQLD_PATH = firstmatched(lambda x: os.access(x, os.X_OK), ('/usr/sbin/mysqld', '/usr/libexec/mysqld'))
 MYSQLDUMP_PATH = '/usr/bin/mysqldump'
 DEFAULT_DATADIR = "/var/lib/mysql"
@@ -128,13 +129,12 @@ class MySQL(BaseService):
                     src_dir = os.path.dirname(raw_value + "/") + "/"
                     LOG.debug('source path: %s' % src_dir)
                     if os.path.isdir(src_dir) and src_dir != dest:
-                        try:
-                            if not system2((software.which('selinuxenabled'), ), raise_exc=False)[2]:
+                        selinuxenabled = software.which('selinuxenabled')
+                        if selinuxenabled:
+                            if not system2((selinuxenabled, ), raise_exc=False)[2]:
                                 if not system2((software.which('getsebool'), 'mysqld_disable_trans'), raise_exc=False)[2]:
                                     LOG.debug('Make SELinux rule for rsync')
                                     system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
-                        except LookupError:
-                            pass
 
                         LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
                         rsync(src_dir, dest, archive=True, exclude=['ib_logfile*', '*.sock'])

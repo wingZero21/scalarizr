@@ -86,6 +86,9 @@ class __os(dict):
                 self['lsb_%s' % key.lower()] = value  # override /etc/lsb-release
         except ImportError:
             pass
+        if 'lsb_codename' in self:
+            self['codename'] = self['lsb_codename']
+
         if osmod.path.isfile('/etc/arch-release'):
             self['name'] = 'Arch'
             self['family'] = 'Arch'
@@ -154,7 +157,8 @@ class __os(dict):
                 self['name'] = 'Amazon'
                 code = data[-7:]
                 bases = {
-                '2012.09': '6.3'
+                '2012.09': '6.3',
+                '2013.03': '6.4'
                 }
                 self['release'] = Version(bases.get(code, '6.3'))
                 self['codename'] = code
@@ -176,6 +180,7 @@ class __os(dict):
             self['release'] = Version(release)
         if not 'codename' in self:
             self['codename'] = codename
+
 
         if not 'name' in self:
             self['name'] = 'Unknown %s' % self['kernel']
