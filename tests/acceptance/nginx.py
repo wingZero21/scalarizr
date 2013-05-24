@@ -142,7 +142,7 @@ def patch_node(feature):
     patcher.start()
     world.patchers = [patcher]
 
-    open('/etc/nginx/ep.include', 'w').close()
+    open('/etc/nginx/error-pages.include', 'w').close()
     patcher = patch.object(nginx.NginxAPI, '_make_error_pages_include')
     patcher.start()
     world.patchers.append(patcher)
