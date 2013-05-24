@@ -478,6 +478,8 @@ class MySQLDumpBackup(backup.Backup):
 			self.transfer = cloudfs.LargeTransfer(self._gen_src, self._dst,
 									streamer=None, chunk_size=self.chunk_size)
 		result = self.transfer.run()
+		if not result:
+			raise Error("Error while transfering to cloud storage")
 		if self._killed:
 			raise Error("Canceled")
 

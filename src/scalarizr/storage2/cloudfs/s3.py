@@ -43,7 +43,7 @@ class S3FileSystem(object):
 			connection = self._get_connection()
 			try:
 				if not self._bucket_check_cache(bucket_name):
-					self._bucket = connection.get_bucket(bucket_name, validate=False)
+					self._bucket = connection.get_bucket(bucket_name)
 			except S3ResponseError, e:
 				if e.code in ('NoSuchBucket',):
 					raise cloudfs.DriverError("S3 path '%s' not found" % remote_path)
