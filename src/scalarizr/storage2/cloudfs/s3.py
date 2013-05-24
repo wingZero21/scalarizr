@@ -62,7 +62,7 @@ class S3FileSystem(CloudFileSystem):
 
             if not self._bucket_check_cache(bucket_name):
                 try:
-                    bck = connection.get_bucket(bucket_name, validate=False)  #?
+                    bck = connection.get_bucket(bucket_name)
                 except S3ResponseError, e:
                     if e.code == 'NoSuchBucket':
                         bck = connection.create_bucket(
