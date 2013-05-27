@@ -650,7 +650,7 @@ class ConfigServerConf(MongoDBConfig):
 	configsvr = property(_get_configsvr, _set_configsvr)
 
 	
-def mongo_preexec_fn(self):
+def mongo_preexec_fn():
 	unlimited = (resource.RLIM_INFINITY, resource.RLIM_INFINITY)
 	resource.setrlimit(resource.RLIMIT_NOFILE, (64000, 64000))
 	resource.setrlimit(resource.RLIMIT_NPROC, (32000, 32000))
