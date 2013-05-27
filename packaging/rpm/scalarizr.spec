@@ -223,6 +223,7 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr Google Compute Engine edition
 Group:          Applications/Internet
 Requires:       scalarizr-base = %{version}-%{release}
+Requires:       pyOpenSSL >= 0.13
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
 Conflicts:      scalarizr-rackspace
