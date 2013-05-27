@@ -301,7 +301,8 @@ __node__ = {
         'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
         'state': File(private_dir + '/.state'),
         'rebooted': BoolFile(private_dir + '/.reboot'),
-        'halted': BoolFile(private_dir + '/.halt')
+        'halted': BoolFile(private_dir + '/.halt'),
+        'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
 }
 
 for behavior in ('mysql', 'mysql2', 'percona'):
@@ -346,6 +347,11 @@ __node__['mongodb'] = Compound({
                                 Json('%s/storage/%s-snap.json' % (private_dir, 'mongodb'),'scalarizr.storage2.snapshot'),
         'shards_total,password,replica_set_index,shard_index,keyfile':
                                 Ini('%s/%s.ini' % (private_dir, 'mongodb'), 'mongodb')
+})
+
+__node__['nginx'] = Compound({
+    'binary_path,app_include_path,https_include_path,app_port,upstream_app_role':
+        Ini('%s/%s.ini' % (public_dir, 'www'), 'www')
 })
 
 __node__['ec2'] = Compound({

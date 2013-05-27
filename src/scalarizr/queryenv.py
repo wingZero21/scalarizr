@@ -96,17 +96,19 @@ class QueryEnvService(object):
         return resp_body
 
 
-    def list_roles(self, role_name=None, behaviour=None, with_init=None):
+    def list_roles(self, role_name=None, behaviour=None, with_init=None, farm_role_id=None):
         """
         @return Role[]
         """
         parameters = {}
-        if None != role_name:
+        if role_name:
             parameters["role"] = role_name
-        if None != behaviour:
+        if behaviour:
             parameters["behaviour"] = behaviour
-        if None != with_init:
+        if with_init:
             parameters["showInitServers"] = "1"
+        if farm_role_id:
+            parameters["farm-role-id"] = farm_role_id
 
         return self._request("list-roles", parameters, self._read_list_roles_response)
 
@@ -154,7 +156,7 @@ class QueryEnvService(object):
             parameters['target_ip'] = target_ip
         if None != local_ip:
             parameters['local_ip'] = local_ip
-        return self._request("list-scripts",parameters, self._read_list_scripts_response)
+        return self._request("list-scripts", parameters, self._read_list_scripts_response)
 
     def list_virtual_hosts(self, name=None, https=None):
         """
@@ -165,19 +167,28 @@ class QueryEnvService(object):
             parameters["name"] = name
         if None != https:
             parameters["https"] = https
-        return self._request("list-virtualhosts",parameters, self._read_list_virtualhosts_response)
+        return self._request("list-virtualhosts", parameters, self._read_list_virtualhosts_response)
 
     def get_https_certificate(self):
         """
         @return (cert, pkey, cacert)
         """
-        return self._request("get-https-certificate",{}, self._read_get_https_certificate_response)
+        return self.get_ssl_certificate(None)
+
+    def get_ssl_certificate(self, certificate_id):
+        """
+        @return (cert, pkey, cacert)
+        """
+        parameters = {}
+        if certificate_id:
+            parameters['id'] = certificate_id
+        return self._request("get-https-certificate", parameters, self._read_get_https_certificate_response)
 
     def list_ebs_mountpoints(self):
         """
         @return Mountpoint[]
         """
-        return self._request("list-ebs-mountpoints",{}, self._read_list_ebs_mountpoints_response)
+        return self._request("list-ebs-mountpoints", {}, self._read_list_ebs_mountpoints_response)
 
     def get_latest_version(self):
         """
@@ -204,7 +215,7 @@ class QueryEnvService(object):
         """
         return {'params':self._request("get-global-config", {}, self._read_get_global_config_response)}
 
-    def _request (self, command, params={}, response_reader=None, response_reader_args=None):
+    def _request(self, command, params={}, response_reader=None, response_reader_args=None):
         xml = self.fetch(command, **params)
         response_reader_args = response_reader_args or ()
         return response_reader(xml, *response_reader_args)
@@ -284,7 +295,7 @@ class QueryEnvService(object):
 
     def _read_get_https_certificate_response(self, xml):
         result = xml2dict(ET.XML(xml))
-        if 'virtualhost' in result:
+        if result and 'virtualhost' in result:
             data = result['virtualhost']
             cert = data['cert'] if 'cert' in data else None
             pkey = data['pkey'] if 'pkey' in data else None
@@ -435,16 +446,18 @@ class RoleHost(QueryEnvResult):
     index = None
     replication_master = False
     internal_ip = None
-    external_ip     = None
+    external_ip = None
     shard_index = None
     replica_set_index = None
     status = None
+    cloud_location = None
 
-    def __init__(self,index=None, replication_master=False, internal_ip=None, external_ip=None,
-                            shard_index=None, replica_set_index=None, status=None):
+    def __init__(self, index=None, replication_master=False, internal_ip=None, external_ip=None,
+                 shard_index=None, replica_set_index=None, status=None, cloud_location=None):
         self.internal_ip = internal_ip
         self.external_ip = external_ip
         self.status = status
+        self.cloud_location = cloud_location
         if index:
             self.index = int(index)
         if replication_master:
@@ -457,11 +470,12 @@ class RoleHost(QueryEnvResult):
 
     def __repr__(self):
         return "index = " + str(self.index) \
-+ "; replication_master = " + str(self.replication_master) \
-+ "; internal_ip = " + str(self.internal_ip) \
-+ "; external_ip = " + str(self.external_ip) \
-+ "; shard_index = " + str(self.shard_index) \
-+ "; replica_set_index = " + str(self.replica_set_index)
+            + "; replication_master = " + str(self.replication_master) \
+            + "; internal_ip = " + str(self.internal_ip) \
+            + "; external_ip = " + str(self.external_ip) \
+            + "; shard_index = " + str(self.shard_index) \
+            + "; replica_set_index = " + str(self.replica_set_index) \
+            + "; cloud_location = " + self.cloud_location
 
 
 class Script(object):
@@ -478,9 +492,9 @@ class Script(object):
 
     def __repr__(self):
         return "asynchronous = " + str(self.asynchronous) \
-+ "; exec_timeout = " + str(self.exec_timeout) \
-+ "; name = " + str(self.name) \
-+ "; body = " + str(self.body)
+            + "; exec_timeout = " + str(self.exec_timeout) \
+            + "; name = " + str(self.name) \
+            + "; body = " + str(self.body)
 
 class VirtualHost(object):
     hostname = None
@@ -497,9 +511,9 @@ class VirtualHost(object):
 
     def __repr__(self):
         return "hostname = " + str(self.hostname) \
-+ "; type = " + str(self.type) \
-+ "; raw = " + str(self.raw) \
-+ "; https = " + str(self.https)
+            + "; type = " + str(self.type) \
+            + "; raw = " + str(self.raw) \
+            + "; https = " + str(self.https)
 
 class ScalingMetric(object):
     class RetriveMethod:
