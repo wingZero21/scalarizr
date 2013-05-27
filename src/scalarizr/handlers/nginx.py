@@ -120,9 +120,6 @@ class NginxCnfController(CnfController):
 
 class NginxHandler(ServiceCtlHandler):
 
-    backends_xpath = "upstream[@value='backend']/server"
-    localhost = '127.0.0.1:80'
-
     def __init__(self):
         self._cnf = bus.cnf
         ServiceCtlHandler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
@@ -258,14 +255,14 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('after host up backend table is %s' % self.api.backend_table)
 
 
-    def on_HostDown(self, message):
-        server = ''
-        role_id = message.farm_role_id
-        behaviours = message.behaviour
-        if message.cloud_location == __node__['cloud_location']:
-            server = message.local_ip
-        else:
-            server = message.remote_ip
+    def _remove_shutting_down_server(self,
+                                     server,
+                                     role_id,
+                                     behaviours,
+                                     cache_remove=False):
+        if server in self._terminating_servers:
+            self._terminating_servers.remove(server)
+            return
 
         self._logger.debug('on host down backend table is %s' % self.api.backend_table)
         self._logger.debug('removing server %s from backends' % server)
@@ -299,30 +296,32 @@ class NginxHandler(ServiceCtlHandler):
             self.api.remove_server_from_role(server, role_id)
         self._logger.debug('after host down backend table is %s' % self.api.backend_table)
 
-        self._terminating_servers.append(server)
+        if cache_remove:
+            self._terminating_servers.append(server)
 
-    def on_BeforeHostTerminate(self, message):
+    def on_HostDown(self, message):
         server = ''
+        role_id = message.farm_role_id
+        behaviours = message.behaviour
         if message.cloud_location == __node__['cloud_location']:
             server = message.local_ip
         else:
             server = message.remote_ip
-        if server not in self._terminating_servers:
-            self.on_HostDown(message)
-        self._terminating_servers.remove(server)
+
+        self._remove_shutting_down_server(server, role_id, behaviours)
+
+    def on_BeforeHostTerminate(self, message):
+        server = ''
+        role_id = message.farm_role_id
+        behaviours = message.behaviour
+        if message.cloud_location == __node__['cloud_location']:
+            server = message.local_ip
+        else:
+            server = message.remote_ip
+
+        self._remove_shutting_down_server(server, role_id, behaviours, True)
 
     def on_VhostReconfigure(self, message):
-        # TODO: maybe uncomment next 9 lines if message actually contains
-        #       vhost name and its ssl status
-        # self._logger.debug('Trying to update ssl certificate on vhost reconfigure')
-        # cert, key, cacert = self._queryenv.get_https_certificate()
-        # self._logger.debud('Got cert: \n%s\n\nkey:\n%s\n\ncacert:\n%s\n' % 
-        #                    (cert, key, cacert))
-        # if cert and key:
-        #     self.api.update_ssl_certificate(None, cert, key, cacert)
-        #     self.api.enable_ssl()
-        # else:
-        #     self.api.disable_ssl()
         if self._in_default_mode():
             self._logger.debug('before vhost reconf backend table is %s' % self.api.backend_table)
             roles_for_proxy = []

@@ -115,8 +115,6 @@ class Server(BaseHTTPServer.HTTPServer):
         self.server_close()
 
 
-
-
 def clear_nginx_includes():
     with open('/etc/nginx/app-servers.include', 'w') as fp:
         fp.write('')
