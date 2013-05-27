@@ -650,6 +650,15 @@ class ConfigServerConf(MongoDBConfig):
 	configsvr = property(_get_configsvr, _set_configsvr)
 
 	
+def mongo_preexec_fn(self):
+	unlimited = (resource.RLIM_INFINITY, resource.RLIM_INFINITY)
+	resource.setrlimit(resource.RLIMIT_NOFILE, (64000, 64000))
+	resource.setrlimit(resource.RLIMIT_NPROC, (32000, 32000))
+	resource.setrlimit(resource.RLIMIT_FSIZE, unlimited)
+	resource.setrlimit(resource.RLIMIT_CPU, unlimited)
+	os.setsid()
+
+
 class Mongod(object):	
 	def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=2):
 		self._logger = logging.getLogger(__name__)
@@ -683,19 +692,13 @@ class Mongod(object):
 
 		return s
 	
-	def _preexec_fn(self):
-		unlimited = (resource.RLIM_INFINITY, resource.RLIM_INFINITY)
-		resource.setrlimit(resource.RLIMIT_NOFILE, (64000, 64000))
-		resource.setrlimit(resource.RLIMIT_NPROC, (32000, 32000))
-		resource.setrlimit(resource.RLIMIT_FSIZE, unlimited)
-		resource.setrlimit(resource.RLIMIT_CPU, unlimited)
-		os.setsid()
+
 
 	def start(self):
 		try:
 			if not self.is_running:
 				self._logger.debug('Starting %s' % MONGOD)
-				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args, close_fds=True, preexec_fn=self._preexec_fn)
+				system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args, close_fds=True, preexec_fn=mongo_preexec_fn)
 				'''
 				mongod process takes some time before it actualy starts accepting connections
 				it can easily be as long as 160 seconds on a Large instance
@@ -776,7 +779,7 @@ class Mongos(object):
 			if os.path.exists(ROUTER_LOG_PATH):
 				chown_r(ROUTER_LOG_PATH, DEFAULT_USER)
 
-			system2(args, close_fds=True, preexec_fn=os.setsid)
+			system2(args, close_fds=True, preexec_fn=mongo_preexec_fn)
 			wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
 			wait_until(lambda: cls.get_cli().has_connection, timeout=MAX_START_TIMEOUT)
 			cls._logger.debug('%s process has been started.' % MONGOS)
