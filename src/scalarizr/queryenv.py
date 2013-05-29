@@ -348,7 +348,7 @@ class QueryEnvService(object):
                     continue
                 preset.name = raw_preset['preset-name']
                 preset.restart_service = raw_preset['restart-service']
-                preset.settings = raw_preset['values']
+                preset.settings = raw_preset['values'] if 'values' in raw_preset else {}
                 preset.new_engine = False
         return preset
 
