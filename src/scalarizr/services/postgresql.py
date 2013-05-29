@@ -671,7 +671,7 @@ class ConfigDir(object):
         cls.version = version or '9.0'
         path = cls.get_sysconfig_pgdata()
         if not path:
-            if os.linux.debian_family:
+            if linux.os.debian_family:
                 path = '/etc/postgresql/%s/main' % version
             else:
                 path = os.path.join(glob.glob(pg_pathname_pattern)[0],'data')
