@@ -289,6 +289,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
                     + "Cross-scalarizr messaging not initialized")
 
+        self._fetch_globals()
+
 
     def _start_int_messaging(self):
         if 'mongodb' in __node__['behavior'] or 'rabbitmq' in __node__['behavior']:
