@@ -232,10 +232,7 @@ class QueryEnvService(object):
         '''
         Returns dict
         '''
-        ret = xml2dict(ET.XML(xml))
-        data = {}
-        if ret:
-            data = ret[0]
+        data = xml2dict(ET.XML(xml)) or {}
         glob_vars = data['variables']['values'] if 'variables' in data else {}
         glob_vars = dict((k, v or '') for k, v in glob_vars.items() if k.startswith('SCALR'))
         return glob_vars
