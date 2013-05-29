@@ -138,7 +138,7 @@ class QueryEnvService(object):
         """
         return self._request('get-server-user-data', {}, self._read_get_server_user_data_response)
 
-    def list_scripts (self, event=None, event_id=None, asynchronous=None, name=None,
+    def list_scripts(self, event=None, event_id=None, asynchronous=None, name=None,
             target_ip=None, local_ip=None):
         """
         @return Script[]
@@ -215,10 +215,30 @@ class QueryEnvService(object):
         """
         return {'params':self._request("get-global-config", {}, self._read_get_global_config_response)}
 
+    def list_global_variables(self):
+        '''
+        Returns dict of scalr-added environment variables
+        '''
+        return self._request('list-global-variables', {}, self._read_list_global_variables)
+
+###############################################################################
+
     def _request(self, command, params={}, response_reader=None, response_reader_args=None):
         xml = self.fetch(command, **params)
         response_reader_args = response_reader_args or ()
         return response_reader(xml, *response_reader_args)
+
+    def _read_list_global_variables(self, xml):
+        '''
+        Returns dict
+        '''
+        ret = xml2dict(ET.XML(xml))
+        data = {}
+        if ret:
+            data = ret[0]
+        glob_vars = data['variables']['values'] if 'variables' in data else {}
+        glob_vars = dict((k, v or '') for k, v in glob_vars.items() if k.startswith('SCALR'))
+        return glob_vars
 
     def _read_get_global_config_response(self, xml):
         """
@@ -542,17 +562,30 @@ class ScalingMetric(object):
 def xml2dict(el):
     if el.attrib:
         ret = el.attrib
-        if el.tag == 'settings':
+        if el.tag in ['settings', 'variables'] and len(el):
+            c = el[0]
+            key = ''
+            if c.attrib.has_key('key'):
+                key = 'key'
+            elif c.attrib.has_key('name'):
+                key = 'name'
+
             ret['values'] = {}
             for ch in el:
-                ret['values'][ch.attrib['key']] = ch.text
+                ret['values'][ch.attrib[key]] = ch.text
         else:
             for ch in el:
                 ret[ch.tag] = xml2dict(ch)
         return ret
     if len(el):
-        if el.tag == 'settings':
-            return {'values':dict((ch.attrib['key'], ch.text) for ch in el)}
+        if el.tag in ['settings', 'variables']:
+            c = el[0]
+            key = ''
+            if c.attrib.has_key('key'):
+                key = 'key'
+            elif c.attrib.has_key('name'):
+                key = 'name'
+            return {'values':dict((ch.attrib[key], ch.text) for ch in el)}
 
         if el.tag == 'user-data':
             ret = {}
@@ -565,7 +598,7 @@ def xml2dict(el):
 
 
         tag = el[0].tag
-        list_tags = ('item', 'role', 'host', 'settings', 'volume', 'mountpoint', 'script', 'param', 'vhost', 'metric')
+        list_tags = ('item', 'role', 'host', 'settings', 'volume', 'mountpoint', 'script', 'param', 'vhost', 'metric', 'variable')
         if tag in list_tags and  all(ch.tag == tag for ch in el):
             return list(xml2dict(ch) for ch in el)
         else:
