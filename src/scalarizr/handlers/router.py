@@ -88,7 +88,7 @@ class RouterHandler(handlers.Handler):
         with open(solo_attr, 'w+') as fp:
             json.dump({
                 'run_list': ['recipe[scalarizr_proxy]'],
-                'normal': {
+                'scalarizr_proxy': {
                     'scalr_addr': self._data['scalr_addr'],
                     'whitelist': self._data['whitelist']
                 }
@@ -99,5 +99,5 @@ class RouterHandler(handlers.Handler):
                 'cookbook_path "%s/cookbooks"' % (solo_home, solo_home)
             )
         linux.system(('chef-solo', '-c', solo_rb, '-j', solo_attr), 
-                close_fds=True, preexec_fn=os.setsid)
+                close_fds=True, preexec_fn=os.setsid, log_level=logging.INFO)
 
