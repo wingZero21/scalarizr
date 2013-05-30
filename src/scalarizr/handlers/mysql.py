@@ -1653,7 +1653,7 @@ class MysqlHandler(ServiceCtlHandler):
                 should_term_mysqld = True
             my_cli = spawn_mysql_cli()
 
-        # Generate passwords
+        # HERE:
         root_password = root_pass if root_pass else cryptotool.pwgen(20)
         repl_password = repl_pass if repl_pass else cryptotool.pwgen(20)
         stat_password = stat_pass if stat_pass else cryptotool.pwgen(20)

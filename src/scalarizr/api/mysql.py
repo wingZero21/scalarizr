@@ -17,7 +17,7 @@ from scalarizr.util.cryptotool import pwgen
 
 class MySQLAPI(object):
     """
-    @xxx: reporting is an anal pain
+    @xxx: reporting is a pain
     """
 
     error_messages = {

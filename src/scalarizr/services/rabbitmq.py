@@ -151,16 +151,20 @@ class RabbitMQ(object):
     def start_app(self):
         system2((RABBITMQCTL, 'start_app'), logger=self._logger)
 
+    def _check_admin_user(self, username, password):
+        if username in self.list_users():
+            self.set_user_password(username, password)
+            self.set_user_tags(username, 'administrator')
+        else:
+            self.add_user(username, password, True)
+
+        self.set_full_permissions(username)
 
     def check_scalr_user(self, password):
-        if SCALR_USERNAME in self.list_users():
-            self.set_user_password(SCALR_USERNAME, password)
-            self.set_user_tags(SCALR_USERNAME, 'administrator')
-        else:
-            self.add_user(SCALR_USERNAME, password, True)
+        self._check_admin_user(SCALR_USERNAME, password)
 
-        self.set_full_permissions(SCALR_USERNAME)
-
+    def check_privileged_user(self, password):
+        self._check_admin_user('privileged', password)
 
     def add_user(self, username, password, is_admin=False):
         system2((RABBITMQCTL, 'add_user', username, password), logger=self._logger)

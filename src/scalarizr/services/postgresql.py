@@ -303,8 +303,18 @@ class PostgreSql(BaseService):
     
     def _set_root_user(self, user):
         self._set('root_user', user)
+
+    def _get_priveleged_user(self):
+        key = 'priveleged'
+        if not self._objects.has_key(key):
+            self._objects[key] = PgUser('priveleged', self.pg_keys_dir)
+        return self._objects[key]
     
+    def _set_priveleged_user(self, user):
+        self._set('priveleged', user)
+
     root_user = property(_get_root_user, _set_root_user)
+    priveleged_user = property(_get_priveleged_user, _set_priveleged_user)
     config_dir = property(_get_config_dir, _set_config_dir)
     cluster_dir = property(_get_cluster_dir, _set_cluster_dir)
     postgresql_conf = property(_get_postgresql_conf, _set_postgresql_conf)
