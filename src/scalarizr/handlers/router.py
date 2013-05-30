@@ -70,7 +70,7 @@ class RouterHandler(handlers.Handler):
         linux.system(('augtool',), stdin=augscript) 
         linux.system(('sysctl', '-p'))
 
-        if self._data['cidr']:
+        if self._data.get('cidr'):
             iptables.ensure({'POSTROUTING': [{
                 'table': 'nat', 
                 'source': self._data['cidr'], 
