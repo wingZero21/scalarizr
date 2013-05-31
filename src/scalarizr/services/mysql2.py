@@ -42,7 +42,7 @@ __mysql__.update({
     'repl_user': 'scalr_repl',
     'stat_user': 'scalr_stat',
     'pma_user': 'pma',
-    'privileged_user': 'scalr_privileged',
+    'master_user': 'scalr_master',
     'debian.cnf': '/etc/mysql/debian.cnf',
     'my.cnf': '/etc/my.cnf' if linux.os['family'] in ('RedHat', 'Oracle') else '/etc/mysql/my.cnf',
     'mysqldump_chunk_size': 200,

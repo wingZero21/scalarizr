@@ -1251,7 +1251,7 @@ class MysqlHandler(DBMSRHandler):
                 __mysql__['root_user']: 'root_password',
                 __mysql__['repl_user']: 'repl_password',
                 __mysql__['stat_user']: 'stat_password',
-                'scalr_master': 'privileged_password'}
+                __mysql__['master_user']: 'master_password'}
         creds = {}
         for login, opt_pwd in options.items():
             password = __mysql__[opt_pwd]
@@ -1290,6 +1290,10 @@ class MysqlHandler(DBMSRHandler):
             user = mysql_svc.MySQLUser(root_cli, login, password,
                                     host='%', privileges=PRIVILEGES.get(login, None))
             users[login] = user
+            if login == __mysql__['master_user']:
+                user2 = mysql_svc.MySQLUser(root_cli, login, password,
+                                    host='localhost', privileges=PRIVILEGES.get(login, None))
+                users[login + '_localhost'] = user2
 
         for login, user in users.items():
             if not user.exists():

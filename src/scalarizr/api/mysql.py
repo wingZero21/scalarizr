@@ -75,7 +75,9 @@ class MySQLAPI(object):
             new_password = pwgen(20)
         mysql_cli = mysql_svc.MySQLClient(__mysql__['root_user'],
                                           __mysql__['root_password'])
-        mysql_cli.set_user_password('scalr_master', 'localhost', new_password)
+        mysql_cli.set_user_password(__mysql__['master_user'],
+                                    'localhost',
+                                    new_password)
         mysql_cli.flush_privileges()
         # __mysql__['root_password'] = new_password
         return new_password
