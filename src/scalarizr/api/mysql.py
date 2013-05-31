@@ -68,14 +68,16 @@ class MySQLAPI(object):
 
     @rpc.service_method
     def reset_password(self, new_password=None):
-        """ Reset password for MySQL user 'scalr'. Return new password """
+        """
+        Reset password for MySQL user 'scalr_master'. Return new password
+        """
         if not new_password:
             new_password = pwgen(20)
         mysql_cli = mysql_svc.MySQLClient(__mysql__['root_user'],
                                           __mysql__['root_password'])
-        mysql_cli.set_user_password('scalr', 'localhost', new_password)
+        mysql_cli.set_user_password('scalr_master', 'localhost', new_password)
         mysql_cli.flush_privileges()
-        __mysql__['root_password'] = new_password
+        # __mysql__['root_password'] = new_password
         return new_password
 
     @rpc.service_method
