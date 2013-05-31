@@ -4,6 +4,7 @@ import logging
 import time
 import errno
 import sys
+from pprint import pformat
 
 from lettuce import step, world, before, after
 import mock
@@ -145,10 +146,10 @@ def communicate(target):
     try:
         sock.connect(address)
     except socket.error, e:
-            if e.errno == errno.ECONNREFUSED:
-                response = 'debug: connection refused'
-            else:
-                raise
+        if e.errno == errno.ECONNREFUSED:
+            response = 'debug: connection refused'
+        else:
+            raise
     else:
         response = sock.recv(1024)  # FIXME: indefinite block if _handle has
                                     # crashed; using communicate from main 
@@ -188,7 +189,7 @@ haproxy_api.get_servers = Role.get_servers
 
 PARAMS = {
     '': {},
-    "down": {"disabled": True},
+    "down": {"down": True},
     "backup": {"backup": True},
     "regular": {},
 }
@@ -200,13 +201,11 @@ HC_PARAMS = {
         "fall_threshold": '3',
         "rise_threshold": '6',
         "check_interval": '7s',
-        #? 'check_timeout': '4s',
     },
     "C2": {
         "fall_threshold": '4',
         "rise_threshold": '7',
         "check_interval": '8s',
-        #'check_timeout': '5s',
     },
 }
 
@@ -216,8 +215,9 @@ def minimal_haproxy_conf(path="/etc/haproxy/haproxy.cfg"):
 """
 defaults
     timeout connect 5000ms
-    timeout client 50000ms
-    timeout server 50000ms
+    timeout client 5000ms
+    timeout server 5000ms
+    option log-health-checks
 
 listen init
     bind *:26998
@@ -243,8 +243,6 @@ def dont_fail(f):
 
 
 def acceptable_responses():
-    # TODO: doc
-    # TODO: ignore down servers
 
     responses = map(str, world.servers.values())
 
@@ -273,6 +271,8 @@ def setup(scenario):
     world.new_server = None
     # for 'server goes down' scenario
     world.terminated = []
+    # for 'get health'
+    world.health = None
 
     minimal_haproxy_conf()
     world.api = haproxy_api.HAProxyAPI()
@@ -326,7 +326,7 @@ def i_add_proxy(step):
     servers = map(lambda server: server.as_arg, world.servers.values())
     roles = map(lambda role: role.as_arg, world.roles.values())
 
-    world.api.add_proxy(port=world.proxy_port,
+    world.api.make_proxy(port=world.proxy_port,
                         servers=servers,
                         roles=roles)
     world.acceptable_responses = acceptable_responses()
@@ -448,6 +448,11 @@ def server_params(server):
     assert record.pop("address") == server.address[0]
     assert record.pop("port") == str(server.address[1])
 
+    #? should we translate param names in the api?
+    if "disabled" in record:
+        record["down"] = record["disabled"]
+        del record["disabled"]
+
     return record
 
 
@@ -459,7 +464,7 @@ def i_expect_servers_in_backend(step, name1, name2, desc):
     records = map(server_params, servers)
 
     for record in records:
-        assert record == PARAMS[desc]
+        assert record == PARAMS[desc], "%s != %s" % (record, PARAMS[desc])
 
 
 @step("i expect (\w+)( and (\w+))? servers? having (default|custom) healthcheck ?(\w+)?")
@@ -469,12 +474,53 @@ def i_expect_servers_having_healthcheck(step, name1, _, name2, __, hc_name):
 
     records = map(server_params, servers)
 
-    # TODO: use param names mapping from the api
     for record in records:
-        assert record == HC_PARAMS[hc_name], str(record) + '  !=  ' + str(HC_PARAMS[hc_name])
-
-    
+        assert record == haproxy_api.rename(HC_PARAMS[hc_name]), str(record) + '  !=  ' + str(HC_PARAMS[hc_name])
 
 
-    
+@step("i have a proxy (\w+) to (running|broken) servers")
+def i_have_a_proxy_to_servers(step, name, status):
+
+    #haproxy_api.HEALTHCHECK_DEFAULTS['default-server']['inter'] = 2000
+    #haproxy_api.HEALTHCHECK_DEFAULTS['default-server']['fall'] = 2
+
+    for i in range(1, 3):
+        server_name = name + str(i)
+        step.given("i have a server %s" % server_name)
+        #world.servers[server_name] = type("X", (object, ), {"__str__": lambda *args: server_addr, "as_arg": {"address": server_addr}})()
+        if status == "broken":
+            LOG.info("Killing %s" % str(world.servers[server_name]))
+            world.servers[server_name].kill()
+
+
+@step("i get health")
+def i_get_health(step):
+    time.sleep(30)
+    world.health = world.api.health()
+    LOG.info(pformat(world.health))
+
+
+@step("i expect (\w+) servers are (UP|DOWN)")
+def i_expect_servers_are(step, name, status):
+
+    for key in filter(lambda key: key.startswith(name), world.servers):
+        server = world.servers[key]
+        server_name = world.api._server_name(str(server))
+
+        # get servers health
+        for health in world.health:
+            if health["svname"] == server_name:
+                server_health = health
+                break
+        else:
+            assert False, "Haven't got healthcheck for %s" % server_name
+
+        assert health["status"] == status, "%s != %s" % (health["status"], status)
+
+
+@step("i expect down explanation")
+def i_expect_fail_explanation(step):
+    for health in filter(lambda health: health["status"] == "DOWN", world.health):
+        health["check_status"]  # TODO
+
 

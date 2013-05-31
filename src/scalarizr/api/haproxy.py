@@ -18,6 +18,22 @@ HEALTHCHECK_DEFAULTS = {
     'default-server': {'inter': '30s', 'fall': 2, 'rise': 10}
 }
 
+
+def rename(params):
+    # translate param names from readable form to config param names
+    server_param_names_map = {
+        "check_interval": "inter",
+        "fall_threshold": "fall",
+        "rise_threshold": "rise",
+        "server_maxconn": "maxconn",
+        "down": "disabled",
+    }
+    return dict([
+        (server_param_names_map.setdefault(key, key), val)
+            for key, val in params.items()
+    ])
+
+
 _rule_protocol = validate.rule(choises=['tcp', 'http', 'TCP', 'HTTP'])
 _rule_backend = validate.rule(re=r'^role:\d+$')
 _rule_hc_target = validate.rule(re='^[tcp|http]+:\d+$')
@@ -39,20 +55,21 @@ class HAProxyAPI(object):
         self.svc = haproxy.HAProxyInitScript(path)
 
     def _server_name(self, ipaddr):
-        '''@rtype: str'''
+        # expected ipaddr: host:port
         # if ':' in ipaddr:
         #    ipaddr = ipaddr.strip().split(':')[0]
         return ipaddr.replace('.', '-')
 
 
-    def add_proxy(self, port, backend_port=None, roles=None, servers=None,
+    def make_proxy(self, port, backend_port=None, roles=None, servers=None,
                 check_timeout=None, maxconn=None, **default_server_params):
         """
-        Add proxy yo.
+        Add listen and backend sections to the haproxy conf and restart the
+        service.
 
         :param port: listener port
         :type port: int
-        :param backend_port: port for backend server to listen on?
+        :param backend_port: port for backend server to listen on
         :type backend_port: int
         :param roles: role ids (ints) or dicts with "id" key
         :type roles: list
@@ -75,7 +92,7 @@ class HAProxyAPI(object):
         :param server_maxconn: value for ``maxconn``, not to confuse with
                                the frontend's ``maxconn``
         :type server_maxconn: str
-        :param down: value for #?
+        :param down: value for ``disabled``
         :type down: bool
         :param backup: value for ``backup``
         :type backup: bool
@@ -89,6 +106,8 @@ class HAProxyAPI(object):
         """
         # TODO: handle address-host-port mess
         # -> {'check': True, 'port': '27001', 'address': '127.0.0.1'}
+        # TODO: servers and roles dicts: port for backend port;
+        #   healthchecks port unreachable for now
 
         # default values
         if not backend_port:
@@ -98,19 +117,6 @@ class HAProxyAPI(object):
         if not servers:
             servers = []
 
-        # translate param names to config param names
-        server_param_names_map = {
-            "check_interval": "inter",
-            "fall_threshold": "fall",
-            "rise_threshold": "rise",
-            "server_maxconn": "maxconn",
-        }
-        def rename(params):
-            return dict([
-                (server_param_names_map.setdefault(key, key), val)
-                    for key, val in params.items()
-            ])
-
         # allowing short servers & roles specification
         # creating new lists here also protects from side effects
         roles = map(lambda x: {"id": x} if isinstance(x, int) else dict(x), roles)
@@ -119,8 +125,6 @@ class HAProxyAPI(object):
         #
         listener_name = haproxy.naming('listen', "tcp", port)
         backend_name = haproxy.naming('backend', "tcp", port)
-
-        #? check for duplicate listener?
 
         listener = {
             'mode': "tcp",
@@ -139,14 +143,14 @@ class HAProxyAPI(object):
         if check_timeout:
             backend["timeout"]["check"] = check_timeout
         backend["default-server"].update(rename(default_server_params))
-        backend["default-server"]["port"] = backend_port
+        #backend["default-server"]["port"] = backend_port  # this actually sets healthchecks port
 
         # roles to server ips & their params
         roles_servers = []
         for role in roles:
             role_id, role_params = role.pop("id"), role
 
-            # get_servers(role_id) -> [ip] ?
+            #? get_servers(role_id) -> [ip]
             role_servers = map(lambda ip: {"address": ip}, get_servers(role_id))
             [server.update(role_params) for server in role_servers]
 
@@ -155,6 +159,10 @@ class HAProxyAPI(object):
         # get all servers together & enable healthchecks
         servers.extend(roles_servers)
         [server.setdefault("check", True) for server in servers]
+
+        ###
+        from pprint import pformat
+        LOG.info(pformat(servers))
 
         # update the backend
         for server in servers:
@@ -205,7 +213,7 @@ class HAProxyAPI(object):
         server_name = ':'.join([server["address"], str(server["port"])]).replace('.', '-')
         
         for bnd in bnds:
-            self.cfg.backends[bnd]['server'][server_name] = server
+            self.cfg.backends[bnd]['server'][server_name] = rename(server)
 
         self.cfg.save()
         self.svc.reload()
@@ -232,16 +240,46 @@ class HAProxyAPI(object):
 
     def health(self):
         try:
-            if self.cfg.defaults['stats'][''] == 'enable' and \
-                    self.cfg.globals['stats']['socket'] == '/var/run/haproxy-stats.sock':
+            # if self.cfg.defaults['stats'][''] == 'enable' and \
+            if self.cfg.globals['stats']['socket'] == '/var/run/haproxy-stats.sock':
                 pass
         except:
             self.cfg.globals['stats']['socket'] = '/var/run/haproxy-stats.sock'
-            self.cfg.defaults['stats'][''] = 'enable'
+            self.cfg.globals['spread-checks'] = 5
             self.cfg.save()
             self.svc.reload()
 
         stats = haproxy.StatSocket().show_stat()
+
+        # filter the stats
+        relevant_keys = [
+            "pxname",
+            "svname",
+            "status",
+            "act",
+            "bck",
+            "chkfail",
+            "chkdown",
+            "downtime",
+            "check_status",
+            "check_duration",
+        ]
+        relevant_keys += [
+            "cap",
+            "mode",
+            "id",
+            "IP",
+            "ip",
+            "cookie",
+            "legends",
+            "legend"
+        ]
+        
+        stats = filter(lambda health: health["svname"] not in ("FRONTEND", "BACKEND"), stats)
+        for health in stats:
+            for key in health.keys():
+                if key not in relevant_keys:
+                    del health[key]
 
         return stats
 
@@ -307,7 +345,7 @@ class HAProxyAPI(object):
                 self.cfg['backend'][bnd] = backend
             try:
                 iptables.FIREWALL.ensure(
-                        {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
+                    {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
                 )
             except Exception, e:
                 raise exceptions.Duplicate(e)

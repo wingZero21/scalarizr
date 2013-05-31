@@ -26,7 +26,6 @@ Scenario: Proxy to backup role
     When i terminate master servers
     Then i expect proxying to backup servers
 
-# later
 Scenario: Mark server as down
     Given i have a proxy to two servers
     When i update proxy marking one server as down
@@ -55,12 +54,13 @@ Scenario: Healthcheck application
     And i expect R2 servers having custom healthcheck C1
 
 Scenario: Get health
-    Given i have a proxy P1 to a running servers
-    And i have a proxy P2 to a broken servers
+    Given i have a proxy P1 to running servers
+    And i have a proxy P2 to broken servers
+    When i add proxy
     When i get health
-    Then i expect P1 servers are OK
-    And i expect P2 servers are FAIL
-    And i expect fail explanation
+    Then i expect P1 servers are UP
+    And i expect P2 servers are DOWN
+    And i expect down explanation
 
 
 
