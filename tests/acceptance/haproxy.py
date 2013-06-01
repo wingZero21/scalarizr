@@ -105,8 +105,7 @@ class Server(SocketServer, threading.Thread):
 
         cls._servers.append(self)
 
-        self.as_arg = {"address": str(self)}
-        # server.as_arg = {"address": server.address[0], "port": server.address[1]}
+        self.as_arg = {"host": self.address[0], "port": self.address[1]}
 
     @classmethod
     def setup(cls):
@@ -180,7 +179,6 @@ class Role(object):
 
     @classmethod
     def get_servers(cls, role_id):
-        #? should the ports be stripped?
         return map(str, cls._instances[role_id].servers)
 
 
@@ -298,8 +296,8 @@ def i_have_a_server(step, desc, name, _, hc_name):
     server.as_arg.update(PARAMS[desc])
     server.as_arg.update(HC_PARAMS[hc_name])
 
-    if server.as_arg.keys() == ["address"]:
-        server.as_arg = server.as_arg["address"]
+    if server.as_arg.keys() == ["host"]:
+        server.as_arg = server.as_arg["host"]
 
     world.servers[name] = server
 
@@ -354,14 +352,12 @@ def i_launch_new_server_of_this_role(step):
 
     world.new_server = server
 
-    #? how do we associate role with a backend?
-    # world.api.add_server(str(server), "tcp:27000")
     world.api.add_server(
         {
             'port': server.address[1],
-            'address': server.address[0]
+            'host': server.address[0]
         },
-        "tcp:27000")
+        "tcp:27000")  #? how do we associate role with a backend?
 
 
 @step("i terminate one server of this role")
@@ -372,7 +368,10 @@ def i_terminate_one_server_of_this_role(step):
     world.terminated.append(server)
     world.acceptable_responses.remove(str(server))
 
-    world.api.remove_server(str(server))
+    world.api.remove_server({
+        'port': server.address[1],
+        'host': server.address[0],
+    })
 
 
 @step("server appears in the backend")
@@ -409,7 +408,10 @@ def i_terminate_master_servers(step):
     master_role = world.roles["master"]
 
     for server in master_role.servers:
-        world.api.remove_server(str(server))
+        world.api.remove_server({
+            'port': server.address[1],
+            'host': server.address[0],
+        })
         world.acceptable_responses.remove(str(server))
     log_acceptable_responses()
 
@@ -420,11 +422,11 @@ def i_update_proxy_marking_one_server_as_down(step):
 
     server_spec = {
         'port': server.address[1],
-        'address': server.address[0],
+        'host': server.address[0],
     }
     server_spec.update(PARAMS["down"])
 
-    world.api.add_server(server_spec, "tcp:27000")
+    world.api.add_server(server_spec, "tcp:27000")  #?
 
     world.acceptable_responses.remove(str(server))
     log_acceptable_responses()
@@ -445,7 +447,7 @@ def server_params(server):
 
     record = world.api.cfg.backends["scalr:backend:tcp:27000"]['server'][server_name]
     record.pop("check", None)
-    assert record.pop("address") == server.address[0]
+    assert record.pop("host") == server.address[0]
     assert record.pop("port") == str(server.address[1])
 
     #? should we translate param names in the api?
@@ -521,6 +523,6 @@ def i_expect_servers_are(step, name, status):
 @step("i expect down explanation")
 def i_expect_fail_explanation(step):
     for health in filter(lambda health: health["status"] == "DOWN", world.health):
-        health["check_status"]  # TODO
+        health["check_status"]  # TODO: finish this test
 
 

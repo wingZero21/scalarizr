@@ -5,6 +5,8 @@ Created on Nov 25, 2011
 @author: marat
 '''
 
+from pprint import pformat
+
 from scalarizr import exceptions
 from scalarizr.libs import validate
 from scalarizr.services import haproxy
@@ -54,17 +56,19 @@ class HAProxyAPI(object):
         self.cfg = haproxy.HAProxyCfg(path)
         self.svc = haproxy.HAProxyInitScript(path)
 
-    def _server_name(self, ipaddr):
-        # expected ipaddr: host:port
-        # if ':' in ipaddr:
-        #    ipaddr = ipaddr.strip().split(':')[0]
-        return ipaddr.replace('.', '-')
+    def _server_name(self, server):
+        if isinstance(server, str):
+            return server.replace('.', '-')
+        elif isinstance (server, dict):
+            return self._server_name(':'.join([server["host"], str(server["port"])]))
+        else:
+            raise TypeError("server must be a dict or a string")
 
 
     def make_proxy(self, port, backend_port=None, roles=None, servers=None,
                 check_timeout=None, maxconn=None, **default_server_params):
         """
-        Add listen and backend sections to the haproxy conf and restart the
+        Add listener and backend sections to the haproxy conf and restart the
         service.
 
         :param port: listener port
@@ -104,25 +108,46 @@ class HAProxyAPI(object):
         http://cbonte.github.com/haproxy-dconv/configuration-1.4.html
 
         """
-        # TODO: handle address-host-port mess
-        # -> {'check': True, 'port': '27001', 'address': '127.0.0.1'}
-        # TODO: servers and roles dicts: port for backend port;
-        #   healthchecks port unreachable for now
 
-        # default values
+        # args preprocessing: default values and short forms
         if not backend_port:
             backend_port = port
         if not roles:
             roles = []
         if not servers:
             servers = []
-
-        # allowing short servers & roles specification
-        # creating new lists here also protects from side effects
         roles = map(lambda x: {"id": x} if isinstance(x, int) else dict(x), roles)
-        servers = map(lambda x: {"address": x} if isinstance(x, str) else dict(x), servers)
+        servers = map(lambda x: {"host": x} if isinstance(x, str) else dict(x), servers)
 
-        #
+        # create a single server list with proper params for each server
+        # 1. extract servers from the roles and apply role params to them
+        roles_servers = []
+        for role in roles:
+            role_id, role_params = role.pop("id"), role
+
+            role_servers = map(lambda ip: {"host": ip}, get_servers(role_id))
+
+            # for testing on a single machine purposes / get_servers retunrs "host:port"
+            for server in role_servers:
+                if ':' in server["host"]:
+                    host, port_ = server["host"].split(':')
+                    server["host"] = host
+                    server["port"] = port_
+            #/
+
+            [server.update(role_params) for server in role_servers]
+
+            roles_servers.extend(role_servers)
+        # 2. get all servers together, enable healthchecks, ensure `port` and
+        # convert some keys
+        servers.extend(roles_servers)
+        [server.setdefault("check", True) for server in servers]
+        [server.setdefault("port", backend_port) for server in servers]
+        servers = map(rename, servers)
+
+        LOG.debug(" Backend servers:\n" + pformat(servers))
+
+        # construct listener and backend sections for the conf
         listener_name = haproxy.naming('listen', "tcp", port)
         backend_name = haproxy.naming('backend', "tcp", port)
 
@@ -143,34 +168,12 @@ class HAProxyAPI(object):
         if check_timeout:
             backend["timeout"]["check"] = check_timeout
         backend["default-server"].update(rename(default_server_params))
-        #backend["default-server"]["port"] = backend_port  # this actually sets healthchecks port
 
-        # roles to server ips & their params
-        roles_servers = []
-        for role in roles:
-            role_id, role_params = role.pop("id"), role
-
-            #? get_servers(role_id) -> [ip]
-            role_servers = map(lambda ip: {"address": ip}, get_servers(role_id))
-            [server.update(role_params) for server in role_servers]
-
-            roles_servers.extend(role_servers)
-
-        # get all servers together & enable healthchecks
-        servers.extend(roles_servers)
-        [server.setdefault("check", True) for server in servers]
-
-        ###
-        from pprint import pformat
-        LOG.info(pformat(servers))
-
-        # update the backend
         for server in servers:
-            backend['server'][server["address"].replace('.', '-')] = rename(server)
+            backend['server'][self._server_name(server)] = server
 
-        # save to cfg
+        # update the cfg
         self.cfg['listen'][listener_name] = listener
-        # backends?
         if not self.cfg.backend or not backend_name in self.cfg.backend:
             self.cfg['backend'][backend_name] = backend
 
@@ -178,7 +181,7 @@ class HAProxyAPI(object):
             iptables.FIREWALL.ensure(
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
             )
-        except Exception, e:
+        except Exception, e:  #??
             raise exceptions.Duplicate(e)
 
         self.cfg.save()
@@ -186,7 +189,6 @@ class HAProxyAPI(object):
 
 
     @rpc.service_method
-    #@validate.param('ipaddr', type='ipv4')
     @validate.param('backend', optional=_rule_backend)
     def add_server(self, server=None, backend=None):
         '''Add server with ipaddr in backend section'''
@@ -210,28 +212,26 @@ class HAProxyAPI(object):
             #with self.cfg.trans(exit='working'):
 
         server.setdefault("check", True)
-        server_name = ':'.join([server["address"], str(server["port"])]).replace('.', '-')
-        
+
+        server = rename(server)
         for bnd in bnds:
-            self.cfg.backends[bnd]['server'][server_name] = rename(server)
+            self.cfg.backends[bnd]['server'][self._server_name(server)] = server
 
         self.cfg.save()
         self.svc.reload()
 
 
     @rpc.service_method
-    @validate.param('ipaddr', type='ipv4')
     @validate.param('backend', optional=_rule_backend)
-    def remove_server(self, ipaddr, backend=None):
+    def remove_server(self, server, backend=None):
+        #? add possibility to remove all records associated with a single ip?
         '''Remove server from backend section with ipaddr'''
-        if ipaddr: 
-            ipaddr = ipaddr.strip()
         if backend: 
             backend = backend.strip()
 
-        srv_name = self._server_name(ipaddr)
+        srv_name = self._server_name(server)
         for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
-            if ipaddr and srv_name in self.cfg.backends[bd]['server']:
+            if srv_name in self.cfg.backends[bd]['server']:
                 del self.cfg.backends[bd]['server'][srv_name]
 
         self.cfg.save()
@@ -264,16 +264,6 @@ class HAProxyAPI(object):
             "check_status",
             "check_duration",
         ]
-        relevant_keys += [
-            "cap",
-            "mode",
-            "id",
-            "IP",
-            "ip",
-            "cookie",
-            "legends",
-            "legend"
-        ]
         
         stats = filter(lambda health: health["svname"] not in ("FRONTEND", "BACKEND"), stats)
         for health in stats:
@@ -281,7 +271,12 @@ class HAProxyAPI(object):
                 if key not in relevant_keys:
                     del health[key]
 
+        # TODO: return data in different format
+
         return stats
+
+
+# ---
 
 
     @rpc.service_method
