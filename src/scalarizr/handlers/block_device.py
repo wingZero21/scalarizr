@@ -161,6 +161,11 @@ class BlockDeviceHandler(handlers.Handler):
 					vol.ensure(mount=True, mkfs=True, fstab=True)
 					bus.fire("block_device_mounted", 
 							volume_id=vol.id, device=vol.device)
+					self.send_message(Messages.BLOCK_DEVICE_MOUNTED, 
+						{"device_name": vol.device, 
+						"volume_id": vol.id, 
+						"mountpoint": vol.mpoint}
+					)
 				
 				if bus.initialization_op:
 					msg = 'Mount device %s to %s' % (vol.device, vol.mpoint)
