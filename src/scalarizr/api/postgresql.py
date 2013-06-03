@@ -27,13 +27,13 @@ class PostgreSQLAPI(object):
     def reset_password(self, new_password=None):
         """ Reset password for PostgreSQL user 'scalr_master'. Return new password """
         if not new_password:
-            new_pass = pwgen(10)
+            new_password = pwgen(10)
         pg = postgresql_svc.PostgreSql()
-        pg.master_user.change_role_password(new_pass)
-        pg.master_user.change_system_password(new_pass)
+        pg.master_user.change_role_password(new_password)
+        pg.master_user.change_system_password(new_password)
         pg.reload()
 
-        return new_pass
+        return new_password
 
     def _parse_query_out(self, out):
         '''
