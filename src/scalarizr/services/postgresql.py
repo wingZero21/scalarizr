@@ -39,6 +39,7 @@ CREATEDB = '/usr/bin/createdb'
 PG_DUMP = '/usr/bin/pg_dump'
 
 ROOT_USER = "scalr"
+MASTER_USER = "scalr_master"
 DEFAULT_USER = "postgres"
 
 STORAGE_DATA_DIR = "data"
@@ -144,6 +145,7 @@ class PostgreSql(BaseService):
         self.postgresql_conf.hot_standby = 'off'
 
         self.create_pg_role(ROOT_USER, password, super=True)
+        self.create_pg_role(MASTER_USER, password, super=True)
                     
         if slaves:
             LOG.debug('Registering slave hosts: %s' % ' '.join(slaves))
@@ -234,6 +236,7 @@ class PostgreSql(BaseService):
         self.service.stop()
         
         self.root_user = self.create_linux_user(ROOT_USER, password)
+        self.master_user = self.create_linux_user(MASTER_USER, password)
         
         move_files = not self.cluster_dir.is_initialized(mpoint)
         self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
@@ -304,17 +307,17 @@ class PostgreSql(BaseService):
     def _set_root_user(self, user):
         self._set('root_user', user)
 
-    def _get_priveleged_user(self):
-        key = 'priveleged'
+    def _get_master_user(self):
+        key = 'master'
         if not self._objects.has_key(key):
-            self._objects[key] = PgUser('priveleged', self.pg_keys_dir)
+            self._objects[key] = PgUser(MASTER_USER, self.pg_keys_dir)
         return self._objects[key]
     
-    def _set_priveleged_user(self, user):
-        self._set('priveleged', user)
+    def _set_master_user(self, user):
+        self._set('master', user)
 
     root_user = property(_get_root_user, _set_root_user)
-    priveleged_user = property(_get_priveleged_user, _set_priveleged_user)
+    master_user = property(_get_master_user, _set_master_user)
     config_dir = property(_get_config_dir, _set_config_dir)
     cluster_dir = property(_get_cluster_dir, _set_cluster_dir)
     postgresql_conf = property(_get_postgresql_conf, _set_postgresql_conf)

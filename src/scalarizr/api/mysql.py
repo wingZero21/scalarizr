@@ -78,6 +78,9 @@ class MySQLAPI(object):
         mysql_cli.set_user_password(__mysql__['master_user'],
                                     'localhost',
                                     new_password)
+        mysql_cli.set_user_password(__mysql__['master_user'],
+                                    '%',
+                                    new_password)
         mysql_cli.flush_privileges()
         # __mysql__['root_password'] = new_password
         return new_password
