@@ -425,6 +425,16 @@ logs_truncate_over=20K
 EOF
 fi
 
+if [ ! -f "$pub_cnf_dir/tomcat.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/tomcat.ini"
+[tomcat]
+
+[handlers]
+
+tomcat = scalarizr.handlers.tomcat
+EOF
+fi
+
 if [ ! -f "$pub_cnf_dir/www.ini" ]; then
 	cat <<EOF > "$pub_cnf_dir/www.ini"
 [www]
