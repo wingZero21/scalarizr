@@ -75,14 +75,20 @@ class MySQLAPI(object):
             new_password = pwgen(20)
         mysql_cli = mysql_svc.MySQLClient(__mysql__['root_user'],
                                           __mysql__['root_password'])
-        mysql_cli.set_user_password(__mysql__['master_user'],
-                                    'localhost',
-                                    new_password)
-        mysql_cli.set_user_password(__mysql__['master_user'],
-                                    '%',
-                                    new_password)
+        master_user = __mysql__['master_user']
+
+        if mysql_cli.user_exists(master_user, 'localhost'):
+            mysql_cli.set_user_password(master_user, 'localhost', new_password)
+        else:
+            mysql_cli.create_user(master_user, 'localhost', new_password)
+
+        if mysql_cli.user_exists(master_user, '%'):
+            mysql_cli.set_user_password(master_user, '%', new_password)
+        else:
+            mysql_cli.create_user(master_user, '%', new_password)
+
         mysql_cli.flush_privileges()
-        # __mysql__['root_password'] = new_password
+
         return new_password
 
     @rpc.service_method

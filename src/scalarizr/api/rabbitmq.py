@@ -15,9 +15,9 @@ class RabbitMQAPI:
     @rpc.service_method
     def reset_password(self, new_password=None):
         """
-        Reset password for RabbitMQ user 'priveleged'. Return new password
+        Reset password for RabbitMQ user 'master_scalr'. Return new password
         """
         if not new_password:
             new_password = pwgen(10)
-        rabbitmq_svc.check_priveleged_user(new_password)
+        rabbitmq_svc.check_master_user(new_password)
         return new_password
