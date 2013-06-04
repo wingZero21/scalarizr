@@ -351,14 +351,14 @@ class PgUser(object):
 
     def change_system_password(self, new_pass):
         LOG.debug('Changing password of system user %s to %s' % (self.name, new_pass))
-        out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
+        out, err, retcode = system2([OPENSSL, 'passwd', '-1', '"%s"' % new_pass])
         shadow_password = out.strip()
         if retcode != 0:
             LOG.error('Error creating hash for ' + self.name)
         if err:
             LOG.error(err)
         
-        r = system2([USERMOD, '-p', '-1', shadow_password, self.name])[2]
+        r = system2([USERMOD, '-p', '-1', '"%s"' % shadow_password, self.name])[2]
         if r != 0:
             LOG.error('Error changing password for ' + self.name)
         
