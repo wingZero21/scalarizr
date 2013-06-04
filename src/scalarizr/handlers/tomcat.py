@@ -74,7 +74,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
         load_lens = [
             'set /augeas/load/Xml/incl[last()+1] "{0}/*.xml"'.format(self.config_dir),
             'load',
-            'defvar service /files/{0}/server.xml/Server/Service'.format(self.config_dir)                       
+            'defvar service /files{0}/server.xml/Server/Service'.format(self.config_dir)                       
         ]
 
         # Enable SSL
@@ -82,13 +82,13 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             'print $service/Connector/*/port'
         ])
         LOG.debug('augscript: %s', augscript)
-        
+
         out = linux.system(('augtool',), stdin=augscript)[1]
         if not '8443' in out:
             self.service.stop()
             augscript = '\n'.join(load_lens + [
                 'defnode connector $service/Connector[last()+1] ""',
-                'defvar attrs $connector/#attribute'
+                'defvar attrs $connector/#attribute',
                 'set $attrs/port 8443',
                 'set $attrs/protocol "HTTP/1.1"',
                 'set $attrs/SSLEnabled true',
