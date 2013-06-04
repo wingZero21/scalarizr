@@ -167,6 +167,7 @@ class __os(dict):
 		if not 'name' in self:
 			self['name'] = name
 		self['release'] = Version(release)
+		self['version'] = self['release']
 		self['codename'] = codename
 
 		if not 'name' in self:
