@@ -25,9 +25,10 @@ class GcePersistentVolume(base.Volume):
                                             last_attached_to=None, **kwargs):
         name = name or 'scalr-disk-%s' % uuid.uuid4().hex[:8]
         super(GcePersistentVolume, self).__init__(name=name, link=link,
-                                                                                          size=size, zone=zone,
-                                                                                          last_attached_to=last_attached_to,
-                                                                                          **kwargs)
+                                                  size=size, zone=zone,
+                                                  last_attached_to=last_attached_to,
+                                                  **kwargs)
+        self.features.update({'grow': True})
 
 
     def _ensure(self):
@@ -40,6 +41,8 @@ class GcePersistentVolume(base.Volume):
         try:
             connection = __node__['gce']['compute_connection']
         except:
+            e = sys.exc_info()[1]
+            LOG.debug('Can not get GCE connection: %s' % e)
             """ No connection, implicit check """
             try:
                 self._check_attr('name')
@@ -54,6 +57,7 @@ class GcePersistentVolume(base.Volume):
         else:
 
             try:
+                # TODO(spike) raise VolumeNotExistsError when link passed disk not exists
                 create = False
                 if not self.link:
                     # Disk does not exist, create it first
@@ -153,9 +157,9 @@ class GcePersistentVolume(base.Volume):
 
             def try_detach():
                 op = connection.instances().detachDisk(instance=server_name,
-                                                                    project=project_id,
-                                                                    zone=zone,
-                                                                    deviceName=attachment_inf['deviceName']).execute()
+                                                    project=project_id,
+                                                    zone=zone,
+                                                    deviceName=attachment_inf['deviceName']).execute()
 
                 gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
 
@@ -169,6 +173,23 @@ class GcePersistentVolume(base.Volume):
                         raise storage2.StorageError('Can not detach disk: %s' % e)
                     time.sleep(1)
                     LOG.debug('Trying to detach disk again.')
+
+
+    def _grow(self, new_vol, **growth_cfg):
+        size = int(growth_cfg.get('size'))
+        snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1})
+
+        try:
+            new_vol.snap = snap
+            new_vol.size = size
+            new_vol.ensure()
+        finally:
+            try:
+                snap.destroy()
+            except:
+                e = sys.exc_info()[1]
+                LOG.error('Temporary snapshot desctruction failed: %s' % e)
+
 
 
     def _destroy(self, force, **kwds):

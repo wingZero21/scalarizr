@@ -401,6 +401,21 @@ def redis_software_info():
 explore('redis', redis_software_info)
 
 
+def mongodb_software_info():
+    try:
+        mongod = which('mongod')
+    except:
+        raise SoftwareError("Can't find mongodb server executable")
+    else:
+        out = system2((mongod, '--version'))[0]
+        version_string = out.splitlines()[0]
+        m = re.search('[\d\.]+', version_string)
+        if m:
+            return SoftwareInfo('mongodb', m.group(0), out)
+        raise SoftwareError("Can't parse `mongod --version` output")
+explore('mongodb', mongodb_software_info)
+
+
 def chef_software_info():
     binary = which('chef-client')
     if not binary:

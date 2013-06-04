@@ -67,7 +67,8 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
             
     def __init__(self):
         initd_script = None
-        if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        # if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if linux.os.debian_family:
             initd_script = ('/usr/sbin/service', 'postgresql')
         else:
             initd_script = firstmatched(os.path.exists, (
@@ -598,7 +599,7 @@ class PSQL(object):
 class ClusterDir(object):
 
     base_path = glob.glob(pg_pathname_pattern)[0]
-    default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
+    default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
     
     def __init__(self, path=None):
         self.path = path
@@ -622,7 +623,7 @@ class ClusterDir(object):
                 LOG.debug('data_directory in postgresql.conf points to non-existing location, using %s instead' % source)
             if source != new_cluster_dir:
                 LOG.debug("copying cluster files from %s into %s" % (source, new_cluster_dir))
-                shutil.copytree(source, new_cluster_dir)    
+                shutil.copytree(source, new_cluster_dir)
         LOG.debug("changing directory owner to %s" % self.user)
         chown_r(dst, self.user)
         
@@ -674,7 +675,7 @@ class ConfigDir(object):
         cls.version = version or '9.0'
         path = cls.get_sysconfig_pgdata()
         if not path:
-            if disttool.is_ubuntu():
+            if linux.os.debian_family:
                 path = '/etc/postgresql/%s/main' % version
             else:
                 path = os.path.join(glob.glob(pg_pathname_pattern)[0],'data')

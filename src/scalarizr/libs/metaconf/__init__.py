@@ -13,6 +13,7 @@ Primary goal: support Ini, Xml, Yaml, ProtocolBuffers, Nginx, Apache2
 import sys
 import re
 import os
+from fnmatch import fnmatch
 
 from utils import quote, unquote, indent, strip_quotes
 
@@ -145,7 +146,7 @@ class Configuration:
                 self.etree.getroot().append(child)
         """
 
-    def write_fp(self, fp, close = True):
+    def write_fp(self, fp, close=True):
         """
         Writes configuration to fp with provider's method 'write'.
         If 'close' parameter passed with 'False' value, fp won't be closed.
@@ -172,9 +173,16 @@ class Configuration:
         Extend self with options from another config
         Comments and blank lines from importing config will not be added
         """
+        # TODO: rename this method to `merge`
         self._init()
         for node in conf.etree.getroot():
             self._extend(node)
+
+    def append_conf(self, conf):
+        # TODO: rename this method to `extend`
+        self._init()
+        for node in conf.etree.getroot():
+            self.etree.find(self._cursect).append(node)
 
     def comment(self, path):
         """
@@ -345,8 +353,11 @@ class Configuration:
         v = conf.get("general/server_id")
         v = "3233-322"
         """
-
-        return self._find(path).text
+        el = self._find(path)
+        value = el.text
+        if not value.strip():
+            value = el.attrib.get('value', value)
+        return value
 
     def get_float(self, path):
         return float(self.get(path))
@@ -358,7 +369,15 @@ class Configuration:
         return self.get(path).lower() in ["1", "yes", "true", "on"]
 
     def get_list(self, path):
-        return list(el.text for el in self._find_all(path) if el.tag)
+        result = []
+        for el in self._find_all(path):
+            if el.tag:
+                value = el.text
+                if not value.strip():
+                    value = el.attrib.get('value', value)
+                result.append(value)
+        return result
+        # return list(el.text for el in self._find_all(path) if el.tag)
 
     def get_dict(self, path):
         return [x.attrib for x in self._find_all(path) if x.attrib]
@@ -551,6 +570,57 @@ root_path=path+"/"
     @property
     def empty(self):
         return not bool(list(self.etree.getroot()))
+
+
+    def xpath_of(self, element_xpath, value):
+        """
+        Like list.indexof but returns xpath.
+
+        Finds first xpath of certain element by given value.
+
+        Use this method when you need to find certain element in list of 
+        elements with same name. Example:
+
+        config contents:
+
+        ``server 12.23.34.45;``
+        ``server 10.10.12.11 backend;``
+        ``server 10.10.12.12 backend;``
+
+        ``conf.xpath_of('server', '12.23.34.45')`` will find first
+        element (its xpath will be 'server[1]').
+
+        Wildcards can be used:
+
+        ``conf.xpath_of('server', '10.10.12.11*')`` will find second
+        element ('server[2]')
+        """
+        for i, val in enumerate(self.get_list(element_xpath)):
+            if fnmatch(val, value):
+                return '%s[%i]' % (element_xpath, i + 1)
+        return None
+
+    def xpath_all_of(self, element_xpath, value):
+        """
+        Much like ``_find_xpath()`` this method finds xpaths by given value,
+        but returns all matches in list.
+
+        Example:
+
+        config contents:
+
+        ``server 12.23.34.45;``
+        ``server 10.10.12.11 backend;``
+        ``server 10.10.12.12 backend;``
+
+        ``conf.xpath_all_of('server', '10.10.12.11*')`` will return
+        ``['server[2]', 'server[3]'']``.
+        """
+        result = []
+        for i, val in enumerate(self.get_list(element_xpath)):
+            if fnmatch(val, value):
+                result.append('%s[%i]' % (element_xpath, i + 1))
+        return result or None
 
 """
 class PyConfigParserAdapter:

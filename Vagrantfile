@@ -5,6 +5,7 @@ boxes = {
   "ubuntu" => "ubuntu1204",
   "centos" => "centos63",
   "centos5" => "centos59",
+  "debian" => "debian6",
   "amzn" => "amzn1303"
 }
 
