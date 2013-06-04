@@ -358,7 +358,7 @@ class PgUser(object):
         if err:
             LOG.error(err)
         
-        r = system2([USERMOD, '-p', '-1', '"%s"' % shadow_password, self.name])[2]
+        r = system2([USERMOD, '-p', '"%s"' % shadow_password, self.name])[2]
         if r != 0:
             LOG.error('Error changing password for ' + self.name)
         
