@@ -526,7 +526,7 @@ class PgUser(object):
             #TODO: check password
         else:
             try:
-                out = system2([USERADD, '-m', '-g', self.group, '-p', password, self.name])[0]
+                out = system2([USERADD, '-m', '-g', self.group, '-p', '"%s"' % password, self.name])[0]
                 if out:
                     LOG.debug(out)
                 LOG.debug('Creating system user %s' % self.name)
