@@ -240,6 +240,10 @@ class PostgreSql(BaseService):
         self.postgresql_conf.wal_level = 'hot_standby'
         self.postgresql_conf.max_wal_senders = 5
         self.postgresql_conf.wal_keep_segments = 32
+
+        if disttool.is_ubuntu() and disttool.version_info() == (12, 4) and '9.1' == self.version:
+            #SEE: https://bugs.launchpad.net/ubuntu/+source/postgresql-9.1/+bug/1018307
+            self.postgresql_conf.ssl_renegotiation_limit = 0
         
         self.cluster_dir.clean()
         
@@ -824,6 +828,15 @@ class PostgresqlConf(BasePGConfig):
     def _set_hot_standby(self, mode):
         #must bee boolean and default is 'off'
         self.set('hot_standby', mode)
+
+    def _get_ssl_renegotiation_limit(self):
+        return self.get('ssl_renegotiation_limit')
+
+    def _set_ssl_renegotiation_limit(self, limit):
+        self.set('ssl_renegotiation_limit', limit)
+
+
+
         
     pid_file = property(_get_pid_file_path, _set_pid_file_path)
     data_directory = property(_get_data_directory, _set_data_directory)
@@ -832,7 +845,8 @@ class PostgresqlConf(BasePGConfig):
     wal_keep_segments = property(_get_wal_keep_segments, _set_wal_keep_segments)
     listen_addresses = property(_get_listen_addresses, _set_listen_addresses)
     hot_standby = property(_get_hot_standby, _set_hot_standby)
-    
+    ssl_renegotiation_limit = property(_get_ssl_renegotiation_limit, _set_ssl_renegotiation_limit)
+
     max_wal_senders_default = 5
     wal_keep_segments_default = 32
 
