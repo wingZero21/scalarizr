@@ -1,4 +1,5 @@
 import os
+import shutil
 import logging
 
 
@@ -76,6 +77,22 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             'load',
             'defvar service /files{0}/server.xml/Server/Service'.format(self.config_dir)                       
         ]
+
+        # Fix XML prolog in server.xml
+        fp = open(self.config_dir + '/server.xml')
+        prolog = fp.readline()
+        fp.close()
+        if prolog.startswith("<?xml version='1.0'"):
+            shutil.copy(self.config_dir + '/server.xml', self.config_dir + '/server.xml.0')
+            with open(self.config_dir + '/server.xml.0') as fpr:
+                with open(self.config_dir + '/server.xml', 'w') as fpw:
+                    fpr.readline()  # skip xml prolog
+                    fpw = open(self.config_dir + '/server.xml', 'w')
+                    fpw.write('<?xml version="1.0" encoding="utf-8"?>\n')
+                    for line in fpr:
+                        fpw.write(line)
+            os.remove(self.config_dir + '/server.xml.0')
+
 
         # Enable SSL
         augscript = '\n'.join(load_lens + [
