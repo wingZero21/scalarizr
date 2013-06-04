@@ -35,12 +35,10 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 self.tomcat_version = 7
             else:
                 self.tomcat_version = 6
-            self.config_dir = '/etc/tomcat{0}'.format(self.tomcat_version)
-            self.init_script_path = '/etc/init.d/tomcat{0}'.format(self.tomcat_version)
         else:
             self.tomcat_version = 6
-            self.config_dir = '/etc/tomcat'
-            self.init_script_path = '/etc/init.d/tomcat'
+        self.config_dir = '/etc/tomcat{0}'.format(self.tomcat_version)
+        self.init_script_path = '/etc/init.d/tomcat{0}'.format(self.tomcat_version)  
 
         self.service = initdv2.ParametrizedInitScript('tomcat', self.init_script_path)
 
