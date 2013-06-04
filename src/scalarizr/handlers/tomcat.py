@@ -83,6 +83,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
         prolog = fp.readline()
         fp.close()
         if prolog.startswith("<?xml version='1.0'"):
+            LOG.info('Making xml prolog in server.xml compatible with augtool')
             shutil.copy(self.config_dir + '/server.xml', self.config_dir + '/server.xml.0')
             with open(self.config_dir + '/server.xml.0') as fpr:
                 with open(self.config_dir + '/server.xml', 'w') as fpw:
@@ -102,6 +103,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
         out = linux.system(('augtool',), stdin=augscript)[1]
         if not '8443' in out:
+            LOG.info('Enabling HTTPS on 8443')
             self.service.stop()
             augscript = '\n'.join(load_lens + [
                 'defnode connector $service/Connector[last()+1] ""',
