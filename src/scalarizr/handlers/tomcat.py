@@ -1,4 +1,5 @@
 import os
+import logging
 
 
 from scalarizr import handlers, linux
@@ -8,6 +9,8 @@ from scalarizr.messaging import Messages
 from scalarizr.util import initdv2
 from scalarizr.node import __node__
 
+
+LOG = logging.getLogger(__name__)
 
 def get_handlers():
     return [TomcatHandler()]
@@ -69,21 +72,22 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
     def on_before_host_up(self, message):
         load_lens = [
-            'set /augeas/load/Xml/incl[last()+1] "{config_dir}/*.xml"',
+            'set /augeas/load/Xml/incl[last()+1] "{0}/*.xml"'.format(self.config_dir),
             'load',
-            'defvar service /files/{0}/server.xml/Server/Service' .format(self.config_dir)                       
+            'defvar service /files/{0}/server.xml/Server/Service'.format(self.config_dir)                       
         ]
-        
+
         # Enable SSL
         augscript = '\n'.join(load_lens + [
             'print $service/Connector/*/port'
         ])
-        augscript = augscript.format(config_dir=self.config_dir)
+        LOG.debug('augscript: %s', augscript)
+        
         out = linux.system(('augtool',), stdin=augscript)[1]
         if not '8443' in out:
             self.service.stop()
             augscript = '\n'.join(load_lens + [
-                'defnode connector $service/Connector[last()+1]',
+                'defnode connector $service/Connector[last()+1] ""',
                 'defvar attrs $connector/#attribute'
                 'set $attrs/port 8443',
                 'set $attrs/protocol "HTTP/1.1"',
@@ -95,6 +99,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 'set $attrs/sslProtocol TLS',
                 'save'
             ])
+            LOG.debug('augscript: %s', augscript)
             linux.system(('augtool', ), stdin=augscript)
 
         self.service.start()
