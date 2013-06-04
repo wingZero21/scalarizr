@@ -136,16 +136,18 @@ class SockParam:
 		self.timeout = timeout
 
 class ParametrizedInitScript(InitScript):
+<<<<<<< HEAD
 	name = None
 	
 	def __init__(self, name, initd_script, pid_file=None, lock_file=None, socks=None):
+		'''
 		if isinstance(initd_script, basestring):
 			if not os.path.exists(initd_script):
 				raise InitdError("Can't find %s init script at %s. Make sure that %s is installed" % (
 					name, initd_script, name))
 			if not os.access(initd_script, os.X_OK):
 				raise InitdError("Permission denied to execute %s" % (initd_script))
-		
+		'''
 		self.name = name		
 		self.initd_script = initd_script
 		self.pid_file = pid_file
