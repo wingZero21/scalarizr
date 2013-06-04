@@ -145,7 +145,7 @@ class PostgreSql(BaseService):
         self.postgresql_conf.hot_standby = 'off'
 
         self.create_pg_role(ROOT_USER, password, super=True)
-        self.create_pg_role(MASTER_USER, password, super=True)
+        self.create_pg_role(MASTER_USER, password, super=True, force=False)
                     
         if slaves:
             LOG.debug('Registering slave hosts: %s' % ' '.join(slaves))
@@ -157,7 +157,7 @@ class PostgreSql(BaseService):
     def init_slave(self, mpoint, primary_ip, primary_port, password):
         self._init_service(mpoint, password)
         
-        self.root_user.apply_public_ssh_key() 
+        self.root_user.apply_public_ssh_key()
         self.root_user.apply_private_ssh_key()
         
         self.postgresql_conf.hot_standby = 'on'
@@ -208,14 +208,18 @@ class PostgreSql(BaseService):
         return user 
     
     
-    def create_pg_role(self, name, password=None, super=True):
-        self.set_trusted_mode()
-        user = PgUser(name, self.pg_keys_dir)   
-        self.service.start()
+    def create_pg_role(self, name, password=None, super=True, force=True):
+        if force:
+            self.service.stop()
+            self.set_trusted_mode()
+        user = PgUser(name, self.pg_keys_dir)  
+        if force: 
+            self.service.start()
         user._create_pg_database()
         user._create_pg_role(password, super)
-        self.set_password_mode()
-        return user         
+        if force:
+            self.set_password_mode()
+        return user
 
 
     def set_trusted_mode(self):
