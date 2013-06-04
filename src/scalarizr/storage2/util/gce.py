@@ -45,8 +45,8 @@ def wait_for_operation(connection, project_id, operation_name,
 
 def attachment_info(connection, project_id, zone, instance_name, disk_link):
     instance = connection.instances().get(zone=zone,
-                                                                            project=project_id,
-                                                                            instance=instance_name).execute()
+                                          project=project_id,
+                                          instance=instance_name).execute()
     attached = filter(lambda x: x.get('source') == disk_link, instance['disks'])
     if attached:
         return attached[0]
