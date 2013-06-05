@@ -5,7 +5,7 @@ import logging
 
 from scalarizr import handlers, linux
 from scalarizr.bus import bus
-from scalarizr.linux import pkgmgr
+from scalarizr.linux import pkgmgr, execute
 from scalarizr.messaging import Messages
 from scalarizr.util import initdv2
 from scalarizr.node import __node__
@@ -15,6 +15,15 @@ LOG = logging.getLogger(__name__)
 
 def get_handlers():
     return [TomcatHandler()]
+
+class KeytoolExec(execute.BaseExec):
+    executable = '/usr/bin/keytool'
+
+    # keytool uses long args with a short prefix
+    def _default_handler(self, key, value, cmd_args):
+        cmd_args.append('-{0}'.format(key))
+        cmd_args.append(value)
+
 
 class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
@@ -101,16 +110,42 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
         out = linux.system(('augtool',), stdin=augscript)[1]
         if not '8443' in out:
-            LOG.info('Enabling HTTPS on 8443')
             self.service.stop()
+
+            keystore_path = self.config_dir + '/keystore'
+            if not os.path.exists(keystore_path):
+                LOG.info('Initializing keystore in %s', keystore_type)
+                keytool = KeytoolExec(wait=True)
+                keytool.start(genkey=True, 
+                    alias='tomcat', 
+                    keystore=keystore_path, 
+                    storepass='changeit', 
+                    keypass='changeit', 
+                    dname='CN=John Smith')
+
+            # Detect keystore type
+            keytool = KeytoolExec(wait=True)
+            out = keytool.start(list=True, 
+                keystore=keystore_path, 
+                storepass='changeit')[0]
+            keystore_type = 'jks'
+            for line in out.splitlines():
+                m = re.search(r'^Key store type:: (.+)$', line)
+                if m:
+                    keystore_type = m.group(1)
+                    break
+            LOG.info('Keystore type: %s', keystore_type)
+
+            LOG.info('Enabling HTTPS on 8443')
             augscript = '\n'.join(load_lens + [
-                'defnode connector $service/Connector[last()+1] ""',
-                'defvar attrs $connector/#attribute',
-                'set $attrs/port 8443',
-                'set $attrs/protocol "HTTP/1.1"',
+                'set $service/Connector[last()+1]/#attribute/port 8443',
+                'defvar attrs $service/Connector[last()]/#attribute'
+                'set $attrs/protocol org.apache.coyote.http11.Http11NioProtocol',
                 'set $attrs/SSLEnabled true',
                 'set $attrs/maxThreads 150',
                 'set $attrs/scheme https',
+                'set $attrs/keystoreFile {0}'.format(keystore_path),
+                'set $attrs/keystoreType {0}'.format(keystore_type).
                 'set $attrs/secure true',
                 'set $attrs/clientAuth false',
                 'set $attrs/sslProtocol TLS',
@@ -118,6 +153,10 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             ])
             LOG.debug('augscript: %s', augscript)
             linux.system(('augtool', ), stdin=augscript)
+
+        # TODO: Import PEM cert/pk into JKS
+        # openssl pkcs12 -export -in cert.pem -inkey key.pem > server.p12
+        # keytool -importkeystore -srckeystore server.p12 -destkeystore server.jks -srcstoretype pkcs12
 
         self.service.start()
 
