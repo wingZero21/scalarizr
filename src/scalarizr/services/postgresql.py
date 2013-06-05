@@ -39,6 +39,7 @@ CREATEDB = '/usr/bin/createdb'
 PG_DUMP = '/usr/bin/pg_dump'
 
 ROOT_USER = "scalr"
+MASTER_USER = "scalr_master"
 DEFAULT_USER = "postgres"
 
 STORAGE_DATA_DIR = "data"
@@ -144,6 +145,7 @@ class PostgreSql(BaseService):
         self.postgresql_conf.hot_standby = 'off'
 
         self.create_pg_role(ROOT_USER, password, super=True)
+        self.create_pg_role(MASTER_USER, password, super=True, force=False)
                     
         if slaves:
             LOG.debug('Registering slave hosts: %s' % ' '.join(slaves))
@@ -155,7 +157,7 @@ class PostgreSql(BaseService):
     def init_slave(self, mpoint, primary_ip, primary_port, password):
         self._init_service(mpoint, password)
         
-        self.root_user.apply_public_ssh_key() 
+        self.root_user.apply_public_ssh_key()
         self.root_user.apply_private_ssh_key()
         
         self.postgresql_conf.hot_standby = 'on'
@@ -206,14 +208,18 @@ class PostgreSql(BaseService):
         return user 
     
     
-    def create_pg_role(self, name, password=None, super=True):
-        self.set_trusted_mode()
-        user = PgUser(name, self.pg_keys_dir)   
-        self.service.start()
+    def create_pg_role(self, name, password=None, super=True, force=True):
+        if force:
+            self.service.stop()
+            self.set_trusted_mode()
+        user = PgUser(name, self.pg_keys_dir)  
+        if force: 
+            self.service.start()
         user._create_pg_database()
         user._create_pg_role(password, super)
-        self.set_password_mode()
-        return user         
+        if force:
+            self.set_password_mode()
+        return user
 
 
     def set_trusted_mode(self):
@@ -234,6 +240,7 @@ class PostgreSql(BaseService):
         self.service.stop()
         
         self.root_user = self.create_linux_user(ROOT_USER, password)
+        self.master_user = self.create_linux_user(MASTER_USER, password)
         
         move_files = not self.cluster_dir.is_initialized(mpoint)
         self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
@@ -307,8 +314,18 @@ class PostgreSql(BaseService):
     
     def _set_root_user(self, user):
         self._set('root_user', user)
+
+    def _get_master_user(self):
+        key = 'master'
+        if not self._objects.has_key(key):
+            self._objects[key] = PgUser(MASTER_USER, self.pg_keys_dir)
+        return self._objects[key]
     
+    def _set_master_user(self, user):
+        self._set('master', user)
+
     root_user = property(_get_root_user, _set_root_user)
+    master_user = property(_get_master_user, _set_master_user)
     config_dir = property(_get_config_dir, _set_config_dir)
     cluster_dir = property(_get_cluster_dir, _set_cluster_dir)
     postgresql_conf = property(_get_postgresql_conf, _set_postgresql_conf)
@@ -338,14 +355,14 @@ class PgUser(object):
 
     def change_system_password(self, new_pass):
         LOG.debug('Changing password of system user %s to %s' % (self.name, new_pass))
-        out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
+        out, err, retcode = system2([OPENSSL, 'passwd', '-1', '"%s"' % new_pass])
         shadow_password = out.strip()
         if retcode != 0:
             LOG.error('Error creating hash for ' + self.name)
         if err:
             LOG.error(err)
         
-        r = system2([USERMOD, '-p', '-1', shadow_password, self.name])[2]
+        r = system2([USERMOD, '-p', '"%s"' % shadow_password, self.name])[2]
         if r != 0:
             LOG.error('Error changing password for ' + self.name)
         
@@ -513,7 +530,7 @@ class PgUser(object):
             #TODO: check password
         else:
             try:
-                out = system2([USERADD, '-m', '-g', self.group, '-p', password, self.name])[0]
+                out = system2([USERADD, '-m', '-g', self.group, '-p', '"%s"' % password, self.name])[0]
                 if out:
                     LOG.debug(out)
                 LOG.debug('Creating system user %s' % self.name)

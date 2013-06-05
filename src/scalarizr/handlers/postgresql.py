@@ -756,12 +756,12 @@ class PostgreSqlHander(ServiceCtlHandler):
             
             with op.step(self._step_collect_host_up_data):
                 # Update HostUp message 
-                msg_data = dict({OPT_REPLICATION_MASTER         :   str(int(self.is_replication_master)),
-                                OPT_ROOT_USER               :   self.postgresql.root_user.name,
-                                OPT_ROOT_PASSWORD           :   self.root_password,
-                                OPT_ROOT_SSH_PRIVATE_KEY    :   self.postgresql.root_user.private_key,
-                                OPT_ROOT_SSH_PUBLIC_KEY     :   self.postgresql.root_user.public_key,
-                                OPT_CURRENT_XLOG_LOCATION   :   None})
+                msg_data = dict({OPT_REPLICATION_MASTER: str(int(self.is_replication_master)),
+                                OPT_ROOT_USER: self.postgresql.root_user.name,
+                                OPT_ROOT_PASSWORD: self.root_password,
+                                OPT_ROOT_SSH_PRIVATE_KEY: self.postgresql.root_user.private_key,
+                                OPT_ROOT_SSH_PUBLIC_KEY: self.postgresql.root_user.public_key,
+                                OPT_CURRENT_XLOG_LOCATION: None})
 
                 if __postgresql__['compat_prior_backup_restore']:
                     if 'restore' in __postgresql__:
