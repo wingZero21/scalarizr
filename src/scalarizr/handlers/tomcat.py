@@ -136,7 +136,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 storepass='changeit')['stdout']
             keystore_type = 'jks'
             for line in out.splitlines():
-                m = re.search(r'^Key store type:: (.+)$', line)
+                m = re.search(r'^Key store type: (.+)$', line)
                 if m:
                     keystore_type = m.group(1)
                     break
