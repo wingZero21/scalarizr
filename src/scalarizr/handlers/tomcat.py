@@ -26,6 +26,10 @@ class KeytoolExec(execute.BaseExec):
         if value is not True:
             cmd_args.append(str(value))
 
+    # last param is a keytool command that should be first
+    def _after_all_handlers(self, cmd_args):
+        return ['-{0}'.format(cmd_args[-1])] + cmd_args[0:-1]
+
 
 class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
@@ -118,7 +122,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             if not os.path.exists(keystore_path):
                 LOG.info('Initializing keystore in %s', keystore_path)
                 keytool = KeytoolExec(wait=True)
-                keytool.start(genkey=True, 
+                keytool.start('genkey', 
                     alias='tomcat', 
                     keystore=keystore_path, 
                     storepass='changeit', 
@@ -127,7 +131,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
             # Detect keystore type
             keytool = KeytoolExec(wait=True)
-            out = keytool.start(list=True, 
+            out = keytool.start('list', 
                 keystore=keystore_path, 
                 storepass='changeit')[0]
             keystore_type = 'jks'
