@@ -1,8 +1,12 @@
 import os
 import re
+import sys
 import shutil
 import logging
-
+try:
+    import augeas
+except ImportError:
+    pass
 
 from scalarizr import handlers, linux
 from scalarizr.bus import bus
@@ -82,16 +86,29 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 pkgs.append('{0}-admin-webapps'.format(tomcat))
             for pkg in pkgs:
                 pkgmgr.installed(pkg)
-        pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
+        #pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
+        pkgmgr.installed('python-augeas')
+        __import__('augeas')
+        globals()['augeas'] = sys.modules['augeas']
+
+    def _aug_load_tomcat(self, aug):
+        aug.set('/augeas/load/Xml/incl[last()+1]', '{0}/*.xml'.format(self.config_dir))
+        aug.load()
+        file_ = self.config_dir + '/server.xml'
+        path = '/augeas/files{0}/error'.format(file_)
+        if aug.match(path):
+            msg = 'AugeasError: {0}. file: {1} line: {2} pos: {3}'.format(
+                aug.get(path + '/message'),
+                file_,
+                aug.get(path + '/line'),
+                aug.get(path + '/pos'))
+            raise Exception(msg)
+        aug.defvar('service', '/files{0}/Server/Service'.format(file_))
+
 
     def on_before_host_up(self, message):
-        load_lens = [
-            'set /augeas/load/Xml/incl[last()+1] "{0}/*.xml"'.format(self.config_dir),
-            'load',
-            'defvar service /files{0}/server.xml/Server/Service'.format(self.config_dir)                       
-        ]
-
         # Fix XML prolog in server.xml
+        '''
         fp = open(self.config_dir + '/server.xml')
         prolog = fp.readline()
         fp.close()
@@ -106,16 +123,14 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                     for line in fpr:
                         fpw.write(line)
             os.remove(self.config_dir + '/server.xml.0')
+        '''
 
 
         # Enable SSL
-        augscript = '\n'.join(load_lens + [
-            'print $service/Connector/*/port'
-        ])
-        LOG.debug('augscript: %s', augscript)
-
-        out = linux.system(('augtool',), stdin=augscript)[1]
-        if not '8443' in out:
+        aug = augeas.Augeas()
+        self._aug_load_tomcat(aug)
+        ports = [aug.get(path) for path in aug.match('$service/Connector/*/port')]
+        if not '8443' in ports:
             self.service.stop()
 
             keystore_path = self.config_dir + '/keystore'
@@ -143,6 +158,20 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             LOG.info('Keystore type: %s', keystore_type)
 
             LOG.info('Enabling HTTPS on 8443')
+            aug.set('$service/Connector[last()+1]/#attribute/port', '8443')
+            aug.defvar('attrs', '$service/Connector[last()]/#attribute')
+            aug.set('$attrs/protocol', 'org.apache.coyote.http11.Http11NioProtocol')
+            aug.set('$attrs/SSLEnabled', 'true')
+            aug.set('$attrs/maxThreads', '150')
+            aug.set('$attrs/scheme', 'https')
+            aug.set('$attrs/keystoreFile', keystore_path)
+            aug.set('$attrs/keystoreType', keystore_type)
+            aug.set('$attrs/secure', 'true')
+            aug.set('$attrs/clientAuth', 'false')
+            aug.set('$attrs/sslProtocol', 'TLS')
+            aug.save()
+
+            '''
             augscript = '\n'.join(load_lens + [
                 'set $service/Connector[last()+1]/#attribute/port 8443',
                 'defvar attrs $service/Connector[last()]/#attribute',
@@ -159,6 +188,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             ])
             LOG.debug('augscript: %s', augscript)
             linux.system(('augtool', ), stdin=augscript)
+            '''
 
         # TODO: Import PEM cert/pk into JKS
         # openssl pkcs12 -export -in cert.pem -inkey key.pem > server.p12
