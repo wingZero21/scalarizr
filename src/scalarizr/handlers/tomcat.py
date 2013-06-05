@@ -133,7 +133,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             keytool = KeytoolExec(wait=True)
             out = keytool.start('list', 
                 keystore=keystore_path, 
-                storepass='changeit')[0]
+                storepass='changeit')['stdout']
             keystore_type = 'jks'
             for line in out.splitlines():
                 m = re.search(r'^Key store type:: (.+)$', line)
@@ -145,7 +145,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             LOG.info('Enabling HTTPS on 8443')
             augscript = '\n'.join(load_lens + [
                 'set $service/Connector[last()+1]/#attribute/port 8443',
-                'defvar attrs $service/Connector[last()]/#attribute'
+                'defvar attrs $service/Connector[last()]/#attribute',
                 'set $attrs/protocol org.apache.coyote.http11.Http11NioProtocol',
                 'set $attrs/SSLEnabled true',
                 'set $attrs/maxThreads 150',
