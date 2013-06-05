@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import logging
 
@@ -114,7 +115,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
             keystore_path = self.config_dir + '/keystore'
             if not os.path.exists(keystore_path):
-                LOG.info('Initializing keystore in %s', keystore_type)
+                LOG.info('Initializing keystore in %s', keystore_path)
                 keytool = KeytoolExec(wait=True)
                 keytool.start(genkey=True, 
                     alias='tomcat', 
@@ -145,7 +146,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 'set $attrs/maxThreads 150',
                 'set $attrs/scheme https',
                 'set $attrs/keystoreFile {0}'.format(keystore_path),
-                'set $attrs/keystoreType {0}'.format(keystore_type).
+                'set $attrs/keystoreType {0}'.format(keystore_type),
                 'set $attrs/secure true',
                 'set $attrs/clientAuth false',
                 'set $attrs/sslProtocol TLS',
