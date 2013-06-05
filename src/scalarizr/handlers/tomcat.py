@@ -3,10 +3,11 @@ import re
 import sys
 import shutil
 import logging
-try:
-    import augeas
-except ImportError:
-    pass
+import multiprocessing
+#try:
+#    import augeas
+#except ImportError:
+#    pass
 
 from scalarizr import handlers, linux
 from scalarizr.bus import bus
@@ -88,8 +89,8 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 pkgmgr.installed(pkg)
         #pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
         pkgmgr.installed('python-augeas')
-        __import__('augeas')
-        globals()['augeas'] = sys.modules['augeas']
+        #__import__('augeas')
+        #globals()['augeas'] = sys.modules['augeas']
 
     def _aug_load_tomcat(self, aug):
         aug.set('/augeas/load/Xml/incl[last()+1]', '{0}/*.xml'.format(self.config_dir))
@@ -124,7 +125,9 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             os.remove(self.config_dir + '/server.xml.0')
             linux.system('sync', shell=True)
 
+
         # Enable SSL
+        import augeas
         aug = augeas.Augeas()
         self._aug_load_tomcat(aug)
         ports = [aug.get(path) for path in aug.match('$service/Connector/*/port')]
