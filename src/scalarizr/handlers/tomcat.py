@@ -108,7 +108,6 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
     def on_before_host_up(self, message):
         # Fix XML prolog in server.xml
-        '''
         fp = open(self.config_dir + '/server.xml')
         prolog = fp.readline()
         fp.close()
@@ -123,8 +122,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                     for line in fpr:
                         fpw.write(line)
             os.remove(self.config_dir + '/server.xml.0')
-        '''
-
+            linux.system('sync', shell=True)
 
         # Enable SSL
         aug = augeas.Augeas()
