@@ -1250,8 +1250,8 @@ class MysqlHandler(DBMSRHandler):
         options = {
                 __mysql__['root_user']: 'root_password',
                 __mysql__['repl_user']: 'repl_password',
-                __mysql__['stat_user']: 'stat_password',
-                __mysql__['master_user']: 'master_password'}
+                __mysql__['stat_user']: 'stat_password',}
+                # __mysql__['master_user']: 'master_password'}
         creds = {}
         for login, opt_pwd in options.items():
             password = __mysql__[opt_pwd]
