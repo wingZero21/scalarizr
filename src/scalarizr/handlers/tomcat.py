@@ -23,7 +23,8 @@ class KeytoolExec(execute.BaseExec):
     # keytool uses long args with a short prefix
     def _default_handler(self, key, value, cmd_args):
         cmd_args.append('-{0}'.format(key))
-        cmd_args.append(value)
+        if value is not True:
+            cmd_args.append(str(value))
 
 
 class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):

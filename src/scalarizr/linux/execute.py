@@ -178,11 +178,10 @@ class BaseExec(object):
             read_stdout = self.stdout == subprocess.PIPE
             read_stderr = self.stderr == subprocess.PIPE
 
+            self.logger.debug('Executing command: {%s} kwds: %s', ' '.join(final_args), self.subprocess_kwds)
             self.popen = subprocess.Popen(final_args, **self.subprocess_kwds)
             if self.wait_for_process:
                 rcode = self.wait(self.popen, self.timeout)
-                if rcode not in self.acceptable_codes and self.raise_exc:
-                    raise ProcessError('Process %s finished with code %s' % (self.executable, rcode))
                 ret = dict(return_code=rcode)
                 if read_stdout:
                     ret['stdout'] = self.popen.stdout.read()
@@ -190,6 +189,8 @@ class BaseExec(object):
                 if read_stderr:
                     ret['stderr'] = self.popen.stderr.read()
                     self.logger.debug('Stderr: %s' % ret['stderr'])
+                if rcode not in self.acceptable_codes and self.raise_exc:
+                    raise ProcessError('Process %s finished with code %s' % (self.executable, rcode))
                 return ret
             else:
                 return self.popen
