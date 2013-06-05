@@ -145,7 +145,7 @@ class PostgreSql(BaseService):
         self.postgresql_conf.hot_standby = 'off'
 
         self.create_pg_role(ROOT_USER, password, super=True)
-        # self.create_pg_role(MASTER_USER, password, super=True, force=False)
+        self.create_pg_role(MASTER_USER, password, super=True, force=False)
                     
         if slaves:
             LOG.debug('Registering slave hosts: %s' % ' '.join(slaves))
@@ -240,7 +240,7 @@ class PostgreSql(BaseService):
         self.service.stop()
         
         self.root_user = self.create_linux_user(ROOT_USER, password)
-        self.master_user = None #self.create_linux_user(MASTER_USER, password)
+        self.master_user = self.create_linux_user(MASTER_USER, password)
         
         move_files = not self.cluster_dir.is_initialized(mpoint)
         self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
