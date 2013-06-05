@@ -178,7 +178,7 @@ class BaseExec(object):
             read_stdout = self.stdout == subprocess.PIPE
             read_stderr = self.stderr == subprocess.PIPE
 
-            self.logger.debug('Executing command: {%s} kwds: %s', ' '.join(final_args), self.subprocess_kwds)
+            self.logger.debug("Executing command: '%s' kwds: %s", ' '.join(final_args), self.subprocess_kwds)
             self.popen = subprocess.Popen(final_args, **self.subprocess_kwds)
             if self.wait_for_process:
                 rcode = self.wait(self.popen, self.timeout)
