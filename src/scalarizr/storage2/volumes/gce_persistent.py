@@ -166,6 +166,7 @@ class GcePersistentVolume(base.Volume):
             for _time in range(3):
                 try:
                     try_detach()
+                    return
                 except:
                     e = sys.exc_info()[1]
                     LOG.debug('Detach disk attempt failed: %s' % e)
