@@ -87,8 +87,8 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 pkgs.append('{0}-admin-webapps'.format(tomcat))
             for pkg in pkgs:
                 pkgmgr.installed(pkg)
-        #pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
-        pkgmgr.installed('python-augeas')
+        pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
+        #pkgmgr.installed('python-augeas')
         #__import__('augeas')
         #globals()['augeas'] = sys.modules['augeas']
 
@@ -123,12 +123,29 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                         fpw.write(line)
             os.remove(self.config_dir + '/server.xml.0')
 
+
+
+
         # Enable SSL
+        '''
         import augeas
         aug = augeas.Augeas()
         self._aug_load_tomcat(aug)
         ports = [aug.get(path) for path in aug.match('$service/Connector/*/port')]
         if not '8443' in ports:
+        '''
+        load_lens = [
+            'set /augeas/load/Xml/incl[last()+1] "{0}/*.xml"'.format(self.config_dir),
+            'load',
+            'defvar service /files{0}/server.xml/Server/Service'.format(self.config_dir)                       
+        ]
+        augscript = '\n'.join(load_lens + [
+            'print $service/Connector/*/port'
+        ])
+        LOG.debug('augscript: %s', augscript)
+
+        out = linux.system(('augtool',), stdin=augscript)[1]
+        if not '8443' in out:
             self.service.stop()
 
             keystore_path = self.config_dir + '/keystore'
@@ -156,6 +173,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             LOG.info('Keystore type: %s', keystore_type)
 
             LOG.info('Enabling HTTPS on 8443')
+            '''
             aug.set('$service/Connector[last()+1]/#attribute/port', '8443')
             aug.defvar('attrs', '$service/Connector[last()]/#attribute')
             aug.set('$attrs/protocol', 'org.apache.coyote.http11.Http11NioProtocol')
@@ -168,8 +186,8 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             aug.set('$attrs/clientAuth', 'false')
             aug.set('$attrs/sslProtocol', 'TLS')
             aug.save()
-
             '''
+
             augscript = '\n'.join(load_lens + [
                 'set $service/Connector[last()+1]/#attribute/port 8443',
                 'defvar attrs $service/Connector[last()]/#attribute',
@@ -186,7 +204,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             ])
             LOG.debug('augscript: %s', augscript)
             linux.system(('augtool', ), stdin=augscript)
-            '''
+
 
         # TODO: Import PEM cert/pk into JKS
         # openssl pkcs12 -export -in cert.pem -inkey key.pem > server.p12
