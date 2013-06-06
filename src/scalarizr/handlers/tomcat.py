@@ -125,6 +125,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             os.remove(self.config_dir + '/server.xml.0')
             linux.system('sync', shell=True)
 
+        LOG.debug('server.xml before augeas load:\n%s', open(self.config_dir + '/server.xml').read())
 
         # Enable SSL
         import augeas
