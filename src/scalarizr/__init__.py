@@ -299,11 +299,12 @@ def _init_platform():
 	logger = logging.getLogger(__name__)
 	cnf = bus.cnf; ini = cnf.rawini
 	
-	try:
-		pkgmgr.updatedb()
-	except:
-		logger.warn('Failed to update package manager database: %s', 
-				sys.exc_info()[1], exc_info=sys.exc_info())
+	if cnf.state != ScalarizrState.RUNNING:
+		try:
+			pkgmgr.updatedb()
+		except:
+			logger.warn('Failed to update package manager database: %s', 
+					sys.exc_info()[1], exc_info=sys.exc_info())
 
 	# Initialize platform
 	logger.debug("Initialize platform")
