@@ -136,7 +136,6 @@ class SockParam:
 		self.timeout = timeout
 
 class ParametrizedInitScript(InitScript):
-<<<<<<< HEAD
 	name = None
 	
 	def __init__(self, name, initd_script, pid_file=None, lock_file=None, socks=None):
