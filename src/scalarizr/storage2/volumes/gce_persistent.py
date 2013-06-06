@@ -31,6 +31,11 @@ class GcePersistentVolume(base.Volume):
         self.features.update({'grow': True})
 
 
+    def _clone(self, config):
+        config.pop('name')
+        config.pop('link')
+
+
     def _ensure(self):
 
         garbage_can = []
@@ -178,8 +183,7 @@ class GcePersistentVolume(base.Volume):
 
     def _grow(self, new_vol, **growth_cfg):
         size = int(growth_cfg.get('size'))
-        snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1})
-
+        snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1}, nowait=False)
         try:
             new_vol.snap = snap
             new_vol.size = size
