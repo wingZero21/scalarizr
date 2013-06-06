@@ -118,7 +118,6 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             with open(self.config_dir + '/server.xml.0') as fpr:
                 with open(self.config_dir + '/server.xml', 'w') as fpw:
                     fpr.readline()  # skip xml prolog
-                    fpw = open(self.config_dir + '/server.xml', 'w')
                     fpw.write('<?xml version="1.0" encoding="utf-8"?>\n')
                     for line in fpr:
                         fpw.write(line)
