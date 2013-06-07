@@ -10,8 +10,9 @@ from __future__ import with_statement
 from scalarizr import config
 from scalarizr import handlers
 from scalarizr import messaging
-from scalarizr import storage
+from scalarizr import storage2
 from scalarizr import util
+from scalarizr.node import __node__
 from scalarizr.linux.rsync import rsync
 from scalarizr.bus import bus
 from scalarizr.services import cloudfoundry
@@ -233,27 +234,6 @@ class CloudControllerHandler(handlers.Handler):
     def __init__(self):
         bus.on(init=self.on_init)
 
-    def _set_volume_config(self, cnf):
-        volume_dir = os.path.dirname(self.volume_path)
-        if not os.path.exists(volume_dir):
-            os.makedirs(volume_dir)
-        if cnf:
-            storage.Storage.backup_config(cnf, self.volume_path)
-        self._volume_config = cnf
-
-    def _get_volume_config(self):
-        if not self._volume_config:
-            self._volume_config = storage.Storage.restore_config(self.volume_path)
-        return self._volume_config
-
-
-    volume_config = property(_get_volume_config, _set_volume_config)
-
-    def _init_objects(self):
-        self.volume_path = _cnf.private_path('storage/cloudfoundry.json')
-        self.volume_config = None
-        self.volume = None
-
 
     def _os_hosts(self, ipaddr, hostname):
         hosts_file = '/etc/hosts'
@@ -300,26 +280,13 @@ class CloudControllerHandler(handlers.Handler):
         return handlers.prepare_tags(SERVICE_NAME)
 
 
-    def _plug_storage(self, vol=None, mpoint=None):
-        vol = vol or self.volume_config
-        mpoint = mpoint or _datadir
-        if type(vol) == dict:
-            vol['tags'] = self.cf_tags
-        if not hasattr(vol, 'id'):
-            vol = storage.Storage.create(vol)
+    def _plug_storage(self, mpoint=None):
+        vol = __node__['cloudfoundry']['volume']
+        vol.mpoint = mpoint or _datadir
+        vol.tags = self.cf_tags
+        vol.ensure(mkfs=True, mount=True)
+        __node__['cloudfoundry']['volume'] = vol
 
-        try:
-            if not os.path.exists(mpoint):
-                os.makedirs(mpoint)
-            if not vol.mounted():
-                vol.mount(mpoint)
-        except storage.StorageError, e:
-            ''' XXX: Crapy. We need to introduce error codes from mount '''
-            if 'you must specify the filesystem type' in str(e):
-                vol.mkfs()
-                vol.mount(mpoint)
-            else:
-                raise
         return vol
 
 
@@ -334,18 +301,11 @@ class CloudControllerHandler(handlers.Handler):
                     start=self.on_start,
                     host_init_response=self.on_host_init_response,
                     before_host_up=self.on_before_host_up,
-                    reload=self.on_reload
             )
-            self._init_objects()
-
             self._phase_cloudfoundry = 'Configure CloudFoundry'
             self._step_create_storage = 'Create VCAP data storage'
             self._step_locate_nginx = 'Locate Nginx frontend'
             self._step_create_database = 'Create CloudController database'
-
-
-    def on_reload(self):
-        self._init_objects()
 
 
     def on_start(self):
@@ -360,8 +320,8 @@ class CloudControllerHandler(handlers.Handler):
         '''
         self.LOG.debug('Called on_host_init_response')
         ini = msg.body.get(_bhs.cloud_controller, {})
-        self.volume_config = ini.pop('volume_config',
-                                                                dict(type='loop',file='/mnt/cfdata.loop',size=500))
+        volume_config = ini.pop('volume_config', dict(type='loop',file='/mnt/cfdata.loop',size=500))
+        __node__['cloudfoundry']['volume'] = storage2.volume(**volume_config)
 
         '''
         Plug storage, initialize database
@@ -375,20 +335,21 @@ class CloudControllerHandler(handlers.Handler):
                     LOG.info('Initializing vcap data storage')
                     tmp_mpoint = '/mnt/tmp.vcap'
                     try:
-                        self.volume = self._plug_storage(mpoint=tmp_mpoint)
+                        storage_vol = self._plug_storage(mpoint=tmp_mpoint)
                         if not _cf.valid_datadir(tmp_mpoint):
                             LOG.info('Copying data from %s to storage', _datadir)
                             rsync(_datadir + '/', tmp_mpoint, archive=True, delete=True)
 
                         LOG.debug('Mounting storage to %s', _datadir)
-                        self.volume.umount()
-                        self.volume.mount(_datadir)
+                        storage_vol.umount()
+                        storage_vol.mpoint = _datadir
+                        storage_vol.mount()
+                        __node__['cloudfoundry']['volume'] = storage_vol
                     except:
                         LOG.exception('Failed to initialize storage')
                     finally:
                         if os.path.exists(tmp_mpoint):
                             os.removedirs(tmp_mpoint)
-                    self.volume_config = self.volume.config()
 
                 with op.step(self._step_locate_nginx):
                     _cf.components['cloud_controller'].allow_external_app_uris = True
@@ -399,7 +360,8 @@ class CloudControllerHandler(handlers.Handler):
 
 
     def on_before_host_up(self, msg):
-        msg.body[_bhs.cloud_controller] = dict(volume_config=self.volume_config)
+        volume_config = __node__['cloudfoundry']['volume'].config()
+        msg.body[_bhs.cloud_controller] = dict(volume_config=volume_config)
 
 
 
