@@ -882,6 +882,7 @@ class MysqlHandler(DBMSRHandler):
                                             volume=__mysql__['volume'],
                                             snapshot=mysql2['snapshot_config'])
                 # XXX: ugly
+                old_vol = None
                 if __mysql__['volume'].type == 'eph':
                     self.mysql.service.stop('Swapping storages to reinitialize slave')
 
@@ -889,12 +890,19 @@ class MysqlHandler(DBMSRHandler):
                                     restore.snapshot['id'], restore.log_file, restore.log_pos)
                     new_vol = restore.run()
                 else:
+                    if __node__['platform'] == 'idcf':
+                        old_vol = dict(__mysql__['volume'])
                     restore.run()
 
                 log_file = restore.log_file
                 log_pos = restore.log_pos
 
                 self.mysql.service.start()
+
+                if __node__['platform'] == 'idcf' and old_vol:
+                    LOG.info('Destroying old Slave volume')
+                    old_vol = storage2.volume(old_vol)
+                    old_vol.destroy(remove_disks=True)
             else:
                 LOG.debug("Stopping slave i/o thread")
                 self.root_client.stop_slave_io_thread()
