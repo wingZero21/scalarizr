@@ -134,15 +134,15 @@ class ScriptExecutor(Handler):
         szrconfig.STATE['script_executor.in_progress'] = [sc.state() for sc in self.in_progress]
 
     def on_host_init_response(self, hir_message):
-        self._data = hir_message.body.get('main', {})
+        self._data = hir_message.body.get('base', {})
         self._data = self._data or {}
         if 'keep_scripting_logs_time' in self._data:
             self.log_rotate_runnable.keep_scripting_logs_time = int(self._data.get('keep_scripting_logs_time', 86400))
 
     def on_before_host_up(self, hostup):
-        if not 'main' in hostup.body:
-            hostup.main = {}
-        hostup.main['keep_scripting_logs_time'] = self.log_rotate_runnable.keep_scripting_logs_time
+        if not 'base' in hostup.body:
+            hostup.base = {}
+        hostup.base['keep_scripting_logs_time'] = self.log_rotate_runnable.keep_scripting_logs_time
 
 
     def _execute_one_script(self, script):
