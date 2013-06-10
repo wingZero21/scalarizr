@@ -57,6 +57,7 @@ def get_truncated_log(logfile, maxsize=None):
 
 class ScriptExecutor(Handler):
     name = 'script_executor'
+    _data = None
 
     def __init__(self):
         self.queue = Queue.Queue()
@@ -78,6 +79,10 @@ class ScriptExecutor(Handler):
 
     def on_init(self):
         global exec_dir_prefix, logs_dir, logs_truncate_over
+
+        bus.on(
+            host_init_response=self.on_host_init_response
+        )
 
         # Configuration
         cnf = bus.cnf
@@ -105,8 +110,9 @@ class ScriptExecutor(Handler):
         except ConfigParser.Error:
             pass
 
+        self.log_rotate_runnable = LogRotateRunnable()
         self.log_rotate_thread = threading.Thread(name='ScriptingLogRotate',
-                                                                target=LogRotateRunnable())
+                                                                target=self.log_rotate_runnable)
         self.log_rotate_thread.setDaemon(True)
 
     def on_start(self):
@@ -125,6 +131,12 @@ class ScriptExecutor(Handler):
         # save state
         LOG.debug('Saving Work In Progress (%d items)', len(self.in_progress))
         szrconfig.STATE['script_executor.in_progress'] = [sc.state() for sc in self.in_progress]
+
+    def on_host_init_response(self, hir_message):
+        self._data = hir_message.body.get('main', {})
+        self._data = self._data or {}
+        if 'keep_scripting_logs_time' in self._data:
+            self.log_rotate_runnable.keep_scripting_logs_time = int(self._data.get('keep_scripting_logs_time', 86400))
 
     def _execute_one_script(self, script):
         if script.asynchronous:
@@ -444,10 +456,15 @@ class Script(object):
 
 
 class LogRotateRunnable(object):
+    keep_scripting_logs_time = 86400  # 1 day
+
     def __call__(self):
         while True:
-            files = os.listdir(logs_dir)
-            files.sort()
-            for file in files[0:-100]:
-                os.remove(os.path.join(logs_dir, file))
+            LOG.debug('Starting log_rotate routine')
+            now = time.time()
+            for name in os.listdir(logs_dir):
+                filename = os.path.join(logs_dir, name)
+                if os.stat(filename).st_ctime + self.keep_scripting_logs_time < now:
+                    LOG.debug('Delete %s', filename)
+                    os.remove(filename)
             time.sleep(3600)
