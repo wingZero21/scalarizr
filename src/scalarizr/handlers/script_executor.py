@@ -81,7 +81,8 @@ class ScriptExecutor(Handler):
         global exec_dir_prefix, logs_dir, logs_truncate_over
 
         bus.on(
-            host_init_response=self.on_host_init_response
+            host_init_response=self.on_host_init_response,
+            before_host_up=self.on_before_host_up
         )
 
         # Configuration
@@ -137,6 +138,12 @@ class ScriptExecutor(Handler):
         self._data = self._data or {}
         if 'keep_scripting_logs_time' in self._data:
             self.log_rotate_runnable.keep_scripting_logs_time = int(self._data.get('keep_scripting_logs_time', 86400))
+
+    def on_before_host_up(self, hostup):
+        if not 'main' in hostup.body:
+            hostup.main = {}
+        hostup.main['keep_scripting_logs_time'] = self.log_rotate_runnable.keep_scripting_logs_time
+
 
     def _execute_one_script(self, script):
         if script.asynchronous:
