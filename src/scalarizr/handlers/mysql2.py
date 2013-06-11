@@ -894,8 +894,8 @@ class MysqlHandler(DBMSRHandler):
                         self.mysql.service.stop('Detaching old Slave volume')
                         old_vol = dict(__mysql__['volume'])
                         old_vol = storage2.volume(old_vol)
-                        LOG.info('Detaching old Slave volume')
-                        old_vol.detach()
+                        old_vol.umount()
+
                     restore.run()
 
                 log_file = restore.log_file
