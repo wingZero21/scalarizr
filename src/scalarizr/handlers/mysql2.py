@@ -891,6 +891,7 @@ class MysqlHandler(DBMSRHandler):
                     new_vol = restore.run()
                 else:
                     if __node__['platform'] == 'idcf':
+                        self.mysql.service.stop('Detaching old Slave volume')
                         old_vol = dict(__mysql__['volume'])
                         old_vol = storage2.volume(old_vol)
                         LOG.info('Detaching old Slave volume')
