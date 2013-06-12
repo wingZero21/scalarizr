@@ -5,6 +5,7 @@ __author__ = 'Nick Demyanchuk'
 
 import re
 import os
+import sys
 import uuid
 import time
 import random
@@ -16,7 +17,7 @@ import tempfile
 from scalarizr.bus import bus
 from scalarizr.storage import transfer
 from scalarizr import storage2
-from scalarizr.util import wait_until
+from scalarizr.util import wait_until, capture_exception
 from scalarizr.linux import mount, system
 from scalarizr.handlers import rebundle as rebundle_hndlr
 from scalarizr.linux.tar import Tar
@@ -150,15 +151,10 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                     remote_path = 'gcs://%s/' % tmp_bucket_name
                     uploader.upload((arch_path,), remote_path)
                 except:
-                    try:
+                    with capture_exception(LOG):
                         objs = cloudstorage.objects()
                         objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
-                    except:
-                        pass
-
-                    cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
-                    raise
-
+                        cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
             finally:
                 os.unlink(arch_path)
 
@@ -210,9 +206,13 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
             wait_until(image_is_ready, logger=LOG, timeout=600)
 
         finally:
-            objs = cloudstorage.objects()
-            objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
-            cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
+            try:
+                objs = cloudstorage.objects()
+                objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
+                cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
+            except:
+                e = sys.exc_info()[0]
+                LOG.error('Faled to remove image compressed source: %s' % e)
 
         return '%s/images/%s' % (proj_name, goog_image_name)
 

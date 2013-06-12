@@ -425,6 +425,16 @@ logs_truncate_over=20K
 EOF
 fi
 
+if [ ! -f "$pub_cnf_dir/tomcat.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/tomcat.ini"
+[tomcat]
+
+[handlers]
+
+tomcat = scalarizr.handlers.tomcat
+EOF
+fi
+
 if [ ! -f "$pub_cnf_dir/www.ini" ]; then
 	cat <<EOF > "$pub_cnf_dir/www.ini"
 [www]
@@ -775,7 +785,7 @@ NAME="scalarizr"
 INIT_SCRIPT="/etc/init.d/$NAME"
 
 if [ -x $INIT_SCRIPT ]; then
-	if which insserv > /dev/null; then
+	if which insserv > /dev/null && test -e /etc/issue.net && ! grep -q 'Ubuntu' /etc/issue.net; then
 		insserv scalarizr_update
 		insserv $NAME
 	else
