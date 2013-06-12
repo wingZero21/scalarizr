@@ -17,8 +17,8 @@ import tempfile
 from scalarizr.bus import bus
 from scalarizr.storage import transfer
 from scalarizr import storage2
-from scalarizr.util import system2, wait_until, capture_exception
-from scalarizr.linux import mount
+from scalarizr.util import wait_until, capture_exception
+from scalarizr.linux import mount, system
 from scalarizr.handlers import rebundle as rebundle_hndlr
 from scalarizr.linux.tar import Tar
 from scalarizr.linux.rsync import rsync
@@ -63,11 +63,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 			try:
 
 				LOG.debug('Creating partition table on image')
-				system2(('parted', image_path, 'mklabel', 'msdos'))
-				system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))))
+				system(('parted', image_path, 'mklabel', 'msdos'))
+				system(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))))
 
 				# Map disk image
-				out = system2(('kpartx', '-av', image_path))[0]
+				out = system(('kpartx', '-av', image_path))[0]
 				try:
 					loop = re.search('(/dev/loop\d+)', out).group(1)
 					root_dev_name = '/dev/mapper/%sp1' % loop.split('/')[-1]
@@ -75,11 +75,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 					LOG.info('Creating filesystem')
 					storage2.filesystem('ext4').mkfs(root_dev_name)
 					dev_uuid = uuid.uuid4()
-					system2(('tune2fs', '-U', str(dev_uuid), root_dev_name))
+					system(('tune2fs', '-U', str(dev_uuid), root_dev_name))
 
 					mount.mount(root_dev_name, tmp_mount_dir)
 					try:
-						lines = system2(('/bin/mount', '-l'))[0].splitlines()
+						lines = system(('/bin/mount', '-l'))[0].splitlines()
 						exclude_dirs = set()
 						for line in lines:
 							mpoint = line.split()[2]
@@ -126,7 +126,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 					finally:
 						mount.umount(root_dev_name)
 				finally:
-					system2(('kpartx', '-d', image_path))
+					system(('kpartx', '-d', image_path))
 
 				LOG.info('Compressing image.')
 				arch_name = '%s.tar.gz' % self._role_name.lower()
@@ -136,7 +136,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 				tar.create().gzip().sparse()
 				tar.archive(arch_path)
 				tar.add(image_name, rebundle_dir)
-				system2(str(tar), shell=True)
+				system(str(tar), shell=True)
 
 			finally:
 				os.unlink(image_path)
@@ -227,4 +227,4 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 		for node in nodes:
 			args = node.split()
 			args[0] = os.path.join(root, 'dev', args[0])
-			system2(['mknod'] + args)
+			system(' '.join(['mknod'] + args), shell=True)
