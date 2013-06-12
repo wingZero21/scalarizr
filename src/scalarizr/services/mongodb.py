@@ -43,7 +43,7 @@ LOG_PATH_DEFAULT = os.path.join(LOG_DIR, 'mongodb.shardsrv.log')
 DEFAULT_UBUNTU_DB_PATH = '/var/lib/mongodb'
 DEFAULT_CENTOS_DB_PATH = '/var/lib/mongo'
 LOCK_FILE = 'mongod.lock'
-DEFAULT_USER = 'mongodb' if disttool.is_ubuntu() else 'mongod'
+DEFAULT_USER = 'mongodb' if disttool.is_debian_based() else 'mongod'
 SCALR_USER = 'scalr'
 STORAGE_DATA_DIR = os.path.join(STORAGE_PATH, 'data')
 
@@ -377,7 +377,7 @@ class MongoDB(BaseService):
         '''
         path = '/etc/sudoers'
         self._logger.debug('Disabling requiretty in %s' % path)
-        if not disttool.is_ubuntu():
+        if not disttool.is_debian_based():
             orig = None
             with open(path, 'r') as fp:
                 orig = fp.read()
@@ -509,7 +509,7 @@ class WorkingDirectory(object):
     def find(cls, mongo_conf):
         dir = mongo_conf.dbpath
         if not dir:
-            dir = DEFAULT_UBUNTU_DB_PATH if disttool.is_ubuntu() else DEFAULT_CENTOS_DB_PATH
+            dir = DEFAULT_UBUNTU_DB_PATH if disttool.is_debian_based() else DEFAULT_CENTOS_DB_PATH
         return cls(dir) 
 
     def is_initialized(self, path): 
