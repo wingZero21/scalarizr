@@ -95,7 +95,7 @@ class GoogleServiceManager(object):
 
 
 class GcePlatform(Platform):
-    metadata_url = 'http://metadata.google.internal/0.1/meta-data/'
+    metadata_url = 'http://metadata/computeMetadata/v1beta1/'
     _metadata = None
 
     def __init__(self):
@@ -110,7 +110,7 @@ class GcePlatform(Platform):
     def get_user_data(self, key=None):
         if self._userdata is None:
             try:
-                raw_userdata = self._get_metadata('attributes/scalr').strip()
+                raw_userdata = self._get_metadata('instance/attributes/scalr').strip()
                 self._userdata = self._parse_user_data(raw_userdata)
             except urllib2.HTTPError, e:
                 if 404 == e.code:
@@ -121,12 +121,15 @@ class GcePlatform(Platform):
         return self._userdata.get(key) if key else self._userdata
 
 
-    def _get_metadata(self, key):
+    def _get_metadata(self, key, url=None):
+        if url is None:
+            url = key
+
         if self._metadata is None:
             self._metadata = dict()
 
-        if not key in self._metadata:
-            key_url = os.path.join(self.metadata_url, key)
+        if not url in self._metadata:
+            key_url = os.path.join(self.metadata_url, url)
             resp = urllib2.urlopen(key_url)
             self._metadata[key] = resp.read()
 
@@ -134,43 +137,43 @@ class GcePlatform(Platform):
 
 
     def get_public_ip(self):
-        network = self._get_metadata('network')
+        network = self._get_metadata('network', 'instance/network-interfaces/?recursive=true')
         network = json.loads(network)
-        return network['networkInterface'][0]['accessConfiguration'][0]['externalIp']
+        return network[0]['accessConfigs'][0]['externalIp']
 
 
     def get_private_ip(self):
-        network = self._get_metadata('network')
+        network = self._get_metadata('network', 'instance/network-interfaces/?recursive=true')
         network = json.loads(network)
-        return network['networkInterface'][0]['ip']
+        return network[0]['ip']
 
 
     def get_project_id(self):
-        return self._get_metadata('project-id')
+        return self._get_metadata('project/project-id')
 
 
     def get_zone(self):
-        return self._get_metadata('zone')
+        return self._get_metadata('instance/zone')
 
 
     def get_numeric_project_id(self):
-        return self._get_metadata('numeric-project-id')
+        return self._get_metadata('project/numeric-project-id')
 
 
     def get_machine_type(self):
-        return self._get_metadata('machine-type')
+        return self._get_metadata('instance/machine-type')
 
 
     def get_instance_id(self):
-        return self._get_metadata('instance-id')
+        return self._get_metadata('instance/id')
 
 
     def get_hostname(self):
-        return self._get_metadata('hostname')
+        return self._get_metadata('instance/hostname')
 
 
     def get_image(self):
-        return self._get_metadata('image')
+        return self._get_metadata('instance/image')
 
 
     def new_compute_client(self):
