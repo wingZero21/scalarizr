@@ -1,15 +1,14 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 __author__ = 'Nick Demyanchuk'
 
 import os
-import sys
 import base64
 import logging
 import urllib2
 import httplib2
 import threading
+from httplib import BadStatusLine
 
 try:
     import json
@@ -47,6 +46,27 @@ api_logger.addFilter(GoogleApiClientLoggerFilter())
 def get_platform():
     return GcePlatform()
 
+class BadStatusLineHandler(object):
+    def __init__(self, con):
+        self._con = con
+
+    def __getattr__(self, item):
+        item = getattr(self._con, item)
+        if callable(item):
+            def wrapper(*args, **kwargs):
+                tries = 3
+                while tries:
+                    try:
+                        return item(*args, **kwargs)
+                    except BadStatusLine:
+                        tries -= 1
+                        if not tries:
+                            raise
+
+            return wrapper
+        else:
+            return item
+
 
 class GoogleServiceManager(object):
     """
@@ -62,6 +82,7 @@ class GoogleServiceManager(object):
         self.map = {}
         self.lock = threading.Lock()
         self.pool = []
+
 
     def get_service(self):
         current_thread = threading.current_thread()
@@ -80,7 +101,8 @@ class GoogleServiceManager(object):
 
                 http = self._get_auth()
                 s = build(self.s_name, self.s_ver, http=http)
-                self.map[current_thread] = s
+                wrapped = BadStatusLineHandler(s)
+                self.map[current_thread] = wrapped
 
             return self.map[current_thread]
 
