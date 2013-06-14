@@ -101,7 +101,7 @@ class GcePlatform(Platform):
     def __init__(self):
         Platform.__init__(self)
         self.compute_svc_mgr = GoogleServiceManager(
-                self, 'compute', 'v1beta15', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
+                self, 'compute', 'v1beta14', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
 
         self.storage_svs_mgr = GoogleServiceManager(
                 self, 'storage', 'v1beta1', STORAGE_FULL_SCOPE)
