@@ -13,6 +13,7 @@ import threading
 import glob
 
 from scalarizr import node, linux
+from scalarizr.linux import coreutils
 from scalarizr.util import wait_until
 from scalarizr.util import system2
 from scalarizr import storage2
@@ -367,6 +368,14 @@ class CSVolume(base.Volume):
         self._check_connection()
         volume_id = self.id or self._native_vol.id
 
+        # Remove volume from SCSI host
+        if self.device:
+            LOG.debug('Removing device from SCSI host')
+            scsi = coreutils.lsscsi()[self.device]
+            name = '/sys/class/scsi_host/host{host}/device/target{host}:{bus}:{target}/{host}:{bus}:{target}:{lun}/delete'.format(**scsi)
+            with open(name, 'w') as fp:
+                fp.write('1')
+
         LOG.debug('Detaching volume %s', volume_id)
         try:
             self._conn.detachVolume(volume_id)
@@ -380,6 +389,7 @@ class CSVolume(base.Volume):
                    timeout=self._global_timeout,
                    error_text="Volume %s wasn't available in a reasonable time" % volume_id)
         LOG.debug('Volume %s is available', volume_id)
+
 
     def _delete(self):
         self._check_connection()

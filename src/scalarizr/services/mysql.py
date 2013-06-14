@@ -23,6 +23,7 @@ import errno
 
 from pymysql import cursors
 
+from scalarizr import node, linux
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy, PresetProvider
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
@@ -657,6 +658,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
 
     def __init__(self):
+        if 'gce' == node.__node__['platform']:
+            self.ensure_pid_directory()
+
         self.mysql_cli = MySQLClient()
 
 
@@ -809,6 +813,16 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                 LOG.warning('Unable to stop mysql running with skip-grant-tables. PID not found.')
         else:
             LOG.debug('Skip stopping mysqld with a skip-grant-tables')
+
+
+    def ensure_pid_directory(self):
+        if 'CentOS' == linux.os['name']:
+            '''
+            Due to rebundle algorythm complications on GCE we must ensure that pid dir actually exists
+            '''
+            pid_dir = '/var/run/mysql'
+            if not os.path.exists(pid_dir):
+                os.makedirs(pid_dir)
 
 
 

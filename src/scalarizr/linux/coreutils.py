@@ -229,3 +229,22 @@ def df():
 	out = linux.system(('df', '-Pk'))[0]
 	return [_dfrow(line[0], int(line[1]), line[-1]) 
 			for line in map(str.split, out.splitlines()[1:])]
+
+
+def lsscsi():
+	out = linux.system(('lsscsi', ))[0]
+	ret = {}
+	for line in out.splitlines():
+		parts  = filter(None, line.split(' '))
+		target, device = parts[0], parts[-1]
+		host, bus, tgt, lun = target[1:-1].split(':')
+		ret[device] = {
+			'host': host,
+			'bus': bus,
+			'target': tgt,
+			'lun': lun,
+			'device': device
+		}
+	return ret
+
+
