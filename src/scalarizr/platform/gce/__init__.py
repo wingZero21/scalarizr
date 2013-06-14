@@ -75,7 +75,7 @@ class BadStatusLineHandler(object):
                 return item
 
     def __call__(self, *args, **kwargs):
-        if self._obj.__name__ in ('execute', 'next_chunk'):
+        if self._obj.__name__ in ('execute', 'next_chunk', 'positional_wrapper'):
             return self._wrap(self._obj.__call__)(*args, **kwargs)
         else:
             item = self._obj(*args, **kwargs)
@@ -83,6 +83,7 @@ class BadStatusLineHandler(object):
                 return BadStatusLineHandler(item)
             else:
                 return item
+
 
 
 
