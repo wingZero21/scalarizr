@@ -34,7 +34,7 @@ LOG = logging.getLogger(__name__)
 ROLEBUILDER_USER = 'scalr-rolesbuilder'
 
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
-    exclude_dirs = set(['/tmp', '/var/run', '/proc', '/dev',
+    exclude_dirs = set(['/tmp', '/proc', '/dev',
                                        '/mnt' ,'/var/lib/google/per-instance',
                                        '/sys', '/cdrom', '/media'])
     exclude_files = ('/etc/ssh/.host_key_regenerated',
