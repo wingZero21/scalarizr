@@ -16,7 +16,8 @@ except ImportError:
     import simplejson as json
 
 from oauth2client.client import SignedJwtAssertionCredentials
-from apiclient.discovery import build
+from apiclient.discovery import build, Resource
+from apiclient.http import HttpRequest
 
 from scalarizr.platform import Platform
 from scalarizr.storage.transfer import Transfer
@@ -47,25 +48,42 @@ def get_platform():
     return GcePlatform()
 
 class BadStatusLineHandler(object):
-    def __init__(self, con):
-        self._con = con
+    def __init__(self, obj):
+        self._obj = obj
 
-    def __getattr__(self, item):
-        item = getattr(self._con, item)
-        if callable(item):
-            def wrapper(*args, **kwargs):
-                tries = 3
-                while tries:
-                    try:
-                        return item(*args, **kwargs)
-                    except BadStatusLine:
-                        tries -= 1
-                        if not tries:
-                            raise
+    def _wrap(self, fn):
+        def wrapper(*args, **kwargs):
+            tries = 3
+            while True:
+                try:
+                    return fn(*args, **kwargs)
+                except BadStatusLine:
+                    tries -= 1
+                    if not tries:
+                        raise
+                    LOG.warning('Caught "BadStatusLine" exception from google API, retrying')
+        return wrapper
 
-            return wrapper
+    def __getattribute__(self, item):
+        try:
+            return object.__getattribute__(self, item)
+        except AttributeError:
+            item = getattr(self._obj, item)
+            if callable(item) or isinstance(item, (HttpRequest, Resource)):
+                return BadStatusLineHandler(item)
+            else:
+                return item
+
+    def __call__(self, *args, **kwargs):
+        if self._obj.__name__ in ('execute', 'next_chunk'):
+            return self._wrap(self._obj.__call__)(*args, **kwargs)
         else:
-            return item
+            item = self._obj(*args, **kwargs)
+            if isinstance(item, (HttpRequest, Resource)):
+                return BadStatusLineHandler(item)
+            else:
+                return item
+
 
 
 class GoogleServiceManager(object):
