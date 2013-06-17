@@ -595,7 +595,7 @@ class PSQL(object):
 class ClusterDir(object):
     
     base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
-    default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
+    default_path = os.path.join(base_path, 'main' if disttool.is_debian_based() else 'data')
     
     def __init__(self, path=None):
         self.path = path
@@ -607,7 +607,7 @@ class ClusterDir(object):
 
     def move_to(self, dst, move_files=True):
         new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
-        
+        ч
         if not os.path.exists(dst):
             LOG.debug('Creating directory structure for postgresql cluster: %s' % dst)
             os.makedirs(dst)
@@ -666,7 +666,7 @@ class ConfigDir(object):
         cls.version = version or '9.0'
         path = cls.get_sysconfig_pgdata()
         if not path:
-            path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
+            path = '/etc/postgresql/%s/main' % version if disttool.is_debian_based() else '/var/lib/pgsql/%s/data/' % version
         return cls(path, version)
         
     
