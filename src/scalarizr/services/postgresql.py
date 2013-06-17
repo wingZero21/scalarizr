@@ -607,7 +607,7 @@ class ClusterDir(object):
 
     def move_to(self, dst, move_files=True):
         new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
-        ч
+
         if not os.path.exists(dst):
             LOG.debug('Creating directory structure for postgresql cluster: %s' % dst)
             os.makedirs(dst)
