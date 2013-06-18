@@ -66,9 +66,9 @@ class P2pMessageConsumer(MessageConsumer):
                 STATE['global.msg_port'] = msg_port
                 self._logger.info('Building message consumer server on %s:%s', r.hostname, msg_port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-                self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
+                self._server = HTTPServer((r.hostname, msg_port), self._get_request_handler_class())
         except (BaseException, Exception), e:
-            self._logger.error("Cannot build server. %s", e)
+            self._logger.error("Cannot build server on port %s. %s", msg_port, e)
             return
 
         self._logger.debug('Starting message consumer %s', self.endpoint)
