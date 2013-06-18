@@ -240,6 +240,8 @@ class YumPackageMgr(PackageMgr):
             self.updatedb()
         self.yum_command('install %s' %  name, raise_exc=True)
 
+    def localinstall(self, name):
+        self.yum_command('localinstall %s' % name, raise_exc=True)
 
     def remove(self, name, purge=False):
         self.yum_command('remove '+name, raise_exc=True)

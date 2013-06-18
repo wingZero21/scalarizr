@@ -564,7 +564,7 @@ class PerconaExec(Exec):
         if not 'percona' in mgr.repos():
             if linux.os['family'] in ('RedHat', 'Oracle'):
                 url = 'http://www.percona.com/downloads/percona-release/percona-release-0.0-1.%s.rpm' % linux.os['arch']
-                pkgmgr.RpmPackageMgr().install(url)
+                pkgmgr.YumPackageMgr().localinstall(url)
             else:
                 try:
                     codename = linux.os['lsb_codename']
