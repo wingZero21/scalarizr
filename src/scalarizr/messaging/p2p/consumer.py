@@ -10,6 +10,7 @@ from scalarizr.bus import bus
 # Core
 from scalarizr.messaging import MessageConsumer, MessagingError
 from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage
+from scalarizr.config import STATE
 from scalarizr.util import wait_until, system2
 
 # Stdlibs
@@ -54,7 +55,16 @@ class P2pMessageConsumer(MessageConsumer):
         try:
             if self._server is None:
                 r = urlparse(self.endpoint)
-                self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)
+                msg_port = r.port
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    sock.connect(('0.0.0.0', msg_port))
+                    msg_port = 8014
+                    sock.close()
+                except socket.error:
+                    pass
+                STATE['global.msg_port'] = msg_port
+                self._logger.info('Building message consumer server on %s:%s', r.hostname, msg_port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
                 self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
         except (BaseException, Exception), e:
