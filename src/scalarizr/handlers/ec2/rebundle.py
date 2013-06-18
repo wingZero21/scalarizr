@@ -10,11 +10,9 @@ from scalarizr.handlers import HandlerError, prepare_tags
 from scalarizr.util import system2, disttool, cryptotool,\
         wait_until, firstmatched
 from scalarizr.linux import mount
-from scalarizr.platform.ec2 import ebstool
 from scalarizr import storage
 from scalarizr.storage.transfer import Transfer
 from scalarizr.handlers import rebundle as rebundle_hdlr
-from scalarizr import storage
 from scalarizr.linux import coreutils
 from scalarizr.linux.tar import Tar
 from scalarizr.storage2.volumes import ebs as ebsvolume
@@ -25,7 +23,6 @@ from xml.dom.minidom import Document
 from datetime import datetime
 import time, os, re, shutil, glob
 import string
-import ConfigParser
 
 from boto.exception import BotoServerError
 from boto.ec2.volume import Volume

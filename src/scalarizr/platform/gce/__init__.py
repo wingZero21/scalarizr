@@ -21,7 +21,6 @@ from apiclient.discovery import build
 from scalarizr.platform import Platform
 from scalarizr.storage.transfer import Transfer
 from scalarizr.platform.gce.storage import GoogleCSTransferProvider
-from scalarizr import util
 
 
 Transfer.explore_provider(GoogleCSTransferProvider)
