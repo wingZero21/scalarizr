@@ -322,8 +322,7 @@ class EbsVolume(base.Volume, EbsMixin):
         '''
 
         self._check_ec2()
-        snapshot = self._create_snapshot(self.id, description, tags,
-                                                                        kwds.get('nowait', True))
+        snapshot = self._create_snapshot(self.id, description, tags, kwds.get('nowait', True))
         return storage2.snapshot(
                         type='ebs',
                         id=snapshot.id,

@@ -216,11 +216,8 @@ class GcePersistentVolumeProvider(GceEphemeralVolumeProvider):
             connection = __node__['gce']['compute_connection']
             project_id = __node__['gce']['project_id']
 
-            op = connection.snapshots().delete(project=project_id,
-                                                                               snapshot=snap.name).execute()
-
-            wait_for_operation_to_complete(connection, project_id,
-                                                                               op['name'])
+            op = connection.snapshots().delete(project=project_id, snapshot=snap.name).execute()
+            wait_for_operation_to_complete(connection, project_id, op['name'])
         except:
             e = sys.exc_info()[1]
             raise storage.StorageError('Failed to delete google disk snapshot.'
