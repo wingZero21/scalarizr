@@ -59,7 +59,7 @@ class P2pMessageConsumer(MessageConsumer):
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
                     sock.connect(('0.0.0.0', msg_port))
-                    msg_port = 8014
+                    msg_port = 8011
                     sock.close()
                 except socket.error:
                     pass
