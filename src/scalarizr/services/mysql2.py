@@ -555,7 +555,7 @@ _mysqldump = Exec("/usr/bin/mysqldump")
 class PerconaExec(Exec):
 
     def check(self):
-        if linux.os['family'] in ('RedHat', 'Oracle'):
+        if linux.os['family'] in ('RedHat', 'Oracle') and linux.os['version'] >= (6, 0):
             # Avoid "Can't locate Time/HiRes.pm in @INC"
             # with InnoDB Backup Utility v1.5.1-xtrabackup
             pkgmgr.installed('perl-Time-HiRes')         
