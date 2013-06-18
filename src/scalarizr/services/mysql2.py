@@ -164,6 +164,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
             # Compression is broken
             #'compress': True,
             #'compress_threads': os.sysconf('SC_NPROCESSORS_ONLN'),
+            'ibbackup': 'xtrabackup',
             'user': __mysql__['root_user'],
             'password': __mysql__['root_password']
         }
@@ -333,6 +334,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
         innobackupex(__mysql__['data_dir'],
                 apply_log=True,
                 redo_only=True,
+                ibbackup='xtrabackup',
                 user=__mysql__['root_user'],
                 password=__mysql__['root_password'])
 
@@ -358,6 +360,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
                             apply_log=True,
                             redo_only=True,
                             incremental_dir=inc_dir,
+                            ibbackup='xtrabackup',
                             user=__mysql__['root_user'],
                             password=__mysql__['root_password'])
                     i += 1
