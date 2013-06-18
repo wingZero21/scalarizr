@@ -270,6 +270,9 @@ class Handler(object):
                         handlers.append(config.BuiltinBehaviours.PERCONA)
                     else:
                         handlers.append(config.BuiltinBehaviours.MYSQL2)
+                elif name == 'tomcat':
+                    handlers.append(config.BuiltinBehaviours.TOMCAT)
+
         return handlers
 
 

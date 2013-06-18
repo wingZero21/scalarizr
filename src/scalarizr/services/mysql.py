@@ -820,7 +820,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
             '''
             Due to rebundle algorythm complications on GCE we must ensure that pid dir actually exists
             '''
-            pid_dir = '/var/run/mysql'
+            pid_dir = '/var/run/mysqld'
             if not os.path.exists(pid_dir):
                 os.makedirs(pid_dir)
 

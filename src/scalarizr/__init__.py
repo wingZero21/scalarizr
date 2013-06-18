@@ -372,10 +372,11 @@ def _init_services():
 		api_port = 8010
 		try:
 			sock.connect(('0.0.0.0', api_port))
-			STATE['global.api_port'] = api_port = 8009
+			api_port = 8009
 			sock.close()
 		except socket.error:
 			pass
+		STATE['global.api_port'] = api_port
 		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
 											cnf.key_path(cnf.DEFAULT_KEY))
 		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app)

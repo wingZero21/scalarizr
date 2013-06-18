@@ -16,8 +16,7 @@ except ImportError:
     import simplejson as json
 
 from oauth2client.client import SignedJwtAssertionCredentials
-from apiclient.discovery import build, Resource
-from apiclient.http import HttpRequest
+from apiclient.discovery import build
 
 from scalarizr.platform import Platform
 from scalarizr.storage.transfer import Transfer
@@ -69,7 +68,7 @@ class BadStatusLineHandler(object):
             return object.__getattribute__(self, item)
         except AttributeError:
             item = getattr(self._obj, item)
-            if callable(item) or isinstance(item, (HttpRequest, Resource)):
+            if callable(item) or item.__class__.__name__ in ("HttpRequest", "Resource"):
                 return BadStatusLineHandler(item)
             else:
                 return item
@@ -79,7 +78,7 @@ class BadStatusLineHandler(object):
             return self._wrap(self._obj.__call__)(*args, **kwargs)
         else:
             item = self._obj(*args, **kwargs)
-            if isinstance(item, (HttpRequest, Resource)):
+            if item.__class__.__name__ in ("HttpRequest", "Resource"):
                 return BadStatusLineHandler(item)
             else:
                 return item
