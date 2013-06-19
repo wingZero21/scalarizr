@@ -473,6 +473,7 @@ if [ -f cloudfoundry.ini ]; then
 	done
 fi
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
+[ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini 
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini 
 popd
