@@ -13,6 +13,7 @@ import re
 import os
 import string
 import time
+import urllib
 
 from scalarizr import linux
 from scalarizr.linux import coreutils
@@ -241,7 +242,19 @@ class YumPackageMgr(PackageMgr):
         self.yum_command('install %s' %  name, raise_exc=True)
 
     def localinstall(self, name):
-        self.yum_command('localinstall %s' % name, raise_exc=True)
+        def do_localinstall(filename):
+             self.yum_command('localinstall %s' % filename, raise_exc=True)
+
+        if name.startswith('http://'):
+            filename = os.path.join('/tmp', os.path.basename(name))
+            urllib.urlretrieve(name, filename)
+            try:
+                do_localinstall(filename)
+            finally:
+                os.remove(filename)
+        else:
+            do_localinstall(name)
+       
 
     def remove(self, name, purge=False):
         self.yum_command('remove '+name, raise_exc=True)
