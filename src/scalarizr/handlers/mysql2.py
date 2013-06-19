@@ -49,40 +49,6 @@ BASH = '/bin/bash'
 __mysql__ = mysql2_svc.__mysql__
 
 
-'''
-OPT_ROOT_PASSWORD               = "root_password"
-OPT_REPL_PASSWORD               = "repl_password"
-OPT_STAT_PASSWORD       = "stat_password"
-OPT_REPLICATION_MASTER  = "replication_master"
-
-OPT_LOG_FILE                    = "log_file"
-OPT_LOG_POS                             = "log_pos"
-
-OPT_VOLUME_CNF                  = 'volume_config'
-OPT_SNAPSHOT_CNF                = 'snapshot_config'
-
-CHANGE_MASTER_TIMEOUT   = '60'
-'''
-'''
-# Mysql storage constants
-STORAGE_PATH                    = "/mnt/dbstorage"
-STORAGE_TMP_DIR                 = "tmp"
-STORAGE_VOLUME_CNF              = 'mysql.json'
-STORAGE_SNAPSHOT_CNF    = 'mysql-snap.json'
-
-# System users
-ROOT_USER                               = "scalr"
-REPL_USER                               = "scalr_repl"
-STAT_USER                               = "scalr_stat"
-PMA_USER                                = "pma"
-
-BACKUP_CHUNK_SIZE               = 200*1024*1024
-STOP_SLAVE_TIMEOUT              = 180
-DEFAULT_DATADIR                 = "/var/lib/mysql"
-DEBIAN_CNF_PATH                 = "/etc/mysql/debian.cnf"
-
-DATA_DIR = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_DATA_DIR)
-'''
 
 PRIVILEGES = {
         __mysql__['repl_user']: ('Repl_slave_priv', ),

@@ -25,9 +25,12 @@ class Error(Exception):
     pass
 
 
-__behavior__ = 'percona' \
-            if 'percona' in __node__['behavior'] \
-            else 'mysql2'
+if 'percona' in __node__['behavior']:
+    __behavior__ = 'percona'
+elif 'mariadb' in __node__['behavior']:
+    __behavior__ = 'mariadb'
+else:
+    __behavior__ = 'mysql2'
 
 
 __mysql__ = __node__[__behavior__]

@@ -268,6 +268,8 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.MYSQL)
                     if 'Percona' in str_ver:
                         handlers.append(config.BuiltinBehaviours.PERCONA)
+                    elif 'Maria' in str_ver:
+                        handlers.append(config.BuiltinBehaviours.MARIADB)
                     else:
                         handlers.append(config.BuiltinBehaviours.MYSQL2)
                 elif name == 'tomcat':

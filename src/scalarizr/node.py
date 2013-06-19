@@ -305,8 +305,8 @@ __node__ = {
         'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
 }
 
-for behavior in ('mysql', 'mysql2', 'percona'):
-    section = 'mysql2' if behavior == 'percona' else behavior
+for behavior in ('mysql', 'mysql2', 'percona', 'mariadb'):
+    section = 'mysql2' if behavior in ('percona', 'mariadb') else behavior
     __node__[behavior] = Compound({
             'volume,volume_config': 
                             Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
