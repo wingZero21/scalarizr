@@ -243,7 +243,7 @@ class YumPackageMgr(PackageMgr):
 
     def localinstall(self, name):
         def do_localinstall(filename):
-             self.yum_command('localinstall %s' % filename, raise_exc=True)
+             self.yum_command('localinstall --nogpgcheck %s' % filename, raise_exc=True)
 
         if name.startswith('http://'):
             filename = os.path.join('/tmp', os.path.basename(name))
