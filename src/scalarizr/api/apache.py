@@ -173,15 +173,7 @@ class ApacheWebServer(object):
             server_root = '/etc/apache2'
 
         elif disttool.is_redhat_based():
-            LOG.debug("Searching in apache config file %s to find server root", APACHE_CONF_PATH)
-
-            try:
-                server_root = strip_quotes(self._config.get('ServerRoot'))
-                server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
-            except NoPathError:
-                LOG.warning("ServerRoot not found in apache config file %s", APACHE_CONF_PATH)
-                server_root = os.path.dirname(APACHE_CONF_PATH)
-                LOG.debug("Use %s as ServerRoot", server_root)
+            server_root = self._main_config.server_root
         return server_root
 
 
@@ -193,31 +185,7 @@ class ApacheWebServer(object):
         return vhosts_path
 
 
-    def _patch_default_conf_deb(self):
-        LOG.debug("Replacing NameVirtualhost and Virtualhost ports especially for debian-based linux")
-        default_vhost_path = os.path.join(
-                                os.path.dirname(APACHE_CONF_PATH),
-                                'sites-enabled',
-                                '000-default')
-        if os.path.exists(default_vhost_path):
-            default_vhost = Configuration('apache')
-            default_vhost.read(default_vhost_path)
-            default_vhost.set('NameVirtualHost', '*:80', force=True)
-            default_vhost.write(default_vhost_path)
-
-            dv = None
-            with open(default_vhost_path, 'r') as fp:
-                dv = fp.read()
-            vhost_regexp = re.compile('<VirtualHost\s+\*>')
-            dv = vhost_regexp.sub( '<VirtualHost *:80>', dv)
-            with open(default_vhost_path, 'w') as fp:
-                fp.write(dv)
-
-        else:
-            LOG.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
-
-
-    def _check_mod_ssl(self):
+    def check_mod_ssl(self):
         if disttool.is_debian_based():
             self._check_mod_ssl_deb()
         elif disttool.is_redhat_based():
@@ -300,7 +268,7 @@ class ApacheWebServer(object):
                         self._main_config.write(APACHE_CONF_PATH)
 
 
-    def _patch_ssl_conf(self, cert_path):
+    def patch_ssl_conf(self, cert_path):
         #TODO: ADD SNI SUPPORT
 
         key_path = os.path.join(cert_path, 'https.key')
@@ -363,7 +331,7 @@ class ApacheWebServer(object):
             ssl_conf.write(ssl_conf_path)
 
 
-    def _rpaf_modify_proxy_ips(self, ips, operation=None):
+    def rpaf_modify_proxy_ips(self, ips, operation=None):
         LOG.debug('Modify RPAFproxy_ips (operation: %s, ips: %s)', operation, ','.join(ips))
         file = firstmatched(
                 lambda x: os.access(x, os.F_OK),
@@ -398,7 +366,7 @@ class ApacheWebServer(object):
                         pass
 
             rpaf.write(file)
-            st = os.stat(self.APACHE_CONF_PATH)
+            st = os.stat(APACHE_CONF_PATH)
             os.chown(file, st.st_uid, st.st_gid)
 
 
@@ -567,7 +535,7 @@ class ApacheAPI(object):
 
 
     @rpc.service_method
-    def update_vhost(self, hostname, template, new_template, ssl_certificate_id=None, port=80, reload=True):
+    def update_vhost(self, hostname, new_hostname=None, template=None, ssl_certificate_id=None, port=80, reload=True):
         pass
 
 
@@ -623,7 +591,7 @@ class ApacheAPI(object):
     @rpc.service_method
     def reload_vhosts(self):
         served_hosts = self.list_served_hosts()
-        for queryenv_vhost in self._queryenv.list_virtualhosts():
+        for queryenv_vhost in self._queryenv.list_farm_role_params():
             for apache_vhost in served_hosts:
                 if apache_vhost.is_like(queryenv_vhost.hostname):
                     apache_vhost.ensure()
@@ -635,7 +603,6 @@ class ApacheAPI(object):
                 else:
                     vhost = ApacheVirtualHost(queryenv_vhost.hostname, queryenv_vhost.raw, port=queryenv_vhost.port)
                 vhost.ensure()
-
 
 
     @rpc.service_method
@@ -680,9 +647,49 @@ class HttpdConf(BaseConfig):
     def _add_module(self, module_name):
         pass
 
+    def set_server_root(self):
+        pass
+
+
+    def _get_server_root(self):
+        try:
+            server_root = strip_quotes(self._config.get('ServerRoot'))
+            server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
+        except NoPathError:
+            LOG.warning("ServerRoot not found in apache config file %s", APACHE_CONF_PATH)
+            server_root = os.path.dirname(APACHE_CONF_PATH)
+            LOG.debug("Using %s as ServerRoot", server_root)
+        return server_root
+
+
     name_virtual_hosts = property(_list_name_virtual_hosts, _add_name_virtual_host)
     includes = property(_list_includes, add_include)
     name_virtual_hosts = property(_list_modules, _add_module)
+    server_root = property(_get_server_root, set_server_root)
+
+
+def patch_default_conf_deb():
+    LOG.debug("Replacing NameVirtualhost and Virtualhost ports specifically for debian-based linux")
+    default_vhost_path = os.path.join(
+                            os.path.dirname(APACHE_CONF_PATH),
+                            'sites-enabled',
+                            '000-default')
+    if os.path.exists(default_vhost_path):
+        default_vhost = Configuration('apache')
+        default_vhost.read(default_vhost_path)
+        default_vhost.set('NameVirtualHost', '*:80', force=True)
+        default_vhost.write(default_vhost_path)
+
+        dv = None
+        with open(default_vhost_path, 'r') as fp:
+            dv = fp.read()
+        vhost_regexp = re.compile('<VirtualHost\s+\*>')
+        dv = vhost_regexp.sub( '<VirtualHost *:80>', dv)
+        with open(default_vhost_path, 'w') as fp:
+            fp.write(dv)
+
+    else:
+        LOG.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
 
 
 def get_apache_user():
