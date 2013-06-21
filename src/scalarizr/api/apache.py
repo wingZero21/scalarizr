@@ -490,6 +490,49 @@ class ApacheVirtualHost(object):
                                  % (uname, ', '.join(os.listdir(doc_root))))
 
 
+class HttpdConf(BaseConfig):
+
+    config_name = os.path.basename(APACHE_CONF_PATH)
+
+    def _list_name_virtual_hosts(self):
+        pass
+
+    def _add_name_virtual_host(self, nvhost):
+        pass
+
+    def _list_includes(self):
+        pass
+
+    def add_include(self, path):
+        pass
+
+    def _list_modules(self):
+        pass
+
+    def _add_module(self, module_name):
+        pass
+
+    def set_server_root(self):
+        pass
+
+
+    def _get_server_root(self):
+        try:
+            server_root = strip_quotes(self._config.get('ServerRoot'))
+            server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
+        except NoPathError:
+            LOG.warning("ServerRoot not found in apache config file %s", APACHE_CONF_PATH)
+            server_root = os.path.dirname(APACHE_CONF_PATH)
+            LOG.debug("Using %s as ServerRoot", server_root)
+        return server_root
+
+
+    name_virtual_hosts = property(_list_name_virtual_hosts, _add_name_virtual_host)
+    includes = property(_list_includes, add_include)
+    name_virtual_hosts = property(_list_modules, _add_module)
+    server_root = property(_get_server_root, set_server_root)
+
+
 class ApacheAPI(object):
 
 
@@ -599,7 +642,7 @@ class ApacheAPI(object):
                 if queryenv_vhost.ssl:
                     cert = SSLCertificate(queryenv_vhost.ssl_certificate_id)
                     cert.ensure()
-                    vhost = ApacheVirtualHost(queryenv_vhost.hostname, ssl_template=queryenv_vhost.raw, ssl_port=queryenv_vhost.port, cert)
+                    vhost = ApacheVirtualHost(queryenv_vhost.hostname, ssl_template=queryenv_vhost.raw, ssl_port=queryenv_vhost.port, cert=cert)
                 else:
                     vhost = ApacheVirtualHost(queryenv_vhost.hostname, queryenv_vhost.raw, port=queryenv_vhost.port)
                 vhost.ensure()
@@ -623,49 +666,6 @@ class ApacheAPI(object):
     @rpc.service_method
     def restart_service(self):
         self.service.restart()
-
-
-class HttpdConf(BaseConfig):
-
-    config_name = os.path.basename(APACHE_CONF_PATH)
-
-    def _list_name_virtual_hosts(self):
-        pass
-
-    def _add_name_virtual_host(self, nvhost):
-        pass
-
-    def _list_includes(self):
-        pass
-
-    def add_include(self, path):
-        pass
-
-    def _list_modules(self):
-        pass
-
-    def _add_module(self, module_name):
-        pass
-
-    def set_server_root(self):
-        pass
-
-
-    def _get_server_root(self):
-        try:
-            server_root = strip_quotes(self._config.get('ServerRoot'))
-            server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
-        except NoPathError:
-            LOG.warning("ServerRoot not found in apache config file %s", APACHE_CONF_PATH)
-            server_root = os.path.dirname(APACHE_CONF_PATH)
-            LOG.debug("Using %s as ServerRoot", server_root)
-        return server_root
-
-
-    name_virtual_hosts = property(_list_name_virtual_hosts, _add_name_virtual_host)
-    includes = property(_list_includes, add_include)
-    name_virtual_hosts = property(_list_modules, _add_module)
-    server_root = property(_get_server_root, set_server_root)
 
 
 def patch_default_conf_deb():
