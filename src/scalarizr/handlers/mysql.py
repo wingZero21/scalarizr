@@ -1348,6 +1348,7 @@ class MysqlHandler(ServiceCtlHandler):
                     self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
                     self._change_selinux_ctx()
 
+
                 with op.step(self._step_patch_conf):
                     # Init replication
                     self._replication_init(master=True)
@@ -1557,12 +1558,37 @@ class MysqlHandler(ServiceCtlHandler):
         if disttool.is_debian_based() and os.path.exists(debian_cnf):
             LOG.debug("Copying debian.cnf from storage to mysql configuration directory")
             shutil.copy(debian_cnf, '/etc/mysql/')
+            self._fix_percona_debian_cnf()
 
 
     def _copy_debian_cnf(self):
+
         if os.path.exists('/etc/mysql/debian.cnf'):
+            self._fix_percona_debian_cnf()
             LOG.debug("Copying debian.cnf file to mysql storage")
             shutil.copy('/etc/mysql/debian.cnf', self._storage_path)
+
+
+    def _fix_percona_debian_cnf(self):
+        deb_cnf_path = '/etc/mysql/debian.cnf'
+
+        if os.path.exists(deb_cnf_path):
+            self._logger.info('Fixing socket options in %s', deb_cnf_path)
+            debian_cnf = Configuration('mysql')
+            debian_cnf.read(deb_cnf_path)
+
+            sock = None
+            try:
+                out = system2("my_print_defaults mysqld", shell=True)
+                m = re.search("--socket=(.*)", out[0], re.MULTILINE)
+                if m:
+                    sock = m.group(1)
+            except:
+                pass
+
+            debian_cnf.set('client/socket', sock)
+            debian_cnf.set('mysql_upgrade/socket', sock)
+            debian_cnf.write(deb_cnf_path)
 
 
     def _storage_valid(self, path=None):
