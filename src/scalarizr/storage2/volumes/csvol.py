@@ -224,6 +224,7 @@ class CSVolume(base.Volume):
                 'id': self._native_vol.id,
                 'size': self._native_vol.size / (1024 * 1024 * 1024),
                 'device': devname,
+                'snap': None,
                 'zone_id': self._native_vol.zoneid,
                 'disk_offering_id': getattr(self._native_vol,
                                             'diskofferingid',
