@@ -395,6 +395,10 @@ class MysqlMessages:
     @ivar log_pos?
     """
 
+    CONVERT_TO_DBMSR = "Mysql_ConvertToDbMsr"
+
+    CONVERT_TO_DBMSR_RESULT = "Mysql_ConvertToDbMsrResult"
+
     """
     Also MySQL behaviour adds params to common messages:
 
@@ -749,6 +753,7 @@ class MysqlHandler(ServiceCtlHandler):
                         or      message.name == MysqlMessages.CREATE_DATA_BUNDLE
                         or      message.name == MysqlMessages.CREATE_BACKUP
                         or      message.name == MysqlMessages.CREATE_PMA_USER
+                        or      message.name == MysqlMessages.CONVERT_TO_DBMSR
                         or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
 
     def get_initialization_phases(self, hir_message):
@@ -776,6 +781,16 @@ class MysqlHandler(ServiceCtlHandler):
                 self.storage_vol.destroy(remove_disks=True)
                 LOG.info('Volume %s has been destroyed.' % self.storage_vol.id)
 
+
+    def on_Mysql_ConvertToDbmsr(self, message):
+        old_path = bus.cnf.private_path('mysql')
+        new_path = bus.cnf.private_path('mysql2')
+        shutil.copy(old_path, new_path)
+        system2("sed -i 's/\^\[mysql/\^\[mysql2/1' %s" % new_path, shell=True)
+        self.send_message(MysqlMessages.CONVERT_TO_DBMSR_RESULT, {
+            'status': 'ok'
+        })
+ 
 
     def on_Mysql_CreatePmaUser(self, message):
         try:
