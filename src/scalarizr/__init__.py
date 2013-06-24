@@ -44,6 +44,7 @@ import select
 import wsgiref.simple_server
 from scalarizr.util import sqlite_server, wait_until
 
+
 class ScalarizrError(BaseException):
 	pass
 
