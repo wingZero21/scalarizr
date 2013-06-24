@@ -381,7 +381,10 @@ class CSVolume(base.Volume):
         try:
             self._conn.detachVolume(volume_id)
         except Exception, e:
-            if 'not attached' not in str(e):
+            if 'not attached' in str(e) or \
+                'Please specify a VM that is either running or stopped' in str(e):
+                pass
+            else:
                 raise
 
         LOG.debug('Checking that volume %s is available', volume_id)
