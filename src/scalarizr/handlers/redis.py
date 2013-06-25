@@ -178,6 +178,11 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         self.on_reload()
 
+        if self._cnf.state == ScalarizrState.RUNNING:
+            # Fix to enable access outside farm when use_passwords=True
+            if self.use_passwords:
+                self.security_off()
+
 
     def on_init(self):
 
@@ -188,8 +193,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         if self._cnf.state == ScalarizrState.RUNNING:
             # Fix to enable access outside farm when use_passwords=True
-            if self.use_passwords:
-                self.security_off()
+            # if self.use_passwords:
+            #    self.security_off()
 
             vol = storage2.volume(__redis__['volume'])
             if not vol.tags:
