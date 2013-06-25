@@ -235,7 +235,7 @@ class GcePersistentVolume(base.Volume):
         # We could put it to separate method, like _get_self_resource
 
         operation = connection.disks().createSnapshot(disk=self.name, project=project_id, zone=self.zone,
-                                                                    body=self.resource).execute()
+                                                    body=dict(name=snap_name, description=description)).execute()
         #operation = connection.snapshots().insert(project=project_id, body=dict(name=snap_name,
         #                           kind="compute#snapshot", description=description, sourceDisk=self.link)).execute()
         try:
