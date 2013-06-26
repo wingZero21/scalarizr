@@ -614,7 +614,6 @@ class PSQL(object):
                     
     
 class ClusterDir(object):
-
     base_path = glob.glob(pg_pathname_pattern)[0]
     default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
     
@@ -628,7 +627,7 @@ class ClusterDir(object):
 
     def move_to(self, dst, move_files=True):
         new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
-        
+
         if not os.path.exists(dst):
             LOG.debug('Creating directory structure for postgresql cluster: %s' % dst)
             os.makedirs(dst)

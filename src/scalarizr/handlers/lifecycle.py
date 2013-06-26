@@ -300,16 +300,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             t.start()
 
     def _check_control_ports(self):
-        sn = bus.api_server.socket.getsockname()
-        if sn[1] != 8010 or STATE['global.api_port']:
-            # API on non-default port
-            self.send_message(Messages.UPDATE_CONTROL_PORTS, {
-                'api': sn[1],
-                'messaging': 8013,
-                'snmp': 8014
-            })
-            if sn[1] == 8010:
-                STATE['global.api_port'] = ''
+		if STATE['global.api_port'] != 8010 or STATE['global.msg_port'] != 8013:
+			# API or Messaging on non-default port
+			self.send_message(Messages.UPDATE_CONTROL_PORTS, {
+				'api': STATE['global.api_port'],
+				'messaging': STATE['global.msg_port'],
+				'snmp': 8014
+			})
 
 
     def on_IntServerReboot(self, message):

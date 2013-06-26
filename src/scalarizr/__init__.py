@@ -8,7 +8,7 @@ if sys.version_info < (2, 6):
 
 
 # Core
-from scalarizr import config, rpc
+from scalarizr import config, rpc, linux
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
 from scalarizr.handlers import MessageListener
@@ -19,6 +19,7 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
 from scalarizr.api.binding import jsonrpc_http
 from scalarizr.storage.util.loop import listloop
+
 from scalarizr.linux import pkgmgr
 
 # Utils
@@ -37,10 +38,12 @@ import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
+import urllib
 import pprint
 import select
 import wsgiref.simple_server
 from scalarizr.util import sqlite_server, wait_until
+
 
 class ScalarizrError(BaseException):
 	pass
@@ -299,18 +302,27 @@ def _init_platform():
 	logger = logging.getLogger(__name__)
 	cnf = bus.cnf; ini = cnf.rawini
 	
-	try:
-		pkgmgr.updatedb()
-	except:
-		logger.warn(str(sys.exc_info()[1]))
+	platform_name = ini.get('general', 'platform')
+
+	if linux.os['name'] == 'RedHat' and platform_name == 'ec2':
+		# Enable RedHat subscription 
+		logger.debug('Enable RedHat subscription')
+		urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
+
+	if cnf.state != ScalarizrState.RUNNING:
+		try:
+			pkgmgr.updatedb()
+		except:
+			logger.warn('Failed to update package manager database: %s', 
+					sys.exc_info()[1], exc_info=sys.exc_info())
 
 	# Initialize platform
 	logger.debug("Initialize platform")
-	name = ini.get('general', 'platform')
-	if name:
-		bus.platform = PlatformFactory().new_platform(name)
+	if platform_name:
+		bus.platform = PlatformFactory().new_platform(platform_name)
 	else:
 		raise ScalarizrError("Platform not defined")
+
 
 
 def _init_services():
@@ -370,10 +382,11 @@ def _init_services():
 		api_port = 8010
 		try:
 			sock.connect(('0.0.0.0', api_port))
-			STATE['global.api_port'] = api_port = 8009
+			api_port = 8009
 			sock.close()
 		except socket.error:
 			pass
+		STATE['global.api_port'] = api_port
 		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
 											cnf.key_path(cnf.DEFAULT_KEY))
 		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app)

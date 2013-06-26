@@ -132,7 +132,8 @@ initdv2.explore(BEHAVIOUR, MysqlProxyInitScript)
 def is_mysql_role(behaviours):
     return bool(set((BuiltinBehaviours.MYSQL,
                BuiltinBehaviours.MYSQL2,
-               BuiltinBehaviours.PERCONA)).intersection(set(behaviours)))
+               BuiltinBehaviours.PERCONA,
+               BuiltinBehaviours.MARIADB)).intersection(set(behaviours)))
 
 
 class MysqlProxyHandler(ServiceCtlHandler):

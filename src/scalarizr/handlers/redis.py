@@ -14,10 +14,12 @@ from scalarizr import handlers
 from scalarizr.api import service as preset_service
 
 from scalarizr import config, storage2, handlers
+from scalarizr.node import __node__
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
+from scalarizr.linux import iptables
 from scalarizr.linux.coreutils import split
 from scalarizr.util import system2, cryptotool, software, initdv2
 from scalarizr.services import redis, backup
@@ -178,6 +180,11 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         self.on_reload()
 
+        if self._cnf.state == ScalarizrState.RUNNING:
+            # Fix to enable access outside farm when use_passwords=True
+            if self.use_passwords:
+                self.security_off()
+
 
     def on_init(self):
 
@@ -186,10 +193,12 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
+        self._insert_iptables_rules()
+
         if self._cnf.state == ScalarizrState.RUNNING:
             # Fix to enable access outside farm when use_passwords=True
-            if self.use_passwords:
-                self.security_off()
+            # if self.use_passwords:
+            #    self.security_off()
 
             vol = storage2.volume(__redis__['volume'])
             if not vol.tags:
@@ -234,6 +243,16 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 
         self.default_service = initdv2.lookup(SERVICE_NAME)
+
+
+    def _insert_iptables_rules(self):
+        if self.use_passwords and iptables.enabled():
+            ports = "{0}:{1}".format(
+                        __redis__['ports_range'][0], 
+                        __redis__['ports_range'][-1])
+            iptables.FIREWALL.ensure([
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": ports}
+            ])
 
 
     def on_host_init_response(self, message):

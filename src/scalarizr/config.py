@@ -1017,6 +1017,7 @@ class BuiltinBehaviours:
     MYSQL = 'mysql'
     MYSQL2 = 'mysql2'
     PERCONA = 'percona'
+    MARIADB = 'mariadb'
     CASSANDRA = 'cassandra'
     MEMCACHED = 'memcached'
     POSTGRESQL = 'postgresql'
@@ -1025,6 +1026,7 @@ class BuiltinBehaviours:
     HAPROXY = 'haproxy'
     MONGODB = 'mongodb'
     CHEF = 'chef'
+    TOMCAT = 'tomcat'
 
     CF_ROUTER = 'cf_router'
     CF_CLOUD_CONTROLLER = 'cf_cloud_controller'

@@ -49,40 +49,6 @@ BASH = '/bin/bash'
 __mysql__ = mysql2_svc.__mysql__
 
 
-'''
-OPT_ROOT_PASSWORD               = "root_password"
-OPT_REPL_PASSWORD               = "repl_password"
-OPT_STAT_PASSWORD       = "stat_password"
-OPT_REPLICATION_MASTER  = "replication_master"
-
-OPT_LOG_FILE                    = "log_file"
-OPT_LOG_POS                             = "log_pos"
-
-OPT_VOLUME_CNF                  = 'volume_config'
-OPT_SNAPSHOT_CNF                = 'snapshot_config'
-
-CHANGE_MASTER_TIMEOUT   = '60'
-'''
-'''
-# Mysql storage constants
-STORAGE_PATH                    = "/mnt/dbstorage"
-STORAGE_TMP_DIR                 = "tmp"
-STORAGE_VOLUME_CNF              = 'mysql.json'
-STORAGE_SNAPSHOT_CNF    = 'mysql-snap.json'
-
-# System users
-ROOT_USER                               = "scalr"
-REPL_USER                               = "scalr_repl"
-STAT_USER                               = "scalr_stat"
-PMA_USER                                = "pma"
-
-BACKUP_CHUNK_SIZE               = 200*1024*1024
-STOP_SLAVE_TIMEOUT              = 180
-DEFAULT_DATADIR                 = "/var/lib/mysql"
-DEBIAN_CNF_PATH                 = "/etc/mysql/debian.cnf"
-
-DATA_DIR = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_DATA_DIR)
-'''
 
 PRIVILEGES = {
         __mysql__['repl_user']: ('Repl_slave_priv', ),
@@ -882,6 +848,7 @@ class MysqlHandler(DBMSRHandler):
                                             volume=__mysql__['volume'],
                                             snapshot=mysql2['snapshot_config'])
                 # XXX: ugly
+                old_vol = None
                 if __mysql__['volume'].type == 'eph':
                     self.mysql.service.stop('Swapping storages to reinitialize slave')
 
@@ -889,12 +856,22 @@ class MysqlHandler(DBMSRHandler):
                                     restore.snapshot['id'], restore.log_file, restore.log_pos)
                     new_vol = restore.run()
                 else:
+                    if __node__['platform'] == 'idcf':
+                        self.mysql.service.stop('Detaching old Slave volume')
+                        old_vol = dict(__mysql__['volume'])
+                        old_vol = storage2.volume(old_vol)
+                        old_vol.umount()
+
                     restore.run()
 
                 log_file = restore.log_file
                 log_pos = restore.log_pos
 
                 self.mysql.service.start()
+
+                if __node__['platform'] == 'idcf' and old_vol:
+                    LOG.info('Destroying old Slave volume')
+                    old_vol.destroy(remove_disks=True)
             else:
                 LOG.debug("Stopping slave i/o thread")
                 self.root_client.stop_slave_io_thread()

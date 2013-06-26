@@ -305,8 +305,8 @@ __node__ = {
         'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
 }
 
-for behavior in ('mysql', 'mysql2', 'percona'):
-    section = 'mysql2' if behavior == 'percona' else behavior
+for behavior in ('mysql', 'mysql2', 'percona', 'mariadb'):
+    section = 'mysql2' if behavior in ('percona', 'mariadb') else behavior
     __node__[behavior] = Compound({
             'volume,volume_config': 
                             Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
@@ -353,11 +353,6 @@ __node__['nginx'] = Compound({
     'binary_path,app_include_path,https_include_path,app_port,upstream_app_role':
         Ini('%s/%s.ini' % (public_dir, 'www'), 'www')
 })
-
-
-__node__['cloudfoundry'] = Compound({
-        'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'cloudfoundry'), 'scalarizr.storage2.volume')
-        })
 
 __node__['ec2'] = Compound({
         't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
