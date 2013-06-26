@@ -298,24 +298,24 @@ def _init_platform():
     logger = logging.getLogger(__name__)
     cnf = bus.cnf; ini = cnf.rawini
     
-	platform_name = ini.get('general', 'platform')
+    platform_name = ini.get('general', 'platform')
 
-	if linux.os['name'] == 'RedHat' and platform_name == 'ec2':
-		# Enable RedHat subscription 
-		logger.debug('Enable RedHat subscription')
-		urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
+    if linux.os['name'] == 'RedHat' and platform_name == 'ec2':
+        # Enable RedHat subscription 
+        logger.debug('Enable RedHat subscription')
+        urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
 
-	if cnf.state != ScalarizrState.RUNNING:
-		try:
-			pkgmgr.updatedb()
-		except:
-			logger.warn('Failed to update package manager database: %s', 
-					sys.exc_info()[1], exc_info=sys.exc_info())
+    if cnf.state != ScalarizrState.RUNNING:
+        try:
+            pkgmgr.updatedb()
+        except:
+            logger.warn('Failed to update package manager database: %s', 
+                    sys.exc_info()[1], exc_info=sys.exc_info())
 
     # Initialize platform
     logger.debug("Initialize platform")
-	if platform_name:
-		bus.platform = PlatformFactory().new_platform(platform_name)
+    if platform_name:
+        bus.platform = PlatformFactory().new_platform(platform_name)
     else:
         raise ScalarizrError("Platform not defined")
 
@@ -376,11 +376,11 @@ def _init_services():
         api_port = 8010
         try:
             sock.connect(('0.0.0.0', api_port))
-			api_port = 8009
+            api_port = 8009
             sock.close()
         except socket.error:
             pass
-		STATE['global.api_port'] = api_port
+        STATE['global.api_port'] = api_port
         api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
                                             cnf.key_path(cnf.DEFAULT_KEY))
         bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app)
