@@ -453,7 +453,8 @@ class MySQLDumpBackup(backup.Backup):
         if self.file_per_database:
             for db_name in self._databases:
                 self._current_db = db_name
-                params = __mysql__['mysqldump_options'].split() + [db_name]
+                params = __mysql__['mysqldump_options'].split()
+                params.extend(['--username', __mysql__['root_user'], '--password', __mysql__, db_name])
                 _mysqldump.args(*params)
                 with self._popen_creation_lock:
                     if self._killed:
