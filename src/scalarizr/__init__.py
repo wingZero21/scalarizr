@@ -8,7 +8,7 @@ if sys.version_info < (2, 6):
 
 
 # Core
-from scalarizr import config, rpc
+from scalarizr import config, rpc, linux
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
 from scalarizr.handlers import MessageListener
@@ -19,6 +19,7 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
 from scalarizr.api.binding import jsonrpc_http
 from scalarizr.storage.util.loop import listloop
+
 from scalarizr.linux import pkgmgr
 
 # Utils
@@ -37,10 +38,12 @@ import threading, socket, signal
 from ConfigParser import ConfigParser
 from optparse import OptionParser, OptionGroup
 from urlparse import urlparse, urlunparse
+import urllib
 import pprint
 import select
 import wsgiref.simple_server
 from scalarizr.util import sqlite_server, wait_until
+
 
 class ScalarizrError(BaseException):
 	pass
@@ -299,6 +302,13 @@ def _init_platform():
 	logger = logging.getLogger(__name__)
 	cnf = bus.cnf; ini = cnf.rawini
 	
+	platform_name = ini.get('general', 'platform')
+
+	if linux.os['name'] == 'RedHat' and platform_name == 'ec2':
+		# Enable RedHat subscription 
+		logger.debug('Enable RedHat subscription')
+		urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
+
 	if cnf.state != ScalarizrState.RUNNING:
 		try:
 			pkgmgr.updatedb()
@@ -308,11 +318,11 @@ def _init_platform():
 
 	# Initialize platform
 	logger.debug("Initialize platform")
-	name = ini.get('general', 'platform')
-	if name:
-		bus.platform = PlatformFactory().new_platform(name)
+	if platform_name:
+		bus.platform = PlatformFactory().new_platform(platform_name)
 	else:
 		raise ScalarizrError("Platform not defined")
+
 
 
 def _init_services():
