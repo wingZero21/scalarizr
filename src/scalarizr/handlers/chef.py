@@ -80,6 +80,7 @@ class ChefHandler(Handler):
             if not self._chef_data.get('node_name'):
                 self._chef_data['node_name'] = self.get_node_name()
             self._with_json_attributes = self._chef_data.get('json_attributes')
+            self._daemonize = self._chef_data.get('daemonize')
 
 
     def on_before_host_up(self, msg):
@@ -118,34 +119,39 @@ class ChefHandler(Handler):
                             os.remove(self._validator_key_path)
                             if self._with_json_attributes:
                                 os.remove(self._json_attributes_path)
+                    try:
+                        with op.step(self._step_execute_run_list):
+                            LOG.info('Executing run list')
 
-                    with op.step(self._step_execute_run_list):
-                        LOG.info('Executing run list')
+                            LOG.debug('Initializing Chef API client')
+                            node_name = self._chef_data['node_name'].encode('ascii')
+                            chef = ChefAPI(self._chef_data['server_url'], self._client_key_path, node_name)
 
-                        LOG.debug('Initializing Chef API client')
-                        node_name = self._chef_data['node_name'].encode('ascii')
-                        chef = ChefAPI(self._chef_data['server_url'], self._client_key_path, node_name)
+                            LOG.debug('Loading node')
+                            node = chef['/nodes/%s' % node_name]
 
-                        LOG.debug('Loading node')
-                        node = chef['/nodes/%s' % node_name]
+                            LOG.debug('Updating run_list')
+                            node['run_list'] = [u'role[%s]' % self._chef_data['role']]
+                            chef.api_request('PUT', '/nodes/%s' % node_name, data=node)
 
-                        LOG.debug('Updating run_list')
-                        node['run_list'] = [u'role[%s]' % self._chef_data['role']]
-                        chef.api_request('PUT', '/nodes/%s' % node_name, data=node)
+                            LOG.debug('Applying run_list')
+                            self.run_chef_client()
 
-                        LOG.debug('Applying run_list')
-                        self.run_chef_client()
-
-                        msg.chef = self._chef_data
-
+                            msg.chef = self._chef_data
+                    finally:
+                        if self._daemonize:
+                            with op.step('Running chef-client in daemonized mode'):
+                                self.run_chef_client(daemonize=True)
                 finally:
                     self._chef_data = None
 
 
-    def run_chef_client(self, first_run=False):
+    def run_chef_client(self, first_run=False, daemonize=False):
         cmd = [self._chef_client_bin]
         if first_run and self._with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
+        if daemonize:
+            cmd += ['--daemonize']
         environ={
             'SCALR_INSTANCE_INDEX': __node__['server_index'],
             'SCALR_FARM_ID': __node__['farm_id'],
