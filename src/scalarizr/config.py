@@ -272,6 +272,15 @@ class ScalarizrOptions(Configurator.Container):
         private = True
         required = True
 
+    class messaging_format(Configurator.Option):
+        '''
+        Message format: xml | json
+        '''
+        name = 'messaging_p2p/message_format'
+        default = 'xml'
+        private = True
+        required = True
+
     class crypto_key(Configurator.Option):
         '''
         Default crypto key

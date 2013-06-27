@@ -745,9 +745,7 @@ def main():
 			try:
 				sys.argv[sys.argv.index('region=')] += region
 			except ValueError:
-				sys.argv += ['-o', 'region=' + region]
-		if '--import' in sys.argv:
-			sys.argv += ['-o', 'messaging_p2p.message_format=xml']		
+				sys.argv += ['-o', 'region=' + region]		
 		
 		optparser.parse_args()
 
