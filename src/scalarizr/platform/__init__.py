@@ -11,14 +11,16 @@ import socket
 import urllib2
 import logging
 import sys
-import socket
 import struct
 import array
-import fcntl
+
 
 import ConfigParser
 
 from scalarizr.bus import bus
+from scalarizr.linux import os as os_dist
+if os_dist['family'] != 'Windows':
+    import fcntl
 
 
 class PlatformError(BaseException):
