@@ -96,5 +96,10 @@ class ApacheVirtualHostTest(unittest.TestCase):
         dirs = self.ssl_vhost._get_document_root_paths()
         print dirs
 
+
+    def test_ensure_vhost(self):
+        self.vhost.ensure()
+        self.assertTrue(os.path.exists(self.vhost.vhost_path))
+
 if __name__ == '__main__':
     unittest.main()
