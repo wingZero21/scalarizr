@@ -745,7 +745,9 @@ def main():
 			try:
 				sys.argv[sys.argv.index('region=')] += region
 			except ValueError:
-				sys.argv += ['-o', 'region=' + region]		
+				sys.argv += ['-o', 'region=' + region]
+		if '--import' in sys.argv:
+			sys.argv += ['-o', 'messaging_p2p.message_format=xml']		
 		
 		optparser.parse_args()
 
@@ -800,6 +802,7 @@ def main():
 			print "Don't terminate Scalarizr until Scalr will create the new role"
 			cnf.state = ScalarizrState.IMPORTING
 			# Load Command-line configuration options and auto-configure Scalarizr
+
 			values = CmdLineIni.to_kvals(optparser.values.cnf)
 			if not values.get('server_id'):
 				values['server_id'] = str(uuid.uuid4())
