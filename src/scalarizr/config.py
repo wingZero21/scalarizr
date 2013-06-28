@@ -279,7 +279,7 @@ class ScalarizrOptions(Configurator.Container):
         name = 'messaging_p2p/message_format'
         default = 'xml'
         private = True
-        required = True
+        required = False
 
     class crypto_key(Configurator.Option):
         '''
