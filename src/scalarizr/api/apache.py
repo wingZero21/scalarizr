@@ -482,6 +482,19 @@ class HttpdConf(BaseConfig):
         self._cleanup(True)
 
 
+    def get_list(self, option):
+        self._init_configuration()
+        try:
+            value = self.data.get_list(option)
+        except NoPathError:
+            try:
+                value = getattr(self, option+'_default')
+            except AttributeError:
+                value = list()
+        self._cleanup(False)
+        return value
+
+
     def add_name_virtual_host(self, hostname='*', port=80):
         self.set('NameVirtualHost', '%s:%s' % (hostname, port))
 
