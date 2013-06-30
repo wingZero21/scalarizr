@@ -26,13 +26,11 @@ def get_handlers ():
 
 class ApacheHandler(ServiceCtlHandler):
 
-    _logger = None
     _queryenv = None
 
 
     def __init__(self):
         self.webserver = apache.ApacheWebServer()
-        self._logger = logging.getLogger(__name__)
         bus.on(init=self.on_init, reload=self.on_reload)
         bus.define_events('apache_rpaf_reload')
         self.on_reload()

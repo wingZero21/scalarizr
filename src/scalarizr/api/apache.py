@@ -65,7 +65,7 @@ class ApacheWebServer(object):
             os.makedirs(self.vhosts_dir)
 
         inc_mask = VHOSTS_PATH + '/*' + VHOST_EXTENSION
-        if not inc_mask in self._apache_conf.list_includes:
+        if not inc_mask in self._apache_conf.includes:
             self._apache_conf.add_include(inc_mask)
 
 
