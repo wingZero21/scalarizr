@@ -91,7 +91,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 
     def on_VhostReconfigure(self, message):
-        pass
+        self.update_vhosts()
 
     def update_vhosts(self):
         received_vhosts = self._queryenv.list_virtual_hosts()
