@@ -64,6 +64,12 @@ class ApacheWebServer(object):
         if not os.path.exists(self.vhosts_dir):
             os.makedirs(self.vhosts_dir)
 
+        inc_mask = VHOSTS_PATH + '/*' + VHOST_EXTENSION
+        if not inc_mask in self._apache_conf.list_includes:
+            self._apache_conf.add_include(inc_mask)
+
+
+        '''
         self.check_mod_ssl()
 
         if disttool.is_debian_based():
@@ -71,11 +77,12 @@ class ApacheWebServer(object):
         elif not self._apache.conf.list_name_virtual_hosts():
             self._apache_conf.add_name_virtual_host('*', 90)
 
-        inc_mask = VHOSTS_PATH + '/*' + VHOST_EXTENSION
-        if not inc_mask in self._apache_conf.list_includes:
-            self._apache_conf.add_include(inc_mask)
+
 
         create_logrotate_conf(LOGROTATE_CONF_PATH)
+        '''
+
+        self.service.start()
 
 
     def clean_vhosts_dir(self):

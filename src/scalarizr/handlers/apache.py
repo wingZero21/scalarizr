@@ -12,8 +12,10 @@ from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.handlers import ServiceCtlHandler
+from scalarizr.api import apache
 
 
+LOG = logging.getLogger(__name__)
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.APP
 
 
@@ -29,6 +31,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 
     def __init__(self):
+        self.webserver = apache.ApacheWebServer()
         self._logger = logging.getLogger(__name__)
         bus.on(init=self.on_init, reload=self.on_reload)
         bus.define_events('apache_rpaf_reload')
@@ -41,6 +44,7 @@ class ApacheHandler(ServiceCtlHandler):
                 before_host_up = self.on_before_host_up,
                 host_init_response = self.on_host_init_response
         )
+        self.webserver.init_service()
 
 
     def on_reload(self):
@@ -77,7 +81,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 
     def on_before_host_up(self, message):
-        pass
+        self.update_vhosts()
 
 
     def on_HostUp(self, message):
@@ -90,6 +94,11 @@ class ApacheHandler(ServiceCtlHandler):
 
     def on_VhostReconfigure(self, message):
         pass
+
+    def update_vhosts(self):
+        received_vhosts = self._queryenv.list_virtual_hosts()
+        LOG.debug('Received list of virtual hosts: %s' % str(received_vhosts))
+        LOG.debug('List of currently served virtual hosts: %s' % str(self.webserver.list_served_vhosts()))
 
 
     on_BeforeHostTerminate = on_HostDown
