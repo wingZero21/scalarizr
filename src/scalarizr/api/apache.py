@@ -467,7 +467,7 @@ class ApacheVirtualHost(object):
 class HttpdConf(BaseConfig):
 
     config_name = os.path.basename(APACHE_CONF_PATH)
-    config_type = 'Apache'
+    config_type = 'apache'
 
 
     def set(self, option, value, append=False):
