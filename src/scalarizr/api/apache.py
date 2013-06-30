@@ -65,8 +65,8 @@ class ApacheWebServer(object):
             os.makedirs(self.vhosts_dir)
 
         inc_mask = VHOSTS_PATH + '/*' + VHOST_EXTENSION
-        if not inc_mask in self._apache_conf.includes:
-            self._apache_conf.includes += inc_mask
+        if not inc_mask in self._apache_conf.list_includes():
+            self._apache_conf.add_include(inc_mask)
 
 
         '''
@@ -503,11 +503,11 @@ class HttpdConf(BaseConfig):
         return self.get('NameVirtualHost')
 
 
-    def _list_includes(self):
+    def list_includes(self):
         return self.get_list('Include')
 
 
-    def _add_include(self, path):
+    def add_include(self, path):
         self.set('Include', path)
 
 
@@ -528,7 +528,6 @@ class HttpdConf(BaseConfig):
         pass
 
 
-    includes = property(_list_includes, _add_include)
     modules = property(_list_modules, _add_module)
     server_root = property(_get_server_root, _set_server_root)
 
