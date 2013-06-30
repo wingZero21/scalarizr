@@ -66,7 +66,7 @@ class ApacheWebServer(object):
 
         inc_mask = VHOSTS_PATH + '/*' + VHOST_EXTENSION
         if not inc_mask in self._apache_conf.includes:
-            self._apache_conf.add_include(inc_mask)
+            self._apache_conf.includes += inc_mask
 
 
         '''
