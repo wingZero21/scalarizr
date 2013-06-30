@@ -508,7 +508,7 @@ class HttpdConf(BaseConfig):
 
 
     def add_include(self, path):
-        self.set('Include', path)
+        self.set('Include', path, append=True)
 
 
     def _set_server_root(self, path):
