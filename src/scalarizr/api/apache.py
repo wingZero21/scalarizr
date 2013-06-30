@@ -672,6 +672,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
                 pid_file = pid_file
         )
 
+
     def reload(self):
         if self.running:
             self.configtest()
@@ -680,6 +681,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
                 raise initdv2.InitdError('Cannot reload apache: %s' % err)
         else:
             raise InitdError('Service "%s" is not running' % self.name, InitdError.NOT_RUNNING)
+
 
     def status(self):
         status = initdv2.ParametrizedInitScript.status(self)
@@ -697,6 +699,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
             return initdv2.Status.NOT_RUNNING
         return status
 
+
     def configtest(self, path=None):
         args = self._apachectl +' configtest'
         if path:
@@ -704,6 +707,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         out = system2(args, shell=True)[1]
         if 'error' in out.lower():
             raise initdv2.InitdError("Configuration isn't valid: %s" % out)
+
 
     def start(self):
         ret = initdv2.ParametrizedInitScript.start(self)
@@ -715,7 +719,16 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         time.sleep(0.5)
         return True
 
-    def restart(self):
+
+    def stop(self, reason=None):
+        if reason:
+            LOG.debug('Stopping apache: %s' % str(reason))
+        initdv2.ParametrizedInitScript.stop(self)
+
+
+    def restart(self,reason=None):
+        if reason:
+            LOG.debug('Restarting apache: %s' % str(reason))
         self.configtest()
         ret = initdv2.ParametrizedInitScript.restart(self)
         if self.pid_file:
@@ -727,21 +740,17 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         time.sleep(0.5)
         return ret
 
+
     def _main_process_started(self):
         res = False
         bin = '/usr/sbin/apache2' if disttool.is_debian_based() else '/usr/sbin/httpd'
         group = 'www-data' if disttool.is_debian_based() else 'apache'
         try:
-            '''
-            _first_ scalarizr start returns error:
-            (ps (code: 1) <out>:  <err>:  <args>: ('ps', '-G', 'www-data', '-o', 'command', '--no-headers')
-            '''
             out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'), raise_exc=False)[0]
             res = True if len([p for p in out.split('\n') if bin in p]) else False
         except:
             pass
         return res
-
 
 
 initdv2.explore('apache', ApacheInitScript)
