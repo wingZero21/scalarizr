@@ -41,8 +41,10 @@ PID_FILE = '/var/run/chef-client.pid'
 CHEF_CLIENT_BIN = which('chef-client')
 
 class ChefInitScript(initdv2.ParametrizedInitScript):
-    pid_file = PID_FILE
     _default_init_script = '/etc/init.d/chef-client'
+
+    def __init__(self):
+        super(ChefInitScript, self).__init__('chef', None, PID_FILE)
 
     # Uses only pid file, no init script involved
     def _start_stop_reload(self, action):
