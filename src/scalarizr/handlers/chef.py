@@ -10,10 +10,11 @@ from __future__ import with_statement
 import logging
 import os
 import sys
+import signal
 
 from scalarizr.node import __node__
 from scalarizr.bus import bus
-from scalarizr.util import system2
+from scalarizr.util import system2, initdv2, PopenError
 from scalarizr.util.software import which
 from scalarizr.handlers import Handler
 
@@ -36,6 +37,49 @@ def get_handlers():
     return (ChefHandler(), )
 
 
+PID_FILE = '/var/run/chef-client.pid'
+CHEF_CLIENT_BIN = which('chef-client')
+
+class ChefInitScript(initdv2.ParametrizedInitScript):
+    pid_file = PID_FILE
+    _default_init_script = '/etc/init.d/chef-client'
+
+    # Uses only pid file, no init script involved
+    def _start_stop_reload(self, action):
+        if action == "start":
+            if not self.running:
+                # Stop default chef-client init script
+                if os.path.exists(self._default_init_script):
+                    system2((self._default_init_script, "stop"), close_fds=True, preexec_fn=os.setsid, raise_exc=False)
+
+                cmd = (CHEF_CLIENT_BIN, '--daemonize', '--logfile', '/var/log/chef-client.log', '--pid', PID_FILE)
+                try:
+                    out, err, rcode = system2(cmd, close_fds=True, preexec_fn=os.setsid)
+                except PopenError, e:
+                    raise initdv2.InitdError('Failed to start chef: %s' % e)
+
+                if rcode:
+                    raise initdv2.InitdError('Chef failed to start daemonized. Return code: %s\nOut:%s\nErr:%s' %
+                                             (rcode, out, err))
+
+        elif action == "stop":
+            if self.running:
+                with open(self.pid_file) as f:
+                    pid = int(f.read().strip())
+                try:
+                    os.getpgid(pid)
+                except OSError:
+                    os.remove(self.pid_file)
+                else:
+                    os.kill(pid, signal.SIGTERM)
+
+    def restart(self):
+        self._start_stop_reload("stop")
+        self._start_stop_reload("start")
+
+initdv2.explore('chef', ChefInitScript)
+
+
 class ChefHandler(Handler):
     def __init__(self):
         bus.on(init=self.on_init)
@@ -49,7 +93,6 @@ class ChefHandler(Handler):
         )
 
     def on_reload(self):
-        self._chef_client_bin = which('chef-client')
         self._chef_data = None
         self._client_conf_path = '/etc/chef/client.rb'
         self._validator_key_path = '/etc/chef/validation.pem'
@@ -58,6 +101,7 @@ class ChefHandler(Handler):
         self._with_json_attributes = False
         self._platform = bus.platform
         self._global_variables = {}
+        self._init_script = initdv2.lookup('chef')
 
 
     def get_initialization_phases(self, hir_message):
@@ -147,11 +191,11 @@ class ChefHandler(Handler):
 
 
     def run_chef_client(self, first_run=False, daemonize=False):
-        cmd = [self._chef_client_bin]
+        cmd = [CHEF_CLIENT_BIN]
         if first_run and self._with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
-        if daemonize:
-            cmd += ['--daemonize']
+        elif daemonize:
+            self._init_script.start()
         environ={
             'SCALR_INSTANCE_INDEX': __node__['server_index'],
             'SCALR_FARM_ID': __node__['farm_id'],
