@@ -430,7 +430,7 @@ class Configuration:
         if el != None:
             self._set(el, value)
         elif force:
-            self.add(path, value)
+            self.add(path, value, force=True)
         else:
             raise NoPathError("Path %s doesn't exist" % path)
 
