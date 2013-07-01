@@ -80,7 +80,10 @@ def losetup_all(flip=False):
  		'/dev/loop2': '/mnt/loop2'}
 	'''
 	ret = list()
-	out = losetup(all=True)[0].strip()
+	if os_info['family'] == 'RedHat' and os_info['version'] < (6, 0):
+		out = losetup('-a')[0].strip()
+	else:
+		out = losetup(all=True)[0].strip()
 	for line in out.splitlines():
 		cols = line.split()
 		device = cols[0][:-1]
