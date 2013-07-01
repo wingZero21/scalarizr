@@ -193,11 +193,13 @@ class ChefHandler(Handler):
 
 
     def run_chef_client(self, first_run=False, daemonize=False):
+        if daemonize:
+            self._init_script.start()
+            return
+
         cmd = [CHEF_CLIENT_BIN]
         if first_run and self._with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
-        elif daemonize:
-            self._init_script.start()
         environ={
             'SCALR_INSTANCE_INDEX': __node__['server_index'],
             'SCALR_FARM_ID': __node__['farm_id'],
