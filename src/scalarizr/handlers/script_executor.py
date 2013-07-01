@@ -237,7 +237,7 @@ class ScriptExecutor(Handler):
 
             queryenv_scripts = self._queryenv.list_scripts(event_name, event_id,
                                                                     target_ip=target_ip, local_ip=local_ip)
-            scripts = [Script(name=s.name, body=s.body, asynchronous=s.asynchronous,
+            scripts = [Script(name=s.name, body=s.body, path=s.path, asynchronous=s.asynchronous,
                                     exec_timeout=s.exec_timeout, event_name=event_name, role_name=role_name) \
                                     for s in queryenv_scripts]
 
@@ -252,6 +252,7 @@ class ScriptExecutor(Handler):
 class Script(object):
     name = None
     body = None
+    path = None
     asynchronous = None
     event_name = None
     role_name = None
@@ -286,9 +287,15 @@ class Script(object):
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
 
-        if self.name and self.body:
+        if self.name and (self.body or self.path):
             self.id = str(time.time())
-            interpreter = read_shebang(script=self.body)
+            if self.path:
+                if not os.path.exists(self.path):
+                    raise Exception('Script %s does not exist (path: %s)' % (self.name, self.path))
+                with open(self.path) as f:
+                    body = f.read()
+
+            interpreter = read_shebang(script=self.body or body)
             if not interpreter:
                 raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
                                                 "First line of the script should have the form of a shebang "
@@ -303,7 +310,7 @@ class Script(object):
                 self.interpreter = split_strip(self.interpreter)[0]
 
         self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
-        self.exec_path = os.path.join(exec_dir_prefix + self.id, self.name)
+        self.exec_path = self.path or os.path.join(exec_dir_prefix + self.id, self.name)
         if self.exec_timeout:
             self.exec_timeout = int(self.exec_timeout)
         args = (self.name, self.event_name, self.role_name, self.id)
@@ -318,14 +325,15 @@ class Script(object):
             raise HandlerError("Can't execute script '%s' cause "
                                             "interpreter '%s' not found" % (self.name, self.interpreter))
 
-        # Write script to disk, prepare execution
-        exec_dir = os.path.dirname(self.exec_path)
-        if not os.path.exists(exec_dir):
-            os.makedirs(exec_dir)
+        if not self.path:
+            # Write script to disk, prepare execution
+            exec_dir = os.path.dirname(self.exec_path)
+            if not os.path.exists(exec_dir):
+                os.makedirs(exec_dir)
 
-        with open(self.exec_path, 'w') as fp:
-            fp.write(self.body.encode('utf-8'))
-        os.chmod(self.exec_path, stat.S_IREAD | stat.S_IEXEC)
+            with open(self.exec_path, 'w') as fp:
+                fp.write(self.body.encode('utf-8'))
+            os.chmod(self.exec_path, stat.S_IREAD | stat.S_IEXEC)
 
         stdout = open(self.stdout_path, 'w+')
         stderr = open(self.stderr_path, 'w+')
@@ -399,9 +407,10 @@ class Script(object):
                 raise
 
         finally:
-            f = os.path.dirname(self.exec_path)
-            if os.path.exists(f):
-                shutil.rmtree(f)
+            if not self.path:
+                f = os.path.dirname(self.exec_path)
+                if os.path.exists(f):
+                    shutil.rmtree(f)
 
     def state(self):
         return {

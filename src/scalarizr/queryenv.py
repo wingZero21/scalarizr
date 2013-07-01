@@ -284,7 +284,8 @@ class QueryEnvService(object):
         for raw_script in scripts:
             asynchronous = bool(int(raw_script["asynchronous"]))
             exec_timeout = int(raw_script["exec-timeout"])
-            script = Script(asynchronous, exec_timeout, raw_script["name"], raw_script["body"])
+            script = Script(asynchronous, exec_timeout, raw_script["name"], raw_script.get("body"),
+                                             raw_script.get("path"))
             ret.append(script)
         return ret
 
@@ -501,11 +502,12 @@ class Script(object):
     name = None
     body = None
 
-    def __init__(self, asynchronous=False, exec_timeout=None, name=None, body=None):
+    def __init__(self, asynchronous=False, exec_timeout=None, name=None, body=None, path=None):
         self.asynchronous = asynchronous
         self.exec_timeout = exec_timeout
         self.name = name
         self.body = body
+        self.path = path
 
     def __repr__(self):
         return "asynchronous = " + str(self.asynchronous) \
