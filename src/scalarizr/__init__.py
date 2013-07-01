@@ -371,7 +371,7 @@ def _init_services():
 	logger.debug('Initialize message handlers')
 	consumer = msg_service.get_consumer()
 	consumer.listeners.append(MessageListener())
-	
+
 	logger.debug('Schedule SNMP process')
 	globals()['_snmp_scheduled_start_time'] = time.time()		
 
@@ -521,6 +521,14 @@ def init_script():
 
 def _start_snmp_server():
 	logger = logging.getLogger(__name__)
+
+	remove_snmp_since = (4, 5, 0)
+	if bus.scalr_version >= remove_snmp_since:
+		logger.debug('Skip SNMP process starting cause condition matched: Scalr version %s >= %s', 
+			bus.scalr_version, remove_snmp_since)
+		globals()['_snmp_pid'] = -1
+		return
+
 	# Start SNMP server in a separate process
 	pid = os.fork()
 	if pid == 0:
