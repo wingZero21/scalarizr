@@ -5,12 +5,10 @@ Created on Oct 24, 2011
 @author: marat
 '''
 
-from __future__ import with_statement
-
-import logging
 import os
 import sys
 import signal
+import logging
 
 from scalarizr.node import __node__
 from scalarizr.bus import bus
@@ -46,6 +44,12 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
     def __init__(self):
         super(ChefInitScript, self).__init__('chef', None, PID_FILE)
 
+
+    def start(self, env=None):
+        self._env = env or os.environ
+        super(ChefInitScript, self).start()
+
+
     # Uses only pid file, no init script involved
     def _start_stop_reload(self, action):
         if action == "start":
@@ -56,7 +60,7 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
 
                 cmd = (CHEF_CLIENT_BIN, '--daemonize', '--logfile', '/var/log/chef-client.log', '--pid', PID_FILE)
                 try:
-                    out, err, rcode = system2(cmd, close_fds=True, preexec_fn=os.setsid)
+                    out, err, rcode = system2(cmd, close_fds=True, preexec_fn=os.setsid, env=self._env)
                 except PopenError, e:
                     raise initdv2.InitdError('Failed to start chef: %s' % e)
 
@@ -194,12 +198,21 @@ class ChefHandler(Handler):
 
     def run_chef_client(self, first_run=False, daemonize=False):
         if daemonize:
-            self._init_script.start()
+            self._init_script.start(env=self._environ_variables)
             return
 
         cmd = [CHEF_CLIENT_BIN]
         if first_run and self._with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
+        system2(cmd,
+            close_fds=True, 
+            log_level=logging.INFO, 
+            preexec_fn=os.setsid, 
+            env=self._environ_variables
+        )
+
+    @property
+    def _environ_variables(self):
         environ={
             'SCALR_INSTANCE_INDEX': __node__['server_index'],
             'SCALR_FARM_ID': __node__['farm_id'],
@@ -210,12 +223,7 @@ class ChefHandler(Handler):
         }
         environ.update(os.environ)
         environ.update(self._global_variables)
-        system2(cmd, 
-            close_fds=True, 
-            log_level=logging.INFO, 
-            preexec_fn=os.setsid, 
-            env=environ
-        )
+        return environ
 
 
     def get_node_name(self):
