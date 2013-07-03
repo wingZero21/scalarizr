@@ -7,6 +7,8 @@ Created on Oct 24, 2011
 
 import os
 import sys
+import time
+import json
 import signal
 import logging
 
@@ -103,7 +105,7 @@ class ChefHandler(Handler):
         self._client_conf_path = '/etc/chef/client.rb'
         self._validator_key_path = '/etc/chef/validation.pem'
         self._client_key_path = '/etc/chef/client.pem'
-        self._json_attributes_path = '/etc/chef/first-run.json'
+        self._json_attributes_path = '/etc/chef/attributes.json'
         self._with_json_attributes = False
         self._platform = bus.platform
         self._global_variables = {}
@@ -127,10 +129,15 @@ class ChefHandler(Handler):
 
         if 'chef' in message.body:
             self._chef_data = message.chef.copy()
-            if not self._chef_data.get('node_name'):
-                self._chef_data['node_name'] = self.get_node_name()
-            self._with_json_attributes = self._chef_data.get('json_attributes')
+            self._chef_data['node_name'] = self.get_node_name()
             self._daemonize = self._chef_data.get('daemonize')
+
+            self._with_json_attributes = self._chef_data.get('json_attributes')
+            self._with_json_attributes = json.loads(self._with_json_attributes) if self._with_json_attributes else {}
+
+            self._run_list = self._chef_data.get('run_list')
+            if self._run_list:
+                self._with_json_attributes['run_list'] = self._run_list
 
 
     def on_before_host_up(self, msg):
@@ -157,38 +164,23 @@ class ChefHandler(Handler):
                         with open(self._validator_key_path, 'w+') as fp:
                             fp.write(self._chef_data['validator_key'])
 
-                        if self._with_json_attributes:
-                            with open(self._json_attributes_path, 'w+') as fp:
-                                fp.write(self._chef_data['json_attributes'])
-
                         # Register node
                         LOG.info('Registering Chef node')
                         try:
-                            self.run_chef_client(first_run=True)
+                            self.run_chef_client()
                         finally:
                             os.remove(self._validator_key_path)
-                            if self._with_json_attributes:
-                                os.remove(self._json_attributes_path)
+
                     try:
                         with op.step(self._step_execute_run_list):
-                            LOG.info('Executing run list')
-
-                            LOG.debug('Initializing Chef API client')
-                            node_name = self._chef_data['node_name'].encode('ascii')
-                            chef = ChefAPI(self._chef_data['server_url'], self._client_key_path, node_name)
-
-                            LOG.debug('Loading node')
-                            node = chef['/nodes/%s' % node_name]
-
-                            LOG.debug('Updating run_list')
-                            node['run_list'] = [u'role[%s]' % self._chef_data['role']]
-                            chef.api_request('PUT', '/nodes/%s' % node_name, data=node)
+                            with open(self._json_attributes_path, 'w+') as fp:
+                                fp.write(self._chef_data['json_attributes'])
 
                             LOG.debug('Applying run_list')
-                            self.run_chef_client()
-
+                            self.run_chef_client(with_json_attributes=True)
                             msg.chef = self._chef_data
                     finally:
+                        os.remove(self._json_attributes_path)
                         if self._daemonize:
                             with op.step('Running chef-client in daemonized mode'):
                                 self.run_chef_client(daemonize=True)
@@ -196,13 +188,13 @@ class ChefHandler(Handler):
                     self._chef_data = None
 
 
-    def run_chef_client(self, first_run=False, daemonize=False):
+    def run_chef_client(self, with_json_attributes=False, daemonize=False):
         if daemonize:
             self._init_script.start(env=self._environ_variables)
             return
 
         cmd = [CHEF_CLIENT_BIN]
-        if first_run and self._with_json_attributes:
+        if with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
         system2(cmd,
             close_fds=True, 
@@ -227,4 +219,4 @@ class ChefHandler(Handler):
 
 
     def get_node_name(self):
-        return '%s-%s' % (self._platform.name, self._platform.get_public_ip())
+        return '%s-%s-%s' % (self._platform.name, self._platform.get_public_ip(), time.time())
