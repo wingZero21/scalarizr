@@ -334,9 +334,11 @@ class ApacheWebServer(object):
 
 class SSLCertificate(object):
 
+    id = None
 
-    def __init__(self, ssl_certificate_id):
-        pass
+    def __init__(self, ssl_certificate_id=None):
+        self.id = ssl_certificate_id
+
 
     def used_by(self):
         '''
@@ -345,16 +347,52 @@ class SSLCertificate(object):
         '''
         pass
 
+
     @property
     def is_orphaned(self):
         return [] == self.used_by()
 
 
     def ensure(self):
+        self._logger.debug("Retrieving ssl cert and private key from Scalr.")
+        cert_data = self._queryenv.get_https_certificate(self.id)
+
+
+        if not cert_data:
+            raise ApacheError('Unable to fetch SSL certificate')
+        for key_file in ['https.key', vhost.hostname + '.key']:
+            with open(os.path.join(cert_path, key_file), 'w') as fp:
+                fp.write(https_certificate[1])
+            os.chmod(cert_path + '/' + key_file, 0644)
+
+        for cert_file in ['https.crt', vhost.hostname + '.crt']:
+            with open(os.path.join(cert_path, cert_file), 'w') as fp:
+                fp.write(https_certificate[0])
+            os.chmod(cert_path + '/' + cert_file, 0644)
+
+        if https_certificate[2]:
+            for filename in ('https-ca.crt', vhost.hostname + '-ca.crt'):
+                with open(os.path.join(cert_path, filename), 'w') as fp:
+                    fp.write(https_certificate[2])
+                os.chmod(os.path.join(cert_path, filename), 0644)
+        #write cert
+        #join key and ca-cert
+        #write key
         pass
 
 
     def delete(self):
+        #remove cert and pk files
+        pass
+
+
+    @property
+    def cert_path(self):
+        pass
+
+
+    @property
+    def pk_path(self):
         pass
 
 
@@ -379,7 +417,7 @@ class ApacheVirtualHost(object):
         return cls._instances[(hostname,port)]
 
 
-    def __init__(self, hostname, port, body, cert=None):
+    def __init__(self, hostname, port, body=None, cert=None):
         self.webserver = ApacheWebServer()
         self.hostname = hostname
         self.body = body
@@ -388,7 +426,15 @@ class ApacheVirtualHost(object):
 
 
     @classmethod
-    def from_file(cls):
+    def from_file(cls, path):
+        '''
+        if path.endswith('000-default'):
+            pass
+        c = Configuration('apache')
+        c.read(path)
+        port = c.get('VirtualHost')
+        host = c.get('.//ServerName')
+        '''
         pass
 
 
@@ -414,7 +460,7 @@ class ApacheVirtualHost(object):
 
 
     def delete(self):
-        pass
+        os.remove(self.vhost_path)
 
 
     def is_deployed(self):

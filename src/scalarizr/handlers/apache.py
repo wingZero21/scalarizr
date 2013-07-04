@@ -6,6 +6,7 @@ Created on Dec 25, 2009
 @author: marat
 '''
 
+import os
 import logging
 
 from scalarizr.bus import bus
@@ -31,6 +32,7 @@ class ApacheHandler(ServiceCtlHandler):
 
     def __init__(self):
         self.webserver = apache.ApacheWebServer()
+        self.api = apache.ApacheAPI()
         bus.on(init=self.on_init, reload=self.on_reload)
         bus.define_events('apache_rpaf_reload')
         self.on_reload()
@@ -93,10 +95,38 @@ class ApacheHandler(ServiceCtlHandler):
     def on_VhostReconfigure(self, message):
         self.update_vhosts()
 
+
     def update_vhosts(self):
         received_vhosts = self._queryenv.list_virtual_hosts()
         LOG.debug('Received list of virtual hosts: %s' % str(received_vhosts))
         LOG.debug('List of currently served virtual hosts: %s' % str(self.webserver.list_served_vhosts()))
 
+        '''
+        if [vh.https for vh in received_vhosts if vh.https]:
+            pass
+
+        self._filter_vhosts_dir([self.get_vhost_filename(vh.hostname, vh.https) for vh in received_vhosts])
+        '''
+
+        for vhost_data in received_vhosts:
+            hostname = vhost_data.hostname
+            port = 443 if vhost_data.https else 80
+            body = vhost_data.raw.replace('/etc/aws/keys/ssl', self.webserver.cert_path)
+            if vhost_data.https:
+                #prepare SSL Cert
+                pass
+            vhost = apache.ApacheVirtualHost(hostname, port, body)
+            vhost.ensure()
+
+
+    def _filter_vhosts_dir(self, white_list):
+        pass
+
+
+    def get_vhost_filename(self, hostname, ssl=False):
+        end = apache.VHOST_EXTENSION if not ssl else '-ssl' + apache.VHOST_EXTENSION
+        return os.path.join(bus.etc_path, apache.VHOSTS_PATH, hostname + end)
+
 
     on_BeforeHostTerminate = on_HostDown
+
