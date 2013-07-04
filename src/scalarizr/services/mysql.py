@@ -23,7 +23,7 @@ import errno
 
 from pymysql import cursors
 
-from scalarizr import node, linux
+from scalarizr import node
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy, PresetProvider
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
@@ -730,6 +730,15 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
         return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
 
 
+    def _get_mysql_error(self, number_of_lines=2):
+        cmd = 'mysqld --print-defaults | tr " " "\n" | grep log_error'
+        out = system2(cmd, shell=True, raise_exc=False)[0]
+        log_error_path = out.split('=')[1] if out else '/var/log/mysql/error.log'
+        cmd = "grep 'ERROR' %s | tail -%s" % (log_error_path, number_of_lines)
+        out = system2(cmd, shell=True, raise_exc=False)[0]
+        return out
+
+
     def start(self):
         '''
         Commented, cause Dima said this code is useless
@@ -750,22 +759,15 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                 LOG.info("Starting mysql")
                 initdv2.ParametrizedInitScript.start(self)
                 LOG.debug("mysql started")
-            except:
+            except Exception as e:
                 if self._is_sgt_process_exists():
                     LOG.warning('MySQL service is running with skip-grant-tables mode.')
                 elif not self.running:
-                    raise
-
-
-        try:
-            LOG.info("Starting mysql")
-            initdv2.ParametrizedInitScript.start(self)
-            LOG.debug("mysql started")
-        except:
-            if self._is_sgt_process_exists():
-                LOG.warning('MySQL service is running with skip-grant-tables mode.')
-            elif not self.running:
-                raise
+                    error = self._get_mysql_error()
+                    if error:
+                        raise Exception('\n%s' % error)
+                    else:
+                        raise e
 
 
     def stop(self, reason=None):
