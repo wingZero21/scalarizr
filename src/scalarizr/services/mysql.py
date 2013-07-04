@@ -733,7 +733,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
     def _get_mysql_error(self, number_of_lines=2):
         cmd = 'mysqld --print-defaults | tr " " "\n" | grep log_error'
         out = system2(cmd, shell=True, raise_exc=False)[0]
-        log_error_path = out.split('=')[1] if out else '/var/log/mysql/error.log'
+        log_error_path = out.split('=')[1] if '=' in out else '/var/log/mysql/error.log'
         cmd = "grep 'ERROR' %s | tail -%s" % (log_error_path, number_of_lines)
         out = system2(cmd, shell=True, raise_exc=False)[0]
         return out
