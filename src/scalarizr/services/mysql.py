@@ -33,6 +33,7 @@ from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
 
+import scalarizr.services.mysql2 as mysql_svc2
 
 LOG = logging.getLogger(__name__)
 
@@ -730,13 +731,22 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
         return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
 
 
-    def _get_mysql_error(self, number_of_lines=2):
-        cmd = 'mysqld --print-defaults | tr " " "\n" | grep log_error'
-        out = system2(cmd, shell=True, raise_exc=False)[0]
-        log_error_path = out.split('=')[1] if '=' in out else '/var/log/mysql/error.log'
-        cmd = "grep 'ERROR' %s | tail -%s" % (log_error_path, number_of_lines)
-        out = system2(cmd, shell=True, raise_exc=False)[0]
-        return out
+    def _get_mysql_error(self):
+        out = []
+        my_defaults = mysql_svc2.my_print_defaults('mysqld')
+        cmd = "cat %s | tail -256" % (my_defaults.get('log_error', '/var/log/mysql/error.log'))
+        content = reversed(system2(cmd, shell=True, raise_exc=False)[0].split('\n'))
+        start = re.compile("^.*[ ]Fatal error:[ ].*$")
+        end = re.compile(r'^[0-9]{6}[ ][0-9]{2}:[0-9]{2}:[0-9]{2}[ ]\[ERROR\][ ]Aborting$')
+        for line in content:
+            if end.match(line):
+                out.append(line)
+                while not start.match(line):
+                    line = content.next()
+                    out.append(line)
+                break
+        return ''.join(reversed(out[0:10]))
+
 
 
     def start(self):
