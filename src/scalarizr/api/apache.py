@@ -487,7 +487,7 @@ class ApacheVirtualHost(object):
 
     def ensure_document_root(self):
         for log_dir in self._get_log_directories():
-            if not os.path.exists():
+            if not os.path.exists(log_dir):
                 os.makedirs(log_dir)
 
         for doc_root in self._get_document_root_paths():
