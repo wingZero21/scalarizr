@@ -751,7 +751,6 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
         return ''.join(reversed(out[0:10]))
 
 
-
     def start(self):
         '''
         Commented, cause Dima said this code is useless
