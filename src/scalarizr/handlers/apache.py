@@ -115,8 +115,9 @@ class ApacheHandler(ServiceCtlHandler):
             if vhost_data.https:
                 #prepare SSL Cert
                 pass
-            vhost = apache.ApacheVirtualHost(hostname, port, body)
-            vhost.ensure()
+            else:
+                vhost = apache.ApacheVirtualHost(hostname, port, body)
+                vhost.ensure()
 
 
     def _filter_vhosts_dir(self, white_list):

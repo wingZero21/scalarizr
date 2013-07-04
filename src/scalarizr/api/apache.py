@@ -357,7 +357,7 @@ class SSLCertificate(object):
         self._logger.debug("Retrieving ssl cert and private key from Scalr.")
         cert_data = self._queryenv.get_https_certificate(self.id)
 
-
+        '''
         if not cert_data:
             raise ApacheError('Unable to fetch SSL certificate')
         for key_file in ['https.key', vhost.hostname + '.key']:
@@ -375,6 +375,7 @@ class SSLCertificate(object):
                 with open(os.path.join(cert_path, filename), 'w') as fp:
                     fp.write(https_certificate[2])
                 os.chmod(os.path.join(cert_path, filename), 0644)
+        '''
         #write cert
         #join key and ca-cert
         #write key
