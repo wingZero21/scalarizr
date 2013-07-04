@@ -57,7 +57,6 @@ def get_truncated_log(logfile, maxsize=None):
 
 class ScriptExecutor(Handler):
     name = 'script_executor'
-    log_rotate_thread = None
     _data = None
 
 
@@ -120,8 +119,7 @@ class ScriptExecutor(Handler):
 
     def on_start(self):
         # Start log rotation
-        if self.log_rotate_thread:
-            self.log_rotate_thread.start()
+        self.log_rotate_thread.start()
 
         # Restore in-progress scripts
         LOG.debug('STATE[script_executor.in_progress]: %s', szrconfig.STATE['script_executor.in_progress'])
