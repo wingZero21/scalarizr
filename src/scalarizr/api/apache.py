@@ -474,9 +474,9 @@ class ApacheVirtualHost(object):
         error_logs = self._configuration.get_list('.//ErrorLog')
         custom_logs = self._configuration.get_list('.//CustomLog')
         if error_logs:
-            result.append(error_logs)
+            result += error_logs
         if custom_logs:
-            result.append(custom_logs)
+            result += custom_logs
         return result
 
 
