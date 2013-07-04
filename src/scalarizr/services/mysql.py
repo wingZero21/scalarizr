@@ -742,7 +742,10 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
             if end.match(line):
                 out.append(line)
                 while not start.match(line):
-                    line = content.next()
+                    try:
+                        line = content.next()
+                    except StopIteration:
+                        break
                     out.append(line)
                 break
         return ''.join(reversed(out[0:10]))
