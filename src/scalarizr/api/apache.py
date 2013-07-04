@@ -428,15 +428,12 @@ class ApacheVirtualHost(object):
 
     @classmethod
     def from_file(cls, path):
-        '''
-        if path.endswith('000-default'):
-            pass
         c = Configuration('apache')
         c.read(path)
+        hostname = c.get('.//ServerName')
         port = c.get('VirtualHost')
-        host = c.get('.//ServerName')
-        '''
-        pass
+        body = open(path).read()
+        return ApacheVirtualHost(hostname, port, body)
 
 
     @property
@@ -473,9 +470,14 @@ class ApacheVirtualHost(object):
 
 
     def _get_log_directories(self):
+        result = []
         error_logs = self._configuration.get_list('.//ErrorLog')
         custom_logs = self._configuration.get_list('.//CustomLog')
-        return error_logs + custom_logs
+        if error_logs:
+            result.append(error_logs)
+        if custom_logs:
+            result.append(custom_logs)
+        return result
 
 
     def _get_document_root_paths(self):
@@ -698,9 +700,6 @@ class ApacheAPI(object):
     @rpc.service_method
     def restart_service(self):
         self.service.restart()
-
-
-
 
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
