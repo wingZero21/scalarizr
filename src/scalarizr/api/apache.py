@@ -486,6 +486,7 @@ class ApacheVirtualHost(object):
             if item[0]=='DocumentRoot':
                 doc_root = item[1][:-1] if item[1][-1]=='/' else item[1]
                 result.append(doc_root)
+        return result
 
 
     def ensure_document_root(self):
