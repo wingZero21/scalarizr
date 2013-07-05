@@ -101,13 +101,6 @@ class ApacheHandler(ServiceCtlHandler):
         LOG.debug('Received list of virtual hosts: %s' % str(received_vhosts))
         LOG.debug('List of currently served virtual hosts: %s' % str(self.webserver.list_served_vhosts()))
 
-        '''
-        if [vh.https for vh in received_vhosts if vh.https]:
-            pass
-
-        self._filter_vhosts_dir([self.get_vhost_filename(vh.hostname, vh.https) for vh in received_vhosts])
-        '''
-
         for vhost_data in received_vhosts:
             hostname = vhost_data.hostname
             port = 443 if vhost_data.https else 80
@@ -119,9 +112,7 @@ class ApacheHandler(ServiceCtlHandler):
                 vhost = apache.ApacheVirtualHost(hostname, port, body)
                 vhost.ensure()
 
-
-    def _filter_vhosts_dir(self, white_list):
-        pass
+        self.webserver.service.reload()
 
 
     def get_vhost_filename(self, hostname, ssl=False):
