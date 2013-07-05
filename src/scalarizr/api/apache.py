@@ -688,14 +688,13 @@ class ApacheAPI(object):
         for vhost_data in received_vhosts:
             hostname = vhost_data.hostname
             port = 443 if vhost_data.https else 80
-            body = vhost_data.raw.replace('/etc/aws/keys/ssl', self.cert_path)
+            body = vhost_data.raw.replace('/etc/aws/keys/ssl', self.webserver.cert_path)
             if vhost_data.https:
                 #prepare SSL Cert
                 pass
             else:
                 vhost = ApacheVirtualHost(hostname, port, body)
                 vhost.ensure()
-
         self.service.reload()
 
 
