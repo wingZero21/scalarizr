@@ -685,6 +685,7 @@ class ApacheAPI(object):
         '''
 
         received_vhosts = self._queryenv.list_virtual_hosts()
+        deployed_vhosts = []
         for vhost_data in received_vhosts:
             hostname = vhost_data.hostname
             port = 443 if vhost_data.https else 80
@@ -695,6 +696,16 @@ class ApacheAPI(object):
             else:
                 vhost = ApacheVirtualHost(hostname, port, body)
                 vhost.ensure()
+                deployed_vhosts.append(vhost)
+
+        #cleanup
+        vhosts_dir = self.webserver.vhosts_dir
+        for fname in os.listdir(vhosts_dir):
+            old_vhost_path = os.path.join(vhosts_dir, fname)
+            if old_vhost_path not in [vhost.vhost_path for vhost in deployed_vhosts]:
+                LOG.debug('Removing old vhost file %s' % old_vhost_path)
+                os.remove(old_vhost_path)
+
         self.service.reload()
 
 
