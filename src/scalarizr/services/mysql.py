@@ -23,7 +23,7 @@ import errno
 
 from pymysql import cursors
 
-from scalarizr import node, linux
+from scalarizr import node
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy, PresetProvider
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
@@ -33,6 +33,7 @@ from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
 
+import scalarizr.services.mysql2 as mysql_svc2
 
 LOG = logging.getLogger(__name__)
 
@@ -730,6 +731,26 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
         return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
 
 
+    def _get_mysql_error(self):
+        out = []
+        my_defaults = mysql_svc2.my_print_defaults('mysqld')
+        cmd = "cat %s | tail -256" % (my_defaults.get('log_error', '/var/log/mysql/error.log'))
+        content = reversed(system2(cmd, shell=True, raise_exc=False)[0].split('\n'))
+        start = re.compile("^.*[ ]Fatal error:[ ].*$")
+        end = re.compile(r'^[0-9]{6}[ ][0-9]{2}:[0-9]{2}:[0-9]{2}[ ]\[ERROR\][ ]Aborting$')
+        for line in content:
+            if end.match(line):
+                out.append(line)
+                while not start.match(line):
+                    try:
+                        line = content.next()
+                    except StopIteration:
+                        break
+                    out.append(line)
+                break
+        return ''.join(reversed(out[0:10]))
+
+
     def start(self):
         '''
         Commented, cause Dima said this code is useless
@@ -750,22 +771,15 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                 LOG.info("Starting mysql")
                 initdv2.ParametrizedInitScript.start(self)
                 LOG.debug("mysql started")
-            except:
+            except Exception as e:
                 if self._is_sgt_process_exists():
                     LOG.warning('MySQL service is running with skip-grant-tables mode.')
                 elif not self.running:
-                    raise
-
-
-        try:
-            LOG.info("Starting mysql")
-            initdv2.ParametrizedInitScript.start(self)
-            LOG.debug("mysql started")
-        except:
-            if self._is_sgt_process_exists():
-                LOG.warning('MySQL service is running with skip-grant-tables mode.')
-            elif not self.running:
-                raise
+                    error = self._get_mysql_error()
+                    if error:
+                        raise Exception('\n%s' % error)
+                    else:
+                        raise e
 
 
     def stop(self, reason=None):
