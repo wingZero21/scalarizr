@@ -93,31 +93,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 
     def on_VhostReconfigure(self, message):
-        self.update_vhosts()
-
-
-    def update_vhosts(self):
-        received_vhosts = self._queryenv.list_virtual_hosts()
-        LOG.debug('Received list of virtual hosts: %s' % str(received_vhosts))
-        LOG.debug('List of currently served virtual hosts: %s' % str(self.webserver.list_served_vhosts()))
-
-        for vhost_data in received_vhosts:
-            hostname = vhost_data.hostname
-            port = 443 if vhost_data.https else 80
-            body = vhost_data.raw.replace('/etc/aws/keys/ssl', self.webserver.cert_path)
-            if vhost_data.https:
-                #prepare SSL Cert
-                pass
-            else:
-                vhost = apache.ApacheVirtualHost(hostname, port, body)
-                vhost.ensure()
-
-        self.webserver.service.reload()
-
-
-    def get_vhost_filename(self, hostname, ssl=False):
-        end = apache.VHOST_EXTENSION if not ssl else '-ssl' + apache.VHOST_EXTENSION
-        return os.path.join(bus.etc_path, apache.VHOSTS_PATH, hostname + end)
+        self.api.reload_vhosts()
 
 
     on_BeforeHostTerminate = on_HostDown

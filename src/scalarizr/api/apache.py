@@ -668,6 +668,7 @@ class ApacheAPI(object):
 
     @rpc.service_method
     def reload_vhosts(self):
+        '''
         served_hosts = self.list_served_hosts()
         for queryenv_vhost in self._queryenv.list_farm_role_params():
             for apache_vhost in served_hosts:
@@ -681,6 +682,21 @@ class ApacheAPI(object):
                 else:
                     vhost = ApacheVirtualHost(queryenv_vhost.hostname, queryenv_vhost.raw, port=queryenv_vhost.port)
                 vhost.ensure()
+        '''
+
+        received_vhosts = self._queryenv.list_virtual_hosts()
+        for vhost_data in received_vhosts:
+            hostname = vhost_data.hostname
+            port = 443 if vhost_data.https else 80
+            body = vhost_data.raw.replace('/etc/aws/keys/ssl', self.cert_path)
+            if vhost_data.https:
+                #prepare SSL Cert
+                pass
+            else:
+                vhost = ApacheVirtualHost(hostname, port, body)
+                vhost.ensure()
+
+        self.service.reload()
 
 
     @rpc.service_method
