@@ -353,48 +353,43 @@ class SSLCertificate(object):
         return [] == self.used_by()
 
 
+    def update_ssl_certificate(self, ssl_certificate_id, cert, key, cacert=None):
+        if cacert:
+            cert = cert + '\n' + cacert
+
+        with open(self.cert_path, 'w') as fp:
+            fp.write(cert)
+
+        with open(self.key_path, 'w') as fp:
+            fp.write(key)
+
+
     def ensure(self):
-        self._logger.debug("Retrieving ssl cert and private key from Scalr.")
+        LOG.debug("Retrieving ssl cert and private key from Scalr.")
         cert_data = self._queryenv.get_https_certificate(self.id)
-
-        '''
-        if not cert_data:
-            raise ApacheError('Unable to fetch SSL certificate')
-        for key_file in ['https.key', vhost.hostname + '.key']:
-            with open(os.path.join(cert_path, key_file), 'w') as fp:
-                fp.write(https_certificate[1])
-            os.chmod(cert_path + '/' + key_file, 0644)
-
-        for cert_file in ['https.crt', vhost.hostname + '.crt']:
-            with open(os.path.join(cert_path, cert_file), 'w') as fp:
-                fp.write(https_certificate[0])
-            os.chmod(cert_path + '/' + cert_file, 0644)
-
-        if https_certificate[2]:
-            for filename in ('https-ca.crt', vhost.hostname + '-ca.crt'):
-                with open(os.path.join(cert_path, filename), 'w') as fp:
-                    fp.write(https_certificate[2])
-                os.chmod(os.path.join(cert_path, filename), 0644)
-        '''
-        #write cert
-        #join key and ca-cert
-        #write key
-        pass
+        cacert = cert_data[2] if len(cert_data) > 2 else None
+        self.update_ssl_certificate(self.id,cert_data[0],cert_data[1],cacert)
 
 
     def delete(self):
-        #remove cert and pk files
-        pass
+        for path in (self.cert_path, self.pk_path):
+            if os.path.exists(path):
+                os.remove(path)
+
+
+    @property
+    def keys_dir(self):
+        return os.path.join(bus.etc_path, "private.d/keys")
 
 
     @property
     def cert_path(self):
-        pass
+        return os.path.join(self.keys_dir, 'https%s.crt' % '_' + str(self.id) if self.id else '')
 
 
     @property
-    def pk_path(self):
-        pass
+    def key_path(self):
+        return os.path.join(self.keys_dir, 'https%s.key' % '_' + str(self.id) if self.id else '')
 
 
 class ApacheVirtualHost(object):
@@ -668,22 +663,6 @@ class ApacheAPI(object):
 
     @rpc.service_method
     def reload_vhosts(self):
-        '''
-        served_hosts = self.list_served_hosts()
-        for queryenv_vhost in self._queryenv.list_farm_role_params():
-            for apache_vhost in served_hosts:
-                if apache_vhost.is_like(queryenv_vhost.hostname):
-                    apache_vhost.ensure()
-            else:
-                if queryenv_vhost.ssl:
-                    cert = SSLCertificate(queryenv_vhost.ssl_certificate_id)
-                    cert.ensure()
-                    vhost = ApacheVirtualHost(queryenv_vhost.hostname, body=queryenv_vhost.raw, port=queryenv_vhost.port, cert=cert)
-                else:
-                    vhost = ApacheVirtualHost(queryenv_vhost.hostname, queryenv_vhost.raw, port=queryenv_vhost.port)
-                vhost.ensure()
-        '''
-
         received_vhosts = self._queryenv.list_virtual_hosts()
         deployed_vhosts = []
         for vhost_data in received_vhosts:
@@ -692,7 +671,8 @@ class ApacheAPI(object):
             body = vhost_data.raw.replace('/etc/aws/keys/ssl', self.webserver.cert_path)
             if vhost_data.https:
                 #prepare SSL Cert
-                pass
+                cert = SSLCertificate()
+                cert.ensure()
             else:
                 vhost = ApacheVirtualHost(hostname, port, body)
                 vhost.ensure()
