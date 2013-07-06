@@ -462,8 +462,14 @@ def enabled():
             pkgmgr.latest("iptables")
 
     if linux.os['family'] in ('RedHat', 'Oracle'):
-        out = redhat.chkconfig(list="iptables")[0]
-        return bool(re.search(r"iptables.*?\s\d:on", out))
+        try:
+            out = redhat.chkconfig(list="iptables")[0]
+            return bool(re.search(r"iptables.*?\s\d:on", out))
+        except LinuxError, e:
+            if 'not referenced in any runlevel' in str(e):
+                return False
+            else:
+                raise
     else:
         return os.access(IPTABLES_BIN, os.X_OK)
 
