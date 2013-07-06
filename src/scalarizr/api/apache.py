@@ -385,12 +385,14 @@ class SSLCertificate(object):
 
     @property
     def cert_path(self):
-        return os.path.join(self.keys_dir, 'https%s.crt' % '_' + str(self.id) if self.id else '')
+        id = '_' + str(self.id) if self.id else ''
+        return os.path.join(self.keys_dir, 'https%s.crt' % id)
 
 
     @property
     def key_path(self):
-        return os.path.join(self.keys_dir, 'https%s.key' % '_' + str(self.id) if self.id else '')
+        id = '_' + str(self.id) if self.id else ''
+        return os.path.join(self.keys_dir, 'https%s.key' % id)
 
 
 class ApacheVirtualHost(object):
