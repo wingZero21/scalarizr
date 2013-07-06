@@ -338,6 +338,7 @@ class SSLCertificate(object):
 
     def __init__(self, ssl_certificate_id=None):
         self.id = ssl_certificate_id
+        self._queryenv = bus.queryenv_service
 
 
     def used_by(self):
