@@ -367,7 +367,7 @@ class SSLCertificate(object):
 
     def ensure(self):
         LOG.debug("Retrieving ssl cert and private key from Scalr.")
-        cert_data = self._queryenv.get_https_certificate(self.id)
+        cert_data = self._queryenv.get_ssl_certificate(self.id)
         cacert = cert_data[2] if len(cert_data) > 2 else None
         self.update_ssl_certificate(self.id,cert_data[0],cert_data[1],cacert)
 
