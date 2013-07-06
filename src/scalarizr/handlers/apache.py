@@ -81,7 +81,7 @@ class ApacheHandler(ServiceCtlHandler):
 
 
     def on_before_host_up(self, message):
-        self.update_vhosts()
+        pass
 
 
     def on_HostUp(self, message):
