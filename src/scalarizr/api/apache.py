@@ -513,11 +513,11 @@ class ApacheConf(object):
         self.path = path
 
     def __enter__(self):
-        self.cnf.read(self.path)
-        return self.cnf
+        self._cnf.read(self.path)
+        return self._cnf
 
     def __exit__(self, type, value, traceback):
-        self.cnf.write(self.path)
+        self._cnf.write(self.path)
 
 
 class HttpdConf(BaseConfig):
