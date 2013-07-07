@@ -22,7 +22,6 @@ from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError, coreutils
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import disttool, wait_until, dynimp, firstmatched
-from scalarizr.services import BaseConfig
 from scalarizr.libs.metaconf import Configuration, NoPathError, strip_quotes
 
 __apache__ = __node__['apache']
@@ -41,9 +40,7 @@ class ApacheError(BaseException):
 
 class ApacheWebServer(object):
 
-    _main_config = None
     _instance = None
-
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -64,14 +61,17 @@ class ApacheWebServer(object):
         if not os.path.exists(self.vhosts_dir):
             os.makedirs(self.vhosts_dir)
 
-        inc_mask = self.vhosts_dir + '/*' + VHOST_EXTENSION
-        if not inc_mask in self._apache_conf.list_includes():
-            self._apache_conf.add_include(inc_mask)
+        with ApacheConfig(APACHE_CONF_PATH) as apache_conf:
+            inc_mask = self.vhosts_dir + '/*' + VHOST_EXTENSION
+            if not inc_mask in apache_conf.get_list('Include'):
+                apache_conf.add('Include', inc_mask)
 
         if disttool.is_debian_based():
             patch_default_conf_deb()
-        elif not self._apache.conf.list_name_virtual_hosts():
-            self._apache_conf.add_name_virtual_host('*', 80)
+        else:
+            with ApacheConfig(APACHE_CONF_PATH) as apache_conf:
+                if not apache_conf.get_list('NameVirtualHost'):
+                    apache_conf.set('NameVirtualHost', '*:80')
 
         create_logrotate_conf(LOGROTATE_CONF_PATH)
         self.check_mod_ssl()
@@ -111,18 +111,12 @@ class ApacheWebServer(object):
 
 
     @property
-    def _apache_conf(self):
-        if not self._main_config:
-            self._main_config = HttpdConf(APACHE_CONF_PATH)
-        return self._main_config
-
-
-    @property
     def server_root(self):
-        server_root = self._apache_conf.server_root
-        if not server_root:
-            server_root = os.path.dirname(APACHE_CONF_PATH)
-            self.set_server_root(server_root)
+        with ApacheConfig(APACHE_CONF_PATH) as apache_conf:
+            server_root = strip_quotes(apache_conf.get('ServerRoot'))
+            if not server_root:
+                server_root = os.path.dirname(APACHE_CONF_PATH)
+                apache_conf.set('ServerRoot', server_root)
         return server_root
 
 
@@ -161,15 +155,13 @@ class ApacheWebServer(object):
 
         LOG.debug('Ensuring NameVirtualHost *:443')
         if os.path.exists(ports_conf_path):
-            conf = Configuration('apache')
-            conf.read(ports_conf_path)
-            i = 0
-            for section in conf.get_dict('IfModule'):
-                i += 1
-                if section['value'] in ('mod_ssl.c', 'mod_gnutls.c'):
-                    conf.set('IfModule[%d]/Listen' % i, '443', True)
-                    conf.set('IfModule[%d]/NameVirtualHost' % i, '*:443', True)
-            conf.write(ports_conf_path)
+            with ApacheConfig(ports_conf_path) as conf:
+                i = 0
+                for section in conf.get_dict('IfModule'):
+                    i += 1
+                    if section['value'] in ('mod_ssl.c', 'mod_gnutls.c'):
+                        conf.set('IfModule[%d]/Listen' % i, '443', True)
+                        conf.set('IfModule[%d]/NameVirtualHost' % i, '*:443', True)
 
 
     def _check_mod_ssl_redhat(self):
@@ -186,35 +178,31 @@ class ApacheWebServer(object):
         if not os.path.exists(ssl_conf_path):
             raise ApacheError("SSL config %s doesn`t exist", ssl_conf_path)
 
-        ssl_conf = Configuration('apache')
-        ssl_conf.read(ssl_conf_path)
+        with ApacheConfig(ssl_conf_path) as ssl_conf:
+            if ssl_conf.empty:
+                LOG.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
+                ssl_conf.add('Listen', '443')
+                ssl_conf.add('NameVirtualHost', '*:443')
 
-        if ssl_conf.empty:
-            LOG.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
-            ssl_conf.add('Listen', '443')
-            ssl_conf.add('NameVirtualHost', '*:443')
-            
-        else:
-            if not ssl_conf.get_list('NameVirtualHost'):
-                LOG.debug("NameVirtualHost directive not found in %s", ssl_conf_path)
-                if not ssl_conf.get_list('Listen'):
-                    LOG.debug("Listen directive not found in %s. ", ssl_conf_path)
-                    LOG.debug("Patching %s with Listen & NameVirtualHost directives.",     ssl_conf_path)
-                    ssl_conf.add('Listen', '443')
-                    ssl_conf.add('NameVirtualHost', '*:443')
-                else:
-                    LOG.debug("NameVirtualHost directive inserted after Listen directive.")
-                    ssl_conf.add('NameVirtualHost', '*:443', 'Listen')
-        ssl_conf.write(ssl_conf_path)
+            else:
+                if not ssl_conf.get_list('NameVirtualHost'):
+                    LOG.debug("NameVirtualHost directive not found in %s", ssl_conf_path)
+                    if not ssl_conf.get_list('Listen'):
+                        LOG.debug("Listen directive not found in %s. ", ssl_conf_path)
+                        LOG.debug("Patching %s with Listen & NameVirtualHost directives.",     ssl_conf_path)
+                        ssl_conf.add('Listen', '443')
+                        ssl_conf.add('NameVirtualHost', '*:443')
+                    else:
+                        LOG.debug("NameVirtualHost directive inserted after Listen directive.")
+                        ssl_conf.add('NameVirtualHost', '*:443', 'Listen')
 
-        loaded_in_main = [module for module in self._main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
-
-        if not loaded_in_main:
-            if os.path.exists(ssl_conf_path):
-                loaded_in_ssl = [module for module in self._main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
-                if not loaded_in_ssl:
-                    self._main_config.add('LoadModule', 'ssl_module modules/mod_ssl.so')
-                    self._main_config.write(APACHE_CONF_PATH)
+        with ApacheConfig(APACHE_CONF_PATH) as main_config:
+            loaded_in_main = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
+            if not loaded_in_main:
+                if os.path.exists(ssl_conf_path):
+                    loaded_in_ssl = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
+                    if not loaded_in_ssl:
+                        main_config.add('LoadModule', 'ssl_module modules/mod_ssl.so')
 
 
     def patch_ssl_conf(self, cert_id=None):
@@ -230,55 +218,52 @@ class ApacheWebServer(object):
 
 
         if os.path.exists(self.ssl_conf_path):
-            ssl_conf = Configuration('apache')
-            ssl_conf.read(self.ssl_conf_path)
+            with ApacheConfig(self.ssl_conf_path) as ssl_conf:
 
-            #removing old paths
-            old_crt_path = None
-            old_key_path = None
-            old_ca_crt_path = None
+                #removing old paths
+                old_crt_path = None
+                old_key_path = None
+                old_ca_crt_path = None
 
-            try:
-                old_crt_path = ssl_conf.get(".//SSLCertificateFile")
-            except NoPathError, e:
-                pass
-            finally:
-                if os.path.exists(crt_path):
-                    ssl_conf.set(".//SSLCertificateFile", crt_path, force=True)
-                elif old_crt_path and not os.path.exists(old_crt_path):
-                    LOG.debug("Certificate file not found. Setting to default %s" % crt_path_default)
-                    ssl_conf.set(".//SSLCertificateFile", crt_path_default, force=True)
+                try:
+                    old_crt_path = ssl_conf.get(".//SSLCertificateFile")
+                except NoPathError, e:
+                    pass
+                finally:
+                    if os.path.exists(crt_path):
+                        ssl_conf.set(".//SSLCertificateFile", crt_path, force=True)
+                    elif old_crt_path and not os.path.exists(old_crt_path):
+                        LOG.debug("Certificate file not found. Setting to default %s" % crt_path_default)
+                        ssl_conf.set(".//SSLCertificateFile", crt_path_default, force=True)
 
-            try:
-                old_key_path = ssl_conf.get(".//SSLCertificateKeyFile")
-            except NoPathError, e:
-                pass
-            finally:
-                if os.path.exists(key_path):
-                    ssl_conf.set(".//SSLCertificateKeyFile", key_path, force=True)
-                elif old_key_path and not os.path.exists(old_key_path):
-                    LOG.debug("Certificate key file not found. Setting to default %s" % key_path_default)
-                    ssl_conf.set(".//SSLCertificateKeyFile", key_path_default, force=True)
+                try:
+                    old_key_path = ssl_conf.get(".//SSLCertificateKeyFile")
+                except NoPathError, e:
+                    pass
+                finally:
+                    if os.path.exists(key_path):
+                        ssl_conf.set(".//SSLCertificateKeyFile", key_path, force=True)
+                    elif old_key_path and not os.path.exists(old_key_path):
+                        LOG.debug("Certificate key file not found. Setting to default %s" % key_path_default)
+                        ssl_conf.set(".//SSLCertificateKeyFile", key_path_default, force=True)
 
-            try:
-                old_ca_crt_path = ssl_conf.get(".//SSLCertificateChainFile")
-            except NoPathError, e:
-                pass
-            finally:
-                if os.path.exists(ca_crt_path):
-                    try:
-                        ssl_conf.set(".//SSLCertificateChainFile", ca_crt_path)
-                    except NoPathError:
-                        # XXX: ugly hack
-                        parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
-                        before_el = ssl_conf.etree.find('.//SSLCertificateFile')
-                        ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCertificateChainFile', ca_crt_path)
-                        ch.text = ca_crt_path
-                        parent.insert(list(parent).index(before_el), ch)
-                elif old_ca_crt_path and not os.path.exists(old_ca_crt_path):
-                    ssl_conf.comment(".//SSLCertificateChainFile")
-
-            ssl_conf.write(self.ssl_conf_path)
+                try:
+                    old_ca_crt_path = ssl_conf.get(".//SSLCertificateChainFile")
+                except NoPathError, e:
+                    pass
+                finally:
+                    if os.path.exists(ca_crt_path):
+                        try:
+                            ssl_conf.set(".//SSLCertificateChainFile", ca_crt_path)
+                        except NoPathError:
+                            # XXX: ugly hack
+                            parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
+                            before_el = ssl_conf.etree.find('.//SSLCertificateFile')
+                            ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCertificateChainFile', ca_crt_path)
+                            ch.text = ca_crt_path
+                            parent.insert(list(parent).index(before_el), ch)
+                    elif old_ca_crt_path and not os.path.exists(old_ca_crt_path):
+                        ssl_conf.comment(".//SSLCertificateChainFile")
 
 
     def rpaf_modify_proxy_ips(self, ips, operation=None):
@@ -288,34 +273,31 @@ class ApacheWebServer(object):
                 ('/etc/httpd/conf.d/mod_rpaf.conf', '/etc/apache2/mods-available/rpaf.conf')
         )
         if file:
-            rpaf = Configuration('apache')
-            rpaf.read(file)
+            with ApacheConfig(file) as rpaf:
+                if operation == 'add' or operation == 'remove':
+                    proxy_ips = set(re.split(r'\s+', rpaf.get('.//RPAFproxy_ips')))
+                    if operation == 'add':
+                        proxy_ips |= set(ips)
+                    else:
+                        proxy_ips -= set(ips)
+                elif operation == 'update':
+                    proxy_ips = set(ips)
+                if not proxy_ips:
+                    proxy_ips.add('127.0.0.1')
 
-            if operation == 'add' or operation == 'remove':
-                proxy_ips = set(re.split(r'\s+', rpaf.get('.//RPAFproxy_ips')))
-                if operation == 'add':
-                    proxy_ips |= set(ips)
-                else:
-                    proxy_ips -= set(ips)
-            elif operation == 'update':
-                proxy_ips = set(ips)
-            if not proxy_ips:
-                proxy_ips.add('127.0.0.1')
+                LOG.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
+                rpaf.set('.//RPAFproxy_ips', ' '.join(proxy_ips))
 
-            LOG.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
-            rpaf.set('.//RPAFproxy_ips', ' '.join(proxy_ips))
+                #fixing bug in rpaf 0.6-2
+                if disttool.is_debian_based():
+                    pm = dynimp.package_mgr()
+                    if '0.6-2' == pm.installed('libapache2-mod-rpaf'):
+                        try:
+                            LOG.debug('Patching IfModule value in rpaf.conf')
+                            rpaf.set("./IfModule[@value='mod_rpaf.c']", {'value': 'mod_rpaf-2.0.c'})
+                        except NoPathError:
+                            pass
 
-            #fixing bug in rpaf 0.6-2
-            if disttool.is_debian_based():
-                pm = dynimp.package_mgr()
-                if '0.6-2' == pm.installed('libapache2-mod-rpaf'):
-                    try:
-                        LOG.debug('Patching IfModule value in rpaf.conf')
-                        rpaf.set("./IfModule[@value='mod_rpaf.c']", {'value': 'mod_rpaf-2.0.c'})
-                    except NoPathError:
-                        pass
-
-            rpaf.write(file)
             st = os.stat(APACHE_CONF_PATH)
             os.chown(file, st.st_uid, st.st_gid)
 
@@ -395,7 +377,6 @@ class ApacheVirtualHost(object):
     port = None
     cert = None
 
-    _config = None
     _instances = None
 
 
@@ -419,10 +400,9 @@ class ApacheVirtualHost(object):
 
     @classmethod
     def from_file(cls, path):
-        c = Configuration('apache')
-        c.read(path)
-        hostname = c.get('.//ServerName')
-        port = c.get('VirtualHost')
+        with ApacheConfig(path) as c:
+            hostname = c.get('.//ServerName')
+            port = c.get('VirtualHost')
         body = open(path).read()
         return ApacheVirtualHost(hostname, port, body)
 
@@ -431,14 +411,6 @@ class ApacheVirtualHost(object):
     def vhost_path(self):
         end = VHOST_EXTENSION if not self.cert else '-ssl' + VHOST_EXTENSION
         return os.path.join(bus.etc_path, VHOSTS_PATH, self.hostname + end)
-
-
-    @property
-    def _configuration(self):
-        if not self._config:
-            self._config = Configuration('apache')
-            self._config.read(self.vhost_path)
-        return self._config
 
 
     def ensure(self):
@@ -462,8 +434,9 @@ class ApacheVirtualHost(object):
 
     def _get_log_directories(self):
         result = []
-        error_logs = self._configuration.get_list('.//ErrorLog')
-        custom_logs = self._configuration.get_list('.//CustomLog')
+        with ApacheConfig(self.vhost_path) as c:
+            error_logs = c.get_list('.//ErrorLog')
+            custom_logs = c.get_list('.//CustomLog')
         if error_logs:
             result += error_logs
         if custom_logs:
@@ -473,10 +446,11 @@ class ApacheVirtualHost(object):
 
     def _get_document_root_paths(self):
         result = []
-        for item in self._configuration.items('VirtualHost'):
-            if item[0]=='DocumentRoot':
-                doc_root = item[1][:-1] if item[1][-1]=='/' else item[1]
-                result.append(doc_root)
+        with ApacheConfig(self.vhost_path) as c:
+            for item in c.items('VirtualHost'):
+                if item[0]=='DocumentRoot':
+                    doc_root = item[1][:-1] if item[1][-1]=='/' else item[1]
+                    result.append(doc_root)
         return result
 
 
@@ -504,7 +478,8 @@ class ApacheVirtualHost(object):
                 LOG.debug('Changed owner to %s: %s'
                          % (uname, ', '.join(os.listdir(doc_root))))
 
-class ApacheConf(object):
+class ApacheConfig(object):
+
     _cnf = None
     path = None
 
@@ -520,76 +495,7 @@ class ApacheConf(object):
         self._cnf.write(self.path)
 
 
-class HttpdConf(BaseConfig):
-
-    config_name = os.path.basename(APACHE_CONF_PATH)
-    config_type = 'apache'
-
-
-    def set(self, option, value, append=False):
-        self._init_configuration()
-        if value:
-            if append:
-                self.data.add(option, str(value))
-            else:
-                self.data.set(option,str(value), force=True)
-        else:
-            self.data.comment(option)
-        self._cleanup(True)
-
-
-    def get_list(self, option):
-        self._init_configuration()
-        try:
-            value = self.data.get_list(option)
-        except NoPathError:
-            try:
-                value = getattr(self, option+'_default')
-            except AttributeError:
-                value = list()
-        self._cleanup(False)
-        return value
-
-
-    def add_name_virtual_host(self, hostname='*', port=80):
-        self.set('NameVirtualHost', '%s:%s' % (hostname, port))
-
-
-    def list_name_virtual_hosts(self):
-        return self.get('NameVirtualHost')
-
-
-    def list_includes(self):
-        return self.get_list('Include')
-
-
-    def add_include(self, path):
-        self.set('Include', path, append=True)
-
-
-    def _set_server_root(self, path):
-        self.set('ServerRoot', path)
-
-
-    def _get_server_root(self):
-        server_root = self.get('ServerRoot')
-        return strip_quotes(server_root)
-
-
-    def _list_modules(self):
-        pass
-
-
-    def _add_module(self, module_name):
-        pass
-
-
-    modules = property(_list_modules, _add_module)
-    server_root = property(_get_server_root, _set_server_root)
-
-
 class ApacheAPI(object):
-
 
     _instance = None
 
@@ -721,6 +627,7 @@ class ApacheAPI(object):
 
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
+
     _apachectl = None
 
     def __init__(self):
@@ -854,10 +761,8 @@ def patch_default_conf_deb():
                             'sites-enabled',
                             '000-default')
     if os.path.exists(default_vhost_path):
-        default_vhost = Configuration('apache')
-        default_vhost.read(default_vhost_path)
-        default_vhost.set('NameVirtualHost', '*:80', force=True)
-        default_vhost.write(default_vhost_path)
+        with ApacheConfig(default_vhost_path) as default_vhost:
+            default_vhost.set('NameVirtualHost', '*:80', force=True)
 
         dv = None
         with open(default_vhost_path, 'r') as fp:
