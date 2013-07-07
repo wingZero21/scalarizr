@@ -114,6 +114,7 @@ class ApacheWebServer(object):
     def server_root(self):
         with ApacheConfig(APACHE_CONF_PATH) as apache_conf:
             server_root = strip_quotes(apache_conf.get('ServerRoot'))
+            server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
             if not server_root:
                 server_root = os.path.dirname(APACHE_CONF_PATH)
                 apache_conf.set('ServerRoot', server_root)
@@ -402,7 +403,7 @@ class ApacheVirtualHost(object):
     def from_file(cls, path):
         with ApacheConfig(path) as c:
             hostname = c.get('.//ServerName')
-            port = c.get('VirtualHost')
+            port = c.get('VirtualHost').split(':')[-1]
         body = open(path).read()
         return ApacheVirtualHost(hostname, port, body)
 

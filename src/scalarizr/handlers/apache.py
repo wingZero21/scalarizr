@@ -77,7 +77,8 @@ class ApacheHandler(ServiceCtlHandler):
 
 
     def on_start(self):
-        self.api.reload_vhosts()
+        #self.api.reload_vhosts()
+        pass
 
 
     def on_before_host_up(self, message):
