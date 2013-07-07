@@ -504,6 +504,21 @@ class ApacheVirtualHost(object):
                 LOG.debug('Changed owner to %s: %s'
                          % (uname, ', '.join(os.listdir(doc_root))))
 
+class ApacheConf(object):
+    _cnf = None
+    path = None
+
+    def __init__(self, path):
+        self._cnf = Configuration('apache')
+        self.path = path
+
+    def __enter__(self):
+        self.cnf.read(self.path)
+        return self.cnf
+
+    def __exit__(self, type, value, traceback):
+        self.cnf.write(self.path)
+
 
 class HttpdConf(BaseConfig):
 
@@ -659,20 +674,21 @@ class ApacheAPI(object):
 
     @rpc.service_method
     def reload_vhosts(self):
-        received_vhosts = self._queryenv.list_virtual_hosts()
         deployed_vhosts = []
+        received_vhosts = self._queryenv.list_virtual_hosts()
         for vhost_data in received_vhosts:
             hostname = vhost_data.hostname
             port = 443 if vhost_data.https else 80
-            body = vhost_data.raw.replace('/etc/aws/keys/ssl', self.webserver.cert_path)
+
             if vhost_data.https:
-                #prepare SSL Cert
                 cert = SSLCertificate()
                 cert.ensure()
+                body = vhost_data.raw.replace('/etc/aws/keys/ssl', self.webserver.cert_path)
+                vhost = ApacheVirtualHost(hostname, port, body, cert)
             else:
-                vhost = ApacheVirtualHost(hostname, port, body)
-                vhost.ensure()
-                deployed_vhosts.append(vhost)
+                vhost = ApacheVirtualHost(hostname, port, vhost_data.raw)
+            vhost.ensure()
+            deployed_vhosts.append(vhost)
 
         #cleanup
         vhosts_dir = self.webserver.vhosts_dir
@@ -681,7 +697,6 @@ class ApacheAPI(object):
             if old_vhost_path not in [vhost.vhost_path for vhost in deployed_vhosts]:
                 LOG.debug('Removing old vhost file %s' % old_vhost_path)
                 os.remove(old_vhost_path)
-
         self.service.reload()
 
 
