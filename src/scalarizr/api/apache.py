@@ -68,20 +68,13 @@ class ApacheWebServer(object):
         if not inc_mask in self._apache_conf.list_includes():
             self._apache_conf.add_include(inc_mask)
 
-
-        '''
-        self.check_mod_ssl()
-
         if disttool.is_debian_based():
-            self._patch_default_conf_deb()
+            patch_default_conf_deb()
         elif not self._apache.conf.list_name_virtual_hosts():
-            self._apache_conf.add_name_virtual_host('*', 90)
-
-
+            self._apache_conf.add_name_virtual_host('*', 80)
 
         create_logrotate_conf(LOGROTATE_CONF_PATH)
-        '''
-
+        self.check_mod_ssl()
         self.service.start()
 
 
