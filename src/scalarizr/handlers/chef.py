@@ -97,7 +97,8 @@ class ChefHandler(Handler):
         bus.on(
                 host_init_response=self.on_host_init_response,
                 before_host_up=self.on_before_host_up,
-                reload=self.on_reload
+                reload=self.on_reload,
+                start=self.on_start
         )
 
     def on_reload(self):
@@ -110,6 +111,15 @@ class ChefHandler(Handler):
         self._platform = bus.platform
         self._global_variables = {}
         self._init_script = initdv2.lookup('chef')
+
+
+    def on_start(self):
+        if 'running' == __node__['state']:
+            queryenv = bus.queryenv_service
+            farm_role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])
+            daemonize = int(farm_role_params['params']['chef']['daemonize'])
+            if daemonize:
+                self.run_chef_client(daemonize=True)
 
 
     def get_initialization_phases(self, hir_message):
