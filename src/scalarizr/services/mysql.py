@@ -33,7 +33,6 @@ from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
 
-import scalarizr.services.mysql2 as mysql_svc2
 
 LOG = logging.getLogger(__name__)
 
@@ -731,24 +730,29 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
         return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
 
 
+    def _get_mysql_logerror_path(self):
+        cmd = 'my_print_defaults mysqld | grep log_error'
+        out = system2(cmd, shell=True, raise_exc=False)[0]
+        return out.split('=')[1] if out else '/var/log/mysql/error.log'
+
+
     def _get_mysql_error(self):
-        out = []
-        my_defaults = mysql_svc2.my_print_defaults('mysqld')
-        cmd = "cat %s | tail -256" % (my_defaults.get('log_error', '/var/log/mysql/error.log'))
+        error = ''
+        cmd = "cat %s | tail -256" % self._get_mysql_logerror_path()
         content = reversed(system2(cmd, shell=True, raise_exc=False)[0].split('\n'))
         start = re.compile("^.*[ ]Fatal error:[ ].*$")
-        end = re.compile(r'^[0-9]{6}[ ][0-9]{2}:[0-9]{2}:[0-9]{2}[ ]\[ERROR\][ ]Aborting$')
+        end = re.compile(r'^[0-9]{6}[ ][0-9]{2}:[0-9]{2}:[0-9]{2}[ ]\[?ERROR\]?[ ]Aborting$')
         for line in content:
             if end.match(line):
-                out.append(line)
+                error = '%s\n' % line + error
                 while not start.match(line):
                     try:
                         line = content.next()
                     except StopIteration:
                         break
-                    out.append(line)
+                    error = '%s\n' % line + error
                 break
-        return ''.join(reversed(out[0:10]))
+        return error
 
 
     def start(self):
@@ -777,7 +781,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                 elif not self.running:
                     error = self._get_mysql_error()
                     if error:
-                        raise Exception('\n%s' % error)
+                        raise Exception('%s' % error)
                     else:
                         raise e
 
