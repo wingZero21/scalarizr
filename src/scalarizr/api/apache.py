@@ -311,10 +311,21 @@ class ApacheWebServer(object):
 class SSLCertificate(object):
 
     id = None
+    keys_dir = os.path.join(bus.etc_path, "private.d/keys")
 
     def __init__(self, ssl_certificate_id=None):
         self.id = ssl_certificate_id
         self._queryenv = bus.queryenv_service
+
+
+    @classmethod
+    def from_file(cls, cert_path, pk_path):
+        m = re.search('https(\d*).key',os.path.basename(cert_path))
+        if m and cls.keys_dir == os.path.dirname(cert_path) == \
+                os.path.dirname(cert_path):
+            return cls(m.group(1) or None)
+        else:
+            raise ApacheError("Unknown certificate")
 
 
     @property
@@ -334,21 +345,19 @@ class SSLCertificate(object):
 
 
     def ensure(self):
-        LOG.debug("Retrieving ssl cert and private key from Scalr.")
-        cert_data = self._queryenv.get_ssl_certificate(self.id)
-        cacert = cert_data[2] if len(cert_data) > 2 else None
-        self.update_ssl_certificate(self.id,cert_data[0],cert_data[1],cacert)
+        if not os.path.exist(self.cert_path) or not os.path.exists(self.key_path):
+            LOG.debug("Retrieving ssl cert and private key from Scalr.")
+            cert_data = self._queryenv.get_ssl_certificate(self.id)
+            cacert = cert_data[2] if len(cert_data) > 2 else None
+            self.update_ssl_certificate(self.id,cert_data[0],cert_data[1],cacert)
+        else:
+            LOG.debug('Cert files are already in place')
 
 
     def delete(self):
         for path in (self.cert_path, self.pk_path):
             if os.path.exists(path):
                 os.remove(path)
-
-
-    @property
-    def keys_dir(self):
-        return os.path.join(bus.etc_path, "private.d/keys")
 
 
     @property
@@ -404,8 +413,15 @@ class ApacheVirtualHost(object):
         with ApacheConfig(path) as c:
             hostname = c.get('.//ServerName')
             port = c.get('VirtualHost').split(':')[-1]
+            cert_path = c.get('.//SSLCertificateFile')
+            pk_path = c.get('SSLCertificateKeyFile')
         body = open(path).read()
-        return ApacheVirtualHost(hostname, port, body)
+
+        if cert_path and pk_path:
+            cert = SSLCertificate.from_file(cert_path, pk_path)
+        else:
+            cert = None
+        return ApacheVirtualHost(hostname, port, body, cert)
 
 
     @property
