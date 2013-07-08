@@ -27,7 +27,7 @@ Requires:		python26-pychef
 BuildRequires:  python-setuptools
 Requires:       python >= 2.5 m2crypto >= 0.20 pexpect >= 2.3
 # snmp
-Requires:       pysnmp >= 4.1 python-pyasn1 >= 0.0.8a python-pysnmp-mibs >= 0.0.8a 
+Requires:       pysnmp >= 4.2.4 python-pyasn1 >= 0.1.7 python-pysnmp-mibs >= 0.0.8a 
 # szradm
 Requires:       python-prettytable PyYAML
 # mongodb behavior
