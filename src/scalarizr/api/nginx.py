@@ -1,11 +1,11 @@
 from __future__ import with_statement
 
 import os
+import shutil
 import logging
 from telnetlib import Telnet
 import time
 from hashlib import sha1
-import StringIO
 
 from scalarizr import rpc
 from scalarizr.bus import bus
@@ -142,7 +142,7 @@ class NginxAPI(object):
             cls._instance = super(NginxAPI, cls).__new__(cls, *args, **kwargs)
         return cls._instance
 
-    def __init__(self, app_inc_dir=None, https_inc_dir=None):
+    def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
         self.service = NginxInitScript()
         self.error_pages_inc = None
         self.backend_table = {}
@@ -151,14 +151,14 @@ class NginxAPI(object):
             app_inc_dir = os.path.dirname(__nginx__['app_include_path'])
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
         self._load_app_servers_inc()
+        self._fix_app_servers_inc()
 
-        if not https_inc_dir:
-            https_inc_dir = os.path.dirname(__nginx__['https_include_path'])
-        self.https_inc_path = os.path.join(https_inc_dir, 'https.include')
-        self._load_https_inc()
+        if not proxies_inc_dir:
+            proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
+        self.proxies_inc_path = os.path.join(proxies_inc_dir, 'proxies.include')
+        self._load_proxies_inc()
 
         self._make_error_pages_include()
-
 
     def _make_error_pages_include(self):
 
@@ -183,15 +183,15 @@ class NginxAPI(object):
         _add_static_location(error_pages_conf, '/noapp.html')
         error_pages_conf.write(self.error_pages_inc)
 
-    def _save_https_inc(self):
-        self.https_inc.write(self.https_inc_path)
+    def _save_proxies_inc(self):
+        self.proxies_inc.write(self.proxies_inc_path)
 
-    def _load_https_inc(self):
-        self.https_inc = metaconf.Configuration('nginx')
-        if os.path.exists(self.https_inc_path):
-            self.https_inc.read(self.https_inc_path)
+    def _load_proxies_inc(self):
+        self.proxies_inc = metaconf.Configuration('nginx')
+        if os.path.exists(self.proxies_inc_path):
+            self.proxies_inc.read(self.proxies_inc_path)
         else:
-            open(self.https_inc_path, 'w').close()
+            open(self.proxies_inc_path, 'w').close()
 
     def _save_app_servers_inc(self):
         self.app_servers_inc.write(self.app_inc_path)
@@ -199,26 +199,46 @@ class NginxAPI(object):
     def _load_app_servers_inc(self):
         self.app_servers_inc = metaconf.Configuration('nginx')
         if os.path.exists(self.app_inc_path):
+            _logger.debug('Reading app-servers.include')
             self.app_servers_inc.read(self.app_inc_path)
         else:
+            _logger.debug('Creating app-servers.include')
             open(self.app_inc_path, 'w').close()
 
+    def _fix_app_servers_inc(self):
+        https_inc_xpath = self.app_servers_inc.xpath_of('include',
+                                                        '/etc/nginx/https.include')
+        if https_inc_xpath:
+            self.app_servers_inc.remove(https_inc_xpath)
+
+        # Removing all existed servers
+        for i, _ in enumerate(self.app_servers_inc.get_list('upstream')):
+            _logger.debug('Removing existing backend servers from app-servers.include')
+            backend_xpath = 'upstream[%i]' % (i + 1)
+            # for j, _ in enumerate(self.app_servers_inc.get_list('%s/server' % backend_xpath)):
+            self.app_servers_inc.remove('%s/server' % backend_xpath)
+
+        self._save_app_servers_inc()
+
     def _clear_nginx_includes(self):
+        shutil.copyfile(self.app_inc_path, self.app_inc_path + '.bak')
+        shutil.copyfile(self.proxies_inc_path, self.proxies_inc_path + '.bak')
+
         with open(self.app_inc_path, 'w') as fp:
             fp.write('')
-        with open(self.https_inc_path, 'w') as fp:
+        with open(self.proxies_inc_path, 'w') as fp:
             fp.write('')
         self._load_app_servers_inc()
-        self._load_https_inc()
+        self._load_proxies_inc()
 
-    def _restart_service(self):
+    def _reload_service(self):
         if self.service.status() == initdv2.Status.NOT_RUNNING:
             self.service.start()
         else:
             self.service.reload()
     @rpc.service_method
     def start_service(self):
-        self.servece.start()
+        self.service.start()
 
     @rpc.service_method
     def stop_service(self):
@@ -226,10 +246,10 @@ class NginxAPI(object):
 
     @rpc.service_method
     def reload_service(self):
-        self.servece.reload()
+        self.service.reload()
 
     @rpc.service_method
-    def restart_service(self):
+    def raestart_service(self):
         self.service.restart()
 
     @rpc.service_method
@@ -238,9 +258,9 @@ class NginxAPI(object):
         self.backend_table = {}
 
         for proxy_parms in proxy_list:
-            self.add_proxy(restart_service=False, **proxy_parms)
+            self.add_proxy(reload_service=False, **proxy_parms)
 
-        self._restart_service()
+        self._reload_service()
 
     def get_role_servers(self, role_id):
         """ Method is used to get role servers from scalr """
@@ -264,6 +284,9 @@ class NginxAPI(object):
         Updates ssl certificate. Returns paths to updated or created .key and
         .crt files
         """
+        if not cert or not key:
+            return (None, None)
+
         if cacert:
             cert = cert + '\n' + cacert
         if ssl_certificate_id:
@@ -407,13 +430,17 @@ class NginxAPI(object):
         """
         Adds backend to app-servers config, but without writing it to file.
         """
-        backend = self._make_backend_conf(name,
-                                          destinations,
-                                          port=port,
-                                          ip_hash=ip_hash,
-                                          max_fails=max_fails,
-                                          fail_timeout=fail_timeout)
-        self.app_servers_inc.append_conf(backend)
+        if self.app_servers_inc.xpath_of('upstream', name):
+            for dest in destinations:
+                self.add_server(name, dest, False, False, False)
+        else:
+            backend = self._make_backend_conf(name,
+                                              destinations,
+                                              port=port,
+                                              ip_hash=ip_hash,
+                                              max_fails=max_fails,
+                                              fail_timeout=fail_timeout)
+            self.app_servers_inc.append_conf(backend)
 
     def _make_backend_conf(self,
                            name,
@@ -637,7 +664,7 @@ class NginxAPI(object):
             redirector_conf = self._make_redirector_conf(hostname,
                                                          port,
                                                          ssl_port)
-            self.https_inc.append_conf(redirector_conf)
+            self.proxies_inc.append_conf(redirector_conf)
 
         server_config = self._make_server_conf(hostname,
                                                locations_and_backends,
@@ -646,7 +673,7 @@ class NginxAPI(object):
                                                ssl_port,
                                                ssl_certificate_id)
 
-        self.https_inc.append_conf(server_config)
+        self.proxies_inc.append_conf(server_config)
 
     def add_proxy(self,
                   name,
@@ -662,8 +689,9 @@ class NginxAPI(object):
                   backend_max_fails=None,
                   backend_fail_timeout=None,
                   reread_conf=True,
-                  restart_service=True,
-                  hash_backend_name=True):
+                  reload_service=True,
+                  hash_backend_name=True,
+                  write_proxies=True):
         """
         Adds proxy
         """
@@ -677,7 +705,7 @@ class NginxAPI(object):
 
         if reread_conf:
             self._load_app_servers_inc()
-            self._load_https_inc()
+            self._load_proxies_inc()
 
         locations_and_backends = self._add_backends(name,
                                                     grouped_destinations,
@@ -705,10 +733,11 @@ class NginxAPI(object):
             _open_port(ssl_port)
 
         self._save_app_servers_inc()
-        self._save_https_inc()
+        if write_proxies:
+            self._save_proxies_inc()
 
-        if restart_service:
-            self._restart_service()
+        if reload_service:
+            self._reload_service()
 
     def _remove_backend(self, name):
         """
@@ -720,41 +749,41 @@ class NginxAPI(object):
 
     def _remove_nginx_server(self, name):
         """
-        Removes server from https.include config. Also removes used backends.
+        Removes server from proxies.include config. Also removes used backends.
         """
 
         xpaths_to_remove = []
 
-        for i, _ in enumerate(self.https_inc.get_list('server')):
+        for i, _ in enumerate(self.proxies_inc.get_list('server')):
 
             server_xpath = 'server[%i]' % (i + 1)
-            server_name = self.https_inc.get('%s/server_name' % server_xpath)
+            server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
 
             if name == server_name or name == server_name + '_redirector':
                 location_xpath = '%s/location' % server_xpath
-                location_qty = len(self.https_inc.get_list(location_xpath))
+                location_qty = len(self.proxies_inc.get_list(location_xpath))
                 
                 for j in xrange(location_qty):
                     xpath = location_xpath + ('[%i]' % (j + 1))
-                    backend = self.https_inc.get(xpath + '/proxy_pass')
+                    backend = self.proxies_inc.get(xpath + '/proxy_pass')
                     backend = backend.replace('http://', '')
                     self._remove_backend(backend)
 
-                for port in self.https_inc.get_list('%s/listen' % server_xpath):
+                for port in self.proxies_inc.get_list('%s/listen' % server_xpath):
                     port = port.split()[0]
                     _close_port(port)
 
                 xpaths_to_remove.append(server_xpath)
 
         for xpath in reversed(xpaths_to_remove):
-            self.https_inc.remove(xpath)
+            self.proxies_inc.remove(xpath)
 
     @rpc.service_method
-    def remove_proxy(self, name, restart_service=True):
+    def remove_proxy(self, name, reload_service=True):
         """
         Removes proxy with given name. Removes created server and its backends.
         """
-        self._load_https_inc()
+        self._load_proxies_inc()
         self._load_app_servers_inc()
 
         self._remove_nginx_server(name)
@@ -764,10 +793,10 @@ class NginxAPI(object):
             if name == self._backend_nameparts(backend_name)[0]:
                 self.backend_table.pop(backend_name)
 
-        self._save_https_inc()
+        self._save_proxies_inc()
         self._save_app_servers_inc()
-        if restart_service:
-            self._restart_service()
+        if reload_service:
+            self._reload_service()
 
     @rpc.service_method
     def make_proxy(self, hostname, **kwds):
@@ -777,15 +806,16 @@ class NginxAPI(object):
         _logger.debug('making proxy: %s' % hostname)
         try:
             # trying to apply changes
-            self._load_https_inc()
+            self._load_proxies_inc()
             self._load_app_servers_inc()
 
-            self.https_inc.write(self.https_inc_path + '.bak')
+            self.proxies_inc.write(self.proxies_inc_path + '.bak')
             self.app_servers_inc.write(self.app_inc_path + '.bak')
 
             _logger.debug('deleting previously existed proxy')
 
-            self._remove_nginx_server(hostname)
+            if kwds.get('write_proxies', True):
+                self._remove_nginx_server(hostname)
 
             for backend_name in self.backend_table.keys():
                 if hostname == self._backend_nameparts(backend_name)[0]:
@@ -795,9 +825,9 @@ class NginxAPI(object):
 
         except:
             # undo changes
-            self.https_inc.read(self.https_inc_path + '.bak')
+            self.proxies_inc.read(self.proxies_inc_path + '.bak')
             self.app_servers_inc.read(self.app_inc_path + '.bak')
-            self._save_https_inc()
+            self._save_proxies_inc()
             self._save_app_servers_inc()
             raise
 
@@ -808,7 +838,7 @@ class NginxAPI(object):
         if type(server) is str:
             return server
 
-        result = server['host']
+        result = server['host'] if 'host' in server else server['servers'][0]
         if 'port' in server:
             result = '%s:%s' % (result, server['port'])
 
@@ -833,7 +863,7 @@ class NginxAPI(object):
                    backend,
                    server,
                    update_conf=True,
-                   restart_service=True,
+                   reload_service=True,
                    update_backend_table=False):
         """
         Adds server to backend with given name pattern.
@@ -865,15 +895,15 @@ class NginxAPI(object):
 
         if update_conf:
             self._save_app_servers_inc()
-        if restart_service:
-            self._restart_service()
+        if reload_service:
+            self._reload_service()
 
     @rpc.service_method
     def remove_server(self,
                       backend,
                       server,
                       update_conf=True,
-                      restart_service=True,
+                      reload_service=True,
                       update_backend_table=False):
         """
         Removes server from backend with given name pattern.
@@ -901,15 +931,15 @@ class NginxAPI(object):
 
         if update_conf:
             self._save_app_servers_inc()
-        if restart_service:
-            self._restart_service()
+        if reload_service:
+            self._reload_service()
 
     @rpc.service_method
     def add_server_to_role(self, 
                            server,
                            role_id,
                            update_conf=True, 
-                           restart_service=True):
+                           reload_service=True):
         """
         Adds server to each backend that uses given role. If role isn't used in
         any backend, does nothing
@@ -941,15 +971,15 @@ class NginxAPI(object):
         if config_updated:
             if update_conf:
                 self._save_app_servers_inc()
-            if restart_service:
-                self._restart_service()
+            if reload_service:
+                self._reload_service()
 
     @rpc.service_method
     def remove_server_from_role(self,
                                 server,
                                 role_id,
                                 update_conf=True,
-                                restart_service=True):
+                                reload_service=True):
         """
         Removes server from each backend that uses given role. If role isn't
         used in any backend, does nothing
@@ -976,15 +1006,15 @@ class NginxAPI(object):
         if config_updated:
             if update_conf:
                 self._save_app_servers_inc()
-            if restart_service:
-                self._restart_service()
+            if reload_service:
+                self._reload_service()
 
 
     @rpc.service_method
     def remove_server_from_all_backends(self,
                                         server,
                                         update_conf=True,
-                                        restart_service=True):
+                                        reload_service=True):
         """
         Method is used to remove stand-alone servers, that aren't belong
         to any role. If role isn't used in any backend, does nothing
@@ -1007,8 +1037,8 @@ class NginxAPI(object):
         if config_updated:
             if update_conf:
                 self._save_app_servers_inc()
-            if restart_service:
-                self._restart_service()
+            if reload_service:
+                self._reload_service()
 
     @rpc.service_method
     def enable_ssl(self,
@@ -1016,27 +1046,27 @@ class NginxAPI(object):
                    ssl_port=None,
                    ssl_certificate_id=None,
                    update_conf=True,
-                   restart_service=True):
+                   reload_service=True):
         if update_conf:
-            self._load_https_inc()
+            self._load_proxies_inc()
 
         if not hostname:
             return
 
         config_updated = False
-        for i, _ in enumerate(self.https_inc.get_list('server')):
+        for i, _ in enumerate(self.proxies_inc.get_list('server')):
             server_xpath = 'server[%i]' % (i + 1)
-            server_name = self.https_inc.get('%s/server_name' % server_xpath)
+            server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
 
             if hostname == server_name:
                 try:
                     # trying get ssl param from config
                     # if it raises exception, then we need to set up ssl
                     # like in first time
-                    self.https_inc.get('%s/ssl' % server_xpath)
-                    self.https_inc.set('%s/ssl' % server_xpath, 'on')
+                    self.proxies_inc.get('%s/ssl' % server_xpath)
+                    self.proxies_inc.set('%s/ssl' % server_xpath, 'on')
                 except metaconf.NoPathError:
-                    self._add_ssl_params(self.https_inc,
+                    self._add_ssl_params(self.proxies_inc,
                                          server_xpath,
                                          ssl_port,
                                          ssl_certificate_id)
@@ -1044,33 +1074,33 @@ class NginxAPI(object):
 
         if config_updated:
             if update_conf:
-                self._save_https_inc()
-            if restart_service:
-                self._restart_service()
+                self._save_proxies_inc()
+            if reload_service:
+                self._reload_service()
 
     @rpc.service_method
-    def disable_ssl(self, hostname, update_conf=True, restart_service=True):
+    def disable_ssl(self, hostname, update_conf=True, reload_service=True):
         if update_conf:
-            self._load_https_inc()
+            self._load_proxies_inc()
 
         if not hostname:
             return
 
         config_updated = False
-        for i, _ in enumerate(self.https_inc.get_list('server')):
+        for i, _ in enumerate(self.proxies_inc.get_list('server')):
             server_xpath = 'server[%i]' % (i + 1)
-            server_name = self.https_inc.get('%s/server_name' % server_xpath)
+            server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
 
             if hostname == server_name:
                 try:
-                    if self.https_inc.get('%s/ssl' % server_xpath) is 'on':
-                        self.https_inc.set('%s/ssl' % server_xpath, 'off')
+                    if self.proxies_inc.get('%s/ssl' % server_xpath) is 'on':
+                        self.proxies_inc.set('%s/ssl' % server_xpath, 'off')
                 except metaconf.NoPathError:
                     pass
                 break
 
         if config_updated:
             if update_conf:
-                self._save_https_inc()
-            if restart_service:
-                self._restart_service()
+                self._save_proxies_inc()
+            if reload_service:
+                self._reload_service()
