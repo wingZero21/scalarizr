@@ -317,14 +317,6 @@ class SSLCertificate(object):
         self._queryenv = bus.queryenv_service
 
 
-    def used_by(self):
-        '''
-        @return:
-        list of ApacheVirtualHost objects which use given cert
-        '''
-        pass
-
-
     @property
     def is_orphaned(self):
         return [] == self.used_by()
@@ -369,6 +361,14 @@ class SSLCertificate(object):
     def key_path(self):
         id = '_' + str(self.id) if self.id else ''
         return os.path.join(self.keys_dir, 'https%s.key' % id)
+
+
+    def used_by(self):
+        '''
+        @return:
+        list of ApacheVirtualHost objects which use given cert
+        '''
+        pass
 
 
 class ApacheVirtualHost(object):
@@ -438,10 +438,10 @@ class ApacheVirtualHost(object):
         with ApacheConfig(self.vhost_path) as c:
             error_logs = c.get_list('.//ErrorLog')
             custom_logs = c.get_list('.//CustomLog')
-        if error_logs:
-            result += error_logs
-        if custom_logs:
-            result += custom_logs
+        for val in error_logs + custom_logs:
+            path = os.path.dirname(val)
+            if path not in result:
+                result.append(path)
         return result
 
 
