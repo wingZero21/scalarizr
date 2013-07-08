@@ -6,14 +6,13 @@ Created on Dec 25, 2009
 @author: marat
 '''
 
-import os
 import logging
 
 from scalarizr.bus import bus
-from scalarizr.messaging import Messages
-from scalarizr.config import BuiltinBehaviours
-from scalarizr.handlers import ServiceCtlHandler
 from scalarizr.api import apache
+from scalarizr.handlers import Handler
+from scalarizr.messaging import Messages
+from scalarizr.config import BuiltinBehaviours, ScalarizrState
 
 
 LOG = logging.getLogger(__name__)
@@ -25,10 +24,9 @@ def get_handlers ():
 
 
 
-class ApacheHandler(ServiceCtlHandler):
+class ApacheHandler(Handler):
 
     _queryenv = None
-
 
     def __init__(self):
         self.webserver = apache.ApacheWebServer()
@@ -72,30 +70,43 @@ class ApacheHandler(ServiceCtlHandler):
         }]}
 
 
-    def on_host_init_response(self, message):
-        pass
+    def on_before_host_up(self, message):
+        with bus.initialization_op as op:
+            with op.phase(self._phase):
+                with op.step(self._step_update_vhosts):
+                    self.api.reload_vhosts()
+                with op.step(self._step_reload_rpaf):
+                    self._rpaf_reload()
+                bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
 
 
     def on_start(self):
-        #self.api.reload_vhosts()
-        pass
-
-
-    def on_before_host_up(self, message):
-        self.api.reload_vhosts()
+        if self._cnf.state == ScalarizrState.RUNNING:
+            self.api.reload_vhosts()
+            self._rpaf_reload()
 
 
     def on_HostUp(self, message):
-        pass
+        if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
+            self.webserver.mod_rpaf.add([message.local_ip])
 
 
     def on_HostDown(self, message):
-        pass
+        if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
+            self.webserver.mod_rpaf.remove([message.local_ip])
 
 
     def on_VhostReconfigure(self, message):
         self.api.reload_vhosts()
 
 
-    on_BeforeHostTerminate = on_HostDown
+    def _rpaf_reload(self):
+        lb_hosts = []
+        for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
+            for host in role.hosts:
+                lb_hosts.append(host.internal_ip)
+        self.webserver.mod_rpaf.update(lb_hosts)
+        bus.fire('apache_rpaf_reload')
 
+
+    on_BeforeHostTerminate = on_HostDown

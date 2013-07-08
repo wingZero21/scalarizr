@@ -380,6 +380,61 @@ class SSLCertificate(object):
         pass
 
 
+class ModRPAF(object):
+
+    path = None
+
+    def __init__(self):
+        self.path = firstmatched(
+                lambda x: os.access(x, os.F_OK),
+                ('/etc/httpd/conf.d/mod_rpaf.conf', '/etc/apache2/mods-available/rpaf.conf')
+        )
+        if not os.path.exists(self.path):
+            raise ApacheError('Nothing to do with rpaf: mod_rpaf configuration file not found')
+        self.ensure_permissions()
+        if disttool.is_debian_based():
+            self._fix_module()
+
+
+    def add(self, ips):
+        with ApacheConfig(self.path) as rpaf:
+            proxy_ips = set(re.split(r'\s+', rpaf.get('.//RPAFproxy_ips')))
+            proxy_ips |= set(ips)
+            if not proxy_ips:
+                    proxy_ips.add('127.0.0.1')
+            rpaf.set('.//RPAFproxy_ips', ' '.join(proxy_ips))
+
+    def remove(self, ips):
+        with ApacheConfig(self.path) as rpaf:
+            proxy_ips = set(re.split(r'\s+', rpaf.get('.//RPAFproxy_ips')))
+            proxy_ips -= set(ips)
+            if not proxy_ips:
+                    proxy_ips.add('127.0.0.1')
+            rpaf.set('.//RPAFproxy_ips', ' '.join(proxy_ips))
+
+
+    def update(self, ips):
+        with ApacheConfig(self.path) as rpaf:
+            proxy_ips = set(ips)
+            if not proxy_ips:
+                    proxy_ips.add('127.0.0.1')
+            rpaf.set('.//RPAFproxy_ips', ' '.join(proxy_ips))
+
+
+    def _fix_module(self):
+        #fixing bug in rpaf 0.6-2
+        pm = dynimp.package_mgr()
+        if '0.6-2' == pm.installed('libapache2-mod-rpaf'):
+            LOG.debug('Patching IfModule value in rpaf.conf')
+            with ApacheConfig(self.path) as rpaf:
+                rpaf.set("./IfModule[@value='mod_rpaf.c']", {'value': 'mod_rpaf-2.0.c'})
+
+
+    def ensure_permissions(self):
+        st = os.stat(APACHE_CONF_PATH)
+        os.chown(self.path, st.st_uid, st.st_gid)
+
+
 class ApacheVirtualHost(object):
 
     hostname = None
@@ -414,9 +469,8 @@ class ApacheVirtualHost(object):
             hostname = c.get('.//ServerName')
             port = c.get('VirtualHost').split(':')[-1]
             cert_path = c.get('.//SSLCertificateFile')
-            pk_path = c.get('SSLCertificateKeyFile')
+            pk_path = c.get('.//SSLCertificateKeyFile')
         body = open(path).read()
-
         if cert_path and pk_path:
             cert = SSLCertificate.from_file(cert_path, pk_path)
         else:
