@@ -50,6 +50,7 @@ class ApacheWebServer(object):
 
     def __init__(self):
         self.service = initdv2.lookup('apache')
+        self.mod_rpaf = ModRPAF()
 
 
     def init_service(self):
