@@ -274,7 +274,6 @@ class SSLCertificate(object):
 
     id = None
 
-
     def __init__(self, ssl_certificate_id=None, keys_dir=None):
         self.id = ssl_certificate_id
         self._queryenv = bus.queryenv_service
@@ -318,6 +317,18 @@ class SSLCertificate(object):
     def key_path(self):
         id = '_' + str(self.id) if self.id else ''
         return os.path.join(self.keys_dir, 'https%s.key' % id)
+
+
+class ModSSL(object):
+
+    def __init__(self):
+        pass
+
+    def set_default_certificate(self, cert):
+        pass
+
+    def _set(self, section, path, default_path):
+        pass
 
 
 class ModRPAF(object):
@@ -653,7 +664,9 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         )
 
 
-    def reload(self):
+    def reload(self, reason=None):
+        if reason:
+            LOG.debug('Reloading apache: %s' % str(reason))
         if self.running:
             self.configtest()
             out, err, retcode = system2(self._apachectl + ' graceful', shell=True)
