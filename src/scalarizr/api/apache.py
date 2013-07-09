@@ -271,11 +271,12 @@ class ApacheWebServer(object):
 class SSLCertificate(object):
 
     id = None
-    keys_dir = os.path.join(bus.etc_path, "private.d/keys")
 
-    def __init__(self, ssl_certificate_id=None):
+
+    def __init__(self, ssl_certificate_id=None, keys_dir=None):
         self.id = ssl_certificate_id
         self._queryenv = bus.queryenv_service
+        self.keys_dir = keys_dir or os.path.join(bus.etc_path, "private.d/keys")
 
 
     def update_ssl_certificate(self, ssl_certificate_id, cert, key, cacert=None):
