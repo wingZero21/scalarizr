@@ -728,14 +728,13 @@ class LargeTransfer(bases.Task):
                 with open(chunk_name, 'w') as chunk:
                     while chunk_capacity:
 
-                        for i in range(3):
+                        while True:
                             try:
                                 bytes_ = stream.read(min(buf_size, chunk_capacity))
                             except IOError, e:
                                 if e.errno == errno.EINTR:
-                                    LOG.debug("EINTR while reading data for %s, try %s",
-                                            chunk_name, i)
-                                    time.sleep(1)  #? is this useful?
+                                    LOG.debug("EINTR while reading data for %s",
+                                            chunk_name)
                                     continue
                                 else:
                                     raise
