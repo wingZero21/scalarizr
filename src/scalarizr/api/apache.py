@@ -474,6 +474,7 @@ class ApacheVirtualHost(object):
                 LOG.debug('Changed owner to %s: %s'
                          % (uname, ', '.join(os.listdir(doc_root))))
 
+
 class ApacheConfig(object):
 
     _cnf = None

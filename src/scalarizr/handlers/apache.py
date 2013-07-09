@@ -7,12 +7,17 @@ Created on Dec 25, 2009
 @author: marat
 '''
 
+import pwd
 import logging
 
 from scalarizr.bus import bus
 from scalarizr.api import apache
+from scalarizr.util import disttool
+from scalarizr.linux import coreutils
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
+from scalarizr.api import service as preset_service
+from scalarizr.services import PresetProvider, BaseConfig
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 
 
@@ -32,6 +37,8 @@ class ApacheHandler(Handler):
     def __init__(self):
         self.webserver = apache.ApacheWebServer()
         self.api = apache.ApacheAPI()
+        self.preset_provider = ApachePresetProvider()
+        preset_service.services[BEHAVIOUR] = self.preset_provider
         bus.on(init=self.on_init, reload=self.on_reload)
         bus.define_events('apache_rpaf_reload')
         self.on_reload()
@@ -71,6 +78,9 @@ class ApacheHandler(Handler):
                 'steps': [self._step_update_vhosts, self._step_reload_rpaf]
         }]}
 
+
+    def on_host_init_response(self, message):
+        pass
 
     def on_before_host_up(self, message):
         with bus.initialization_op as op:
@@ -116,3 +126,26 @@ class ApacheHandler(Handler):
 
     on_BeforeHostTerminate = on_HostDown
 
+
+class ApacheConf(BaseConfig):
+
+    config_type = 'app'
+    config_name = 'apache2.conf' if disttool.is_debian_based() else 'httpd.conf'
+
+
+class ApachePresetProvider(PresetProvider):
+
+    def __init__(self):
+        webserver = apache.ApacheWebServer()
+        config_mapping = {'apache.conf':ApacheConf(apache.APACHE_CONF_PATH)}
+        PresetProvider.__init__(self, webserver.service, config_mapping)
+
+
+    def rollback_hook(self):
+        try:
+            pwd.getpwnam('apache')
+            uname = 'apache'
+        except:
+            uname = 'www-data'
+        for obj in self.config_data:
+            coreutils.chown_r(obj.path, uname)
