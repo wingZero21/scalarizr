@@ -30,7 +30,7 @@ def get_handlers ():
 
 
 
-class ApacheHandler(Handler):
+class ApacheHandler(ServiceCtlHandler):
 
     _queryenv = None
 
