@@ -7,7 +7,6 @@ import unittest
 from scalarizr.storage2.volumes import raid
 from scalarizr.linux import mount
 
-'''
 @mock.patch('__builtin__.open')
 @mock.patch('scalarizr.storage2.volumes.raid.base64')
 @mock.patch('scalarizr.storage2.volumes.raid.tempfile')
@@ -380,7 +379,6 @@ class RaidVolumeTest(unittest.TestCase):
                          mock.call('resume', raid_vol.device)]
 
         self.assertSequenceEqual(lvm2.dmsetup.mock_calls, calls)
-'''
 
 
 class RaidVolumeTest2(unittest.TestCase):
