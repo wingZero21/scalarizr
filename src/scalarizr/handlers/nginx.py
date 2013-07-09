@@ -411,11 +411,13 @@ class NginxHandler(ServiceCtlHandler):
         # ssl virtual host. If there are no ssl vhosts in farm, it returns
         # empty list
         ssl_vhosts = self._queryenv.list_virtual_hosts()
-        self._logger.info('Making default proxy')
+        self._logger.info('Making default proxy with roles: %s' % roles)
         servers = []
         for role in roles:
             if type(role) is str:
-                servers.extend(self.api.get_role_servers(role))
+                s = self.api.get_role_servers(role) or \
+                    self.api.get_role_servers(role_name=role)
+                servers.extend(s)
             else:
                 cl = __node__['cloud_location']
                 servers_ips = [h.internal_ip if cl == h.cloud_location else

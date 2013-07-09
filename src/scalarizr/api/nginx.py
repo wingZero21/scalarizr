@@ -262,14 +262,14 @@ class NginxAPI(object):
 
         self._reload_service()
 
-    def get_role_servers(self, role_id):
+    def get_role_servers(self, role_id=None, role_name=None):
         """ Method is used to get role servers from scalr """
         if type(role_id) is int:
             role_id = str(role_id)
 
         server_location = __node__['cloud_location']
         queryenv = bus.queryenv_service
-        roles = queryenv.list_roles(farm_role_id=role_id)
+        roles = queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
         servers = []
         for role in roles:
             ips = [h.internal_ip if server_location == h.cloud_location else
