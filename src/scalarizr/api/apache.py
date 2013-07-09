@@ -293,7 +293,7 @@ class SSLCertificate(object):
 
 
     def ensure(self):
-        if not os.path.exist(self.cert_path) or not os.path.exists(self.key_path):
+        if not os.path.exists(self.cert_path) or not os.path.exists(self.key_path):
             LOG.debug("Retrieving ssl cert and private key from Scalr.")
             cert_data = self._queryenv.get_ssl_certificate(self.id)
             cacert = cert_data[2] if len(cert_data) > 2 else None

@@ -82,6 +82,7 @@ class ApacheHandler(Handler):
     def on_host_init_response(self, message):
         pass
 
+
     def on_before_host_up(self, message):
         with bus.initialization_op as op:
             with op.phase(self._phase):
