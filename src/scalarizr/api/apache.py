@@ -268,47 +268,6 @@ class ApacheWebServer(object):
                         ssl_conf.comment(".//SSLCertificateChainFile")
 
 
-    def rpaf_modify_proxy_ips(self, ips, operation=None):
-        LOG.debug('Modify RPAFproxy_ips (operation: %s, ips: %s)', operation, ','.join(ips))
-        file = firstmatched(
-                lambda x: os.access(x, os.F_OK),
-                ('/etc/httpd/conf.d/mod_rpaf.conf', '/etc/apache2/mods-available/rpaf.conf')
-        )
-        if file:
-            with ApacheConfig(file) as rpaf:
-                if operation == 'add' or operation == 'remove':
-                    proxy_ips = set(re.split(r'\s+', rpaf.get('.//RPAFproxy_ips')))
-                    if operation == 'add':
-                        proxy_ips |= set(ips)
-                    else:
-                        proxy_ips -= set(ips)
-                elif operation == 'update':
-                    proxy_ips = set(ips)
-                if not proxy_ips:
-                    proxy_ips.add('127.0.0.1')
-
-                LOG.info('RPAFproxy_ips: %s', ' '.join(proxy_ips))
-                rpaf.set('.//RPAFproxy_ips', ' '.join(proxy_ips))
-
-                #fixing bug in rpaf 0.6-2
-                if disttool.is_debian_based():
-                    pm = dynimp.package_mgr()
-                    if '0.6-2' == pm.installed('libapache2-mod-rpaf'):
-                        try:
-                            LOG.debug('Patching IfModule value in rpaf.conf')
-                            rpaf.set("./IfModule[@value='mod_rpaf.c']", {'value': 'mod_rpaf-2.0.c'})
-                        except NoPathError:
-                            pass
-
-            st = os.stat(APACHE_CONF_PATH)
-            os.chown(file, st.st_uid, st.st_gid)
-
-
-            self.service.reload('Applying new RPAF proxy IPs list')
-        else:
-            LOG.debug('Nothing to do with rpaf: mod_rpaf configuration file not found')
-
-
 class SSLCertificate(object):
 
     id = None
@@ -317,21 +276,6 @@ class SSLCertificate(object):
     def __init__(self, ssl_certificate_id=None):
         self.id = ssl_certificate_id
         self._queryenv = bus.queryenv_service
-
-
-    @classmethod
-    def from_file(cls, cert_path, pk_path):
-        m = re.search('https(\d*).key',os.path.basename(cert_path))
-        if m and cls.keys_dir == os.path.dirname(cert_path) == \
-                os.path.dirname(cert_path):
-            return cls(m.group(1) or None)
-        else:
-            raise ApacheError("Unknown certificate")
-
-
-    @property
-    def is_orphaned(self):
-        return [] == self.used_by()
 
 
     def update_ssl_certificate(self, ssl_certificate_id, cert, key, cacert=None):
@@ -371,14 +315,6 @@ class SSLCertificate(object):
     def key_path(self):
         id = '_' + str(self.id) if self.id else ''
         return os.path.join(self.keys_dir, 'https%s.key' % id)
-
-
-    def used_by(self):
-        '''
-        @return:
-        list of ApacheVirtualHost objects which use given cert
-        '''
-        pass
 
 
 class ModRPAF(object):
@@ -462,21 +398,6 @@ class ApacheVirtualHost(object):
         self.body = body
         self.port = port
         self.cert = cert
-
-
-    @classmethod
-    def from_file(cls, path):
-        with ApacheConfig(path) as c:
-            hostname = c.get('.//ServerName')
-            port = c.get('VirtualHost').split(':')[-1]
-            cert_path = c.get('.//SSLCertificateFile')
-            pk_path = c.get('.//SSLCertificateKeyFile')
-        body = open(path).read()
-        if cert_path and pk_path:
-            cert = SSLCertificate.from_file(cert_path, pk_path)
-        else:
-            cert = None
-        return ApacheVirtualHost(hostname, port, body, cert)
 
 
     @property

@@ -42,7 +42,8 @@ class ApacheHandler(Handler):
                 before_host_up = self.on_before_host_up,
                 host_init_response = self.on_host_init_response
         )
-        self.webserver.init_service()
+        if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+            self.webserver.init_service()
 
 
     def on_reload(self):
@@ -89,11 +90,13 @@ class ApacheHandler(Handler):
     def on_HostUp(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
             self.webserver.mod_rpaf.add([message.local_ip])
+            self.webserver.service.reload('Applying new RPAF proxy IPs list')
 
 
     def on_HostDown(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
             self.webserver.mod_rpaf.remove([message.local_ip])
+            self.webserver.service.reload('Applying new RPAF proxy IPs list')
 
 
     def on_VhostReconfigure(self, message):
@@ -106,7 +109,9 @@ class ApacheHandler(Handler):
             for host in role.hosts:
                 lb_hosts.append(host.internal_ip)
         self.webserver.mod_rpaf.update(lb_hosts)
+        self.webserver.service.reload('Applying new RPAF proxy IPs list')
         bus.fire('apache_rpaf_reload')
 
 
     on_BeforeHostTerminate = on_HostDown
+
