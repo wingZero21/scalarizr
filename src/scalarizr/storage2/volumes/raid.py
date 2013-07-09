@@ -488,22 +488,23 @@ class RaidVolume(base.Volume):
         '''
 
         new_disk = storage2.volume(disk)
-        new_disk.ensure()
-        if not new_disk.id:
-            new_disk.destroy()
-            raise Exception('Failed to create new disk')
-
-        disk_to_replace = self.disks[index]
 
         try:
+            if not new_disk.id:
+                raise Exception('Volume id is None')
+
+            new_disk.ensure()
+
+            disk_to_replace = self.disks[index]
+
             mdadm.mdadm('manage', self.device, '--fail', disk_to_replace.device)
             mdadm.mdadm('manage', self.device, '--remove', disk_to_replace.device)
             mdadm.mdadm('manage', self.device, '--add', new_disk.device)
+
+            self.disks[index] = new_disk
         except Exception as e:
             new_disk.destroy()
             raise(e)
-
-        self.disks[index] = new_disk
 
 
 class RaidSnapshot(base.Snapshot):
