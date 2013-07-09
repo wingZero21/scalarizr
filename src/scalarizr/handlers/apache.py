@@ -14,7 +14,7 @@ from scalarizr.bus import bus
 from scalarizr.api import apache
 from scalarizr.util import disttool
 from scalarizr.linux import coreutils
-from scalarizr.handlers import Handler
+from scalarizr.handlers import ServiceCtlHandler
 from scalarizr.messaging import Messages
 from scalarizr.api import service as preset_service
 from scalarizr.services import PresetProvider, BaseConfig
