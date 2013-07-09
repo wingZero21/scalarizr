@@ -241,11 +241,11 @@ class MysqlHandler(DBMSRHandler):
 
     def __init__(self):
         self.mysql = mysql_svc.MySQL()
-
+        cnf_ctl = MysqlCnfController() if __mysql__['behavior'] in ('mysql2', 'percona') else None  # mariadb dont do old presets 
         ServiceCtlHandler.__init__(self,
                         __mysql__['behavior'],
                         self.mysql.service,
-                        MysqlCnfController())
+                        cnf_ctl)
 
         self.preset_provider = mysql_svc.MySQLPresetProvider()
         preset_service.services[__mysql__['behavior']] = self.preset_provider

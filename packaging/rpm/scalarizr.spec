@@ -564,6 +564,7 @@ if [ -f cloudfoundry.ini ]; then
 fi
 rm -f percona.ini  # Measly config in several builds 
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
+[ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini
 popd
