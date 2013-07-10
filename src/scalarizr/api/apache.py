@@ -66,7 +66,7 @@ with ApacheConfig(__apache__['httpd.conf']) as apache_conf:
     finally:
         if not server_root:
             server_root = os.path.dirname(__apache__['httpd.conf'])
-            apache_conf.set('ServerRoot', server_root)
+            apache_conf.set('ServerRoot', server_root, force=True)
         __apache__.update({'server_root': server_root})
 
 
