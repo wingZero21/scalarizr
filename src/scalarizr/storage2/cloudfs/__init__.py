@@ -14,6 +14,7 @@ import ConfigParser
 import time
 import hashlib
 import uuid
+import errno
 from copy import copy
 if sys.version_info[0:2] >= (2, 7):
     from collections import OrderedDict
@@ -714,33 +715,50 @@ class LargeTransfer(bases.Task):
 
 
     def _split(self, stream, prefix):
-        buf_size = 4096
-        chunk_size = self.chunk_size * 1024 * 1024
+        try:
+            buf_size = 4096
+            chunk_size = self.chunk_size * 1024 * 1024
 
-        for chunk_n in itertools.count():
-            chunk_name = prefix + '%03d' % chunk_n
-            chunk_capacity = chunk_size
-            chunk_md5 = hashlib.md5()
+            for chunk_n in itertools.count():
+                chunk_name = prefix + '%03d' % chunk_n
+                chunk_capacity = chunk_size
+                chunk_md5 = hashlib.md5()
 
-            zero = int(time.time())
-            with open(chunk_name, 'w') as chunk:
-                while chunk_capacity:
-                    bytes_ = stream.read(min(buf_size, chunk_capacity))
-                    if not bytes_:
-                        break
-                    chunk.write(bytes_)
-                    chunk_capacity -= len(bytes_)
-                    chunk_md5.update(bytes_)
+                zero = int(time.time())
+                with open(chunk_name, 'w') as chunk:
+                    while chunk_capacity:
 
-            if chunk_capacity != chunk_size:  # non-empty chunk
-                LOG.debug("*** BENCH %s %s created", int(time.time() - zero),
-                                os.path.basename(chunk_name))
-                yield chunk_name, chunk_md5.hexdigest(), chunk_size - chunk_capacity
-            else:  # empty chunk
-                os.remove(chunk_name)
-            if chunk_capacity:  # empty or half-empty chunk, meaning stream
-                                                    # is empty
-                break
+                        while True:
+                            try:
+                                bytes_ = stream.read(min(buf_size, chunk_capacity))
+                            except IOError, e:
+                                if e.errno == errno.EINTR:
+                                    LOG.debug("EINTR while reading data for %s",
+                                            chunk_name)
+                                    continue
+                                else:
+                                    raise
+                            else:
+                                break
+
+                        if not bytes_:
+                            break
+                        chunk.write(bytes_)
+                        chunk_capacity -= len(bytes_)
+                        chunk_md5.update(bytes_)
+
+                if chunk_capacity != chunk_size:  # non-empty chunk
+                    LOG.debug("*** BENCH %s %s created", int(time.time() - zero),
+                                    os.path.basename(chunk_name))
+                    yield chunk_name, chunk_md5.hexdigest(), chunk_size - chunk_capacity
+                else:  # empty chunk
+                    os.remove(chunk_name)
+                if chunk_capacity:  # empty or half-empty chunk, meaning stream
+                                                        # is empty
+                    break
+        except:
+            LOG.debug(" ", exc_info=sys.exc_info())
+            self.kill()
 
 
     def _dl_restorer(self):
