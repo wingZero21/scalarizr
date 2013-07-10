@@ -22,7 +22,7 @@ from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.linux import coreutils, iptables, pkgmgr
-from scalarizr.util import disttool, wait_until, dynimp, firstmatched
+from scalarizr.util import wait_until, dynimp, firstmatched
 from scalarizr.libs.metaconf import Configuration, NoPathError, strip_quotes
 
 LOG = logging.getLogger(__name__)
@@ -322,8 +322,12 @@ class ApacheAPI(object):
 class ModSSL(object):
 
     def __init__(self):
-        self.ssl_conf_path = os.path.join(__apache__['server_root'], 'conf.d/ssl.conf' \
-                if linux.os.redhat_family else 'sites-available/default-ssl')
+        if linux.os.redhat_family:
+            base = 'conf.d/ssl.conf'
+        else:
+            self.ssl_conf_path =
+            base = 'sites-available/default-ssl'
+        self.ssl_conf_path = os.path.join(__apache__['server_root'], base)
 
 
     def set_default_certificate(self, cert):
