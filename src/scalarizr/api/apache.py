@@ -31,9 +31,9 @@ LOG = logging.getLogger(__name__)
 __apache__ = __node__['apache']
 __apache__.update({
     'httpd.conf'         : '/etc/apache2/apache2.conf' if linux.os.debian_family else '/etc/httpd/conf/httpd.conf',
+    'vhosts_path'        : 'private.d/vhosts',
     'vhosts_dir'         : os.path.join(bus.etc_path, __apache__['vhosts_path']),
     'cert_path'          : os.path.join(bus.etc_path, 'private.d/keys'),
-    'vhosts_path'        : 'private.d/vhosts',
     'vhost_extension'   : '.vhost.conf',
     'logrotate_conf_path':'/etc/logrotate.d/scalarizr_app'})
 
@@ -220,8 +220,8 @@ class ApacheAPI(object):
 
 
     def clean_vhosts_dir(self):
-        for fname in os.listdir(__apache__['vhosts_path']):
-            path = os.path.join(__apache__['vhosts_path'], fname)
+        for fname in os.listdir(__apache__['vhosts_dir']):
+            path = os.path.join(__apache__['vhosts_dir'], fname)
             if path.endswith(__apache__['vhost_extension']):
                 if os.path.isfile(path):
                     os.remove(path)
