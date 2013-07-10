@@ -86,6 +86,7 @@ class ApacheAPI(object):
 
     def __init__(self):
         self.service = initdv2.lookup('apache')
+        self._queryenv = bus.queryenv_service
         self.mod_rpaf = ModRPAF()
         self.mod_ssl = ModSSL()
 
