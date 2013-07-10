@@ -64,6 +64,9 @@ with ApacheConfig(__apache__['httpd.conf']) as apache_conf:
     except NoPathError,e:
         pass
     finally:
+        if not server_root:
+            server_root = os.path.dirname(__apache__['httpd.conf'])
+            apache_conf.set('ServerRoot', server_root)
         __apache__.update({'server_root': server_root})
 
 
@@ -200,9 +203,6 @@ class ApacheAPI(object):
             inc_mask = __apache__['vhosts_dir'] + '/*' + __apache__['vhost_extension']
             if not inc_mask in apache_conf.get_list('Include'):
                 apache_conf.add('Include', inc_mask)
-
-            if not __apache__['server_root']:
-                apache_conf.set('ServerRoot', os.path.dirname(__apache__['httpd.conf']))
 
         if linux.os.debian_family:
             self.patch_default_conf_deb()
