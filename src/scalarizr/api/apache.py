@@ -250,7 +250,7 @@ class ApacheAPI(object):
         return d
 
 
-    def _open_ports(ports):
+    def _open_ports(self, ports):
         if iptables.enabled():
             rules = []
             for port in ports:
