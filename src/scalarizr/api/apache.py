@@ -325,7 +325,6 @@ class ModSSL(object):
         if linux.os.redhat_family:
             base = 'conf.d/ssl.conf'
         else:
-            self.ssl_conf_path =
             base = 'sites-available/default-ssl'
         self.ssl_conf_path = os.path.join(__apache__['server_root'], base)
 
