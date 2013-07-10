@@ -194,7 +194,7 @@ class ApacheAPI(object):
     def init_service(self):
         self.service.stop('Configuring Apache Web Server')
 
-        self._open_ports(80,443)
+        self._open_ports([80,443])
 
         if not os.path.exists(__apache__['vhosts_dir']):
             os.makedirs(__apache__['vhosts_dir'])
