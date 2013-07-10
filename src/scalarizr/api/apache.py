@@ -31,10 +31,9 @@ LOG = logging.getLogger(__name__)
 __apache__ = __node__['apache']
 __apache__.update({
     'httpd.conf'         : '/etc/apache2/apache2.conf' if linux.os.debian_family else '/etc/httpd/conf/httpd.conf',
-    'vhosts_path'        : 'private.d/vhosts',
-    'vhosts_dir'         : os.path.join(bus.etc_path, __apache__['vhosts_path']),
+    'vhosts_dir'         : os.path.join(bus.etc_path, 'private.d/vhosts'),
     'cert_path'          : os.path.join(bus.etc_path, 'private.d/keys'),
-    'vhost_extension'   : '.vhost.conf',
+    'vhost_extension'    : '.vhost.conf',
     'logrotate_conf_path':'/etc/logrotate.d/scalarizr_app'})
 
 
@@ -587,7 +586,7 @@ class ApacheVirtualHost(object):
     def vhost_path(self):
         ext = __apache__['vhost_extension']
         end = ext if not self.cert else '-ssl' + ext
-        return os.path.join(bus.etc_path, __apache__['vhosts_path'], self.hostname + end)
+        return os.path.join(__apache__['vhosts_dir'], self.hostname + end)
 
 
     def ensure(self):
