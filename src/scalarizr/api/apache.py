@@ -54,19 +54,20 @@ class ApacheConfig(object):
         self._cnf.write(self.path)
 
 
-with ApacheConfig(__apache__['httpd.conf']) as apache_conf:
-    server_root = None
-    try:
-        server_root = apache_conf.get('ServerRoot')
-        server_root = strip_quotes(server_root)
-        server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
-    except NoPathError,e:
-        pass
-    finally:
-        if not server_root:
-            server_root = os.path.dirname(__apache__['httpd.conf'])
-            apache_conf.set('ServerRoot', server_root, force=True)
-        __apache__.update({'server_root': server_root})
+if os.path.exists(__apache__['httpd.conf']):
+    with ApacheConfig(__apache__['httpd.conf']) as apache_conf:
+        server_root = None
+        try:
+            server_root = apache_conf.get('ServerRoot')
+            server_root = strip_quotes(server_root)
+            server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
+        except NoPathError,e:
+            pass
+        finally:
+            if not server_root:
+                server_root = os.path.dirname(__apache__['httpd.conf'])
+                apache_conf.set('ServerRoot', server_root, force=True)
+            __apache__.update({'server_root': server_root})
 
 
 class ApacheError(BaseException):
@@ -549,7 +550,7 @@ class SSLCertificate(object):
         return os.path.join(self.keys_dir, 'https%s.key' % id)
 
     @property
-    def ca_cert_path(self):
+    def ca_crt_path(self):
         id = '_' + str(self.id) if self.id else ''
         return os.path.join(self.keys_dir, 'https%s-ca.crt' % id)
 
