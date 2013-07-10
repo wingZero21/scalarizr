@@ -35,7 +35,6 @@ class ApacheHandler(ServiceCtlHandler):
     _queryenv = None
 
     def __init__(self):
-        self.webserver = apache.ApacheWebServer()
         self.api = apache.ApacheAPI()
         self.preset_provider = ApachePresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
@@ -51,7 +50,7 @@ class ApacheHandler(ServiceCtlHandler):
                 host_init_response = self.on_host_init_response
         )
         if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
-            self.webserver.init_service()
+            self.api.init_service()
 
 
     def on_reload(self):
@@ -101,14 +100,14 @@ class ApacheHandler(ServiceCtlHandler):
 
     def on_HostUp(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
-            self.webserver.mod_rpaf.add([message.local_ip])
-            self.webserver.service.reload('Applying new RPAF proxy IPs list')
+            self.api.mod_rpaf.add([message.local_ip])
+            self.api.service.reload('Applying new RPAF proxy IPs list')
 
 
     def on_HostDown(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
-            self.webserver.mod_rpaf.remove([message.local_ip])
-            self.webserver.service.reload('Applying new RPAF proxy IPs list')
+            self.api.mod_rpaf.remove([message.local_ip])
+            self.api.service.reload('Applying new RPAF proxy IPs list')
 
 
     def on_VhostReconfigure(self, message):
@@ -120,8 +119,8 @@ class ApacheHandler(ServiceCtlHandler):
         for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
             for host in role.hosts:
                 lb_hosts.append(host.internal_ip)
-        self.webserver.mod_rpaf.update(lb_hosts)
-        self.webserver.service.reload('Applying new RPAF proxy IPs list')
+        self.api.mod_rpaf.update(lb_hosts)
+        self.api.service.reload('Applying new RPAF proxy IPs list')
         bus.fire('apache_rpaf_reload')
 
 
@@ -137,9 +136,9 @@ class ApacheConf(BaseConfig):
 class ApachePresetProvider(PresetProvider):
 
     def __init__(self):
-        webserver = apache.ApacheWebServer()
+        api = apache.ApacheAPI()
         config_mapping = {'apache.conf':ApacheConf(apache.APACHE_CONF_PATH)}
-        PresetProvider.__init__(self, webserver.service, config_mapping)
+        PresetProvider.__init__(self, api.service, config_mapping)
 
 
     def rollback_hook(self):

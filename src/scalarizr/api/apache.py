@@ -12,80 +12,216 @@ import pwd
 import time
 import shutil
 import logging
-from telnetlib import Telnet
+
 from scalarizr import rpc
+from scalarizr import linux
+from telnetlib import Telnet
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
-from scalarizr.linux import iptables
-from scalarizr.linux import LinuxError, coreutils
 from scalarizr.util.initdv2 import InitdError
+from scalarizr.linux import LinuxError, coreutils, iptables, pkgmgr
 from scalarizr.util import disttool, wait_until, dynimp, firstmatched
 from scalarizr.libs.metaconf import Configuration, NoPathError, strip_quotes
 
-__apache__ = __node__['apache']
-
-VHOSTS_PATH = 'private.d/vhosts'
-VHOST_EXTENSION = '.vhost.conf'
-LOGROTATE_CONF_PATH = '/etc/logrotate.d/scalarizr_app'
-APACHE_CONF_PATH = '/etc/apache2/apache2.conf' if disttool.is_debian_based() else '/etc/httpd/conf/httpd.conf'
-
 LOG = logging.getLogger(__name__)
+
+
+__apache__ = __node__['apache']
+__apache__.update({
+    'httpd.conf'         : '/etc/apache2/apache2.conf' if linux.os.debian_family else '/etc/httpd/conf/httpd.conf',
+    'vhosts_dir'         : os.path.join(bus.etc_path, __apache__['vhosts_path']),
+    'cert_path'          : os.path.join(bus.etc_path, 'private.d/keys'),
+    'vhosts_path'        : 'private.d/vhosts',
+    'vhosts_extension'   : '.vhost.conf',
+    'logrotate_conf_path':'/etc/logrotate.d/scalarizr_app'})
+
+
+class ApacheConfig(object):
+
+    _cnf = None
+    path = None
+
+    def __init__(self, path):
+        self._cnf = Configuration('apache')
+        self.path = path
+
+    def __enter__(self):
+        self._cnf.read(self.path)
+        return self._cnf
+
+    def __exit__(self, type, value, traceback):
+        self._cnf.write(self.path)
+
+
+with ApacheConfig(__apache__['httpd.conf']) as apache_conf:
+    server_root = None
+    try:
+        server_root = apache_conf.get('ServerRoot')
+        server_root = strip_quotes(server_root)
+        server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
+    except NoPathError,e:
+        pass
+    finally:
+        __apache__.update({'server_root': server_root})
 
 
 class ApacheError(BaseException):
     pass
 
 
-class ApacheWebServer(object):
+class ApacheAPI(object):
 
     _instance = None
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
-            cls._instance = super(ApacheWebServer, cls).__new__(cls, *args, **kwargs)
+            cls._instance = super(ApacheAPI, cls).__new__(cls, *args, **kwargs)
         return cls._instance
 
 
     def __init__(self):
         self.service = initdv2.lookup('apache')
         self.mod_rpaf = ModRPAF()
-        self.mod_ssl = ModSSL(self.server_root)
+        self.mod_ssl = ModSSL()
+
+
+    @rpc.service_method
+    def create_vhost(self, hostname, port, template, ssl_certificate_id=None, reload=True):
+        if ssl_certificate_id:
+            cert = SSLCertificate(ssl_certificate_id)
+            cert.ensure()
+
+        body = template.replace('/etc/aws/keys/ssl', __apache__['cert_path'])
+        vhost = ApacheVirtualHost(hostname, port, body, cert)
+        vhost.ensure()
+
+        if reload:
+            self.reload_service()
+            assert vhost in self.list_served_hosts()
+
+
+    @rpc.service_method
+    def delete_vhost(self, hostname_pattern, reload=True):
+        for vhost in self.list_served_hosts:
+            if vhost.is_like(hostname_pattern):
+                vhost.delete()
+
+        if reload:
+            self.reload_service()
+
+
+    @rpc.service_method
+    def reload_vhosts(self):
+        deployed_vhosts = []
+        received_vhosts = self._queryenv.list_virtual_hosts()
+        for vhost_data in received_vhosts:
+            hostname = vhost_data.hostname
+            port = 443 if vhost_data.https else 80
+
+            if vhost_data.https:
+                cert = SSLCertificate()
+                cert.ensure()
+                body = vhost_data.raw.replace('/etc/aws/keys/ssl', __apache__['cert_path'])
+                vhost = ApacheVirtualHost(hostname, port, body, cert)
+            else:
+                vhost = ApacheVirtualHost(hostname, port, vhost_data.raw)
+            vhost.ensure()
+            deployed_vhosts.append(vhost)
+
+        #cleanup
+        vhosts_dir = __apache__['vhosts_dir']
+        for fname in os.listdir(vhosts_dir):
+            old_vhost_path = os.path.join(vhosts_dir, fname)
+            if old_vhost_path not in [vhost.vhost_path for vhost in deployed_vhosts]:
+                LOG.debug('Removing old vhost file %s' % old_vhost_path)
+                os.remove(old_vhost_path)
+        self.service.reload()
+
+
+    @rpc.service_method
+    def start_service(self):
+        self.servece.start()
+
+
+    @rpc.service_method
+    def stop_service(self):
+        self.service.stop()
+
+
+    @rpc.service_method
+    def reload_service(self):
+        self.servece.reload()
+
+
+    @rpc.service_method
+    def restart_service(self):
+        self.service.restart()
+
+
+    @rpc.service_method
+    def update_vhost(self, hostname, new_hostname=None, template=None, ssl_certificate_id=None, port=80, reload=True):
+        pass
+
+
+    @rpc.service_method
+    def get_webserver_statistics(self):
+        '''
+        @return:
+        dict of parsed mod_status data
+
+        i.e.
+        Current Time
+        Restart Time
+        Parent Server Generation
+        Server uptime
+        Total accesses
+        CPU Usage
+        '''
+        pass
+
+
+
+    @rpc.service_method
+    def list_webserver_ssl_certificates(self):
+        pass
 
 
     def init_service(self):
         self.service.stop('Configuring Apache Web Server')
 
-        _open_port(80)
-        _open_port(443)
+        self._open_ports(80,443)
 
-        if not os.path.exists(self.vhosts_dir):
-            os.makedirs(self.vhosts_dir)
+        if not os.path.exists(__apache__['vhosts_dir']):
+            os.makedirs(__apache__['vhosts_dir'])
 
-        with ApacheConfig(APACHE_CONF_PATH) as apache_conf:
-            inc_mask = self.vhosts_dir + '/*' + VHOST_EXTENSION
+        with ApacheConfig(__apache__['httpd.conf']) as apache_conf:
+            inc_mask = __apache__['vhosts_dir'] + '/*' + __apache__['vhost_extension']
             if not inc_mask in apache_conf.get_list('Include'):
                 apache_conf.add('Include', inc_mask)
 
-        if disttool.is_debian_based():
-            patch_default_conf_deb()
+            if not __apache__['server_root']:
+                apache_conf.set('ServerRoot', os.path.dirname(__apache__['httpd.conf']))
+
+        if linux.os.debian_family:
+            self.patch_default_conf_deb()
             self.mod_rpaf.fix_module()
         else:
-            with ApacheConfig(APACHE_CONF_PATH) as apache_conf:
+            with ApacheConfig(__apache__['httpd.conf']) as apache_conf:
                 if not apache_conf.get_list('NameVirtualHost'):
                     apache_conf.set('NameVirtualHost', '*:80')
 
-        create_logrotate_conf(LOGROTATE_CONF_PATH)
+        self.create_logrotate_conf(__apache__['logrotate_conf_path'])
         self.mod_ssl.ensure()
         self.mod_rpaf.ensure_permissions()
         self.service.start()
 
 
     def clean_vhosts_dir(self):
-        for fname in os.listdir(VHOSTS_PATH):
-            path = os.path.join(VHOSTS_PATH, fname)
-            if path.endswith(VHOST_EXTENSION):
+        for fname in os.listdir(__apache__['vhosts_path']):
+            path = os.path.join(__apache__['vhosts_path'], fname)
+            if path.endswith(__apache__['vhost_extension']):
                 if os.path.isfile(path):
                     os.remove(path)
                 elif os.path.islink(path):
@@ -93,7 +229,7 @@ class ApacheWebServer(object):
 
 
     def list_served_vhosts(self):
-        binary_path = '/usr/sbin/apache2ctl' if disttool.is_debian_based() else 'usr/sbin/httpd'
+        binary_path = '/usr/sbin/apache2ctl' if linux.os.debian_family else 'usr/sbin/httpd'
         d = {}
         host = None
         s = system2((binary_path, '-S'))[0]
@@ -114,37 +250,79 @@ class ApacheWebServer(object):
         return d
 
 
-    @property
-    def server_root(self):
-        with ApacheConfig(APACHE_CONF_PATH) as apache_conf:
-            server_root = None
-            try:
-                server_root = apache_conf.get('ServerRoot')
-                server_root = strip_quotes(server_root)
-                server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
-            except NoPathError,e:
-                pass
-            if not server_root:
-                server_root = os.path.dirname(APACHE_CONF_PATH)
-                apache_conf.set('ServerRoot', server_root)
-        return server_root
+    def _open_ports(ports):
+        if iptables.enabled():
+            rules = []
+            for port in ports:
+                rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
+            iptables.FIREWALL.ensure(rules)
 
 
-    @property
-    def vhosts_dir(self):
-        return os.path.join(bus.etc_path, VHOSTS_PATH)
+    def patch_default_conf_deb(self):
+        LOG.debug("Replacing NameVirtualhost and Virtualhost ports specifically for debian-based linux")
+        default_vhost_path = os.path.join(
+                                os.path.dirname(__apache__['httpd.conf']),
+                                'sites-enabled',
+                                '000-default')
+        if os.path.exists(default_vhost_path):
+            with ApacheConfig(default_vhost_path) as default_vhost:
+                default_vhost.set('NameVirtualHost', '*:80', force=True)
+
+            dv = None
+            with open(default_vhost_path, 'r') as fp:
+                dv = fp.read()
+            vhost_regexp = re.compile('<VirtualHost\s+\*>')
+            dv = vhost_regexp.sub( '<VirtualHost *:80>', dv)
+            with open(default_vhost_path, 'w') as fp:
+                fp.write(dv)
+
+        else:
+            LOG.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
 
 
-    @property
-    def cert_path(self):
-        return os.path.join(bus.etc_path, 'private.d/keys')
+    def create_logrotate_conf(self, path):
+
+        LOGROTATE_CONF_REDHAT_RAW = """/var/log/http-*.log {
+             missingok
+             notifempty
+             sharedscripts
+             delaycompress
+             postrotate
+                 /sbin/service httpd reload > /dev/null 2>/dev/null || true
+             endscript
+        }
+        """
+
+        LOGROTATE_CONF_DEB_RAW = """/var/log/http-*.log {
+                 weekly
+                 missingok
+                 rotate 52
+                 compress
+                 delaycompress
+                 notifempty
+                 create 640 root adm
+                 sharedscripts
+                 postrotate
+                         if [ -f "`. /etc/apache2/envvars ; echo ${APACHE_PID_FILE:-/var/run/apache2.pid}`" ]; then
+                                 /etc/init.d/apache2 reload > /dev/null
+                         fi
+                 endscript
+        }
+        """
+
+        if not os.path.exists(path):
+            if linux.os.debian_family:
+                with open(path, 'w') as fp:
+                    fp.write(LOGROTATE_CONF_DEB_RAW)
+            else:
+                with open(path, 'w') as fp:
+                    fp.write(LOGROTATE_CONF_REDHAT_RAW)
 
 
 class ModSSL(object):
 
-    def __init__(self, server_root):
-        self.server_root = server_root
-        self.ssl_conf_path = os.path.join(self.server_root, 'conf.d/ssl.conf' \
+    def __init__(self):
+        self.ssl_conf_path = os.path.join(__apache__['server_root'], 'conf.d/ssl.conf' \
                 if disttool.is_redhat_based() else 'sites-available/default-ssl')
 
 
@@ -197,14 +375,14 @@ class ModSSL(object):
 
 
     def ensure(self, ssl_port=443):
-        if disttool.is_debian_based():
+        if linux.os.debian_family:
             self._check_mod_ssl_deb(ssl_port)
         elif disttool.is_redhat_based():
             self._check_mod_ssl_redhat(ssl_port)
 
 
     def _check_mod_ssl_deb(self, ssl_port=443):
-        base = os.path.dirname(APACHE_CONF_PATH)
+        base = os.path.dirname(__apache__['httpd.conf'])
         ports_conf_path = os.path.join(base, 'ports.conf')
         ssl_load_path = os.path.join(base, 'mods-enabled', 'ssl.load')
 
@@ -225,12 +403,11 @@ class ModSSL(object):
 
 
     def _check_mod_ssl_redhat(self,ssl_port=443):
-        mod_ssl_file = os.path.join(self.server_root, 'modules', 'mod_ssl.so')
+        mod_ssl_file = os.path.join(__apache__['server_root'], 'modules', 'mod_ssl.so')
 
         if not os.path.exists(mod_ssl_file):
-            inst_cmd = '/usr/bin/yum -y install mod_ssl'
-            LOG.info('%s does not exist. Trying "%s" ' % (mod_ssl_file, inst_cmd))
-            system2(inst_cmd, shell=True)
+            LOG.info('%s does not exist. Trying to install' % mod_ssl_file)
+            pkgmgr.install('mod_ssl')
 
         #ssl.conf part
         if not os.path.exists(self.ssl_conf_path):
@@ -254,7 +431,7 @@ class ModSSL(object):
                         LOG.debug("NameVirtualHost directive inserted after Listen directive.")
                         ssl_conf.add('NameVirtualHost', '*:%s'% ssl_port, 'Listen')
 
-        with ApacheConfig(APACHE_CONF_PATH) as main_config:
+        with ApacheConfig(__apache__['httpd.conf']) as main_config:
             loaded_in_main = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
             if not loaded_in_main:
                 if os.path.exists(self.ssl_conf_path):
@@ -314,7 +491,7 @@ class ModRPAF(object):
 
 
     def ensure_permissions(self):
-        st = os.stat(APACHE_CONF_PATH)
+        st = os.stat(__apache__['httpd.conf'])
         os.chown(self.path, st.st_uid, st.st_gid)
 
 
@@ -328,7 +505,7 @@ class SSLCertificate(object):
         self.keys_dir = keys_dir or os.path.join(bus.etc_path, "private.d/keys")
 
 
-    def update_ssl_certificate(self, cert, key, cacert=None):
+    def update(self, cert, key, cacert=None):
 
         with open(self.cert_path, 'w') as fp:
             fp.write(cert)
@@ -346,7 +523,7 @@ class SSLCertificate(object):
             LOG.debug("Retrieving ssl cert and private key from Scalr.")
             cert_data = self._queryenv.get_ssl_certificate(self.id)
             cacert = cert_data[2] if len(cert_data) > 2 else None
-            self.update_ssl_certificate(cert_data[0],cert_data[1],cacert)
+            self.update(cert_data[0],cert_data[1],cacert)
         else:
             LOG.debug('Cert files are already in place')
 
@@ -395,7 +572,7 @@ class ApacheVirtualHost(object):
 
 
     def __init__(self, hostname, port, body=None, cert=None):
-        self.webserver = ApacheWebServer()
+        self.mod_ssl = ModSSL()
         self.hostname = hostname
         self.body = body
         self.port = port
@@ -404,8 +581,9 @@ class ApacheVirtualHost(object):
 
     @property
     def vhost_path(self):
-        end = VHOST_EXTENSION if not self.cert else '-ssl' + VHOST_EXTENSION
-        return os.path.join(bus.etc_path, VHOSTS_PATH, self.hostname + end)
+        ext = __apache__['vhost_extension']
+        end = ext if not self.cert else '-ssl' + ext
+        return os.path.join(bus.etc_path, __apache__['vhosts_path'], self.hostname + end)
 
 
     def ensure(self):
@@ -413,20 +591,12 @@ class ApacheVirtualHost(object):
             fp.write(self.body)
         self.ensure_document_root()
         if self.cert:
-            self.webserver.mod_ssl.set_default_certificate(self.cert)
+            self.mod_ssl.set_default_certificate(self.cert)
         #TODO: check ssl.conf, debian.conf, etc. if needed
 
 
     def delete(self):
         os.remove(self.vhost_path)
-
-
-    def is_deployed(self):
-        return self.vhost_path in self.webserver.list_served_vhosts()['*:%d' % self.port]
-
-
-    def is_like(self, hostname_pattern):
-        pass
 
 
     def _get_log_directories(self):
@@ -470,154 +640,15 @@ class ApacheVirtualHost(object):
                 LOG.debug('Copied documentroot files: %s'
                          % ', '.join(os.listdir(doc_root)))
 
-                uname = get_apache_user()
+                try:
+                    pwd.getpwnam('apache')
+                    uname = 'apache'
+                except:
+                    uname = 'www-data'
+
                 coreutils.chown_r(doc_root, uname)
                 LOG.debug('Changed owner to %s: %s'
                          % (uname, ', '.join(os.listdir(doc_root))))
-
-
-class ApacheConfig(object):
-
-    _cnf = None
-    path = None
-
-    def __init__(self, path):
-        self._cnf = Configuration('apache')
-        self.path = path
-
-    def __enter__(self):
-        self._cnf.read(self.path)
-        return self._cnf
-
-    def __exit__(self, type, value, traceback):
-        self._cnf.write(self.path)
-
-
-class ApacheAPI(object):
-
-    _instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(ApacheAPI, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
-
-
-    def __init__(self):
-        self.service = initdv2.lookup('apache')
-        self.webserver = ApacheWebServer()
-        self._queryenv = bus.queryenv_service
-
-
-    @rpc.service_method
-    def create_vhost(self, hostname, port, template, ssl_certificate_id=None, reload=True):
-        if ssl_certificate_id:
-            cert = SSLCertificate(ssl_certificate_id)
-            cert.ensure()
-
-        body = template.replace('/etc/aws/keys/ssl', self.webserver.cert_path)
-        vhost = ApacheVirtualHost(hostname, port, body, cert)
-        vhost.ensure()
-
-        if reload:
-            self.reload_service()
-            assert vhost in self.list_served_hosts()
-
-
-    @rpc.service_method
-    def delete_vhost(self, hostname_pattern, reload=True):
-        for vhost in self.list_served_hosts:
-            if vhost.is_like(hostname_pattern):
-                vhost.delete()
-
-        if reload:
-            self.reload_service()
-
-
-    @rpc.service_method
-    def update_vhost(self, hostname, new_hostname=None, template=None, ssl_certificate_id=None, port=80, reload=True):
-        pass
-
-
-    @rpc.service_method
-    def get_webserver_statistics(self):
-        '''
-        @return:
-        dict of parsed mod_status data
-
-        i.e.
-        Current Time
-        Restart Time
-        Parent Server Generation
-        Server uptime
-        Total accesses
-        CPU Usage
-        '''
-        pass
-
-
-    @rpc.service_method
-    def list_served_hosts(self, hostname_pattern=None, port=None):
-        '''
-        @param hostname_pattern: regexp
-        @param port: filter by port
-        @return: list of ApacheVirtualHost objects according to httpd -S output (apache2ctl -S on Ubuntu)
-        #temporary returns dict of "ip:host" : list(vhosts)
-        '''
-        return self.webserver.list_served_vhosts()
-
-
-    @rpc.service_method
-    def list_webserver_ssl_certificates(self):
-        pass
-
-
-    @rpc.service_method
-    def reload_vhosts(self):
-        deployed_vhosts = []
-        received_vhosts = self._queryenv.list_virtual_hosts()
-        for vhost_data in received_vhosts:
-            hostname = vhost_data.hostname
-            port = 443 if vhost_data.https else 80
-
-            if vhost_data.https:
-                cert = SSLCertificate()
-                cert.ensure()
-                body = vhost_data.raw.replace('/etc/aws/keys/ssl', self.webserver.cert_path)
-                vhost = ApacheVirtualHost(hostname, port, body, cert)
-            else:
-                vhost = ApacheVirtualHost(hostname, port, vhost_data.raw)
-            vhost.ensure()
-            deployed_vhosts.append(vhost)
-
-        #cleanup
-        vhosts_dir = self.webserver.vhosts_dir
-        for fname in os.listdir(vhosts_dir):
-            old_vhost_path = os.path.join(vhosts_dir, fname)
-            if old_vhost_path not in [vhost.vhost_path for vhost in deployed_vhosts]:
-                LOG.debug('Removing old vhost file %s' % old_vhost_path)
-                os.remove(old_vhost_path)
-        self.service.reload()
-
-
-    @rpc.service_method
-    def start_service(self):
-        self.servece.start()
-
-
-    @rpc.service_method
-    def stop_service(self):
-        self.service.stop()
-
-
-    @rpc.service_method
-    def reload_service(self):
-        self.servece.reload()
-
-
-    @rpc.service_method
-    def restart_service(self):
-        self.service.restart()
 
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
@@ -629,7 +660,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
             self._apachectl = '/usr/sbin/apachectl'
             initd_script    = '/etc/init.d/httpd'
             pid_file                = '/var/run/httpd/httpd.pid' if disttool.version_info()[0] == 6 else '/var/run/httpd.pid'
-        elif disttool.is_debian_based():
+        elif linux.os.debian_family:
             self._apachectl = '/usr/sbin/apache2ctl'
             initd_script    = '/etc/init.d/apache2'
             pid_file = None
@@ -722,102 +753,14 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
     def _main_process_started(self):
         res = False
-        bin = '/usr/sbin/apache2' if disttool.is_debian_based() else '/usr/sbin/httpd'
-        group = 'www-data' if disttool.is_debian_based() else 'apache'
+        bin = '/usr/sbin/apache2' if linux.os.debian_family else '/usr/sbin/httpd'
+        group = 'www-data' if linux.os.debian_family else 'apache'
         try:
             out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'), raise_exc=False)[0]
             res = True if len([p for p in out.split('\n') if bin in p]) else False
         except:
             pass
         return res
-
-
-initdv2.explore('apache', ApacheInitScript)
-
-
-def _open_port(port):
-    if iptables.enabled():
-        rule = {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)}
-        iptables.FIREWALL.ensure([rule])
-
-
-def _close_port(port):
-    if iptables.enabled():
-        rule = {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)}
-        try:
-            iptables.FIREWALL.remove(rule)
-        except LinuxError:
-            pass
-
-
-def patch_default_conf_deb():
-    LOG.debug("Replacing NameVirtualhost and Virtualhost ports specifically for debian-based linux")
-    default_vhost_path = os.path.join(
-                            os.path.dirname(APACHE_CONF_PATH),
-                            'sites-enabled',
-                            '000-default')
-    if os.path.exists(default_vhost_path):
-        with ApacheConfig(default_vhost_path) as default_vhost:
-            default_vhost.set('NameVirtualHost', '*:80', force=True)
-
-        dv = None
-        with open(default_vhost_path, 'r') as fp:
-            dv = fp.read()
-        vhost_regexp = re.compile('<VirtualHost\s+\*>')
-        dv = vhost_regexp.sub( '<VirtualHost *:80>', dv)
-        with open(default_vhost_path, 'w') as fp:
-            fp.write(dv)
-
-    else:
-        LOG.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
-
-
-def get_apache_user():
-    try:
-        pwd.getpwnam('apache')
-        uname = 'apache'
-    except:
-        uname = 'www-data'
-    return uname
-
-
-def create_logrotate_conf(path=LOGROTATE_CONF_PATH):
-
-    LOGROTATE_CONF_REDHAT_RAW = """/var/log/http-*.log {
-         missingok
-         notifempty
-         sharedscripts
-         delaycompress
-         postrotate
-             /sbin/service httpd reload > /dev/null 2>/dev/null || true
-         endscript
-    }
-    """
-
-    LOGROTATE_CONF_DEB_RAW = """/var/log/http-*.log {
-             weekly
-             missingok
-             rotate 52
-             compress
-             delaycompress
-             notifempty
-             create 640 root adm
-             sharedscripts
-             postrotate
-                     if [ -f "`. /etc/apache2/envvars ; echo ${APACHE_PID_FILE:-/var/run/apache2.pid}`" ]; then
-                             /etc/init.d/apache2 reload > /dev/null
-                     fi
-             endscript
-    }
-    """
-
-    if not os.path.exists(path):
-        if disttool.is_debian_based():
-            with open(path, 'w') as fp:
-                fp.write(LOGROTATE_CONF_DEB_RAW)
-        else:
-            with open(path, 'w') as fp:
-                fp.write(LOGROTATE_CONF_REDHAT_RAW)
 
 
 initdv2.explore('apache', ApacheInitScript)
