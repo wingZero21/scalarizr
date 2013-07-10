@@ -497,13 +497,15 @@ class RaidVolume(base.Volume):
 
             disk_to_replace = self.disks[index]
 
-            mdadm.mdadm('manage', self.device, '--fail', disk_to_replace.device)
-            mdadm.mdadm('manage', self.device, '--remove', disk_to_replace.device)
-            mdadm.mdadm('manage', self.device, '--add', new_disk.device)
+            mdadm.mdadm('manage', self.raid_pv, '--fail', disk_to_replace.device)
+            mdadm.mdadm('manage', self.raid_pv, '--remove', disk_to_replace.device)
+            mdadm.mdadm('manage', self.raid_pv, '--add', new_disk.device)
 
             self.disks[index] = new_disk
+            disk_to_replace.destroy(force=True, remove_disks=True)
+
         except Exception as e:
-            new_disk.destroy()
+            new_disk.destroy(force=True, remove_disks=True)
             raise(e)
 
 

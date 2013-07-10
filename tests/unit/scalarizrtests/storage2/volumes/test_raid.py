@@ -19,8 +19,7 @@ class RaidVolumeTest(unittest.TestCase):
 
     def test_ensure_new(self, mdadm, lvm2, storage2, exists, rm, tfile,
                                             b64, op):
-        disks = [mock.MagicMock(type='loop', device='/dev/loop%s' % x)
-                                                                                                        for x in range(2)]*2
+        disks = [mock.MagicMock(type='loop', device='/dev/loop%s' % x) for x in range(2)]*2
         storage2.volume.side_effect = disks
         disks_devices = [d.device for d in disks[:2]]
         mdadm.findname.return_value = '/dev/md1'
