@@ -13,6 +13,7 @@ import logging
 from scalarizr.bus import bus
 from scalarizr.api import apache
 from scalarizr.util import disttool
+from scalarizr.node import __node__
 from scalarizr.linux import coreutils
 from scalarizr.handlers import ServiceCtlHandler
 from scalarizr.messaging import Messages
@@ -24,10 +25,10 @@ from scalarizr.config import BuiltinBehaviours, ScalarizrState
 LOG = logging.getLogger(__name__)
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.APP
 
+__apache__ = __node__['apache']
 
 def get_handlers ():
     return [ApacheHandler()]
-
 
 
 class ApacheHandler(ServiceCtlHandler):
@@ -137,7 +138,7 @@ class ApachePresetProvider(PresetProvider):
 
     def __init__(self):
         api = apache.ApacheAPI()
-        config_mapping = {'apache.conf':ApacheConf(apache.APACHE_CONF_PATH)}
+        config_mapping = {'apache.conf':ApacheConf(apache)}
         PresetProvider.__init__(self, api.service, config_mapping)
 
 
