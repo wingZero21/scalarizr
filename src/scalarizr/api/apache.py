@@ -117,8 +117,13 @@ class ApacheWebServer(object):
     @property
     def server_root(self):
         with ApacheConfig(APACHE_CONF_PATH) as apache_conf:
-            server_root = strip_quotes(apache_conf.get('ServerRoot'))
-            server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
+            server_root = None
+            try:
+                server_root = apache_conf.get('ServerRoot')
+                server_root = strip_quotes(server_root)
+                server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
+            except NoPathError,e:
+                pass
             if not server_root:
                 server_root = os.path.dirname(APACHE_CONF_PATH)
                 apache_conf.set('ServerRoot', server_root)
