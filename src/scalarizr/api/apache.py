@@ -334,11 +334,11 @@ class ModSSL(object):
         crt_path_default = '/etc/pki/tls/certs/localhost.crt' if linux.os.redhat_family else '/etc/ssl/certs/ssl-cert-snakeoil.pem'
 
         cert_path = cert.cert_path if cert else None
-        pk_path = cert.pk_path  if cert else None
+        key_path = cert.key_path  if cert else None
         ca_crt_path = cert.ca_crt_path if cert else None
 
         self._set('.//SSLCertificateFile', cert_path, crt_path_default)
-        self._set('.//SSLCertificateKeyFile', pk_path, key_path_default)
+        self._set('.//SSLCertificateKeyFile', key_path, key_path_default)
 
         with ApacheConfig(self.ssl_conf_path) as ssl_conf:
 
@@ -532,7 +532,7 @@ class SSLCertificate(object):
 
 
     def delete(self):
-        for path in (self.cert_path, self.pk_path):
+        for path in (self.cert_path, self.key_path):
             if os.path.exists(path):
                 os.remove(path)
 
