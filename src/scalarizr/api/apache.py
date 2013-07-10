@@ -51,6 +51,7 @@ class ApacheWebServer(object):
     def __init__(self):
         self.service = initdv2.lookup('apache')
         self.mod_rpaf = ModRPAF()
+        self.mod_ssl = ModSSL(self.server_root)
 
 
     def init_service(self):
@@ -76,7 +77,7 @@ class ApacheWebServer(object):
                     apache_conf.set('NameVirtualHost', '*:80')
 
         create_logrotate_conf(LOGROTATE_CONF_PATH)
-        self.check_mod_ssl()
+        self.mod_ssl.ensure()
         self.mod_rpaf.ensure_permissions()
         self.service.start()
 
@@ -134,41 +135,91 @@ class ApacheWebServer(object):
         return os.path.join(bus.etc_path, 'private.d/keys')
 
 
-    @property
-    def ssl_conf_path(self):
-        return os.path.join(self.server_root, 'conf.d/ssl.conf' if disttool.is_redhat_based() else 'sites-available/default-ssl')
+class ModSSL(object):
+
+    def __init__(self, server_root):
+        self.server_root = server_root
+        self.ssl_conf_path = os.path.join(self.server_root, 'conf.d/ssl.conf' \
+                if disttool.is_redhat_based() else 'sites-available/default-ssl')
 
 
-    def check_mod_ssl(self):
+    def set_default_certificate(self, cert):
+        key_path_default = '/etc/pki/tls/private/localhost.key' if disttool.is_redhat_based() else '/etc/ssl/private/ssl-cert-snakeoil.key'
+        crt_path_default = '/etc/pki/tls/certs/localhost.crt' if disttool.is_redhat_based() else '/etc/ssl/certs/ssl-cert-snakeoil.pem'
+
+        cert_path = cert.cert_path if cert else None
+        pk_path = cert.pk_path  if cert else None
+        ca_crt_path = cert.ca_crt_path if cert else None
+
+        self._set('.//SSLCertificateFile', cert_path, crt_path_default)
+        self._set('.//SSLCertificateKeyFile', pk_path, key_path_default)
+
+        with ApacheConfig(self.ssl_conf_path) as ssl_conf:
+
+            if not os.path.exists(ca_crt_path):
+                try:
+                    old_ca_crt_path = ssl_conf.get(".//SSLCertificateChainFile")
+                except:
+                    old_ca_crt_path = None
+                else:
+                    if old_ca_crt_path and not os.path.exists(old_ca_crt_path):
+                        ssl_conf.comment(".//SSLCertificateChainFile")
+
+            else:
+                try:
+                    self._set('.//SSLCertificateChainFile', ca_crt_path, force=False)
+                except NoPathError:
+                    parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
+                    before_el = ssl_conf.etree.find('.//SSLCertificateFile')
+                    ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCertificateChainFile', ca_crt_path)
+                    ch.text = ca_crt_path
+                    parent.insert(list(parent).index(before_el), ch)
+
+
+    def _set(self, section, path, default_path=None, force=True):
+        if os.path.exists(self.ssl_conf_path):
+            with ApacheConfig(self.ssl_conf_path) as ssl_conf:
+                old_path = None
+                try:
+                    old_path = ssl_conf.get(section)
+                except NoPathError, e:
+                    pass
+                if path and os.path.exists(path):
+                    ssl_conf.set(".//SSLCertificateFile", path, force=force)
+                elif default_path and old_path and not os.path.exists(old_path):
+                    LOG.debug("Certificate file not found. Setting to default %s" % default_path)
+                    ssl_conf.set(".//SSLCertificateFile", default_path, force=True)
+
+
+    def ensure(self, ssl_port=443):
         if disttool.is_debian_based():
-            self._check_mod_ssl_deb()
+            self._check_mod_ssl_deb(ssl_port)
         elif disttool.is_redhat_based():
-            self._check_mod_ssl_redhat()
+            self._check_mod_ssl_redhat(ssl_port)
 
 
-    def _check_mod_ssl_deb(self):
+    def _check_mod_ssl_deb(self, ssl_port=443):
         base = os.path.dirname(APACHE_CONF_PATH)
         ports_conf_path = os.path.join(base, 'ports.conf')
         ssl_load_path = os.path.join(base, 'mods-enabled', 'ssl.load')
-
 
         LOG.debug('Ensuring mod_ssl enabled')
         if not os.path.exists(ssl_load_path):
             LOG.info('Enabling mod_ssl')
             system2(('/usr/sbin/a2enmod', 'ssl'))
 
-        LOG.debug('Ensuring NameVirtualHost *:443')
+        LOG.debug('Ensuring NameVirtualHost *:%s' % ssl_port)
         if os.path.exists(ports_conf_path):
             with ApacheConfig(ports_conf_path) as conf:
                 i = 0
                 for section in conf.get_dict('IfModule'):
                     i += 1
                     if section['value'] in ('mod_ssl.c', 'mod_gnutls.c'):
-                        conf.set('IfModule[%d]/Listen' % i, '443', True)
-                        conf.set('IfModule[%d]/NameVirtualHost' % i, '*:443', True)
+                        conf.set('IfModule[%d]/Listen' % i, str(ssl_port), True)
+                        conf.set('IfModule[%d]/NameVirtualHost' % i, '*:%s'% ssl_port, True)
 
 
-    def _check_mod_ssl_redhat(self):
+    def _check_mod_ssl_redhat(self,ssl_port=443):
         mod_ssl_file = os.path.join(self.server_root, 'modules', 'mod_ssl.so')
 
         if not os.path.exists(mod_ssl_file):
@@ -177,158 +228,34 @@ class ApacheWebServer(object):
             system2(inst_cmd, shell=True)
 
         #ssl.conf part
-        ssl_conf_path = os.path.join(self.server_root, 'conf.d', 'ssl.conf')
+        if not os.path.exists(self.ssl_conf_path):
+            raise ApacheError("SSL config %s doesn`t exist", self.ssl_conf_path)
 
-        if not os.path.exists(ssl_conf_path):
-            raise ApacheError("SSL config %s doesn`t exist", ssl_conf_path)
-
-        with ApacheConfig(ssl_conf_path) as ssl_conf:
+        with ApacheConfig(self.ssl_conf_path) as ssl_conf:
             if ssl_conf.empty:
-                LOG.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
-                ssl_conf.add('Listen', '443')
-                ssl_conf.add('NameVirtualHost', '*:443')
+                LOG.error("SSL config file %s is empty. Filling in with minimal configuration.", self.ssl_conf_path)
+                ssl_conf.add('Listen', str(ssl_port))
+                ssl_conf.add('NameVirtualHost', '*:%s'% ssl_port)
 
             else:
                 if not ssl_conf.get_list('NameVirtualHost'):
-                    LOG.debug("NameVirtualHost directive not found in %s", ssl_conf_path)
+                    LOG.debug("NameVirtualHost directive not found in %s", self.ssl_conf_path)
                     if not ssl_conf.get_list('Listen'):
-                        LOG.debug("Listen directive not found in %s. ", ssl_conf_path)
-                        LOG.debug("Patching %s with Listen & NameVirtualHost directives.",     ssl_conf_path)
-                        ssl_conf.add('Listen', '443')
-                        ssl_conf.add('NameVirtualHost', '*:443')
+                        LOG.debug("Listen directive not found in %s. ", self.ssl_conf_path)
+                        LOG.debug("Patching %s with Listen & NameVirtualHost directives.",     self.ssl_conf_path)
+                        ssl_conf.add('Listen', str(ssl_port))
+                        ssl_conf.add('NameVirtualHost', '*:%s'% ssl_port)
                     else:
                         LOG.debug("NameVirtualHost directive inserted after Listen directive.")
-                        ssl_conf.add('NameVirtualHost', '*:443', 'Listen')
+                        ssl_conf.add('NameVirtualHost', '*:%s'% ssl_port, 'Listen')
 
         with ApacheConfig(APACHE_CONF_PATH) as main_config:
             loaded_in_main = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
             if not loaded_in_main:
-                if os.path.exists(ssl_conf_path):
+                if os.path.exists(self.ssl_conf_path):
                     loaded_in_ssl = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
                     if not loaded_in_ssl:
                         main_config.add('LoadModule', 'ssl_module modules/mod_ssl.so')
-
-
-    def patch_ssl_conf(self, cert_id=None):
-        #TODO: ADD SNI SUPPORT
-        if not cert_id:
-            cert_id = 'https'
-        key_path = os.path.join(self.cert_path, '%s.key' % cert_id)
-        crt_path = os.path.join(self.cert_path, '%s.crt' % cert_id)
-        ca_crt_path = os.path.join(self.cert_path, '%s.crt' % cert_id)
-
-        key_path_default = '/etc/pki/tls/private/localhost.key' if disttool.is_redhat_based() else '/etc/ssl/private/ssl-cert-snakeoil.key'
-        crt_path_default = '/etc/pki/tls/certs/localhost.crt' if disttool.is_redhat_based() else '/etc/ssl/certs/ssl-cert-snakeoil.pem'
-
-
-        if os.path.exists(self.ssl_conf_path):
-            with ApacheConfig(self.ssl_conf_path) as ssl_conf:
-
-                #removing old paths
-                old_crt_path = None
-                old_key_path = None
-                old_ca_crt_path = None
-
-                try:
-                    old_crt_path = ssl_conf.get(".//SSLCertificateFile")
-                except NoPathError, e:
-                    pass
-                finally:
-                    if os.path.exists(crt_path):
-                        ssl_conf.set(".//SSLCertificateFile", crt_path, force=True)
-                    elif old_crt_path and not os.path.exists(old_crt_path):
-                        LOG.debug("Certificate file not found. Setting to default %s" % crt_path_default)
-                        ssl_conf.set(".//SSLCertificateFile", crt_path_default, force=True)
-
-                try:
-                    old_key_path = ssl_conf.get(".//SSLCertificateKeyFile")
-                except NoPathError, e:
-                    pass
-                finally:
-                    if os.path.exists(key_path):
-                        ssl_conf.set(".//SSLCertificateKeyFile", key_path, force=True)
-                    elif old_key_path and not os.path.exists(old_key_path):
-                        LOG.debug("Certificate key file not found. Setting to default %s" % key_path_default)
-                        ssl_conf.set(".//SSLCertificateKeyFile", key_path_default, force=True)
-
-                try:
-                    old_ca_crt_path = ssl_conf.get(".//SSLCertificateChainFile")
-                except NoPathError, e:
-                    pass
-                finally:
-                    if os.path.exists(ca_crt_path):
-                        try:
-                            ssl_conf.set(".//SSLCertificateChainFile", ca_crt_path)
-                        except NoPathError:
-                            # XXX: ugly hack
-                            parent = ssl_conf.etree.find('.//SSLCertificateFile/..')
-                            before_el = ssl_conf.etree.find('.//SSLCertificateFile')
-                            ch = ssl_conf._provider.create_element(ssl_conf.etree, './/SSLCertificateChainFile', ca_crt_path)
-                            ch.text = ca_crt_path
-                            parent.insert(list(parent).index(before_el), ch)
-                    elif old_ca_crt_path and not os.path.exists(old_ca_crt_path):
-                        ssl_conf.comment(".//SSLCertificateChainFile")
-
-
-class SSLCertificate(object):
-
-    id = None
-
-    def __init__(self, ssl_certificate_id=None, keys_dir=None):
-        self.id = ssl_certificate_id
-        self._queryenv = bus.queryenv_service
-        self.keys_dir = keys_dir or os.path.join(bus.etc_path, "private.d/keys")
-
-
-    def update_ssl_certificate(self, ssl_certificate_id, cert, key, cacert=None):
-        if cacert:
-            cert = cert + '\n' + cacert
-
-        with open(self.cert_path, 'w') as fp:
-            fp.write(cert)
-
-        with open(self.key_path, 'w') as fp:
-            fp.write(key)
-
-
-    def ensure(self):
-        if not os.path.exists(self.cert_path) or not os.path.exists(self.key_path):
-            LOG.debug("Retrieving ssl cert and private key from Scalr.")
-            cert_data = self._queryenv.get_ssl_certificate(self.id)
-            cacert = cert_data[2] if len(cert_data) > 2 else None
-            self.update_ssl_certificate(self.id,cert_data[0],cert_data[1],cacert)
-        else:
-            LOG.debug('Cert files are already in place')
-
-
-    def delete(self):
-        for path in (self.cert_path, self.pk_path):
-            if os.path.exists(path):
-                os.remove(path)
-
-
-    @property
-    def cert_path(self):
-        id = '_' + str(self.id) if self.id else ''
-        return os.path.join(self.keys_dir, 'https%s.crt' % id)
-
-
-    @property
-    def key_path(self):
-        id = '_' + str(self.id) if self.id else ''
-        return os.path.join(self.keys_dir, 'https%s.key' % id)
-
-
-class ModSSL(object):
-
-    def __init__(self):
-        pass
-
-    def set_default_certificate(self, cert):
-        pass
-
-    def _set(self, section, path, default_path):
-        pass
 
 
 class ModRPAF(object):
@@ -386,6 +313,62 @@ class ModRPAF(object):
         os.chown(self.path, st.st_uid, st.st_gid)
 
 
+class SSLCertificate(object):
+
+    id = None
+
+    def __init__(self, ssl_certificate_id=None, keys_dir=None):
+        self.id = ssl_certificate_id
+        self._queryenv = bus.queryenv_service
+        self.keys_dir = keys_dir or os.path.join(bus.etc_path, "private.d/keys")
+
+
+    def update_ssl_certificate(self, cert, key, cacert=None):
+
+        with open(self.cert_path, 'w') as fp:
+            fp.write(cert)
+
+        with open(self.key_path, 'w') as fp:
+            fp.write(key)
+
+        if cacert:
+            with open(self.cacert, 'w') as fp:
+                fp.write(cacert)
+
+
+    def ensure(self):
+        if not os.path.exists(self.cert_path) or not os.path.exists(self.key_path):
+            LOG.debug("Retrieving ssl cert and private key from Scalr.")
+            cert_data = self._queryenv.get_ssl_certificate(self.id)
+            cacert = cert_data[2] if len(cert_data) > 2 else None
+            self.update_ssl_certificate(cert_data[0],cert_data[1],cacert)
+        else:
+            LOG.debug('Cert files are already in place')
+
+
+    def delete(self):
+        for path in (self.cert_path, self.pk_path):
+            if os.path.exists(path):
+                os.remove(path)
+
+
+    @property
+    def cert_path(self):
+        id = '_' + str(self.id) if self.id else ''
+        return os.path.join(self.keys_dir, 'https%s.crt' % id)
+
+
+    @property
+    def key_path(self):
+        id = '_' + str(self.id) if self.id else ''
+        return os.path.join(self.keys_dir, 'https%s.key' % id)
+
+    @property
+    def ca_cert_path(self):
+        id = '_' + str(self.id) if self.id else ''
+        return os.path.join(self.keys_dir, 'https%s-ca.crt' % id)
+
+
 class ApacheVirtualHost(object):
 
     hostname = None
@@ -424,6 +407,8 @@ class ApacheVirtualHost(object):
         with open(self.vhost_path, 'w') as fp:
             fp.write(self.body)
         self.ensure_document_root()
+        if self.cert:
+            self.webserver.mod_ssl.set_default_certificate(self.cert)
         #TODO: check ssl.conf, debian.conf, etc. if needed
 
 
@@ -539,10 +524,6 @@ class ApacheAPI(object):
         for vhost in self.list_served_hosts:
             if vhost.is_like(hostname_pattern):
                 vhost.delete()
-
-        for certificate in self.list_webserver_ssl_certificates():
-            if certificate.is_orphaned():
-                certificate.delete()
 
         if reload:
             self.reload_service()
