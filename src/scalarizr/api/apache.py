@@ -34,7 +34,7 @@ __apache__.update({
     'vhosts_dir'         : os.path.join(bus.etc_path, __apache__['vhosts_path']),
     'cert_path'          : os.path.join(bus.etc_path, 'private.d/keys'),
     'vhosts_path'        : 'private.d/vhosts',
-    'vhosts_extension'   : '.vhost.conf',
+    'vhost_extension'   : '.vhost.conf',
     'logrotate_conf_path':'/etc/logrotate.d/scalarizr_app'})
 
 
