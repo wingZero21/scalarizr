@@ -21,7 +21,7 @@ from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util.initdv2 import InitdError
-from scalarizr.linux import LinuxError, coreutils, iptables, pkgmgr
+from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.util import disttool, wait_until, dynimp, firstmatched
 from scalarizr.libs.metaconf import Configuration, NoPathError, strip_quotes
 
@@ -323,12 +323,12 @@ class ModSSL(object):
 
     def __init__(self):
         self.ssl_conf_path = os.path.join(__apache__['server_root'], 'conf.d/ssl.conf' \
-                if disttool.is_redhat_based() else 'sites-available/default-ssl')
+                if linux.os.redhat_family else 'sites-available/default-ssl')
 
 
     def set_default_certificate(self, cert):
-        key_path_default = '/etc/pki/tls/private/localhost.key' if disttool.is_redhat_based() else '/etc/ssl/private/ssl-cert-snakeoil.key'
-        crt_path_default = '/etc/pki/tls/certs/localhost.crt' if disttool.is_redhat_based() else '/etc/ssl/certs/ssl-cert-snakeoil.pem'
+        key_path_default = '/etc/pki/tls/private/localhost.key' if linux.os.redhat_family else '/etc/ssl/private/ssl-cert-snakeoil.key'
+        crt_path_default = '/etc/pki/tls/certs/localhost.crt' if linux.os.redhat_family else '/etc/ssl/certs/ssl-cert-snakeoil.pem'
 
         cert_path = cert.cert_path if cert else None
         pk_path = cert.pk_path  if cert else None
@@ -377,7 +377,7 @@ class ModSSL(object):
     def ensure(self, ssl_port=443):
         if linux.os.debian_family:
             self._check_mod_ssl_deb(ssl_port)
-        elif disttool.is_redhat_based():
+        elif linux.os.redhat_family:
             self._check_mod_ssl_redhat(ssl_port)
 
 
@@ -656,10 +656,10 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     _apachectl = None
 
     def __init__(self):
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             self._apachectl = '/usr/sbin/apachectl'
             initd_script    = '/etc/init.d/httpd'
-            pid_file                = '/var/run/httpd/httpd.pid' if disttool.version_info()[0] == 6 else '/var/run/httpd.pid'
+            pid_file        = '/var/run/httpd/httpd.pid' if linux.os["release"].startswith('6') else '/var/run/httpd.pid'
         elif linux.os.debian_family:
             self._apachectl = '/usr/sbin/apache2ctl'
             initd_script    = '/etc/init.d/apache2'
@@ -671,7 +671,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         else:
             self._apachectl = '/usr/sbin/apachectl'
             initd_script    = '/etc/init.d/apache2'
-            pid_file                = '/var/run/apache2.pid'
+            pid_file        = '/var/run/apache2.pid'
 
         initdv2.ParametrizedInitScript.__init__(
                 self,
@@ -757,7 +757,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         group = 'www-data' if linux.os.debian_family else 'apache'
         try:
             out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'), raise_exc=False)[0]
-            res = True if len([p for p in out.split('\n') if bin in p]) else False
+            res = bool([p for p in out.split('\n') if bin in p])
         except:
             pass
         return res
