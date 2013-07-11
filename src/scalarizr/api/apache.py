@@ -649,7 +649,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
     def __init__(self):
         if linux.os.redhat_family:
-            pid_file        = '/var/run/httpd/httpd.pid' if linux.os["release"].startswith('6') else '/var/run/httpd.pid'
+            pid_file        = '/var/run/httpd/httpd.pid' if linux.os["release"].version[0] == 6 else '/var/run/httpd.pid'
         elif linux.os.debian_family:
             pid_file = None
             if os.path.exists('/etc/apache2/envvars'):
