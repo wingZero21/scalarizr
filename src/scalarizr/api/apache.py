@@ -238,7 +238,7 @@ class ApacheAPI(object):
         else:
             with ApacheConfig(__apache__['httpd.conf']) as apache_conf:
                 if not apache_conf.get_list('NameVirtualHost'):
-                    apache_conf.set('NameVirtualHost', '*:80')
+                    apache_conf.set('NameVirtualHost', '*:80', force=True)
 
         self.create_logrotate_conf(__apache__['logrotate_conf_path'])
         self.mod_ssl.ensure()
