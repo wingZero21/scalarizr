@@ -28,13 +28,54 @@ from scalarizr.libs.metaconf import Configuration, NoPathError, strip_quotes
 LOG = logging.getLogger(__name__)
 
 
-__apache__ = __node__['apache']
-__apache__.update({
-    'httpd.conf'         : '/etc/apache2/apache2.conf' if linux.os.debian_family else '/etc/httpd/conf/httpd.conf',
+apache = {
     'vhosts_dir'         : os.path.join(bus.etc_path, 'private.d/vhosts'),
     'cert_path'          : os.path.join(bus.etc_path, 'private.d/keys'),
     'vhost_extension'    : '.vhost.conf',
-    'logrotate_conf_path':'/etc/logrotate.d/scalarizr_app'})
+    'logrotate_conf_path':'/etc/logrotate.d/scalarizr_app'}
+
+if linux.os.debian_family:
+    apache.update({
+        'httpd.conf'     : '/etc/apache2/apache2.conf',
+        'apache2ctl'     : '/usr/sbin/apache2ctl',
+        'default_vhost'  : '/etc/apache2/sites-enabled/000-default',
+        'logrotate_conf' : """/var/log/http-*.log {
+         weekly
+         missingok
+         rotate 52
+         compress
+         delaycompress
+         notifempty
+         create 640 root adm
+         sharedscripts
+         postrotate
+                 if [ -f "`. /etc/apache2/envvars ; echo ${APACHE_PID_FILE:-/var/run/apache2.pid}`" ]; then
+                         /etc/init.d/apache2 reload > /dev/null
+                 fi
+         endscript
+}
+"""
+    })
+
+else:
+    apache.update({
+        'httpd.conf'     : '/etc/httpd/conf/httpd.conf',
+        'apache2ctl'     : 'usr/sbin/httpd',
+        'default_vhost'  : '/etc/httpd/sites-enabled/000-default',
+        'logrotate_conf' : """/var/log/http-*.log {
+     missingok
+     notifempty
+     sharedscripts
+     delaycompress
+     postrotate
+         /sbin/service httpd reload > /dev/null 2>/dev/null || true
+     endscript
+}
+"""
+    })
+
+__apache__ = __node__['apache']
+__apache__.update(apache)
 
 
 class ApacheConfig(object):
@@ -230,10 +271,9 @@ class ApacheAPI(object):
 
 
     def list_served_vhosts(self):
-        binary_path = '/usr/sbin/apache2ctl' if linux.os.debian_family else 'usr/sbin/httpd'
         d = {}
         host = None
-        s = system2((binary_path, '-S'))[0]
+        s = system2((__apache__['apache2ctl'], '-S'))[0]
         s = s.split('VirtualHost configuration:\n')[1:]
         lines = s[0].split('\n')
         for line in lines:
@@ -261,63 +301,26 @@ class ApacheAPI(object):
 
     def patch_default_conf_deb(self):
         LOG.debug("Replacing NameVirtualhost and Virtualhost ports specifically for debian-based linux")
-        default_vhost_path = os.path.join(
-                                os.path.dirname(__apache__['httpd.conf']),
-                                'sites-enabled',
-                                '000-default')
-        if os.path.exists(default_vhost_path):
-            with ApacheConfig(default_vhost_path) as default_vhost:
+        if os.path.exists(__apache__['default_vhost']):
+            with ApacheConfig(__apache__['default_vhost']) as default_vhost:
                 default_vhost.set('NameVirtualHost', '*:80', force=True)
 
             dv = None
-            with open(default_vhost_path, 'r') as fp:
+            with open(__apache__['default_vhost'], 'r') as fp:
                 dv = fp.read()
             vhost_regexp = re.compile('<VirtualHost\s+\*>')
             dv = vhost_regexp.sub( '<VirtualHost *:80>', dv)
-            with open(default_vhost_path, 'w') as fp:
+            with open(__apache__['default_vhost'], 'w') as fp:
                 fp.write(dv)
 
         else:
-            LOG.debug('Cannot find default vhost config file %s. Nothing to patch' % default_vhost_path)
+            LOG.debug('Cannot find default vhost config file %s. Nothing to patch' % __apache__['default_vhost'])
 
 
     def create_logrotate_conf(self, path):
-
-        LOGROTATE_CONF_REDHAT_RAW = """/var/log/http-*.log {
-             missingok
-             notifempty
-             sharedscripts
-             delaycompress
-             postrotate
-                 /sbin/service httpd reload > /dev/null 2>/dev/null || true
-             endscript
-        }
-        """
-
-        LOGROTATE_CONF_DEB_RAW = """/var/log/http-*.log {
-                 weekly
-                 missingok
-                 rotate 52
-                 compress
-                 delaycompress
-                 notifempty
-                 create 640 root adm
-                 sharedscripts
-                 postrotate
-                         if [ -f "`. /etc/apache2/envvars ; echo ${APACHE_PID_FILE:-/var/run/apache2.pid}`" ]; then
-                                 /etc/init.d/apache2 reload > /dev/null
-                         fi
-                 endscript
-        }
-        """
-
         if not os.path.exists(path):
-            if linux.os.debian_family:
-                with open(path, 'w') as fp:
-                    fp.write(LOGROTATE_CONF_DEB_RAW)
-            else:
-                with open(path, 'w') as fp:
-                    fp.write(LOGROTATE_CONF_REDHAT_RAW)
+            with open(path, 'w') as fp:
+                fp.write(__apache__['logrotate_conf'])
 
 
 class ModSSL(object):
