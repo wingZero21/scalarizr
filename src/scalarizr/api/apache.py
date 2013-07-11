@@ -27,19 +27,30 @@ from scalarizr.libs.metaconf import Configuration, NoPathError, strip_quotes
 
 LOG = logging.getLogger(__name__)
 
-
 apache = {
     'vhosts_dir'         : os.path.join(bus.etc_path, 'private.d/vhosts'),
     'cert_path'          : os.path.join(bus.etc_path, 'private.d/keys'),
+    'keys_dir'           : os.path.join(bus.etc_path, "private.d/keys"),
     'vhost_extension'    : '.vhost.conf',
-    'logrotate_conf_path':'/etc/logrotate.d/scalarizr_app'}
+    'logrotate_conf_path': '/etc/logrotate.d/scalarizr_app'}
 
 if linux.os.debian_family:
     apache.update({
-        'httpd.conf'     : '/etc/apache2/apache2.conf',
-        'apache2ctl'     : '/usr/sbin/apache2ctl',
-        'default_vhost'  : '/etc/apache2/sites-enabled/000-default',
-        'logrotate_conf' : """/var/log/http-*.log {
+        'httpd.conf'      : '/etc/apache2/apache2.conf',
+        'ssl_conf_path'   : '/etc/apache2/sites-available/default-ssl',
+        'default_vhost'   : '/etc/apache2/sites-enabled/000-default',
+        'ports_conf_deb'  : '/etc/apache2/ports.conf',
+        'ssl_load_deb'    : '/etc/apache2/mods-enabled/ssl.load',
+        'mod_rpaf_path'   : '/etc/apache2/mods-available/rpaf.conf',
+        'key_path_default': '/etc/ssl/private/ssl-cert-snakeoil.key',
+        'crt_path_default': '/etc/ssl/certs/ssl-cert-snakeoil.pem',
+        'apachectl'       : '/usr/sbin/apache2ctl',
+        'bin_path'        : '/usr/sbin/apache2',
+        'a2enmod_path'    : '/usr/sbin/a2enmod',
+        'initd_script'    : '/etc/init.d/apache2',
+        'group'           : 'www-data',
+
+        'logrotate_conf'  : """/var/log/http-*.log {
          weekly
          missingok
          rotate 52
@@ -53,26 +64,34 @@ if linux.os.debian_family:
                          /etc/init.d/apache2 reload > /dev/null
                  fi
          endscript
-}
-"""
-    })
+        }
+        """})
 
 else:
     apache.update({
-        'httpd.conf'     : '/etc/httpd/conf/httpd.conf',
-        'apache2ctl'     : 'usr/sbin/httpd',
-        'default_vhost'  : '/etc/httpd/sites-enabled/000-default',
-        'logrotate_conf' : """/var/log/http-*.log {
-     missingok
-     notifempty
-     sharedscripts
-     delaycompress
-     postrotate
-         /sbin/service httpd reload > /dev/null 2>/dev/null || true
-     endscript
-}
-"""
-    })
+        'httpd.conf'      : '/etc/httpd/conf/httpd.conf',
+        'default_vhost'   : '/etc/httpd/sites-enabled/000-default',
+        'ssl_conf_path'   : '/etc/httpd/conf.d/ssl.conf',
+        'mod_ssl_file'    : '/etc/httpd/modules/mod_ssl.so',
+        'mod_rpaf_path'   : '/etc/httpd/conf.d/mod_rpaf.conf',
+        'key_path_default': '/etc/pki/tls/private/localhost.key',
+        'crt_path_default': '/etc/pki/tls/certs/localhost.crt',
+        'apachectl'       : '/usr/sbin/httpd',
+        'bin_path'        : '/usr/sbin/httpd',
+        'initd_script':'/etc/init.d/httpd',
+        'group'           : 'apache',
+
+        'logrotate_conf'  : """/var/log/http-*.log {
+         missingok
+         notifempty
+         sharedscripts
+         delaycompress
+         postrotate
+             /sbin/service httpd reload > /dev/null 2>/dev/null || true
+         endscript
+        }
+        """
+        })
 
 __apache__ = __node__['apache']
 __apache__.update(apache)
@@ -93,22 +112,6 @@ class ApacheConfig(object):
 
     def __exit__(self, type, value, traceback):
         self._cnf.write(self.path)
-
-
-if os.path.exists(__apache__['httpd.conf']):
-    with ApacheConfig(__apache__['httpd.conf']) as apache_conf:
-        server_root = None
-        try:
-            server_root = apache_conf.get('ServerRoot')
-            server_root = strip_quotes(server_root)
-            server_root = re.sub(r'^["\'](.+)["\']$', r'\1', server_root)
-        except NoPathError,e:
-            pass
-        finally:
-            if not server_root:
-                server_root = os.path.dirname(__apache__['httpd.conf'])
-                apache_conf.set('ServerRoot', server_root, force=True)
-            __apache__.update({'server_root': server_root})
 
 
 class ApacheError(BaseException):
@@ -273,7 +276,7 @@ class ApacheAPI(object):
     def list_served_vhosts(self):
         d = {}
         host = None
-        s = system2((__apache__['apache2ctl'], '-S'))[0]
+        s = system2((__apache__['apachectl'], '-S'))[0]
         s = s.split('VirtualHost configuration:\n')[1:]
         lines = s[0].split('\n')
         for line in lines:
@@ -325,26 +328,16 @@ class ApacheAPI(object):
 
 class ModSSL(object):
 
-    def __init__(self):
-        if linux.os.redhat_family:
-            base = 'conf.d/ssl.conf'
-        else:
-            base = 'sites-available/default-ssl'
-        self.ssl_conf_path = os.path.join(__apache__['server_root'], base)
-
 
     def set_default_certificate(self, cert):
-        key_path_default = '/etc/pki/tls/private/localhost.key' if linux.os.redhat_family else '/etc/ssl/private/ssl-cert-snakeoil.key'
-        crt_path_default = '/etc/pki/tls/certs/localhost.crt' if linux.os.redhat_family else '/etc/ssl/certs/ssl-cert-snakeoil.pem'
-
         cert_path = cert.cert_path if cert else None
         key_path = cert.key_path  if cert else None
         ca_crt_path = cert.ca_crt_path if cert else None
 
-        self._set('.//SSLCertificateFile', cert_path, crt_path_default)
-        self._set('.//SSLCertificateKeyFile', key_path, key_path_default)
+        self._set('.//SSLCertificateFile', cert_path, __apache__['crt_path_default'])
+        self._set('.//SSLCertificateKeyFile', key_path, __apache__['key_path_default'] )
 
-        with ApacheConfig(self.ssl_conf_path) as ssl_conf:
+        with ApacheConfig(__apache__['ssl_conf_path']) as ssl_conf:
 
             if not os.path.exists(ca_crt_path):
                 try:
@@ -367,8 +360,8 @@ class ModSSL(object):
 
 
     def _set(self, section, path, default_path=None, force=True):
-        if os.path.exists(self.ssl_conf_path):
-            with ApacheConfig(self.ssl_conf_path) as ssl_conf:
+        if os.path.exists(__apache__['ssl_conf_path']):
+            with ApacheConfig(__apache__['ssl_conf_path']) as ssl_conf:
                 old_path = None
                 try:
                     old_path = ssl_conf.get(section)
@@ -389,18 +382,15 @@ class ModSSL(object):
 
 
     def _check_mod_ssl_deb(self, ssl_port=443):
-        base = os.path.dirname(__apache__['httpd.conf'])
-        ports_conf_path = os.path.join(base, 'ports.conf')
-        ssl_load_path = os.path.join(base, 'mods-enabled', 'ssl.load')
 
         LOG.debug('Ensuring mod_ssl enabled')
-        if not os.path.exists(ssl_load_path):
+        if not os.path.exists(__apache__['ssl_load_deb']):
             LOG.info('Enabling mod_ssl')
-            system2(('/usr/sbin/a2enmod', 'ssl'))
+            system2((__apache__['a2enmod_path'], 'ssl'))
 
         LOG.debug('Ensuring NameVirtualHost *:%s' % ssl_port)
-        if os.path.exists(ports_conf_path):
-            with ApacheConfig(ports_conf_path) as conf:
+        if os.path.exists(__apache__['ports_conf_deb']):
+            with ApacheConfig(__apache__['ports_conf_deb']) as conf:
                 i = 0
                 for section in conf.get_dict('IfModule'):
                     i += 1
@@ -410,28 +400,28 @@ class ModSSL(object):
 
 
     def _check_mod_ssl_redhat(self,ssl_port=443):
-        mod_ssl_file = os.path.join(__apache__['server_root'], 'modules', 'mod_ssl.so')
+        ssl_conf_path = __apache__['ssl_conf_path']
 
-        if not os.path.exists(mod_ssl_file):
-            LOG.info('%s does not exist. Trying to install' % mod_ssl_file)
+        if not os.path.exists(__apache__['mod_ssl_file']):
+            LOG.info('%s does not exist. Trying to install' % __apache__['mod_ssl_file'])
             pkgmgr.install('mod_ssl')
 
         #ssl.conf part
-        if not os.path.exists(self.ssl_conf_path):
-            raise ApacheError("SSL config %s doesn`t exist", self.ssl_conf_path)
+        if not os.path.exists(ssl_conf_path):
+            raise ApacheError("SSL config %s doesn`t exist", ssl_conf_path)
 
-        with ApacheConfig(self.ssl_conf_path) as ssl_conf:
+        with ApacheConfig(ssl_conf_path) as ssl_conf:
             if ssl_conf.empty:
-                LOG.error("SSL config file %s is empty. Filling in with minimal configuration.", self.ssl_conf_path)
+                LOG.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
                 ssl_conf.add('Listen', str(ssl_port))
                 ssl_conf.add('NameVirtualHost', '*:%s'% ssl_port)
 
             else:
                 if not ssl_conf.get_list('NameVirtualHost'):
-                    LOG.debug("NameVirtualHost directive not found in %s", self.ssl_conf_path)
+                    LOG.debug("NameVirtualHost directive not found in %s", ssl_conf_path)
                     if not ssl_conf.get_list('Listen'):
-                        LOG.debug("Listen directive not found in %s. ", self.ssl_conf_path)
-                        LOG.debug("Patching %s with Listen & NameVirtualHost directives.",     self.ssl_conf_path)
+                        LOG.debug("Listen directive not found in %s. ", ssl_conf_path)
+                        LOG.debug("Patching %s with Listen & NameVirtualHost directives.",     ssl_conf_path)
                         ssl_conf.add('Listen', str(ssl_port))
                         ssl_conf.add('NameVirtualHost', '*:%s'% ssl_port)
                     else:
@@ -441,7 +431,7 @@ class ModSSL(object):
         with ApacheConfig(__apache__['httpd.conf']) as main_config:
             loaded_in_main = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
             if not loaded_in_main:
-                if os.path.exists(self.ssl_conf_path):
+                if os.path.exists(ssl_conf_path):
                     loaded_in_ssl = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
                     if not loaded_in_ssl:
                         main_config.add('LoadModule', 'ssl_module modules/mod_ssl.so')
@@ -452,16 +442,12 @@ class ModRPAF(object):
     path = None
 
     def __init__(self):
-        self.path = firstmatched(
-                lambda x: os.access(x, os.F_OK),
-                ('/etc/httpd/conf.d/mod_rpaf.conf', '/etc/apache2/mods-available/rpaf.conf')
-        )
-        if not os.path.exists(self.path):
+        if not os.path.exists(__apache__['mod_rpaf_path']):
             raise ApacheError('Nothing to do with rpaf: mod_rpaf configuration file not found')
 
 
     def add(self, ips):
-        with ApacheConfig(self.path) as rpaf:
+        with ApacheConfig(__apache__['mod_rpaf_path']) as rpaf:
             proxy_ips = set(re.split(r'\s+', rpaf.get('.//RPAFproxy_ips')))
             proxy_ips |= set(ips)
             if not proxy_ips:
@@ -469,7 +455,7 @@ class ModRPAF(object):
             rpaf.set('.//RPAFproxy_ips', ' '.join(proxy_ips))
 
     def remove(self, ips):
-        with ApacheConfig(self.path) as rpaf:
+        with ApacheConfig(__apache__['mod_rpaf_path']) as rpaf:
             proxy_ips = set(re.split(r'\s+', rpaf.get('.//RPAFproxy_ips')))
             proxy_ips -= set(ips)
             if not proxy_ips:
@@ -478,7 +464,7 @@ class ModRPAF(object):
 
 
     def update(self, ips):
-        with ApacheConfig(self.path) as rpaf:
+        with ApacheConfig(__apache__['mod_rpaf_path']) as rpaf:
             proxy_ips = set(ips)
             if not proxy_ips:
                     proxy_ips.add('127.0.0.1')
@@ -490,7 +476,7 @@ class ModRPAF(object):
         pm = dynimp.package_mgr()
         if '0.6-2' == pm.installed('libapache2-mod-rpaf'):
             LOG.debug('Patching IfModule value in rpaf.conf')
-            with ApacheConfig(self.path) as rpaf:
+            with ApacheConfig(__apache__['mod_rpaf_path']) as rpaf:
                 try:
                     rpaf.set("./IfModule[@value='mod_rpaf.c']", {'value': 'mod_rpaf-2.0.c'})
                 except NoPathError:
@@ -499,17 +485,16 @@ class ModRPAF(object):
 
     def ensure_permissions(self):
         st = os.stat(__apache__['httpd.conf'])
-        os.chown(self.path, st.st_uid, st.st_gid)
+        os.chown(__apache__['mod_rpaf_path'], st.st_uid, st.st_gid)
 
 
 class SSLCertificate(object):
 
     id = None
 
-    def __init__(self, ssl_certificate_id=None, keys_dir=None):
+    def __init__(self, ssl_certificate_id=None):
         self.id = ssl_certificate_id
         self._queryenv = bus.queryenv_service
-        self.keys_dir = keys_dir or os.path.join(bus.etc_path, "private.d/keys")
 
 
     def update(self, cert, key, cacert=None):
@@ -544,18 +529,18 @@ class SSLCertificate(object):
     @property
     def cert_path(self):
         id = '_' + str(self.id) if self.id else ''
-        return os.path.join(self.keys_dir, 'https%s.crt' % id)
+        return os.path.join(__apache__['keys_dir'], 'https%s.crt' % id)
 
 
     @property
     def key_path(self):
         id = '_' + str(self.id) if self.id else ''
-        return os.path.join(self.keys_dir, 'https%s.key' % id)
+        return os.path.join(__apache__['keys_dir'], 'https%s.key' % id)
 
     @property
     def ca_crt_path(self):
         id = '_' + str(self.id) if self.id else ''
-        return os.path.join(self.keys_dir, 'https%s-ca.crt' % id)
+        return os.path.join(__apache__['keys_dir'], 'https%s-ca.crt' % id)
 
 
 class ApacheVirtualHost(object):
@@ -664,26 +649,18 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
     def __init__(self):
         if linux.os.redhat_family:
-            self._apachectl = '/usr/sbin/apachectl'
-            initd_script    = '/etc/init.d/httpd'
             pid_file        = '/var/run/httpd/httpd.pid' if linux.os["release"].startswith('6') else '/var/run/httpd.pid'
         elif linux.os.debian_family:
-            self._apachectl = '/usr/sbin/apache2ctl'
-            initd_script    = '/etc/init.d/apache2'
             pid_file = None
             if os.path.exists('/etc/apache2/envvars'):
                 pid_file = system2('/bin/sh', stdin='. /etc/apache2/envvars; echo -n $APACHE_PID_FILE')[0]
             if not pid_file:
                 pid_file = '/var/run/apache2.pid'
-        else:
-            self._apachectl = '/usr/sbin/apachectl'
-            initd_script    = '/etc/init.d/apache2'
-            pid_file        = '/var/run/apache2.pid'
 
         initdv2.ParametrizedInitScript.__init__(
                 self,
                 'apache',
-                initd_script,
+                __apache__['initd_script'],
                 pid_file = pid_file
         )
 
@@ -693,7 +670,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
             LOG.debug('Reloading apache: %s' % str(reason))
         if self.running:
             self.configtest()
-            out, err, retcode = system2(self._apachectl + ' graceful', shell=True)
+            out, err, retcode = system2(__apache__['apachectl'] + ' graceful', shell=True)
             if retcode > 0:
                 raise initdv2.InitdError('Cannot reload apache: %s' % err)
         else:
@@ -718,7 +695,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
 
     def configtest(self, path=None):
-        args = self._apachectl +' configtest'
+        args = __apache__['apachectl'] +' configtest'
         if path:
             args += '-f %s' % path
         out = system2(args, shell=True)[1]
@@ -760,11 +737,9 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
     def _main_process_started(self):
         res = False
-        bin = '/usr/sbin/apache2' if linux.os.debian_family else '/usr/sbin/httpd'
-        group = 'www-data' if linux.os.debian_family else 'apache'
         try:
-            out = system2(('ps', '-G', group, '-o', 'command', '--no-headers'), raise_exc=False)[0]
-            res = bool([p for p in out.split('\n') if bin in p])
+            out = system2(('ps', '-G', __apache__['group'], '-o', 'command', '--no-headers'), raise_exc=False)[0]
+            res = __apache__['bin_path'] in out
         except:
             pass
         return res
