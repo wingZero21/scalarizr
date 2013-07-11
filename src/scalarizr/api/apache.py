@@ -76,7 +76,7 @@ else:
         'mod_rpaf_path'   : '/etc/httpd/conf.d/mod_rpaf.conf',
         'key_path_default': '/etc/pki/tls/private/localhost.key',
         'crt_path_default': '/etc/pki/tls/certs/localhost.crt',
-        'apachectl'       : '/usr/sbin/httpd',
+        'apachectl'       : '/usr/sbin/apachectl',
         'bin_path'        : '/usr/sbin/httpd',
         'initd_script':'/etc/init.d/httpd',
         'group'           : 'apache',
