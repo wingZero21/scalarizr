@@ -97,23 +97,6 @@ __apache__ = __node__['apache']
 __apache__.update(apache)
 
 
-class ApacheConfig(object):
-
-    _cnf = None
-    path = None
-
-    def __init__(self, path):
-        self._cnf = Configuration('apache')
-        self.path = path
-
-    def __enter__(self):
-        self._cnf.read(self.path)
-        return self._cnf
-
-    def __exit__(self, type, value, traceback):
-        self._cnf.write(self.path)
-
-
 class ApacheError(BaseException):
     pass
 
@@ -324,6 +307,23 @@ class ApacheAPI(object):
         if not os.path.exists(path):
             with open(path, 'w') as fp:
                 fp.write(__apache__['logrotate_conf'])
+
+
+class ApacheConfig(object):
+
+    _cnf = None
+    path = None
+
+    def __init__(self, path):
+        self._cnf = Configuration('apache')
+        self.path = path
+
+    def __enter__(self):
+        self._cnf.read(self.path)
+        return self._cnf
+
+    def __exit__(self, type, value, traceback):
+        self._cnf.write(self.path)
 
 
 class ModSSL(object):
@@ -746,4 +746,3 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
 
 initdv2.explore('apache', ApacheInitScript)
-
