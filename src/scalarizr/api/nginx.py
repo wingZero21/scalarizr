@@ -218,7 +218,7 @@ class NginxAPI(object):
             self.service.reload()
     @rpc.service_method
     def start_service(self):
-        self.servece.start()
+        self.service.start()
 
     @rpc.service_method
     def stop_service(self):
@@ -226,7 +226,7 @@ class NginxAPI(object):
 
     @rpc.service_method
     def reload_service(self):
-        self.servece.reload()
+        self.service.reload()
 
     @rpc.service_method
     def restart_service(self):
@@ -645,11 +645,11 @@ class NginxAPI(object):
         places of this module means nginx upstream config.
         """
         _logger.debug('adding proxy name: %s' % name)
-        destinations = self._normalize_destinations(destinations)
+        destinations = self._normalize_destinations(backends)
 
         grouped_destinations = self._group_destinations(destinations)
         if not grouped_destinations:
-            raise BaseException('No servers or roles given', servers, roles)
+            raise BaseException('No destinations given given')
 
         if reread_conf:
             self._load_app_servers_inc()
