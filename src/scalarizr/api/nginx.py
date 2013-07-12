@@ -369,6 +369,51 @@ class NginxAPI(object):
 
         return destinations
 
+    def _normalize_destinations(self, destinations):
+        """
+        Parses list of destinations. They are dictionaries. Dictionary example:
+
+        .. code-block:: python
+            {
+            'farm_role_id': 123,
+            'port': '80',
+            'backup': True,
+            # ...
+            # other backend params
+            # ...
+            }
+
+        or
+
+        .. code-block:: python
+            {
+            'host': '12.234.45.67',
+            'port': '80',
+            'backup': True,
+            # ...
+            # other backend params
+            # ...
+            }
+
+        Returns destination dictionaries with format like above
+        plus servers list in 'servers' key.
+        """
+        if not destinations:
+            return []
+
+        normalized_dests = []
+        for d in destinations:
+            dest = d.copy()
+            dest['servers'] = []
+            if 'farm_role_id' in dest:
+                dest['id'] = str(dest['farm_role_id'])
+                dest['servers'].extend(self.get_role_servers(dest['id']))
+            if 'host' in dest:
+                dest['servers'].append(dest['host'])
+            normalized_dests.append(dest)
+
+        return normalized_dests
+
     def _group_destinations(self, destinations):
         """
         Groups destinations by location in list of lists.
@@ -650,8 +695,7 @@ class NginxAPI(object):
 
     def add_proxy(self,
                   name,
-                  roles=[],
-                  servers=[],
+                  backends=[],
                   port='80',
                   http=True,
                   ssl=False,
@@ -665,11 +709,15 @@ class NginxAPI(object):
                   restart_service=True,
                   hash_backend_name=True):
         """
-        Adds proxy
+        Adds proxy.
+
+        ``backends`` param is list of dictionaries which contains servers
+        and/or roles with params and inner naming in this module for such dicts
+        is ``destinations``. So keep in mind that ``backend`` word in all other
+        places of this module means nginx upstream config.
         """
         _logger.debug('adding proxy name: %s' % name)
-        destinations = self._normalize_roles_arg(roles)
-        destinations.extend(self._normalize_servers_arg(servers))
+        destinations = self._normalize_destinations(destinations)
 
         grouped_destinations = self._group_destinations(destinations)
         if not grouped_destinations:

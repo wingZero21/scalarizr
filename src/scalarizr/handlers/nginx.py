@@ -229,6 +229,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('on host up backend table is %s' % self.api.backend_table)
         # Assuming backend `backend` can be only in default behaviour mode
         if self._in_default_mode():
+
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
@@ -243,16 +244,17 @@ class NginxHandler(ServiceCtlHandler):
                     self.api.remove_server(default_backend, '127.0.0.1',
                                            restart_service=False,
                                            update_backend_table=True)
-                    self._logger.debug('adding new app server %s to default '
+                    self._logger.debug('Adding new app server %s to default '
                                         'backend' % server)
+                    self._logger.info('Adding %s server to backend' % server)
                     self.api.add_server(default_backend, server,
                                          update_backend_table=True)
 
         else:
-            self._logger.debug('adding new app server %s to backends that are '
+            self._logger.info('Adding new app server %s to backends that are '
                                'using role %s' % (server, role_id))
             self.api.add_server_to_role(server, role_id)
-        self._logger.debug('after host up backend table is %s' % self.api.backend_table)
+        self._logger.info('After %s host up backend table is %s' % (server, self.api.backend_table))
 
 
     def _remove_shutting_down_server(self,
@@ -287,14 +289,16 @@ class NginxHandler(ServiceCtlHandler):
                         self.api.add_server(default_backend, '127.0.0.1',
                                             restart_service=False,
                                             update_backend_table=True)
+                    self._logger.info('Removing %s server from backend' % server)
                     self.api.remove_server(default_backend, server, 
                                            update_backend_table=True)
 
         else:
-            self._logger.debug('trying to remove server %s from backends that '
+            self._logger.info('Trying to remove server %s from backends that '
                                'are using role %s' % (server, role_id))
             self.api.remove_server_from_role(server, role_id)
-        self._logger.debug('after host down backend table is %s' % self.api.backend_table)
+        self._logger.debug('After %s host down backend table is %s' %
+                           (server, self.api.backend_table))
 
         if cache_remove:
             self._terminating_servers.append(server)
@@ -403,7 +407,7 @@ class NginxHandler(ServiceCtlHandler):
                                 hash_backend_name=False)
         else:
             self.api.remove_proxy('backend.ssl')
-        self._logger.debug('After making proxy backend table is %s' % self.api.backend_table)
+        self._logger.info('After making proxy backend table is %s' % self.api.backend_table)
         self._logger.debug('Default proxy is made')
 
     def get_all_app_roles(self):
