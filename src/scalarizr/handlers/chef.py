@@ -49,7 +49,7 @@ class ChefHandler(Handler):
         )
 
     def on_reload(self):
-        self._chef_client_bin = which('chef-client')
+        self._chef_client_bin = None
         self._chef_data = None
         self._client_conf_path = '/etc/chef/client.rb'
         self._validator_key_path = '/etc/chef/validation.pem'
@@ -76,6 +76,7 @@ class ChefHandler(Handler):
             self._global_variables[kv['name']] = kv['value'] or ''
 
         if 'chef' in message.body:
+            self._chef_client_bin = which('chef-client')   # Workaround for 'chef' behavior enabled, but chef not installed
             self._chef_data = message.chef.copy()
             if not self._chef_data.get('node_name'):
                 self._chef_data['node_name'] = self.get_node_name()
@@ -146,7 +147,7 @@ class ChefHandler(Handler):
         cmd = [self._chef_client_bin]
         if first_run and self._with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
-        environ={
+        environ = {
             'SCALR_INSTANCE_INDEX': __node__['server_index'],
             'SCALR_FARM_ID': __node__['farm_id'],
             'SCALR_ROLE_ID': __node__['role_id'],
