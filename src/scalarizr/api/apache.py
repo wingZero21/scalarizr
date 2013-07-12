@@ -368,10 +368,10 @@ class ModSSL(object):
                 except NoPathError, e:
                     pass
                 if path and os.path.exists(path):
-                    ssl_conf.set(".//SSLCertificateFile", path, force=force)
+                    ssl_conf.set(section, path, force=force)
                 elif default_path and old_path and not os.path.exists(old_path):
                     LOG.debug("Certificate file not found. Setting to default %s" % default_path)
-                    ssl_conf.set(".//SSLCertificateFile", default_path, force=True)
+                    ssl_conf.set(section, default_path, force=True)
 
 
     def ensure(self, ssl_port=443):
