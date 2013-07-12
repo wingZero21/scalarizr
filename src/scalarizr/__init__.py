@@ -42,6 +42,7 @@ import urllib
 import pprint
 import select
 import wsgiref.simple_server
+import SocketServer
 from scalarizr.util import sqlite_server, wait_until
 
 
@@ -389,7 +390,9 @@ def _init_services():
 		STATE['global.api_port'] = api_port
 		api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
 											cnf.key_path(cnf.DEFAULT_KEY))
-		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app)
+		class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
+			pass
+ 		bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app, server_class=ThreadingWSGIServer)
 
 
 def _start_services():
