@@ -75,7 +75,7 @@ class ChefHandler(Handler):
         for kv in global_variables:
             self._global_variables[kv['name']] = kv['value'] or ''
 
-        if 'chef' in message.body:
+        if 'chef' in message.body and message.body['chef']:
             self._chef_client_bin = which('chef-client')   # Workaround for 'chef' behavior enabled, but chef not installed
             self._chef_data = message.chef.copy()
             if not self._chef_data.get('node_name'):
