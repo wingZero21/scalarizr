@@ -118,7 +118,7 @@ class Server(BaseHTTPServer.HTTPServer):
 def clear_nginx_includes():
     with open('/etc/nginx/app-servers.include', 'w') as fp:
         fp.write('')
-    with open('/etc/nginx/https.include', 'w') as fp:
+    with open('/etc/nginx/proxies.include', 'w') as fp:
         fp.write('')
 
 
@@ -126,7 +126,7 @@ def read_nginx_includes():
     result = None
     with open('/etc/nginx/app-servers.include', 'r') as fp:
         result = fp.read() + '\n\n'
-    with open('/etc/nginx/https.include', 'r') as fp:
+    with open('/etc/nginx/proxies.include', 'r') as fp:
         result += fp.read() + '\n\n'
     return result
 
@@ -155,7 +155,7 @@ def patch_node(feature):
                            '__node__',
                            new={'nginx': {'binary_path': '/usr/sbin/nginx',
                                           'app_include_path': '/etc/nginx/app-servers.include',
-                                          'https_include_path': '/etc/nginx/https.include',
+                                          # 'https_include_path': '/etc/nginx/https.include',
                                           'app_port': '80',
                                           'main_handler': 'nginx'},
                                 'behavior': ['nginx']})
@@ -165,7 +165,7 @@ def patch_node(feature):
                            '__nginx__',
                            new={'binary_path': '/usr/sbin/nginx',
                                 'app_include_path': '/etc/nginx/app-servers.include',
-                                'https_include_path': '/etc/nginx/https.include',
+                                # 'https_include_path': '/etc/nginx/https.include',
                                 'app_port': '80',
                                 'main_handler': 'nginx'})
     patcher.start()
@@ -194,8 +194,7 @@ def create_api(feature=None):
 def clear_make_proxy_world_parms(scenario):
     world.http = True
     world.port = 8008
-    world.roles = None
-    world.servers = None
+    world.destinations = None
     world.ssl = None
     world.ssl_port = None
     world.ssl_cert_id = None
@@ -222,14 +221,13 @@ def given_i_have_a_server(step):
     world.expected_response = 'KUKU'
     world.server = Server(8000, world.expected_response)
     world.server.serve_forever()
-    world.servers = [{'host': 'localhost', 'port': '8000'}]
+    world.destinations = [{'host': 'localhost', 'port': '8000'}]
 
 
 @step(u'When I add proxy')
 def when_i_add_proxy(step):
     world.api.make_proxy(hostname='uty.com',
-                         roles=world.roles,
-                         servers=world.servers,
+                         backends=world.destinations,
                          port=world.port,
                          http=world.http,
                          ssl=world.ssl,
@@ -270,7 +268,7 @@ def given_i_have_a_role(step):
     world.server2.serve_forever()
 
     world.role_id = 123
-    world.roles = [world.role_id]
+    world.destinations = [{'farm_role_id': world.role_id}]
 
 
 @step(u'Then I expect proxying to role')
@@ -434,10 +432,11 @@ def given_i_have_a_proxy_to_two_roles_master_and_backup(step):
     world.server3 = Server(server3_port, world.expected_response3)
     world.server3.serve_forever()
 
-    world.roles = [123, {'id': 321, 'backup': True}]
+    world.destinations = [{'farm_role_id': 123},
+                          {'farm_role_id': 321, 'backup': True}]
 
     world.api.make_proxy(hostname='uty.com',
-                         roles=world.roles,
+                         backends=world.destinations,
                          port=8008)
     time.sleep(1)
 
@@ -476,11 +475,11 @@ def given_i_have_a_proxy_to_two_servers(step):
     world.expected_response2 = 'Test2'
     world.server2 = Server(8002, world.expected_response2)
     world.server2.serve_forever()
-    world.servers = [{'host': 'localhost', 'port': '8001'},
-                     {'host': 'localhost', 'port': '8002'}]
+    world.destinations = [{'host': 'localhost', 'port': '8001'},
+                          {'host': 'localhost', 'port': '8002'}]
 
     world.api.make_proxy(hostname='uty.com',
-                         servers=world.servers,
+                         backends=world.destinations,
                          port=8008)
     time.sleep(1)
 
@@ -491,13 +490,12 @@ def given_i_have_a_proxy_to_two_servers(step):
 
 @step(u'When I update proxy marking one server as down')
 def when_i_update_proxy_marking_one_server_as_down(step):
-    server_to_update = world.servers[1]
+    server_to_update = world.destinations[1]
     server_to_update['down'] = True
     world.api.make_proxy(hostname='uty.com',
-                         servers=world.servers,
+                         backends=world.destinations,
                          port=8008)
     time.sleep(1)
-
 
 
 @step(u'Then I expect proxying to remaining server')
@@ -518,7 +516,7 @@ def given_i_have_a_regular_server_s(step):
     world.server_S = Server(8001, world.S_response)
     world.server_S.serve_forever()
 
-    world.servers = [{'host': 'localhost', 'port': '8001'}]
+    world.destinations = [{'host': 'localhost', 'port': '8001'}]
 
 
 @step(u'And I have a down server SD')
@@ -527,7 +525,7 @@ def and_i_have_a_down_server_sd(step):
     world.server_SD = Server(8002, world.SD_response)
     world.server_SD.serve_forever()
 
-    world.servers.append({'host': 'localhost', 'port': '8002', 'down': True})
+    world.destinations.append({'host': 'localhost', 'port': '8002', 'down': True})
 
 
 @step(u'And I have a backup server SB')
@@ -536,7 +534,7 @@ def and_i_have_i_backup_server_sb(step):
     world.server_SB = Server(8003, world.SB_response)
     world.server_SB.serve_forever()
 
-    world.servers.append({'host': 'localhost', 'port': '8003', 'backup': True})
+    world.destinations.append({'host': 'localhost', 'port': '8003', 'backup': True})
 
 
 @step(u'And I have a regular role R')
@@ -562,7 +560,7 @@ def and_i_have_a_regular_role_r(step):
     world.R_role_server2 = Server(server2_port, world.R_role_response2)
     world.R_role_server2.serve_forever()
 
-    world.roles = [123]
+    world.destinations.append({'farm_role_id': 123})
 
 
 @step(u'And I have a backup role RB')
@@ -573,7 +571,7 @@ def and_i_have_a_backup_role_rb(step):
     world.RB_role_server1 = Server(server1_port, world.RB_role_response1)
     world.RB_role_server1.serve_forever()
 
-    world.roles.append({'id': 321, 'backup': True})
+    world.destinations.append({'id': 321, 'backup': True})
 
 
 @step(u'And I have a down role RD')
@@ -584,7 +582,7 @@ def and_i_have_a_down_role_rd(step):
     world.RD_role_server1 = Server(server1_port, world.RD_role_response1)
     world.RD_role_server1.serve_forever()
 
-    world.roles.append({'id': 890, 'down': True})
+    world.destinations.append({'id': 890, 'down': True})
 
 
 @step(u'Then I expect S and R servers are regular in backend')
