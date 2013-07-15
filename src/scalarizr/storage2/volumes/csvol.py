@@ -50,7 +50,7 @@ def devname_to_deviceid(devname):
 class FreeDeviceLetterMgr(object):
 
     def __init__(self):
-        self._all = set(string.ascii_lowercase[1:16])
+        self._all = set(string.ascii_letters[1:3] + string.ascii_letters[4:16])
         self._acquired = set()
         self._lock = threading.Lock()
         self._local = threading.local()

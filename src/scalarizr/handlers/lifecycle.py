@@ -149,7 +149,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         # Add firewall rules
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
         self._insert_iptables_rules()
-        self._fetch_globals()
+        if __node__['state'] !=  ScalarizrState.IMPORTING:
+            self._fetch_globals()
 
     def _fetch_globals(self):
         queryenv = bus.queryenv_service

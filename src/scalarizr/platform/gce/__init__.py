@@ -25,8 +25,11 @@ from scalarizr.platform.gce.storage import GoogleCSTransferProvider
 
 Transfer.explore_provider(GoogleCSTransferProvider)
 
-COMPUTE_RW_SCOPE = 'https://www.googleapis.com/auth/compute'
-STORAGE_FULL_SCOPE = 'https://www.googleapis.com/auth/devstorage.full_control'
+COMPUTE_RW_SCOPE = ('https://www.googleapis.com/auth/compute', "https://www.googleapis.com/auth/compute.readonly")
+STORAGE_FULL_SCOPE = ("https://www.googleapis.com/auth/devstorage.full_control",
+                      "https://www.googleapis.com/auth/devstorage.read_only",
+                      "https://www.googleapis.com/auth/devstorage.read_write",
+                      "https://www.googleapis.com/auth/devstorage.write_only")
 
 
 LOG = logging.getLogger(__name__)
@@ -140,10 +143,10 @@ class GcePlatform(Platform):
     def __init__(self):
         Platform.__init__(self)
         self.compute_svc_mgr = GoogleServiceManager(
-                self, 'compute', 'v1beta14', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
+                self, 'compute', 'v1beta14', *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
 
         self.storage_svs_mgr = GoogleServiceManager(
-                self, 'storage', 'v1beta1', STORAGE_FULL_SCOPE)
+                self, 'storage', 'v1beta1', *STORAGE_FULL_SCOPE)
 
 
     def get_user_data(self, key=None):

@@ -39,12 +39,12 @@ class TestNginx(unittest.TestCase):
 
 
     def _test_on_VhostReconfigure(self):
-        https_include_path = "/etc/nginx/https.include"
+        proxies_include_path = "/etc/nginx/proxies.include"
         #_queryenv = bus.queryenv_service = _QueryEnv()
         _queryenv = bus.queryenv_service = qe
-        https_include = None
-        with open(https_include_path, 'r') as fp:
-            https_include = fp.read()
+        proxies_include = None
+        with open(proxies_include_path, 'r') as fp:
+            proxies_include = fp.read()
 
         cert_path =  self._cnf.key_path("https.crt")
         pk_path = self._cnf.key_path("https.key")
@@ -57,7 +57,7 @@ class TestNginx(unittest.TestCase):
             pk = fp.read()
 
         print 'Cleaning..'
-        for file in (https_include_path, cert_path, pk_path):
+        for file in (proxies_include_path, cert_path, pk_path):
             if os.path.exists(file):
                 os.remove(file)
                 print 'File %s deleted.' % file
@@ -65,11 +65,11 @@ class TestNginx(unittest.TestCase):
         n = nginx.NginxHandler()
         n.on_VhostReconfigure(None)
 
-        self.assertTrue(os.path.isfile(https_include_path))
+        self.assertTrue(os.path.isfile(proxies_include_path))
         self.assertTrue(os.path.isfile(cert_path))
         self.assertTrue(os.path.isfile(pk_path))
 
-        self.assertEquals(_queryenv.list_virtual_hosts()[0].raw + '\n', https_include)
+        self.assertEquals(_queryenv.list_virtual_hosts()[0].raw + '\n', proxies_include)
 
         #temporary
         self.assertTrue(cert.startswith(_queryenv.get_https_certificate()[0]))
@@ -118,7 +118,7 @@ class TestNginx(unittest.TestCase):
         #8.8.8.8 had 'weight' option, so it not supposed to be vanished
         self.assertNotEquals(string.find(new_incl, 'weight=5;'), -1)
         #check that there is only one include
-        include_str = 'include  /etc/nginx/https.include;'
+        include_str = 'include  /etc/nginx/proxies.include;'
         self.assertNotEquals(string.find(new_incl, include_str), '-1')
         self.assertEquals(string.find(new_incl, include_str), string.rfind(new_incl, include_str))
 

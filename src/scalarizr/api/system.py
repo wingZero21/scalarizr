@@ -333,7 +333,7 @@ class SystemAPI(object):
             'avail_swap': info['SwapFree'],
             'total_real': info['MemTotal'],
             'total_free': info['MemFree'],
-            'shared': info['Shmem'],
+            'shared': info.get('Shmem', 0),
             'buffer': info['Buffers'],
             'cached': info['Cached']
         }
