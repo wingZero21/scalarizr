@@ -472,7 +472,7 @@ class NginxAPI(object):
         return name, location, roles
 
     def _make_backend_name(self, name, location, roles, hash_name=True):
-        role_namepart = '_'.join(roles)
+        role_namepart = '_'.join(map(str, roles))
         if hash_name:
             name = sha1(name).hexdigest()
         name = '%s%s__%s' % (name, 

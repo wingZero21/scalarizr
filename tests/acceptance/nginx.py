@@ -342,11 +342,11 @@ def and_i_have_ssl_keypair(step):
         if id_ != 123:
             return None
 
-        cert_path = '/vagrant/https.crt'
+        cert_path = '/home/vagrant/https.crt'
         with open(cert_path, 'w') as fp:
             fp.write(TEST_SSL_CERT)
 
-        key_path = '/vagrant/https.key'
+        key_path = '/home/vagrant/https.key'
         with open(key_path, 'w') as fp:
             fp.write(TEST_SSL_KEY)
 
@@ -571,7 +571,7 @@ def and_i_have_a_backup_role_rb(step):
     world.RB_role_server1 = Server(server1_port, world.RB_role_response1)
     world.RB_role_server1.serve_forever()
 
-    world.destinations.append({'id': 321, 'backup': True})
+    world.destinations.append({'farm_role_id': 321, 'backup': True})
 
 
 @step(u'And I have a down role RD')
@@ -582,7 +582,7 @@ def and_i_have_a_down_role_rd(step):
     world.RD_role_server1 = Server(server1_port, world.RD_role_response1)
     world.RD_role_server1.serve_forever()
 
-    world.destinations.append({'id': 890, 'down': True})
+    world.destinations.append({'farm_role_id': 890, 'down': True})
 
 
 @step(u'Then I expect S and R servers are regular in backend')
@@ -609,7 +609,7 @@ def and_i_expect_sb_and_rb_servers_are_backup_in_backend(step):
 
     responses = get_responses(10)
 
-    # as regular destinations goes down, backups starts to respond
+    # as regular destinations went down, backups started to respond
     assert world.SB_response in responses, responses
     assert world.RB_role_response1 in responses, responses
 
