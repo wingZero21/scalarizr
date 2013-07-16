@@ -241,11 +241,11 @@ class MysqlHandler(DBMSRHandler):
 
     def __init__(self):
         self.mysql = mysql_svc.MySQL()
-
+        cnf_ctl = MysqlCnfController() if __mysql__['behavior'] in ('mysql2', 'percona') else None  # mariadb dont do old presets 
         ServiceCtlHandler.__init__(self,
                         __mysql__['behavior'],
                         self.mysql.service,
-                        MysqlCnfController())
+                        cnf_ctl)
 
         self.preset_provider = mysql_svc.MySQLPresetProvider()
         preset_service.services[__mysql__['behavior']] = self.preset_provider
@@ -1021,6 +1021,7 @@ class MysqlHandler(DBMSRHandler):
                 self.mysql.my_cnf.bind_address = '0.0.0.0'
                 LOG.debug('bind-address post: %s', self.mysql.my_cnf.bind_address)
                 self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
+                self.mysql.my_cnf.set('mysqld/log-bin-index', __mysql__['binlog_dir'] + '/binlog.index')  # MariaDB 
 
                 #if not os.listdir(__mysql__['data_dir']):
                 if not storage_valid:
@@ -1131,6 +1132,7 @@ class MysqlHandler(DBMSRHandler):
                 self.mysql.my_cnf.bind_address = '0.0.0.0'
                 LOG.debug('bind-address post: %s', self.mysql.my_cnf.bind_address)
                 self.mysql.my_cnf.read_only = True
+                self.mysql.my_cnf.set('mysqld/log-bin-index', __mysql__['binlog_dir'] + '/binlog.index')  # MariaDB
                 self._fix_percona_debian_cnf()
 
             with op.step(self._step_move_datadir):

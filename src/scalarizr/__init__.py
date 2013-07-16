@@ -12,18 +12,18 @@ from scalarizr import config, rpc, linux
 from scalarizr import node
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
+from scalarizr.storage import Storage
 from scalarizr.handlers import MessageListener
 from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.api.binding import jsonrpc_http
-
 from scalarizr.linux import pkgmgr
 
 # Utils
 from scalarizr.util import initdv2, log, PeriodicalExecutor
-from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size, dynimp
+from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
 from scalarizr.util import wait_until, sqlite_server
 
 # Stdlibs
@@ -39,6 +39,8 @@ import urllib
 import pprint
 import select
 import wsgiref.simple_server
+import SocketServer
+
 
 
 class ScalarizrError(BaseException):
@@ -367,10 +369,12 @@ def _init_services():
     logger.debug('Initialize message handlers')
     consumer = msg_service.get_consumer()
     consumer.listeners.append(MessageListener())
-    
-    logger.debug('Schedule SNMP process')
-    globals()['_snmp_scheduled_start_time'] = time.time()        
 
+    logger.debug('Schedule SNMP process')
+    globals()['_snmp_scheduled_start_time'] = time.time()       
+
+    Storage.maintain_volume_table = True
+    
     if not bus.api_server:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         api_port = 8010
@@ -383,7 +387,9 @@ def _init_services():
         STATE['global.api_port'] = api_port
         api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
                                             cnf.key_path(cnf.DEFAULT_KEY))
-        bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app)
+        class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
+            pass
+        bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app, server_class=ThreadingWSGIServer)
 
 
 def _start_services():
@@ -515,12 +521,20 @@ def init_script():
 
 def _start_snmp_server():
     logger = logging.getLogger(__name__)
+
+    remove_snmp_since = (4, 5, 0)
+    if bus.scalr_version >= remove_snmp_since:
+        logger.debug('Skip SNMP process starting cause condition matched: Scalr version %s >= %s', 
+            bus.scalr_version, remove_snmp_since)
+        globals()['_snmp_pid'] = -1
+        return
+
     # Start SNMP server in a separate process
     pid = os.fork()
     if pid == 0:
         from scalarizr.snmp.agent import SnmpServer
         globals()['_pid'] = 0
-        cnf = bus.cnf; ini = cnf.rawini        
+        cnf = bus.cnf; ini = cnf.rawini     
         snmp_server = SnmpServer(
             port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
             security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
@@ -740,7 +754,7 @@ def main():
             try:
                 sys.argv[sys.argv.index('region=')] += region
             except ValueError:
-                sys.argv += ['-o', 'region=' + region]        
+                sys.argv += ['-o', 'region=' + region]      
         
         optparser.parse_args()
 
@@ -763,7 +777,7 @@ def main():
         _init()
 
         # Starting scalarizr daemon initialization
-        globals()['_pid'] = pid = os.getpid()        
+        globals()['_pid'] = pid = os.getpid()       
         logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
         
         # Check for another running scalarzir 
@@ -795,6 +809,7 @@ def main():
             print "Don't terminate Scalarizr until Scalr will create the new role"
             cnf.state = ScalarizrState.IMPORTING
             # Load Command-line configuration options and auto-configure Scalarizr
+
             values = CmdLineIni.to_kvals(optparser.values.cnf)
             if not values.get('server_id'):
                 values['server_id'] = str(uuid.uuid4())
@@ -824,7 +839,7 @@ def main():
                     
                 udfile = cnf.private_path('.user-data')
                 wait_until(lambda: os.path.exists(udfile), 
-                        timeout=60, error_text="User-data file %s doesn't exist" % udfile)                    
+                        timeout=60, error_text="User-data file %s doesn't exist" % udfile)                  
             try:
                 ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
             except:
@@ -895,7 +910,7 @@ def main():
         # Validate configuration
         num_errors = do_validate_cnf()
         if num_errors or optparser.values.validate_cnf:
-            sys.exit(int(not num_errors or 1))        
+            sys.exit(int(not num_errors or 1))      
         
         # Initialize scalarizr services
         _init_services()
@@ -909,7 +924,7 @@ def main():
                         exc_info=sys.exc_info())
         
         # Install signal handlers
-        signal.signal(signal.SIGCHLD, onSIGCHILD)    
+        signal.signal(signal.SIGCHLD, onSIGCHILD)   
         signal.signal(signal.SIGTERM, onSIGTERM)
         signal.signal(signal.SIGHUP, onSIGHUP)
 
@@ -958,3 +973,5 @@ def main():
             else:
                 print >> sys.stderr, 'error: %s' % e
             sys.exit(1)
+
+

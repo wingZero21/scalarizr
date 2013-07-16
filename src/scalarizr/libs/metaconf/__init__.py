@@ -355,7 +355,7 @@ class Configuration:
         """
         el = self._find(path)
         value = el.text
-        if not value.strip():
+        if not value or not value.strip():
             value = el.attrib.get('value', value)
         return value
 
@@ -373,7 +373,7 @@ class Configuration:
         for el in self._find_all(path):
             if el.tag:
                 value = el.text
-                if not value.strip():
+                if not value or not value.strip():
                     value = el.attrib.get('value', value)
                 result.append(value)
         return result
@@ -430,7 +430,7 @@ class Configuration:
         if el != None:
             self._set(el, value)
         elif force:
-            self.add(path, value)
+            self.add(path, value, force=True)
         else:
             raise NoPathError("Path %s doesn't exist" % path)
 

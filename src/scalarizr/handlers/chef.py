@@ -38,7 +38,6 @@ def get_handlers():
 
 
 PID_FILE = '/var/run/chef-client.pid'
-CHEF_CLIENT_BIN = which('chef-client')
 
 class ChefInitScript(initdv2.ParametrizedInitScript):
     _default_init_script = '/etc/init.d/chef-client'
@@ -54,13 +53,14 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
 
     # Uses only pid file, no init script involved
     def _start_stop_reload(self, action):
-        if action == "start":
+        chef_client_bin = which('chef-client')
+	if action == "start":
             if not self.running:
                 # Stop default chef-client init script
                 if os.path.exists(self._default_init_script):
                     system2((self._default_init_script, "stop"), close_fds=True, preexec_fn=os.setsid, raise_exc=False)
 
-                cmd = (CHEF_CLIENT_BIN, '--daemonize', '--logfile', '/var/log/chef-client.log', '--pid', PID_FILE)
+                cmd = (chef_client_bin, '--daemonize', '--logfile', '/var/log/chef-client.log', '--pid', PID_FILE)
                 try:
                     out, err, rcode = system2(cmd, close_fds=True, preexec_fn=os.setsid, env=self._env)
                 except PopenError, e:
@@ -102,6 +102,7 @@ class ChefHandler(Handler):
         )
 
     def on_reload(self):
+        self._chef_client_bin = None
         self._chef_data = None
         self._client_conf_path = '/etc/chef/client.rb'
         self._validator_key_path = '/etc/chef/validation.pem'
@@ -137,7 +138,8 @@ class ChefHandler(Handler):
         for kv in global_variables:
             self._global_variables[kv['name']] = kv['value'] or ''
 
-        if 'chef' in message.body:
+        if 'chef' in message.body and message.body['chef']:
+            self._chef_client_bin = which('chef-client')   # Workaround for 'chef' behavior enabled, but chef not installed
             self._chef_data = message.chef.copy()
             self._chef_data['node_name'] = self.get_node_name()
             self._daemonize = self._chef_data.get('daemonize')
@@ -203,7 +205,7 @@ class ChefHandler(Handler):
             self._init_script.start(env=self._environ_variables)
             return
 
-        cmd = [CHEF_CLIENT_BIN]
+        cmd = [self._chef_client_bin]
         if with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
         system2(cmd,
@@ -215,7 +217,7 @@ class ChefHandler(Handler):
 
     @property
     def _environ_variables(self):
-        environ={
+        environ = {
             'SCALR_INSTANCE_INDEX': __node__['server_index'],
             'SCALR_FARM_ID': __node__['farm_id'],
             'SCALR_ROLE_ID': __node__['role_id'],

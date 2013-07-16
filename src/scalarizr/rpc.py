@@ -17,6 +17,7 @@ import urllib2
 import urlparse
 import struct
 import socket
+import traceback
 from threading import local
 import logging
 
@@ -111,10 +112,17 @@ class RequestHandler(object):
                             'message': e.message,
                             'data': e.data}
         except:
-            self.handle_error()
+            E, e = sys.exc_info()[:2]
+            if E in (KeyError, IndexError):
+                # file/line/def where exception occurred formatted like exception stacktrace 
+                where = traceback.format_list([traceback.extract_tb(sys.exc_info()[2])[-1]])[0].strip()  
+                message = '{0}: {1} in {2}'.format(E.__name__, e, where)
+            else:
+                message = '{0}: {1}'.format(E.__name__, e)
+            LOG.warn('Caught API exception. {0}'.format(message), exc_info=sys.exc_info())
             error = {'code': ServiceError.INTERNAL,
-                            'message': 'Internal error',
-                            'data': str(sys.exc_info()[1])}
+                            'message': message,
+                            'data': None}
         finally:
             if not error:
                 resp = {'result': result}
