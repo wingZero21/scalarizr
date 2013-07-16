@@ -459,8 +459,7 @@ class RaidVolume(base.Volume):
                 lvm2.lvresize(new_vol.device, extents='100%VG')
             except:
                 e = sys.exc_info()[1]
-                if (self.level == 1 and 'matches existing size' in str(e)
-                                                                                                and not disk_growth):
+                if (self.level == 1 and 'matches existing size' in str(e) and not disk_growth):
                     LOG.debug('Raid1 actual size has not changed')
                 else:
                     raise
@@ -478,6 +477,35 @@ class RaidVolume(base.Volume):
                         LOG.error('Failed to remove raid disk: %s' % e)
 
             raise err_type, err_val, trace
+
+
+    def replace_disk(self, index, disk):
+        '''
+        :param: index RAID disk index. Starts from 0
+        :type index: int
+        :param: disk  Replacement disk. 
+        :type: disk dict/Volume
+        '''
+
+        disk_replace = storage2.volume(disk)
+        replace_is_new = not disk_replace.id
+
+        try:
+            disk_replace.ensure()
+            disk_find = self.disks[index]
+
+            mdadm.mdadm('manage', self.raid_pv, '--fail', disk_find.device)
+            mdadm.mdadm('manage', self.raid_pv, '--remove', disk_find.device)
+            mdadm.mdadm('manage', self.raid_pv, '--add', disk_replace.device)
+
+            self.disks[index] = disk_replace
+        except:
+            with util.capture_exception(logger=LOG):
+                if replace_is_new:
+                    disk_replace.destroy(force=True)
+        else:
+            disk_find.destroy(force=True)
+
 
 
 class RaidSnapshot(base.Snapshot):

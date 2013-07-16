@@ -17,11 +17,9 @@ from scalarizr.linux import mount
 @mock.patch('scalarizr.storage2.volumes.raid.mdadm')
 class RaidVolumeTest(unittest.TestCase):
 
-
     def test_ensure_new(self, mdadm, lvm2, storage2, exists, rm, tfile,
                                             b64, op):
-        disks = [mock.MagicMock(type='loop', device='/dev/loop%s' % x)
-                                                                                                        for x in range(2)]*2
+        disks = [mock.MagicMock(type='loop', device='/dev/loop%s' % x) for x in range(2)]*2
         storage2.volume.side_effect = disks
         disks_devices = [d.device for d in disks[:2]]
         mdadm.findname.return_value = '/dev/md1'
@@ -249,7 +247,6 @@ class RaidVolumeTest(unittest.TestCase):
         lvm2.vgchange.assert_called_once_with('test', available='y')
 
 
-
     @mock.patch.object(mount, 'umount')
     def test_detach(self, um, mdadm, lvm2, storage2,
                                     exists, rm, tfile, b64, op):
@@ -381,3 +378,21 @@ class RaidVolumeTest(unittest.TestCase):
                          mock.call('resume', raid_vol.device)]
 
         self.assertSequenceEqual(lvm2.dmsetup.mock_calls, calls)
+
+
+class RaidVolumeTest2(unittest.TestCase):
+
+    @mock.patch('scalarizr.storage2.volumes.raid.mdadm')
+    @mock.patch('scalarizr.storage2.volumes.raid.lvm2')
+    def test_replace_disk(self, lvm2, mdadm):
+        lvm2.lvcreate.return_value = ('Logical volume "lvol0" created', '', 0)
+        raid_vol = raid.RaidVolume(type='raid', vg='test', level=1,
+                disks=[dict(type='loop', size=0.01)]*2)
+        raid_vol.replace_disk(0, {'device':'/dev/loop0', 'id':'vol-987654321'})
+
+        with mock.patch('scalarizr.storage2.volumes.base.Base._genid') as mock_genid:
+            mock_genid.return_value = None
+            raid_vol = raid.RaidVolume(type='raid', vg='test', level=1,
+                    disks=[dict(type='loop', size=0.01)]*2)
+            self.assertRaises(Exception, raid_vol.replace_disk, 0, {'device':'/dev/loop0'})
+
