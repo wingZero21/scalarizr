@@ -65,7 +65,7 @@ class HAProxyAPI(object):
             raise TypeError("server must be a dict or a string")
 
 
-    def make_proxy(self, port, backend_port=None, roles=None, servers=None,
+    def make_proxy(self, port, backend_port=None, backends=None,
                 check_timeout=None, maxconn=None, **default_server_params):
         """
         Add listener and backend sections to the haproxy conf and restart the
@@ -75,10 +75,12 @@ class HAProxyAPI(object):
         :type port: int
         :param backend_port: port for backend server to listen on
         :type backend_port: int
-        :param roles: role ids (ints) or dicts with "id" key
-        :type roles: list
-        :param servers: server ips
-        :type servers: list
+        :param backends: list of dicts, each dict represents role or server
+        :type backends: list
+        # :param roles: role ids (ints) or dicts with "id" key
+        # :type roles: list
+        # :param servers: server ips
+        # :type servers: list
         :param check_timeout: ``timeout check`` - additional read timeout,
                               e.g. "3s"
         :type check_timeout: str
@@ -112,18 +114,22 @@ class HAProxyAPI(object):
         # args preprocessing: default values and short forms
         if not backend_port:
             backend_port = port
-        if not roles:
-            roles = []
-        if not servers:
-            servers = []
-        roles = map(lambda x: {"id": x} if isinstance(x, int) else dict(x), roles)
+
+        # new: backends instead of separate roles/hosts args
+        if not backends:
+            backends = []
+        roles = filter(lambda spec: "farm_role_id" in spec, backends)
+        servers = filter(lambda spec: "host" in spec, backends)
+
+
+        roles = map(lambda x: {"farm_role_id": x} if isinstance(x, int) else dict(x), roles)
         servers = map(lambda x: {"host": x} if isinstance(x, str) else dict(x), servers)
 
         # create a single server list with proper params for each server
         # 1. extract servers from the roles and apply role params to them
         roles_servers = []
         for role in roles:
-            role_id, role_params = role.pop("id"), role
+            role_id, role_params = role.pop("farm_role_id"), role
 
             role_servers = map(lambda ip: {"host": ip}, get_servers(role_id))
 

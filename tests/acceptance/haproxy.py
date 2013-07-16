@@ -168,7 +168,7 @@ class Role(object):
         cls._id += 1
 
         self.id = cls._id
-        self.as_arg = {"id": self.id}
+        self.as_arg = {"farm_role_id": self.id}
         self.servers = servers or []
 
         cls._instances[self.id] = self
@@ -296,8 +296,8 @@ def i_have_a_server(step, desc, name, _, hc_name):
     server.as_arg.update(PARAMS[desc])
     server.as_arg.update(HC_PARAMS[hc_name])
 
-    if server.as_arg.keys() == ["host"]:
-        server.as_arg = server.as_arg["host"]
+    # if server.as_arg.keys() == ["host"]:
+    #     server.as_arg = server.as_arg["host"]
 
     world.servers[name] = server
 
@@ -312,8 +312,8 @@ def i_have_a_role(step, desc, name, _, hc_name):
     role.as_arg.update(HC_PARAMS[hc_name])
 
     # if id is the only key, test the short form
-    if role.as_arg.keys() == ["id"]:
-        role.as_arg = role.as_arg["id"]
+    # if role.as_arg.keys() == ["id"]:
+    #     role.as_arg = role.as_arg["id"]
 
     world.roles[name] = role
 
@@ -323,10 +323,10 @@ def i_have_a_role(step, desc, name, _, hc_name):
 def i_add_proxy(step):
     servers = map(lambda server: server.as_arg, world.servers.values())
     roles = map(lambda role: role.as_arg, world.roles.values())
+    backends = servers + roles
 
     world.api.make_proxy(port=world.proxy_port,
-                        servers=servers,
-                        roles=roles)
+                        backends=backends)
     world.acceptable_responses = acceptable_responses()
     log_acceptable_responses()
 
