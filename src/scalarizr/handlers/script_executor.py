@@ -229,17 +229,9 @@ class ScriptExecutor(Handler):
                                             event_id=message.body.get('event_id'))
                                     for item in message.body['scripts']]
         else:
-            # TODO: remove obsolete code
-            LOG.debug("Fetching scripts for event %s", event_name)
-            event_id = message.meta['event_id'] if message.name == Messages.EXEC_SCRIPT else None
-            target_ip = message.body.get('local_ip')
-            local_ip = self._platform.get_private_ip()
+            LOG.warn('No scripts embed into message')
+            return
 
-            queryenv_scripts = self._queryenv.list_scripts(event_name, event_id,
-                                                                    target_ip=target_ip, local_ip=local_ip)
-            scripts = [Script(name=s.name, body=s.body, asynchronous=s.asynchronous,
-                                    exec_timeout=s.exec_timeout, event_name=event_name, role_name=role_name) \
-                                    for s in queryenv_scripts]
 
         global_variables = message.body.get('global_variables') or []
         for kv in global_variables:
