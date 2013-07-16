@@ -420,13 +420,13 @@ class NginxHandler(ServiceCtlHandler):
             if type(role) is str:
                 s = self.api.get_role_servers(role) or \
                     self.api.get_role_servers(role_name=role)
-                servers.extend(s)
+                servers.extend({'host': s})
             else:
                 cl = __node__['cloud_location']
                 servers_ips = [h.internal_ip if cl == h.cloud_location else
                                h.external_ip
                                for h in role.hosts]
-                servers.extend(servers_ips)
+                servers.extend({'host': srv} for srv in servers_ips)
 
         if not servers:
             self._logger.debug('No app roles in farm, making mock backend')
@@ -439,7 +439,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('backend table is %s' % self.api.backend_table)
         write_proxies = not self._main_config_contains_server()
         self.api.make_proxy('backend',
-                            servers=servers,
+                            backends=servers,
                             ssl=False,
                             backend_ip_hash=True,
                             hash_backend_name=False,
@@ -466,7 +466,7 @@ class NginxHandler(ServiceCtlHandler):
         #     self._logger.debug('adding default ssl nginx server')
         #     write_proxies = not self._https_config_exists()
         #     self.api.make_proxy('backend.ssl',
-        #                         servers=servers,
+        #                         backends=servers,
         #                         port=None,
         #                         ssl=True,
         #                         backend_ip_hash=True,
