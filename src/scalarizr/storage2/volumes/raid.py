@@ -487,26 +487,25 @@ class RaidVolume(base.Volume):
         :type: disk dict/Volume
         '''
 
-        new_disk = storage2.volume(disk)
+        disk_replace = storage2.volume(disk)
+        replace_is_new = not disk_replace.id
 
         try:
-            if not new_disk.id:
-                raise Exception('Volume id is None')
+            disk_replace.ensure()
+            disk_find = self.disks[index]
 
-            new_disk.ensure()
+            mdadm.mdadm('manage', self.raid_pv, '--fail', disk_find.device)
+            mdadm.mdadm('manage', self.raid_pv, '--remove', disk_find.device)
+            mdadm.mdadm('manage', self.raid_pv, '--add', disk_replace.device)
 
-            disk_to_replace = self.disks[index]
+            self.disks[index] = disk_replace
+        except:
+            with util.capture_exception(logger=LOG):
+                if replace_is_new:
+                    disk_replace.destroy(force=True)
+        else:
+            disk_find.destroy(force=True)
 
-            mdadm.mdadm('manage', self.raid_pv, '--fail', disk_to_replace.device)
-            mdadm.mdadm('manage', self.raid_pv, '--remove', disk_to_replace.device)
-            mdadm.mdadm('manage', self.raid_pv, '--add', new_disk.device)
-
-            self.disks[index] = new_disk
-            disk_to_replace.destroy(force=True, remove_disks=True)
-
-        except Exception as e:
-            new_disk.destroy(force=True, remove_disks=True)
-            raise(e)
 
 
 class RaidSnapshot(base.Snapshot):
