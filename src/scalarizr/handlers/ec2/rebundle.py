@@ -700,7 +700,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
         self._ebs_config['tags'] = prepare_tags(tmp=1)
         self.ebs_volume = volume(self._ebs_config)
         self.ebs_volume.ensure()
-        return self.ebs_volume.devname
+        return self.ebs_volume.device
 
 
     def _read_pt(self, dev_name):
