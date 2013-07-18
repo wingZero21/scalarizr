@@ -163,7 +163,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             keytool = KeytoolExec()
             out = keytool.start('list', 
                 keystore=keystore_path, 
-                storepass='changeit')[0]
+                storepass='changeit')[1]
             keystore_type = 'jks'
             for line in out.splitlines():
                 m = re.search(r'^Key store type: (.+)$', line)
