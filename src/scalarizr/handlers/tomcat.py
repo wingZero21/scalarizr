@@ -151,7 +151,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             keystore_path = self.config_dir + '/keystore'
             if not os.path.exists(keystore_path):
                 LOG.info('Initializing keystore in %s', keystore_path)
-                keytool = KeytoolExec(wait=True)
+                keytool = KeytoolExec()
                 keytool.start('genkey', 
                     alias='tomcat', 
                     keystore=keystore_path, 
@@ -160,7 +160,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                     dname='CN=John Smith')
 
             # Detect keystore type
-            keytool = KeytoolExec(wait=True)
+            keytool = KeytoolExec()
             out = keytool.start('list', 
                 keystore=keystore_path, 
                 storepass='changeit')['stdout']
