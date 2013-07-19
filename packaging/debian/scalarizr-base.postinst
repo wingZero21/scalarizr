@@ -231,6 +231,10 @@ if [ ! -f "$pub_cnf_dir/gce.ini" ]; then
 [handlers]
 
 rebundle = scalarizr.handlers.gce.rebundle
+
+gce_lifecycle = scalarizr.handlers.gce.lifecycle
+
+gce_vol = scalarizr.handlers.gce.vol
 EOF
 fi
 
@@ -363,6 +367,15 @@ nimbula_rebundle = scalarizr.handlers.nimbula.rebundle
 EOF
 fi
 
+if [ ! -f "$pub_cnf_dir/openstack.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/openstack.ini"
+[openstack]
+
+[handlers]
+
+openstack_vol = scalarizr.handlers.openstack.vol
+EOF
+fi
 
 if [ ! -f "$pub_cnf_dir/postgresql.ini" ]; then
         cat <<EOF > "$pub_cnf_dir/postgresql.ini"
