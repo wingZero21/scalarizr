@@ -229,7 +229,7 @@ class ScriptExecutor(Handler):
                                             event_id=message.body.get('event_id'))
                                     for item in message.body['scripts']]
         else:
-            LOG.warn('No scripts embed into message')
+            LOG.debug("No scripts embed into message '%s'", message.name)
             return
 
 
