@@ -109,22 +109,19 @@ class OpenstackPlatform(platform.Platform):
         nova = self.new_nova_connection()
         nova.connect()
         servers = nova.servers.list()
-        for srv in servers:
-            srv_private_addrs = []
-            for _ in xrange(20):
-                # if for some reason nova returns server without private ip
-                # waiting for 1 sec than try again.
-                # If after 20 tries still no ip, give up and try another srv
-                try:
-                    srv_private_addrs = [addr_info['addr'] for addr_info in
-                                         srv.addresses['private']]
-                    break
-                except KeyError:
-                    sleep(1)
-                    srv.update()
+        my_private_ip = self.get_private_ip()
+        for server in servers:
+            private_ip = 'private' in server.addresses and server.addresses['private']['addr']
+            if not private_ip:
+                ips = [address['addr'] 
+                        for network in server.addresses.values()
+                        for address in network
+                        if address['addr'].startswith('10.')]
+                if ips:
+                    private_ip = ips[0]
 
-            if self.get_private_ip() in srv_private_addrs:
-                return srv.id
+            if my_private_ip == private_ip:
+                return server.id
 
         raise BaseException("Can't get server_id because we can't get "
                             "server private ip")
