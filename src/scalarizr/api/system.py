@@ -16,6 +16,8 @@ import sys
 import glob
 import time
 import signal
+import weakref
+import threading
 import subprocess as subps
 
 from Queue import Queue, Empty
@@ -470,7 +472,21 @@ class SystemAPI(object):
 
         # Obtain scaling metrics from Scalr.
         scaling_metrics = bus.queryenv_service.get_scaling_metrics()
+        if not scaling_metrics:
+            return []
+
+        if not hasattr(threading.current_thread(), '_children'):
+            threading.current_thread()._children = weakref.WeakKeyDictionary()
+
+        wrk_pool = pool.ThreadPool(processes=10)
         
+        try:
+            return wrk_pool.map_async(_ScalingMetricStrategy.get, scaling_metrics).get()
+        finally:
+            wrk_pool.close()
+            wrk_pool.join()
+        '''
+        rewrite without ThreadPool
         max_threads = 10
         result_queue = Queue()
         workers = list()
@@ -508,7 +524,7 @@ class SystemAPI(object):
 
             if not workers and not scaling_metrics:
                 return list_from_queue(result_queue)
-
+        '''
 
 if linux.os.windows_family:
 
