@@ -15,6 +15,8 @@ import sys
 import glob
 import time
 import signal
+import weakref
+import threading
 import subprocess as subps
 
 from multiprocessing import pool
@@ -468,12 +470,18 @@ class SystemAPI(object):
 
         # Obtain scaling metrics from Scalr.
         scaling_metrics = bus.queryenv_service.get_scaling_metrics()
-        
-        max_threads = 10
-        wrk_pool = pool.ThreadPool(processes=max_threads)
 
+        if not scaling_metrics:
+            return []
+
+        if not hasattr(threading.current_thread(), '_children'):
+            threading.current_thread()._children = weakref.WeakKeyDictionary()
+
+        wrk_pool = pool.ThreadPool(processes=10)
+        
         try:
             return wrk_pool.map_async(_ScalingMetricStrategy.get, scaling_metrics).get()
         finally:
             wrk_pool.close()
             wrk_pool.join()
+
