@@ -5,6 +5,7 @@ Created on Feb 25, 2013
 '''
 
 import re
+from scalarizr.util import PopenError
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.services import postgresql as postgresql_svc
 from scalarizr import rpc
@@ -67,7 +68,13 @@ class PostgreSQLAPI(object):
     @rpc.service_method
     def replication_status(self):
         psql = postgresql_svc.PSQL()
-        query_out = psql.execute(self.replication_status_query)
+        try:
+            query_out = psql.execute(self.replication_status_query)
+        except PopenError, e:
+            if 'function pg_last_xact_replay_timestamp() does not exist' in str(e):
+                raise BaseException('This version of PostgreSQL server does not support replication status')
+            else:
+                raise e
         query_result = self._parse_query_out(query_out)
 
         is_master = int(__postgresql__[OPT_REPLICATION_MASTER])
