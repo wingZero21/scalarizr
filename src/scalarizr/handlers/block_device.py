@@ -124,10 +124,7 @@ class BlockDeviceHandler(handlers.Handler):
 
 
 	def on_before_host_up(self, hostup):
-		LOG.debug('block_device on_before_host_up')
-		LOG.debug('self._volumes: %s', self._volumes)
 		if self._volumes:
-			hostup.body['volumes'] = self._volumes
 			LOG.debug('update hostup with volumes. HostUp message body: %s', hostup.body)
 
 
