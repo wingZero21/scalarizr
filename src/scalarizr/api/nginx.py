@@ -143,6 +143,7 @@ class NginxAPI(object):
         return cls._instance
 
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
+        _logger.debug('Initializing nginx API.')
         self.service = NginxInitScript()
         self.error_pages_inc = None
         self.backend_table = {}
@@ -206,6 +207,7 @@ class NginxAPI(object):
             open(self.app_inc_path, 'w').close()
 
     def _fix_app_servers_inc(self):
+        _logger.debug('Fixing app servers include')
         https_inc_xpath = self.app_servers_inc.xpath_of('include',
                                                         '/etc/nginx/https.include')
         if https_inc_xpath:
@@ -221,6 +223,8 @@ class NginxAPI(object):
         self._save_app_servers_inc()
 
     def _clear_nginx_includes(self):
+        _logger.debug('Clearing app-servers.include and proxies.include. '
+                      'Old configs copied to .bak files.')
         shutil.copyfile(self.app_inc_path, self.app_inc_path + '.bak')
         shutil.copyfile(self.proxies_inc_path, self.proxies_inc_path + '.bak')
 
@@ -255,6 +259,7 @@ class NginxAPI(object):
 
     @rpc.service_method
     def recreate_proxying(self, proxy_list):
+        _logger.debug('Recreating proxying with %s' % proxy_list)
         self._clear_nginx_includes()
         self.backend_table = {}
 
@@ -287,6 +292,8 @@ class NginxAPI(object):
         """
         if not cert or not key:
             return (None, None)
+
+        _logger.debug('Updating ssl certificate with id: %s' % ssl_certificate_id)
 
         if cacert:
             cert = cert + '\n' + cacert
@@ -673,7 +680,7 @@ class NginxAPI(object):
         is ``destinations``. So keep in mind that ``backend`` word in all other
         places of this module means nginx upstream config.
         """
-        _logger.debug('adding proxy name: %s' % name)
+        _logger.debug('Adding proxy with name: %s' % name)
         destinations = self._normalize_destinations(backends)
 
         grouped_destinations = self._group_destinations(destinations)
@@ -760,6 +767,7 @@ class NginxAPI(object):
         """
         Removes proxy with given name. Removes created server and its backends.
         """
+        _logger.debug('Removing proxy with name: %s' % name)
         self._load_proxies_inc()
         self._load_app_servers_inc()
 
@@ -851,7 +859,7 @@ class NginxAPI(object):
 
         if not server:
             return
-
+        _logger.debug('Adding server %s to backend %s' % (server, backend))
         xpath = self.app_servers_inc.xpath_of('upstream', backend + '*')
 
         server = self._server_to_str(server)
