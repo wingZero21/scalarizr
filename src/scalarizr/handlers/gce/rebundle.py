@@ -214,9 +214,9 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
         finally:
             try:
-            objs = cloudstorage.objects()
-            objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
-            cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
+                objs = cloudstorage.objects()
+                objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
+                cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
             except:
                 e = sys.exc_info()[1]
                 LOG.error('Faled to remove image compressed source: %s' % e)
