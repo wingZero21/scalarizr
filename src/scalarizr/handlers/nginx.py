@@ -157,14 +157,17 @@ class NginxHandler(ServiceCtlHandler):
             self._upstream_app_role = None
 
     def on_host_init_response(self, message):
+        self._logger.debug('Handling on_host_init_response message')
         if hasattr(message, BEHAVIOUR):
             data = getattr(message, BEHAVIOUR)
+            self._logger.debug('message data: %s' % data)
             if data and 'preset' in data:
                 self.initial_preset = data['preset'].copy()
             if data and 'proxies' in data:
                 self._proxies = data['proxies'].copy()
             else:
                 self._proxies = None
+            self._logger.debug('proxies: %s' % self._proxies)
 
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):

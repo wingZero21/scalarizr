@@ -859,7 +859,9 @@ class NginxAPI(object):
 
         if not server:
             return
+
         _logger.debug('Adding server %s to backend %s' % (server, backend))
+        
         xpath = self.app_servers_inc.xpath_of('upstream', backend + '*')
 
         server = self._server_to_str(server)
