@@ -160,6 +160,9 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('Handling on_host_init_response message')
         if hasattr(message, BEHAVIOUR):
             data = getattr(message, BEHAVIOUR)
+            if not data and hasattr(message, 'nginx'):
+                data = getattr(message, 'nginx')
+
             self._logger.debug('message data: %s' % data)
             if data and 'preset' in data:
                 self.initial_preset = data['preset'].copy()
@@ -171,12 +174,12 @@ class NginxHandler(ServiceCtlHandler):
 
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-        return BEHAVIOUR in behaviour and \
-                (message.name == Messages.HOST_UP or \
-                message.name == Messages.HOST_DOWN or \
-                message.name == Messages.BEFORE_HOST_TERMINATE or \
-                message.name == Messages.VHOST_RECONFIGURE or \
-                message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
+        return BEHAVIOUR in behaviour or 'nginx' in behaviour and \
+            message.name in (Messages.HOST_UP,
+                             Messages.HOST_DOWN,
+                             Messages.BEFORE_HOST_TERMINATE,
+                             Messages.VHOST_RECONFIGURE,
+                             Messages.UPDATE_SERVICE_CONFIGURATION)
 
     def get_initialization_phases(self, hir_message):
         self._phase = 'Configure Nginx'
