@@ -806,6 +806,9 @@ class NginxAPI(object):
                 if hostname == self._backend_nameparts(backend_name)[0]:
                     self.backend_table.pop(backend_name)
 
+            if 'hostname' in kwds:
+                kwds.pop('hostname')
+
             self.add_proxy(hostname, reread_conf=False, **kwds)
 
         except:
@@ -861,7 +864,7 @@ class NginxAPI(object):
             return
 
         _logger.debug('Adding server %s to backend %s' % (server, backend))
-        
+
         xpath = self.app_servers_inc.xpath_of('upstream', backend + '*')
 
         server = self._server_to_str(server)
