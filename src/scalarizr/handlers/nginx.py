@@ -167,7 +167,7 @@ class NginxHandler(ServiceCtlHandler):
             if data and 'preset' in data:
                 self.initial_preset = data['preset'].copy()
             if data and 'proxies' in data:
-                self._proxies = data['proxies'].copy()
+                self._proxies = list(data['proxies'])
             else:
                 self._proxies = None
             self._logger.debug('proxies: %s' % self._proxies)
