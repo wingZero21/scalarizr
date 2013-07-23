@@ -75,7 +75,8 @@ class RabbitMQHandler(ServiceCtlHandler):
         bus.on("host_init_response", self.on_host_init_response)
         bus.on("before_host_up", self.on_before_host_up)
         bus.on("before_hello", self.on_before_hello)
-        bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
+        if bus.event_defined('rebundle_cleanup_image'):
+            bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
         bus.on("before_host_down", self.on_before_host_down)
 
         if 'bootstrapping' == __node__['state']:
