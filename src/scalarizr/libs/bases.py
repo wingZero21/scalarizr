@@ -19,6 +19,10 @@ class Observable(object):
             if not event in self._listeners:
                 self._listeners[event] = list()
 
+    def event_defined(self, event):
+        return event in self._listeners
+        
+
     def list_events(self):
         return self._listeners.keys()
 
