@@ -264,6 +264,8 @@ class NginxAPI(object):
         self.backend_table = {}
 
         for proxy_parms in proxy_list:
+            if 'hostname' in proxy_parms:
+                proxy_parms['name'] = proxy_parms.pop('hostname')
             self.add_proxy(reload_service=False, **proxy_parms)
 
         self._reload_service()
@@ -805,9 +807,6 @@ class NginxAPI(object):
             for backend_name in self.backend_table.keys():
                 if hostname == self._backend_nameparts(backend_name)[0]:
                     self.backend_table.pop(backend_name)
-
-            if 'hostname' in kwds:
-                kwds.pop('hostname')
 
             self.add_proxy(hostname, reread_conf=False, **kwds)
 
