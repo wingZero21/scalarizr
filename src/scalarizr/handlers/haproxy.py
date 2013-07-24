@@ -1,5 +1,4 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler, HandlerError
@@ -38,6 +37,7 @@ def _result_message(name):
 
 
 class HAProxyHandler(Handler):
+
     def __init__(self):
         self.api = haproxy_api.HAProxyAPI()
         self.on_reload()
@@ -80,17 +80,26 @@ class HAProxyHandler(Handler):
 
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+        if message.name == Messages.HOST_INIT_RESPONSE:
+            LOG.debug("*debug* handling every host init respose")
+            return True ###
         accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
-                Messages.HOST_UP, Messages.HOST_DOWN, Messages.BEFORE_HOST_TERMINATE,
-                'HAProxy_AddServer',
-                'HAProxy_ConfigureHealthcheck',
-                'HAProxy_GetServersHealth',
-                'HAProxy_ListListeners',
-                'HAProxy_ListServers',
-                'HAProxy_RemoveServer',
-                'HAProxy_ResetHealthcheck'
-                )
+            Messages.HOST_UP, 
+            Messages.HOST_DOWN, 
+            Messages.BEFORE_HOST_TERMINATE,
+            Messages.HOST_INIT_RESPONSE,
+            'HAProxy_AddServer',
+            'HAProxy_ConfigureHealthcheck',
+            'HAProxy_GetServersHealth',
+            'HAProxy_ListListeners',
+            'HAProxy_ListServers',
+            'HAProxy_RemoveServer',
+            'HAProxy_ResetHealthcheck'
+        )
         return accept_res
+
+    def on_HostInitResponse(self, msg):
+        LOG.debug("HAProxyHandler on_HostInitResponse, msg id %s", msg.id)
 
     def on_init(self, *args, **kwds):
         bus.on(
@@ -99,10 +108,12 @@ class HAProxyHandler(Handler):
         )
 
     def on_reload(self, *args):
+        LOG.debug("HAProxyHandler on_reload")
         self.cnf = bus.cnf
         self.svs = haproxy_svs.HAProxyInitScript()
 
     def on_start(self):
+        LOG.debug("HAProxyHandler on_start")
         if bus.cnf.state == ScalarizrState.INITIALIZING:
             # todo: Repair data from HIR
             pass
@@ -159,6 +170,7 @@ class HAProxyHandler(Handler):
 
 
     def on_HostUp(self, msg):
+        LOG.debug('HAProxyHandler on_HostUp')
         self._farm_role_id = msg.body.get('farm_role_id')
         self._local_ip = msg.body.get('local_ip')
         try:
