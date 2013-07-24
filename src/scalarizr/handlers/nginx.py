@@ -219,7 +219,7 @@ class NginxHandler(ServiceCtlHandler):
                     os.remove(https_inc_path)
 
             self._logger.debug('Updating main config')
-            self._update_main_config(remove_server_section=False)
+            self._update_main_config(remove_server_section='proxies' in nginx_params)
 
     def on_before_host_up(self, message):
         self._logger.debug('Handling on_before_host_up message')
