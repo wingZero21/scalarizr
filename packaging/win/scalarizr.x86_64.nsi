@@ -131,6 +131,9 @@ Section "MainSection" SEC01
   File "x86_64\libeay32.dll"
   File "x86_64\ssleay32.dll"
   ${EnableX64FSRedirection}
+
+  SetOutPath "$INSTDIR\var\log"
+
 SectionEnd
 
 Section -AdditionalIcons

@@ -128,6 +128,9 @@ Section "MainSection" SEC01
   File "i386\python26.dll"
   File "i386\libeay32.dll"
   File "i386\ssleay32.dll"
+
+  SetOutPath "$INSTDIR\var\log"
+
 SectionEnd
 
 Section -AdditionalIcons
