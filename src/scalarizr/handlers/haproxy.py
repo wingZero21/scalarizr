@@ -12,6 +12,7 @@ from scalarizr.queryenv import QueryEnvService
 import os
 import sys
 import logging
+from pprint import pformat
 
 
 def get_handlers():
@@ -43,7 +44,6 @@ class HAProxyHandler(Handler):
         self.api = haproxy_api.HAProxyAPI()
         self.on_reload()
         bus.on(init=self.on_init, reload=self.on_reload)
-        LOG.debug("HAProxyHandler __init__ return")
 
     def _remove_add_servers_from_queryenv(self):
         cnf = ScalarizrCnf(bus.etc_path)
@@ -103,6 +103,10 @@ class HAProxyHandler(Handler):
 
     def on_HostInitResponse(self, msg):
         LOG.debug("HAProxyHandler on_HostInitResponse, msg id %s", msg.id)
+        data = msg.haproxy.copy()
+        self._data = data
+        LOG.debug("data for add proxy %s", pformat(data))
+
 
     def on_init(self, *args, **kwds):
         bus.on(
@@ -130,11 +134,15 @@ class HAProxyHandler(Handler):
             raise HandlerError('HostInitResponse message for HAProxy behaviour must \
                             have `haproxy` property')
         data = msg.haproxy.copy()
+        self._data = data
+        LOG.debug("data for add proxy %s", pformat(data))
 
+        """
         self._listeners = data.get('listeners', [])
         self._healthchecks = data.get('healthchecks', [])
         LOG.debug('listeners = `%s`', self._listeners)
         LOG.debug('healthchecks = `%s`', self._healthchecks)
+        """
 
 
     def on_before_host_up(self, msg):

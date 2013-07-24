@@ -305,9 +305,7 @@ class MessageListener:
             LOG.debug("Collecting message handlers...");
 
             cnf = bus.cnf
-            LOG.debug(pprint.pformat(cnf.rawini.items))
             for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
-                LOG.debug("%s", module_str)
                 __import__(module_str)
                 try:
                     self._handlers_chain.extend(sys.modules[module_str].get_handlers())
