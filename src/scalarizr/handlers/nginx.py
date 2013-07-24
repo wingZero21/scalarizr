@@ -196,7 +196,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('Handling on_start message')
         if __node__['state'] == 'running':
             role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])
-            nginx_params = getattr(message, BEHAVIOUR)
+            nginx_params = getattr(role_params, BEHAVIOUR)
             if not nginx_params and hasattr(role_params, 'nginx'):
                 nginx_params = getattr(role_params, 'nginx')
 
