@@ -176,7 +176,7 @@ Section -PostInstall
   	${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\src"
   ${EndIf}
   ; Install and start services anyway
-  nsExec::ExecToLog '"$INSTDIR\Python26\python.exe" "$INSTDIR\scripts\win-install-services.py"'
+  nsExec::ExecToLog '"$INSTDIR\Python26\python.exe" "$INSTDIR\bin\scalarizr" "--install-win-services"'
 
 SectionEnd
 
@@ -192,7 +192,7 @@ FunctionEnd
 
 Section Uninstall
   services::SendServiceCommand 'stop' 'Scalarizr'
-  nsExec::ExecToLog '"$INSTDIR\Python26\python.exe" "$INSTDIR\scripts\win-uninstall-services.py"'
+  nsExec::ExecToLog '"$INSTDIR\Python26\python.exe" "$INSTDIR\bin\scalarizr" "--uninstall-win-services"'
   RMDir /r /REBOOTOK "$INSTDIR"
   SetShellVarContext all
   RMDir /r /REBOOTOK "$SMPROGRAMS\Scalarizr"

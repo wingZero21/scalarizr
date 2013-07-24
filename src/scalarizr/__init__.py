@@ -523,10 +523,16 @@ def main():
                 help='Answer "yes" to all questions')
         optparser.add_option('-o', dest='cnf', action='append',
                 help='Runtime .ini option key=value')
+
         if linux.os['family'] != 'Windows':
             optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
                                                help='Daemonize process')
-        
+        else:
+            optparser.add_option("--install-win-services", dest="install_win_services", action="store_true",
+                                 default=False, help='Install scalarizr as windows service')
+            optparser.add_option("--uninstall-win-services", dest="uninstall_win_services", action="store_true",
+                                 default=False, help='Uninstall scalarizr windows service')
+
         if ('cloud-location=' in sys.argv or 'region=' in sys.argv) and 'platform=ec2' in sys.argv:
             region = urllib2.urlopen('http://169.254.169.254/latest/meta-data/placement/availability-zone').read().strip()[:-1]
             try:
@@ -550,7 +556,7 @@ def main():
             do_keygen()
             sys.exit()
 
-        service = WindowsService() if 'Windows' == linux.os['family'] else LinuxService()
+        service = WindowsService() if 'Windows' == linux.os['family'] else Service()
         service.start()
             
     except (BaseException, Exception), e:
@@ -566,7 +572,7 @@ def main():
             sys.exit(1)
 
 
-class LinuxService(object):
+class Service(object):
 
     def __init__(self):
         self._logger = logging.getLogger(__name__)
@@ -825,9 +831,8 @@ class LinuxService(object):
                                                 cnf.key_path(cnf.DEFAULT_KEY))
             class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
                 pass
-            bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app, server_class=ThreadingWSGIServer)
-
-
+            bus.api_server = wsgiref.simple_server.make_server('0.0.0.0',
+                                                api_port, api_app, server_class=ThreadingWSGIServer)
 
 
     def _check_snmp(self):
@@ -1021,13 +1026,13 @@ if 'Windows' == linux.os['family']:
     import win32api
 
 
-    class WindowsService(win32serviceutil.ServiceFramework, LinuxService):
+    class WindowsService(win32serviceutil.ServiceFramework, Service):
         _svc_name_            = "Scalarizr"
         _svc_display_name_    = "Scalarizr"
         _stopping             = None
 
         def __init__(self, args=None):
-            LinuxService.__init__(self)
+            Service.__init__(self)
             if args != None:
                 win32serviceutil.ServiceFramework.__init__(self, args)
             self._snmp_last_poll_time = time.time()
@@ -1036,6 +1041,29 @@ if 'Windows' == linux.os['family']:
             def handler(*args):
                 return True
             win32api.SetConsoleCtrlHandler(handler, True)
+
+
+        def start(self):
+            optparser = bus.optparser
+            if optparser.values.install_win_services:
+                # Install win services
+                sys.argv = ['--startup', 'auto', 'install']
+                win32serviceutil.HandleCommandLine(WindowsService)
+                sys.argv[-2] = 'manual'
+                win32serviceutil.HandleCommandLine(WindowsSnmpService)
+                win32serviceutil.StartService(WindowsService._svc_name_)
+                sys.exit()
+
+            elif optparser.values.uninstall_win_services:
+                # Uninstall win services
+                sys.argv += ['remove']
+                win32serviceutil.HandleCommandLine(WindowsService)
+                win32serviceutil.HandleCommandLine(WindowsSnmpService)
+                sys.exit()
+
+            else:
+                # Normal start
+                super(WindowsService, self).start()
 
 
         def SvcDoRun(self):

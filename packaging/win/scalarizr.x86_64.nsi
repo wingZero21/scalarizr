@@ -192,10 +192,10 @@ Section -PostInstall
 	
 	${If} ${RunningX64}
 	  ${DisableX64FSRedirection}
-	  nsExec::ExecToStack '"$INSTDIR\Python26\python.exe" "$INSTDIR\scripts\win-install-services.py"'
+	  nsExec::ExecToStack '"$INSTDIR\Python26\python.exe" "$INSTDIR\bin\scalarizr" "--install-win-services"'
 	  ${EnableX64FSRedirection}
 	${Else}
-	  nsExec::ExecToStack '"$INSTDIR\Python26\python.exe" "$INSTDIR\scripts\win-install-services.py"'
+	  nsExec::ExecToStack '"$INSTDIR\Python26\python.exe" "$INSTDIR\bin\scalarizr" "--install-win-services"'
 	${EndIf}
 	
 SectionEnd
@@ -214,7 +214,7 @@ FunctionEnd
 Section Uninstall
   services::SendServiceCommand 'stop' 'Scalarizr'
   ${DisableX64FSRedirection}
-    nsExec::ExecToLog '"$INSTDIR\Python26\python.exe" "$INSTDIR\scripts\win-uninstall-services.py"'
+    nsExec::ExecToLog '"$INSTDIR\Python26\python.exe" "$INSTDIR\bin\scalarizr "--uninstall-win-services"'
   ${EnableX64FSRedirection}
   RMDir /r /REBOOTOK "$INSTDIR"
   SetShellVarContext all
