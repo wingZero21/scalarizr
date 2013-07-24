@@ -64,6 +64,10 @@ SNMP_POLL_INTERVAL = 10 # Seconds
 
 PID_FILE = '/var/run/scalarizr.pid' 
 
+LOGFILES_BASEPATH = '/var/log/' if linux.os['family'] != 'Windows' else r'C:\Program Files\Scalarizr\var\log'
+LOG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr.log')
+LOG_DEBUG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr_debug.log')
+
 LOGGING_CONFIG = '''
 [loggers]
 keys=root,scalarizr
@@ -94,13 +98,13 @@ args=(sys.stderr,)
 class=scalarizr.util.log.RotatingFileHandler
 level=INFO
 formatter=user
-args=('/var/log/scalarizr.log', 'a+', 5242880, 5, 0600)
+args=('%s', 'a+', 5242880, 5, 0600)
 
 [handler_debug_log]
 class=scalarizr.util.log.RotatingFileHandler
 level=DEBUG
 formatter=debug
-args=('/var/log/scalarizr_debug.log', 'a+', 5242880, 5, 0600)
+args=('%s', 'a+', 5242880, 5, 0600)
 
 [handler_scalr]
 class=scalarizr.util.log.MessagingHandler
@@ -113,7 +117,7 @@ format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
 [formatter_user]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
 class=scalarizr.util.log.NoStacktraceFormatter
-'''
+''' % (LOG_PATH, LOG_DEBUG_PATH)
 
 
 _running = False
@@ -543,7 +547,7 @@ def main():
         optparser.parse_args()
         
         # Daemonize process
-        if optparser.values.daemonize:
+        if linux.os['family'] != 'Windows' and optparser.values.daemonize:
             daemonize()
 
         if optparser.values.version:
@@ -1035,8 +1039,6 @@ if 'Windows' == linux.os['family']:
             Service.__init__(self)
             if args != None:
                 win32serviceutil.ServiceFramework.__init__(self, args)
-            self._snmp_last_poll_time = time.time()
-            _init()
 
             def handler(*args):
                 return True
@@ -1047,7 +1049,7 @@ if 'Windows' == linux.os['family']:
             optparser = bus.optparser
             if optparser.values.install_win_services:
                 # Install win services
-                sys.argv = ['--startup', 'auto', 'install']
+                sys.argv = [sys.argv[0], '--startup', 'auto', 'install']
                 win32serviceutil.HandleCommandLine(WindowsService)
                 sys.argv[-2] = 'manual'
                 win32serviceutil.HandleCommandLine(WindowsSnmpService)

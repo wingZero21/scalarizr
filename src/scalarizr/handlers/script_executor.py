@@ -6,13 +6,13 @@ Created on Dec 24, 2009
 '''
 
 from scalarizr.bus import bus
-#from scalarizr.config import STATE
 from scalarizr import config as szrconfig
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
+from scalarizr.linux import os as os_dist
 
 import time
 import ConfigParser
@@ -92,6 +92,8 @@ class ScriptExecutor(Handler):
         # read exec_dir_prefix
         try:
             exec_dir_prefix = ini.get(self.name, 'exec_dir_prefix')
+            if os_dist['family'] == 'Windows':
+                self._exec_dir_prefix = os.path.expandvars(self._exec_dir_prefix)
             if not os.path.isabs(exec_dir_prefix):
                 os.path.join(bus.base_path, exec_dir_prefix)
         except ConfigParser.Error:
@@ -274,6 +276,9 @@ class Script(object):
         '''
         for key, value in kwds.items():
             setattr(self, key, value)
+
+        if os_dist['family'] == 'Windows' and self.body:
+            self.body = '\n'.join(self.body.splitlines()[1:])
 
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'

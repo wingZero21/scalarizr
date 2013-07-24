@@ -58,7 +58,7 @@ def main():
         logger.info('Detecting architecture')
         arch = platform.uname()[4]
         if '64' in arch:
-            arch = 'amd64'
+            arch = 'x86_64'
         elif '86' in arch:
             arch = 'i386'
         else:
