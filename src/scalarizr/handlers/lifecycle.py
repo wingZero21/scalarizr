@@ -20,7 +20,7 @@ from scalarizr.util.flag import Flag
 
 # Libs
 from scalarizr.util import cryptotool, software
-from scalarizr.linux import iptables
+from scalarizr.linux import iptables, os as os_dist
 
 # Stdlibs
 import logging, os, sys, threading
@@ -146,7 +146,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             pass
 
         # Mount all filesystems
-        system2(('mount', '-a'), raise_exc=False)
+        if os_dist['family'] != 'Windows':
+            system2(('mount', '-a'), raise_exc=False)
 
         # Add firewall rules
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):

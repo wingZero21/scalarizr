@@ -10,6 +10,7 @@ import re
 import socket
 import urllib2
 import logging
+import platform
 import sys
 import struct
 import array
@@ -115,13 +116,20 @@ class Platform():
         @return Architectures
         """
         if self._arch is None:
-            uname = os.uname()
-            if re.search("^i\\d86$", uname[4]):
-                self._arch = Architectures.I386
-            elif re.search("^x86_64$", uname[4]):
-                self._arch = Architectures.X86_64
+
+            if os_dist['family'] == 'Windows':
+                if '32' in platform.architecture()[0]:
+                    self._arch = Architectures.I386
+                else:
+                    self._arch = Architectures.X86_64
             else:
-                self._arch = Architectures.UNKNOWN
+                uname = os.uname()
+                if re.search("^i\\d86$", uname[4]):
+                    self._arch = Architectures.I386
+                elif re.search("^x86_64$", uname[4]):
+                    self._arch = Architectures.X86_64
+                else:
+                    self._arch = Architectures.UNKNOWN
         return self._arch
 
     @property
