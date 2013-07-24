@@ -39,9 +39,11 @@ def _result_message(name):
 class HAProxyHandler(Handler):
 
     def __init__(self):
+        LOG.debug("HAProxyHandler __init__")
         self.api = haproxy_api.HAProxyAPI()
         self.on_reload()
         bus.on(init=self.on_init, reload=self.on_reload)
+        LOG.debug("HAProxyHandler __init__ return")
 
     def _remove_add_servers_from_queryenv(self):
         cnf = ScalarizrCnf(bus.etc_path)
@@ -80,6 +82,7 @@ class HAProxyHandler(Handler):
 
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+        LOG.debug("HAproxyHandler accept - id: %s, beh: %s", msg.id, behaviour)
         if message.name == Messages.HOST_INIT_RESPONSE:
             LOG.debug("*debug* handling every host init respose")
             return True ###
