@@ -174,7 +174,7 @@ class NginxHandler(ServiceCtlHandler):
 
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-        return BEHAVIOUR in behaviour or 'nginx' in behaviour and \
+        return (BEHAVIOUR in behaviour or 'nginx' in behaviour) and \
             message.name in (Messages.HOST_UP,
                              Messages.HOST_DOWN,
                              Messages.BEFORE_HOST_TERMINATE,

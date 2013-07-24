@@ -231,7 +231,7 @@ class Handler(object):
         if hasattr(self, fn) and callable(getattr(self, fn)):
             getattr(self, fn)(message)
         else:
-            raise HandlerError("Handler has no method %s" % (fn))
+            raise HandlerError("Handler %s has no method %s", self.__class__.__name__, fn)
 
 
     def get_ready_behaviours(self):
