@@ -134,6 +134,12 @@ def _close_port(port):
             pass
 
 
+def _bool_from_scalr_str(bool_str):
+    if not bool_str:
+        return False
+    return int(bool_str) == 1
+
+
 class NginxAPI(object):
 
     _instance = None
@@ -365,12 +371,19 @@ class NginxAPI(object):
         normalized_dests = []
         for d in destinations:
             dest = d.copy()
+
+            if 'backup' in dest:
+                dest['backup'] = _bool_from_scalr_str(dest['backup'])
+            if 'down' in dest:
+                dest['down'] = _bool_from_scalr_str(dest['down'])
+
             dest['servers'] = []
             if 'farm_role_id' in dest:
                 dest['id'] = str(dest['farm_role_id'])
                 dest['servers'].extend(self.get_role_servers(dest['id']))
             if 'host' in dest:
                 dest['servers'].append(dest['host'])
+
             normalized_dests.append(dest)
 
         return normalized_dests
@@ -682,6 +695,15 @@ class NginxAPI(object):
         is ``destinations``. So keep in mind that ``backend`` word in all other
         places of this module means nginx upstream config.
         """
+        # typecast is needed because scalr sends bool params as strings: '1' for True, '0' for False 
+        ssl = _bool_from_scalr_str(ssl)
+        http = _bool_from_scalr_str(http)
+        backend_ip_hash = _bool_from_scalr_str(backend_ip_hash)
+        reread_conf = _bool_from_scalr_str(reread_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+        hash_backend_name = _bool_from_scalr_str(hash_backend_name)
+        write_proxies = _bool_from_scalr_str(write_proxies)
+
         _logger.debug('Adding proxy with name: %s' % name)
         destinations = self._normalize_destinations(backends)
 
@@ -765,19 +787,21 @@ class NginxAPI(object):
             self.proxies_inc.remove(xpath)
 
     @rpc.service_method
-    def remove_proxy(self, name, reload_service=True):
+    def remove_proxy(self, hostname, reload_service=True):
         """
-        Removes proxy with given name. Removes created server and its backends.
+        Removes proxy with given hostname. Removes created server and its backends.
         """
-        _logger.debug('Removing proxy with name: %s' % name)
+        reload_service = _bool_from_scalr_str(reload_service)
+
+        _logger.debug('Removing proxy with hostname: %s' % hostname)
         self._load_proxies_inc()
         self._load_app_servers_inc()
 
-        self._remove_nginx_server(name)
+        self._remove_nginx_server(hostname)
 
         # remove each backend that were in use by this proxy from backend_table
         for backend_name in self.backend_table.keys():
-            if name == self._backend_nameparts(backend_name)[0]:
+            if hostname == self._backend_nameparts(backend_name)[0]:
                 self.backend_table.pop(backend_name)
 
         self._save_proxies_inc()
@@ -829,7 +853,7 @@ class NginxAPI(object):
         if 'port' in server:
             result = '%s:%s' % (result, server['port'])
 
-        if 'backup' in server and server['backup']:
+        if 'backup' in server and _bool_from_scalr_str(server['backup']):
             result = '%s %s' % (result, 'backup')
 
         _max_fails = server.get('max_fails')
@@ -840,7 +864,7 @@ class NginxAPI(object):
         if _fail_timeout:
             result = '%s %s' % (result, 'fail_timeout=%is' % _fail_timeout)
 
-        if 'down' in server:
+        if 'down' in server and _bool_from_scalr_str(server['down']):
             result = '%s %s' % (result, 'down')
 
         return result
@@ -856,6 +880,10 @@ class NginxAPI(object):
         Adds server to backend with given name pattern.
         Parameter server can be dict or string (ip addr)
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+        update_backend_table = _bool_from_scalr_str(update_backend_table)
+
         if update_conf:
             self._load_app_servers_inc()
 
@@ -898,6 +926,10 @@ class NginxAPI(object):
         Removes server from backend with given name pattern.
         Parameter server can be dict or string (ip addr)
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+        update_backend_table = _bool_from_scalr_str(update_backend_table)
+
         if update_conf:
             self._load_app_servers_inc()
 
@@ -933,6 +965,9 @@ class NginxAPI(object):
         Adds server to each backend that uses given role. If role isn't used in
         any backend, does nothing
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_app_servers_inc()
 
@@ -973,6 +1008,9 @@ class NginxAPI(object):
         Removes server from each backend that uses given role. If role isn't
         used in any backend, does nothing
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_app_servers_inc()
 
@@ -1008,6 +1046,9 @@ class NginxAPI(object):
         Method is used to remove stand-alone servers, that aren't belong
         to any role. If role isn't used in any backend, does nothing
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_app_servers_inc()
 
@@ -1036,6 +1077,9 @@ class NginxAPI(object):
                    ssl_certificate_id=None,
                    update_conf=True,
                    reload_service=True):
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_proxies_inc()
 
@@ -1069,6 +1113,9 @@ class NginxAPI(object):
 
     @rpc.service_method
     def disable_ssl(self, hostname, update_conf=True, reload_service=True):
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_proxies_inc()
 
