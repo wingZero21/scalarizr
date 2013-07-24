@@ -22,12 +22,7 @@ base_repo_url = "http://buildbot.scalr-labs.com/win"
 
 def main():
     try:
-        reg_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_uninstall_path)
-        installdir = winreg.QueryValueEx(reg_key, 'InstallDir')[0]
-        logfile_dir =  os.path.join(installdir, 'var', 'log', 'scalarizr')
-        logfile_path = os.path.join(logfile_dir, 'update.log')
-        if not os.path.isdir(logfile_dir):
-            os.makedirs(logfile_dir)
+        logfile_path = os.path.join(os.path.dirname(__file__), 'install.log')
 
         _format = '%(asctime)s - %(message)s'
         logging.basicConfig(level=logging.INFO, format=_format)
@@ -81,7 +76,10 @@ def main():
             urllib.urlretrieve(latest_package_url, file_path)
 
             logger.info('Stopping scalarizr service.')
-            win32serviceutil.StopService('Scalarizr')
+            try:
+                win32serviceutil.StopService('Scalarizr')
+            except:
+                pass
 
             logger.info('Running package.')
             p = subprocess.Popen('start "Installer" /wait "%s" /S' % file_path, shell=True)
