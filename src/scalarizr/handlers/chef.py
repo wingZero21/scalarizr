@@ -118,7 +118,7 @@ class ChefHandler(Handler):
         if 'running' == __node__['state']:
             queryenv = bus.queryenv_service
             farm_role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])
-            params_dict = farm_role_params['params'].get('chef', None)
+            params_dict = farm_role_params['params'].get('chef')
             if params_dict:
                 daemonize = int(params_dict.get('daemonize', False))
                 if daemonize:

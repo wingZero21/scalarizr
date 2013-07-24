@@ -196,9 +196,9 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('Handling on_start message')
         if __node__['state'] == 'running':
             role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])
-            nginx_params = getattr(role_params, BEHAVIOUR)
-            if not nginx_params and hasattr(role_params, 'nginx'):
-                nginx_params = getattr(role_params, 'nginx')
+            nginx_params = role_params.get(BEHAVIOUR)
+            if not nginx_params and 'nginx' in role_params:
+                nginx_params = role_params.get('nginx')
 
             if nginx_params and 'proxies' in nginx_params:
                 self._logger.debug('Recreating proxying with proxies:\n%s' % nginx_params['proxies'])
