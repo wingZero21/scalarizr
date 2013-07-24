@@ -68,7 +68,7 @@ LOGFILES_BASEPATH = '/var/log/' if linux.os['family'] != 'Windows' else r'C:\Pro
 LOG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr.log')
 LOG_DEBUG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr_debug.log')
 
-LOGGING_CONFIG = '''
+LOGGING_CONFIG = r'''
 [loggers]
 keys=root,scalarizr
 
@@ -98,13 +98,13 @@ args=(sys.stderr,)
 class=scalarizr.util.log.RotatingFileHandler
 level=INFO
 formatter=user
-args=('%s', 'a+', 5242880, 5, 0600)
+args=(r'LOG_PATH', 'a+', 5242880, 5, 0600)
 
 [handler_debug_log]
 class=scalarizr.util.log.RotatingFileHandler
 level=DEBUG
 formatter=debug
-args=('%s', 'a+', 5242880, 5, 0600)
+args=(r'LOG_DEBUG_PATH', 'a+', 5242880, 5, 0600)
 
 [handler_scalr]
 class=scalarizr.util.log.MessagingHandler
@@ -117,7 +117,9 @@ format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
 [formatter_user]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
 class=scalarizr.util.log.NoStacktraceFormatter
-''' % (LOG_PATH, LOG_DEBUG_PATH)
+'''
+LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_PATH', LOG_PATH)
+LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_DEBUG_PATH', LOG_DEBUG_PATH)
 
 
 _running = False
@@ -300,7 +302,8 @@ def _create_db(db_file=None, script_file=None):
     conn.close()
     
     #conn.commit()
-    system2('sync', shell=True)    
+    if linux.os['family'] != 'Windows':
+        system2('sync', shell=True)
 
 def _init_logging():
     optparser = bus.optparser
@@ -616,11 +619,11 @@ class Service(object):
         cnf.on('apply_user_data', _apply_user_data)
 
         optparser = bus.optparser
-        if optparser.values.configure:
+        if optparser and optparser.values.configure:
             do_configure()
             sys.exit()
 
-        elif optparser.values.import_server:
+        elif optparser and optparser.values.import_server:
             print "Starting import process..."
             print "Don't terminate Scalarizr until Scalr will create the new role"
             cnf.state = ScalarizrState.IMPORTING
@@ -712,11 +715,12 @@ class Service(object):
 
 
         # Apply Command-line passed configuration options
-        cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))
+        if optparser:
+            cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))
 
         # Validate configuration
         num_errors = do_validate_cnf()
-        if num_errors or optparser.values.validate_cnf:
+        if num_errors or (optparser and optparser.values.validate_cnf):
             sys.exit(int(not num_errors or 1))
 
         # Initialize scalarizr services
@@ -1047,7 +1051,7 @@ if 'Windows' == linux.os['family']:
 
         def start(self):
             optparser = bus.optparser
-            if optparser.values.install_win_services:
+            if optparser and optparser.values.install_win_services:
                 # Install win services
                 sys.argv = [sys.argv[0], '--startup', 'auto', 'install']
                 win32serviceutil.HandleCommandLine(WindowsService)
@@ -1056,7 +1060,7 @@ if 'Windows' == linux.os['family']:
                 win32serviceutil.StartService(WindowsService._svc_name_)
                 sys.exit()
 
-            elif optparser.values.uninstall_win_services:
+            elif optparser and optparser.values.uninstall_win_services:
                 # Uninstall win services
                 sys.argv += ['remove']
                 win32serviceutil.HandleCommandLine(WindowsService)
