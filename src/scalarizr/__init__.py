@@ -917,12 +917,15 @@ class Service(object):
 
 
     def _start_update_client(self):
-        upd = ScalrUpdClientScript()
-        if not upd.running:
-            try:
-                upd.start()
-            except:
-                self._logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
+        if linux.os['family'] == 'Windows':
+            pass
+        else:
+            upd = ScalrUpdClientScript()
+            if not upd.running:
+                try:
+                    upd.start()
+                except:
+                    self._logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
 
 
     def _shutdown(self):
