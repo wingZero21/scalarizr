@@ -26,6 +26,7 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
     IMAGE_NAME_MAXLEN = 32
 
     def get_os_type_id(self, conn):
+        pl = bus.platform
         vm = conn.listVirtualMachines(id=pl.get_instance_id())[0]
         tpl = conn.listTemplates(id=vm.templateid)[0]
         LOG.debug('ostypeid: %s', tpl.ostypeid)
