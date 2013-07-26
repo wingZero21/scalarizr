@@ -93,7 +93,7 @@ class ScriptExecutor(Handler):
         try:
             exec_dir_prefix = ini.get(self.name, 'exec_dir_prefix')
             if os_dist['family'] == 'Windows':
-                self._exec_dir_prefix = os.path.expandvars(self._exec_dir_prefix)
+                exec_dir_prefix = os.path.expandvars(exec_dir_prefix)
             if not os.path.isabs(exec_dir_prefix):
                 os.path.join(bus.base_path, exec_dir_prefix)
         except ConfigParser.Error:
