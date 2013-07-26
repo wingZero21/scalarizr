@@ -178,7 +178,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             self._check_control_ports() 
             self._start_after_reboot()
 
-        elif optparser.values.import_server:
+        elif optparser and optparser.values.import_server:
             self._logger.info('Server will be imported into Scalr')
             self._start_import()
 

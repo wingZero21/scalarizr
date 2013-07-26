@@ -901,7 +901,7 @@ class Service(object):
         msg_thread = threading.Thread(target=consumer.start, name="Message server")
 
         # Start SNMP
-        if linux.os['fmaily'] != 'Windows':
+        if linux.os['family'] != 'Windows':
             self._start_snmp_server()
 
         # Start message server
