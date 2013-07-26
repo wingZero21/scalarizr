@@ -753,7 +753,8 @@ class Service(object):
         try:
             while _running:
                 # Recover SNMP
-                self._check_snmp()
+                if linux.os['family'] != 'Windows':
+                    self._check_snmp()
                 #_msg_thread.join(0.2)
                 try:
                     select.select([], [], [], 30)
@@ -844,7 +845,8 @@ class Service(object):
 
 
     def _check_snmp(self):
-        if self._running and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
+        if self._running and linux.os['family'] != 'Windows' \
+                                    and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
             self._start_snmp_server()
 
 
@@ -899,7 +901,8 @@ class Service(object):
         msg_thread = threading.Thread(target=consumer.start, name="Message server")
 
         # Start SNMP
-        self._start_snmp_server()
+        if linux.os['fmaily'] != 'Windows':
+            self._start_snmp_server()
 
         # Start message server
         msg_thread.start()
@@ -961,6 +964,9 @@ class Service(object):
         api_server = bus.api_server
         api_server.shutdown()
         bus.api_server = None
+
+        # Shutdown snmp
+        self._stop_snmp_server()
 
         # Shutdown periodical executor
         self._logger.debug('Shutdowning periodical executor')
@@ -1058,16 +1064,13 @@ if 'Windows' == linux.os['family']:
                 # Install win services
                 sys.argv = [sys.argv[0], '--startup', 'auto', 'install']
                 win32serviceutil.HandleCommandLine(WindowsService)
-                sys.argv[-2] = 'manual'
-                win32serviceutil.HandleCommandLine(WindowsSnmpService)
                 win32serviceutil.StartService(WindowsService._svc_name_)
                 sys.exit()
 
             elif optparser and optparser.values.uninstall_win_services:
                 # Uninstall win services
-                sys.argv += ['remove']
+                sys.argv = [sys.argv[0], 'remove']
                 win32serviceutil.HandleCommandLine(WindowsService)
-                win32serviceutil.HandleCommandLine(WindowsSnmpService)
                 sys.exit()
 
             else:
@@ -1099,66 +1102,3 @@ if 'Windows' == linux.os['family']:
             srv = bus.messaging_service
             message = srv.new_message(Messages.WIN_HOST_DOWN)
             srv.get_producer().send(Queues.CONTROL, message)
-
-
-        def _start_snmp_server(self):
-            try:
-                win32serviceutil.StartService('scalarizr-snmp')
-            except (Exception, BaseException), e:
-                if "An instance of the service is already running" in str(e):
-                    pass
-                elif "The specified service does not exist as an installed service" in str(e):
-                    win32serviceutil.HandleCommandLine(WindowsSnmpService)
-                    win32serviceutil.StartService('scalarizr-snmp')
-                else:
-                    raise
-
-        def _stop_snmp_server(self):
-            self._logger.info("Stopping SNMP service.")
-            try:
-                win32serviceutil.StopServiceWithDeps('scalarizr-snmp')
-            except (Exception, BaseException), e:
-                self._logger.debug("Can't stop SNMP service: %s" % e)
-            self._logger.debug("SNMP service successfully stoppped.")
-
-
-        def _check_snmp(self):
-            if self._snmp_last_poll_time + SNMP_POLL_INTERVAL <= time.time():
-                if win32serviceutil.QueryServiceStatus('scalarizr-snmp')[1] != 4:
-                    self._logger.debug("SNMP service is not running. Trying to start.")
-                    try:
-                        self._start_snmp()
-                    except (Exception, BaseException), e:
-                        self._logger.debug("Can't start SNMP service: %s" % e)
-                    self._snmp_last_poll_time = time.time()
-
-
-    class WindowsSnmpService(win32serviceutil.ServiceFramework):
-        _svc_name_ = 'scalarizr-snmp'
-        _svc_display_name_ = "Scalarizr Snmp"
-        snmp_server        = None
-        def __init__(self, args):
-            win32serviceutil.ServiceFramework.__init__(self,args)
-
-        def SvcDoRun(self):
-            servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
-                                  servicemanager.PYS_SERVICE_STARTED,
-                                  (self._svc_name_,''))
-            self.start()
-
-        def SvcStop(self):
-            self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-            self.stop()
-
-        def stop(self):
-            if self.snmp_server:
-                try:
-                    self.snmp_server.stop()
-                except:
-                    pass
-
-        def start(self):
-            self.snmp_server = prepare_snmp()
-            self.snmp_server.start()
-
-

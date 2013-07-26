@@ -16,7 +16,6 @@ import servicemanager
 import _winreg as winreg
 import win32serviceutil
 
-reg_uninstall_path = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Scalarizr"
 
 logger = logging.getLogger('Update')
 
@@ -70,8 +69,18 @@ class ScalarizrDevTools(win32serviceutil.ServiceFramework):
                 raise Exception('Unknown architecture "%s"' % arch)
             logger.info('Architecture: %s', arch)
 
-            # scalarizr.exe is a link to latest package in branch
-            latest_package_url = '/'.join((base_repo_url, branch, arch, 'scalarizr.exe'))
+            packages = dict()
+            index = urllib2.urlopen('/'.join((base_repo_url, branch, arch, 'index'))).read().strip()
+            for pkg in index.splitlines():
+                pkg_name, pkg_latest = pkg.split(None, 1)
+                packages[pkg_name] = pkg_latest
+
+            try:
+                latest_package_url = '/'.join((base_repo_url, branch, arch, packages['scalarizr']))
+            except KeyError:
+                logger.error('Repository does not contain scalarizr package')
+                sys.exit(1)
+
             tmp_dir = tempfile.mkdtemp()
             file_path = os.path.join(tmp_dir, 'scalarizr.exe')
             logger.info('Downloading newest scalarizr package. URL: %s', latest_package_url)

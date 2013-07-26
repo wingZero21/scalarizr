@@ -71,6 +71,7 @@ class __os(dict):
         if _uname[0].lower() == 'windows':
             self['family'] = 'Windows'
             self['name'] = 'Windows'
+            self['release'] = _uname[2]
             return
 
         if osmod.path.isfile('/etc/lsb-release'):
