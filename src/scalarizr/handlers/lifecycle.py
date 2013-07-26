@@ -160,7 +160,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         glob_vars = queryenv.list_global_variables()
         os.environ.update(glob_vars)
 
-        if 'Windows' != os_dist['family']:
+        if 'Windows' == os_dist['family']:
             pass
         else:
             with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
