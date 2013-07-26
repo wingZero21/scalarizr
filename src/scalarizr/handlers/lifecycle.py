@@ -160,9 +160,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         glob_vars = queryenv.list_global_variables()
         os.environ.update(glob_vars)
 
-        with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
-            for kv in glob_vars.items():
-                fp.write('export %s="%s"\n' % kv)
+        if 'Windows' != os_dist['family']:
+            pass
+        else:
+            with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
+                for kv in glob_vars.items():
+                    fp.write('export %s="%s"\n' % kv)
 
 
     def on_start(self):
