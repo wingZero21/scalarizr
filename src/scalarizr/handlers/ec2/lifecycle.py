@@ -15,7 +15,7 @@ from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.handlers import Handler
 from scalarizr.util import system2, disttool
-from scalarizr.linux import mount, system
+from scalarizr.linux import mount, system, os as os_dist
 
 
 __ec2__ = __node__['ec2']
@@ -105,7 +105,8 @@ class Ec2LifeCycleHandler(Handler):
                     except:
                         self._logger.warn(sys.exc_info()[1])
         else:
-            system2('mount -a', shell=True, raise_exc=False)
+            if not os_dist.windows_family:
+                system2('mount -a', shell=True, raise_exc=False)
 
 
     def on_reload(self):

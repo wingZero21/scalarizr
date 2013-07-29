@@ -122,7 +122,6 @@ LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_PATH', LOG_PATH)
 LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_DEBUG_PATH', LOG_DEBUG_PATH)
 
 
-_running = False
 '''
 True when scalarizr daemon should be running
 '''
@@ -132,17 +131,11 @@ _pid = None
 Scalarizr main process PID
 '''
 
-_snmp_pid = None
-'''
-Embed SNMP server process PID
-'''
 
 _snmp_scheduled_start_time = None
 '''
 Next time when SNMP process should be forked
 '''
-
-_msg_thread = None
 
 _logging_configured = False
 
@@ -751,24 +744,28 @@ class Service(object):
                         exc_info=sys.exc_info())
 
         try:
-            while _running:
+            while self._running:
                 # Recover SNMP
-                if linux.os['family'] != 'Windows':
+                if linux.os.windows_family:
+                    rc = win32event.WaitForSingleObject(self.hWaitStop, 30000)
+                    if rc == win32event.WAIT_OBJECT_0:
+                        # Service stopped, stop main loop
+                        break
+                else:
                     self._check_snmp()
-                #_msg_thread.join(0.2)
-                try:
-                    select.select([], [], [], 30)
-                except select.error, e:
-                    if e.args[0] == 4:
-                        # Interrupted syscall
-                        continue
-                    raise
+                    try:
+                        select.select([], [], [], 30)
+                    except select.error, e:
+                        if e.args[0] == 4:
+                            # Interrupted syscall
+                            continue
+                        raise
 
         except KeyboardInterrupt:
             self._logger.debug('Mainloop: KeyboardInterrupt')
         finally:
             self._logger.debug('Mainloop: finally')
-            if _running and os.getpid() == _pid:
+            if self._running and os.getpid() == _pid:
                 self._shutdown()
         self._logger.debug('Mainloop: leave')
 
@@ -846,16 +843,16 @@ class Service(object):
 
     def _check_snmp(self):
         if self._running and linux.os['family'] != 'Windows' \
-                                    and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
+                                    and not self._snmp_pid and time.time() >= _snmp_scheduled_start_time:
             self._start_snmp_server()
 
 
     def _stop_snmp_server(self):
         # Shutdown SNMP
-        if _snmp_pid:
-            self._logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
+        if self._snmp_pid:
+            self._logger.debug('Send SIGTERM to SNMP process (pid: %d)', self._snmp_pid)
             try:
-                os.kill(_snmp_pid, signal.SIGTERM)
+                os.kill(self._snmp_pid, signal.SIGTERM)
             except (Exception, BaseException), e:
                 self._logger.debug("Can't kill SNMP process: %s" % e)
             self._snmp_pid = None
@@ -991,10 +988,10 @@ class Service(object):
 
 
     def onSIGCHILD(self, *args):
-        if self._running and _snmp_pid:
+        if self._running and self._snmp_pid:
             try:
                 # Restart SNMP process if it terminates unexpectedly
-                pid, sts = os.waitpid(_snmp_pid, os.WNOHANG)
+                pid, sts = os.waitpid(self._snmp_pid, os.WNOHANG)
                 '''
                 logger.debug(
                     'Child terminated (pid: %d, status: %s, WIFEXITED: %s, '
@@ -1003,10 +1000,10 @@ class Service(object):
                     os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts)
                 )
                 '''
-                if pid == _snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
+                if pid == self._snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
                     self._logger.warning(
                         'SNMP process [pid: %d] died unexpectedly. Restarting it',
-                        _snmp_pid
+                        self._snmp_pid
                     )
                     self._snmp_scheduled_start_time = time.time() + SNMP_RESTART_DELAY
                     self._snmp_pid = None
@@ -1053,6 +1050,8 @@ if 'Windows' == linux.os['family']:
             if args != None:
                 win32serviceutil.ServiceFramework.__init__(self, args)
 
+            self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+
             def handler(*args):
                 return True
             win32api.SetConsoleCtrlHandler(handler, True)
@@ -1087,7 +1086,7 @@ if 'Windows' == linux.os['family']:
 
         def SvcStop(self):
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-            #win32event.SetEvent(self.hWaitStop)
+            win32event.SetEvent(self.hWaitStop)
             if self._running:
                 self._running = False
             else:
