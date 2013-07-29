@@ -612,12 +612,11 @@ class NginxAPI(object):
 
         if port:
             config.add('server/listen', str(port))
+        config.add('server/server_name', hostname)
 
         # Configuring ssl
         if ssl:
             self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id)
-
-        config.add('server/server_name', hostname)
 
         self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
