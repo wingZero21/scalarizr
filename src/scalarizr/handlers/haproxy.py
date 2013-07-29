@@ -13,6 +13,7 @@ import os
 import sys
 import logging
 from pprint import pformat
+from copy import deepcopy
 
 
 def get_handlers():
@@ -82,31 +83,21 @@ class HAProxyHandler(Handler):
 
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-        LOG.debug("HAproxyHandler accept - id: %s, beh: %s", msg.id, behaviour)
-        if message.name == Messages.HOST_INIT_RESPONSE:
-            LOG.debug("*debug* handling every host init respose")
-            return True ###
         accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
-            Messages.HOST_UP, 
-            Messages.HOST_DOWN, 
-            Messages.BEFORE_HOST_TERMINATE,
             Messages.HOST_INIT_RESPONSE,
-            'HAProxy_AddServer',
-            'HAProxy_ConfigureHealthcheck',
-            'HAProxy_GetServersHealth',
-            'HAProxy_ListListeners',
-            'HAProxy_ListServers',
-            'HAProxy_RemoveServer',
-            'HAProxy_ResetHealthcheck'
+            Messages.BEFORE_HOST_UP,
+            # Messages.HOST_UP, 
+            # Messages.HOST_DOWN, 
+            # Messages.BEFORE_HOST_TERMINATE,
+            # 'HAProxy_AddServer',
+            # 'HAProxy_ConfigureHealthcheck',
+            # 'HAProxy_GetServersHealth',
+            # 'HAProxy_ListListeners',
+            # 'HAProxy_ListServers',
+            # 'HAProxy_RemoveServer',
+            # 'HAProxy_ResetHealthcheck'
         )
         return accept_res
-
-    def on_HostInitResponse(self, msg):
-        LOG.debug("HAProxyHandler on_HostInitResponse, msg id %s", msg.id)
-        data = msg.haproxy.copy()
-        self._data = data
-        LOG.debug("data for add proxy %s", pformat(data))
-
 
     def on_init(self, *args, **kwds):
         bus.on(
@@ -130,6 +121,9 @@ class HAProxyHandler(Handler):
 
     def on_host_init_response(self, msg):
         LOG.debug('HAProxyHandler.on_host_init_response')
+        return
+
+        """
         if not 'haproxy' in msg.body:
             raise HandlerError('HostInitResponse message for HAProxy behaviour must \
                             have `haproxy` property')
@@ -137,16 +131,44 @@ class HAProxyHandler(Handler):
         self._data = data
         LOG.debug("data for add proxy %s", pformat(data))
 
-        """
         self._listeners = data.get('listeners', [])
         self._healthchecks = data.get('healthchecks', [])
         LOG.debug('listeners = `%s`', self._listeners)
         LOG.debug('healthchecks = `%s`', self._healthchecks)
         """
 
+    def on_HostInitResponse(self, msg):
+        LOG.debug("HAProxyHandler on_HostInitResponse")
+        self._data = deepcopy(msg.haproxy)
+        LOG.debug("data for add proxy %s", pformat(self._data))
+
+    def on_BeforeHostUp(self, msg):
+        LOG.debug("HAProxyHandler on_BeforeHostUp")
+        self.svs.start()
+
+        healthcheck_names = {
+            "healthcheck.fallthreshold": "fall_threshold",
+            "healthcheck.interval": "check_interval",
+            "healthcheck.risethreshold": "rise_threshold",
+        }
+        for proxy in self._data["proxies"]:
+            healthcheck_params = {}
+            for name in healthcheck_names:
+                if name in proxy:
+                    healthcheck_params[healthcheck_names[name]] = proxy[name]
+            LOG.debug("make_proxy args: port=%s, backends=%s, %s", proxy["port"],
+                    pformat(proxy["backends"]), pformat(healthcheck_params))
+            self.api.make_proxy(port=proxy["port"],
+                                backends=proxy["backends"],
+                                **healthcheck_params)
+
+        msg.haproxy = "test"
 
     def on_before_host_up(self, msg):
         LOG.debug('HAProxyHandler.on_before_host_up')
+        return
+
+        """
         try:
             if self.svs.status() != 0:
                 self.svs.start()
@@ -178,6 +200,7 @@ class HAProxyHandler(Handler):
         msg.haproxy = data
 
         self._remove_add_servers_from_queryenv()
+        """
 
 
     def on_HostUp(self, msg):
