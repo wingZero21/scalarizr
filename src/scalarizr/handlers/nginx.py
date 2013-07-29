@@ -166,8 +166,8 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('message data: %s' % data)
             if data and 'preset' in data:
                 self.initial_preset = data['preset'].copy()
-            if data and 'proxies' in data:
-                self._proxies = list(data['proxies'] or [None])
+            if data and 'proxies' in data and data['proxies']:
+                self._proxies = list(data['proxies'])
             else:
                 self._proxies = None
             self._logger.debug('proxies: %s' % self._proxies)
@@ -200,9 +200,9 @@ class NginxHandler(ServiceCtlHandler):
             if not nginx_params and 'nginx' in role_params:
                 nginx_params = role_params.get('nginx')
 
-            if nginx_params and 'proxies' in nginx_params:
+            if nginx_params and 'proxies' in nginx_params and nginx_params['proxies']:
                 self._logger.debug('Recreating proxying with proxies:\n%s' % nginx_params['proxies'])
-                self.api.recreate_proxying(nginx_params['proxies'] or [None])
+                self.api.recreate_proxying(nginx_params['proxies'])
             else:
                 self._logger.debug('Compatibility mode proxying recreation')
                 roles_for_proxy = []
