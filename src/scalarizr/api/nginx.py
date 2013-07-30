@@ -249,15 +249,21 @@ class NginxAPI(object):
         self.service.reload()
 
     @rpc.service_method
-    def raestart_service(self):
+    def restart_service(self):
         self.service.restart()
 
     @rpc.service_method
     def recreate_proxying(self, proxy_list):
+        if proxy_list == [None]:
+            return
+
+        _logger.debug('Recreating proxying with %s' % proxy_list)
         self._clear_nginx_includes()
         self.backend_table = {}
 
         for proxy_parms in proxy_list:
+            if 'hostname' in proxy_parms:
+                proxy_parms['name'] = proxy_parms.pop('hostname')
             self.add_proxy(reload_service=False, **proxy_parms)
 
         self._reload_service()
