@@ -427,16 +427,16 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.info('Making default proxy with roles: %s' % roles)
         servers = []
         for role in roles:
+            servers_ips = []
             if type(role) is str:
-                s = self.api.get_role_servers(role) or \
+                servers_ips = self.api.get_role_servers(role) or \
                     self.api.get_role_servers(role_name=role)
-                servers.extend({'host': s})
             else:
                 cl = __node__['cloud_location']
                 servers_ips = [h.internal_ip if cl == h.cloud_location else
                                h.external_ip
                                for h in role.hosts]
-                servers.extend({'host': srv} for srv in servers_ips)
+            servers.extend({'host': srv} for srv in servers_ips)
 
         if not servers:
             self._logger.debug('No app roles in farm, making mock backend')
