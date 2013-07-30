@@ -57,7 +57,7 @@ class HAProxyAPI(object):
         self.svc = haproxy.HAProxyInitScript(path)
 
     def _server_name(self, server):
-        if isinstance(server, str):
+        if isinstance(server, basestring):
             return server.replace('.', '-')
         elif isinstance (server, dict):
             return self._server_name(':'.join([server["host"], str(server["port"])]))
@@ -183,12 +183,9 @@ class HAProxyAPI(object):
         if not self.cfg.backend or not backend_name in self.cfg.backend:
             self.cfg['backend'][backend_name] = backend
 
-        try:
-            iptables.FIREWALL.ensure(
-                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
-            )
-        except Exception, e:  #??
-            raise exceptions.Duplicate(e)
+        iptables.FIREWALL.ensure(
+            [{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}]
+        )
 
         self.cfg.save()
         self.svc.reload()

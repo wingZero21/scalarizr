@@ -144,7 +144,8 @@ class HAProxyHandler(Handler):
 
     def on_BeforeHostUp(self, msg):
         LOG.debug("HAProxyHandler on_BeforeHostUp")
-        self.svs.start()
+        if self.svs.status() != 0:
+            self.svs.start()
 
         healthcheck_names = {
             "healthcheck.fallthreshold": "fall_threshold",
@@ -152,10 +153,15 @@ class HAProxyHandler(Handler):
             "healthcheck.risethreshold": "rise_threshold",
         }
         for proxy in self._data["proxies"]:
+            for backend in proxy["backends"]:
+                for name in ("backup", "down"):
+                    if name in backend:
+                        backend[name] = bool(int(backend[name]))
             healthcheck_params = {}
             for name in healthcheck_names:
                 if name in proxy:
                     healthcheck_params[healthcheck_names[name]] = proxy[name]
+                    
             LOG.debug("make_proxy args: port=%s, backends=%s, %s", proxy["port"],
                     pformat(proxy["backends"]), pformat(healthcheck_params))
             self.api.make_proxy(port=proxy["port"],
