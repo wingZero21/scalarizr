@@ -258,7 +258,10 @@ class NginxHandler(ServiceCtlHandler):
                 for default_backend in ['backend', 'backend.ssl']:
                     if default_backend not in self.api.backend_table:
                         continue
-                    server_list = self.api.backend_table[default_backend][0]['servers']
+
+                    server_list = []
+                    for dest in self.api.backend_table[default_backend]:
+                        server_list.extend(dest['servers'])
                     if server in server_list:
                         continue
 
@@ -299,7 +302,9 @@ class NginxHandler(ServiceCtlHandler):
                 for default_backend in ['backend', 'backend.ssl']:
                     if default_backend not in self.api.backend_table:
                         continue
-                    server_list = self.api.backend_table[default_backend][0]['servers']
+                    server_list = []
+                    for dest in self.api.backend_table[default_backend]:
+                        server_list.extend(dest['servers'])
                     if server not in server_list:
                         continue
 
