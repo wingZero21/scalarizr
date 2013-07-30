@@ -199,7 +199,7 @@ class NginxHandler(ServiceCtlHandler):
             default_mode = not (role_params and role_params.get('proxies'))
 
             self._logger.debug('Updating main config')
-            self._update_main_config(remove_server_section=not default_mode)
+            self._update_main_config(remove_server_section=not default_mode, reload_service=False)
 
             if not default_mode:
                 self._logger.debug('Recreating proxying with proxies:\n%s' % role_params['proxies'])
@@ -230,7 +230,8 @@ class NginxHandler(ServiceCtlHandler):
 
                 with op.step(self._step_setup_proxying):
                     self._logger.debug('Updating main config')
-                    self._update_main_config(remove_server_section=bool(self._proxies))
+                    self._update_main_config(remove_server_section=bool(self._proxies),
+                                             reload_service=False)
 
                     if self._proxies:
                         self._logger.debug('Recreating proxying with proxies:\n%s' % self._proxies)
@@ -535,7 +536,7 @@ class NginxHandler(ServiceCtlHandler):
 
         return result
 
-    def _update_main_config(self, remove_server_section=True):
+    def _update_main_config(self, remove_server_section=True, reload_service=True):
         config_dir = os.path.dirname(self.api.app_inc_path)
         nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
 
@@ -593,7 +594,8 @@ class NginxHandler(ServiceCtlHandler):
             # Write new nginx.conf
             shutil.copy(nginx_conf_path, nginx_conf_path + '.bak')
             config.write(nginx_conf_path)
-            self.api._reload_service()
+            if reload_service:
+                self.api._reload_service()
 
     def _insert_iptables_rules(self, *args, **kwargs):
         if iptables.enabled():
