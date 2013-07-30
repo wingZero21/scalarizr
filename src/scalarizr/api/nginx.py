@@ -931,9 +931,14 @@ class NginxAPI(object):
             self.app_servers_inc.remove(server_xpath)
 
             if update_backend_table:
+                empty_destinations = []
                 for destination in self.backend_table[backend]:
                     if server in destination['servers']:
                         destination['servers'].remove(server)
+                        if not destination['servers']:
+                            empty_destinations.append(destination)
+                for destination in empty_destinations:
+                    self.backend_table[backend].remove(destination)
 
         if update_conf:
             self._save_app_servers_inc()
