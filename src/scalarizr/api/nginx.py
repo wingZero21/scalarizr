@@ -395,7 +395,7 @@ class NginxAPI(object):
     def _group_destinations(self, destinations):
         """
         Groups destinations by location in list of lists.
-        If no location defined assumes that it'r '/' location.
+        If no location defined assumes that it's '/' location.
         """
         if not destinations:
             return []
