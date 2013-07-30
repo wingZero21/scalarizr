@@ -166,7 +166,7 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('message data: %s' % data)
             if data and 'preset' in data:
                 self.initial_preset = data['preset'].copy()
-            if data and 'proxies' in data and data['proxies']:
+            if data and data.get('proxies'):
                 self._proxies = list(data['proxies'])
             else:
                 self._proxies = None
@@ -195,14 +195,15 @@ class NginxHandler(ServiceCtlHandler):
     def on_start(self):
         self._logger.debug('Handling on_start message')
         if __node__['state'] == 'running':
-            role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
-            nginx_params = role_params.get(BEHAVIOUR)
-            if not nginx_params and 'nginx' in role_params:
-                nginx_params = role_params.get('nginx')
+            role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])
+            default_mode = not (role_params and role_params.get('proxies'))
 
-            if nginx_params and 'proxies' in nginx_params and nginx_params['proxies']:
-                self._logger.debug('Recreating proxying with proxies:\n%s' % nginx_params['proxies'])
-                self.api.recreate_proxying(nginx_params['proxies'])
+            self._logger.debug('Updating main config')
+            self._update_main_config(remove_server_section=not default_mode)
+
+            if not default_mode:
+                self._logger.debug('Recreating proxying with proxies:\n%s' % role_params['proxies'])
+                self.api.recreate_proxying(role_params['proxies'])
             else:
                 self._logger.debug('Compatibility mode proxying recreation')
                 roles_for_proxy = []
@@ -218,8 +219,6 @@ class NginxHandler(ServiceCtlHandler):
                     self._logger.debug('Removing https.include')
                     os.remove(https_inc_path)
 
-            self._logger.debug('Updating main config')
-            self._update_main_config(remove_server_section='proxies' in nginx_params)
 
     def on_before_host_up(self, message):
         self._logger.debug('Handling on_before_host_up message')
@@ -230,6 +229,9 @@ class NginxHandler(ServiceCtlHandler):
                     self._copy_error_pages()
 
                 with op.step(self._step_setup_proxying):
+                    self._logger.debug('Updating main config')
+                    self._update_main_config(remove_server_section=bool(self._proxies))
+
                     if self._proxies:
                         self._logger.debug('Recreating proxying with proxies:\n%s' % self._proxies)
                         self.api.recreate_proxying(self._proxies)
@@ -241,9 +243,6 @@ class NginxHandler(ServiceCtlHandler):
                         else:
                             roles_for_proxy = self.get_all_app_roles()
                         self.make_default_proxy(roles_for_proxy)
-
-                    self._logger.debug('Updating main config')
-                    self._update_main_config(remove_server_section=bool(self._proxies))
 
         bus.fire('service_configured',
                  service_name=SERVICE_NAME,
@@ -261,7 +260,6 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('on host up backend table is %s' % self.api.backend_table)
         # Assuming backend `backend` can be only in default behaviour mode
         if self._in_default_mode():
-
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_id) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
