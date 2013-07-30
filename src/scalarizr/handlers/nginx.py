@@ -161,8 +161,8 @@ class NginxHandler(ServiceCtlHandler):
             data = getattr(message, BEHAVIOUR)
             if data and 'preset' in data:
                 self.initial_preset = data['preset'].copy()
-            if data and 'proxies' in data:
-                self._proxies = data['proxies'].copy()
+            if data and data.get('proxies'):
+                self._proxies = list(data['proxies'])
             else:
                 self._proxies = None
 
@@ -190,7 +190,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('Handling on_start message')
         if __node__['state'] == 'running':
             role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])
-            if role_params and 'proxies' in role_params:
+            if role_params and role_params.get('proxies'):
                 self._logger.debug('Recreating proxying with proxies:\n%s' % role_params['proxies'])
                 self.api.recreate_proxying(role_params['proxies'])
             else:
