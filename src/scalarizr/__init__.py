@@ -18,9 +18,11 @@ from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.storage import Storage
 from scalarizr.api.binding import jsonrpc_http
-from scalarizr.snmp.agent import SnmpServer
 from scalarizr.storage.util.loop import listloop
 from scalarizr.linux import pkgmgr
+if not linux.os.windows_family:
+    from scalarizr.snmp.agent import SnmpServer
+
 
 # Utils
 from scalarizr.util import initdv2, log, PeriodicalExecutor
