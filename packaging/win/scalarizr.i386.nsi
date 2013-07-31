@@ -41,7 +41,7 @@ SetCompressor /FINAL /SOLID lzma
 !insertmacro MUI_LANGUAGE "English"
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}-${PRODUCT_RELEASE}"
-OutFile "scalarizr_${PRODUCT_VERSION}-${PRODUCT_RELEASE}.amd64.exe"
+OutFile "scalarizr_${PRODUCT_VERSION}-${PRODUCT_RELEASE}.i386.exe"
 InstallDir "$PROGRAMFILES64\Scalarizr"
 ShowInstDetails show
 ShowUnInstDetails show
