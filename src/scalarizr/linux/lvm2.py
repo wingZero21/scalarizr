@@ -11,11 +11,14 @@ import os
 import logging
 import base64
 import collections
+import time
 
 from scalarizr import linux
 
 if not linux.which('lvs'):
     from scalarizr.linux import pkgmgr
+	# set updatedb=True to work over problem on GCE:
+	# E: Problem renaming the file /var/cache/apt/pkgcache.bin.fsF22K to /var/cache/apt/pkgcache.bin
     pkgmgr.installed('lvm2')
 
 
@@ -67,6 +70,16 @@ def lvpath(volume_group_name, logical_volume_name):
                                                             logical_volume_name.replace('-', '--'))
 
 
+def restart_udev(fn):
+    if linux.os['name'] == 'GCEL':
+        def wrapper(*args, **kwds):
+            try:
+                return fn(*args, **kwds)
+            finally:
+                linux.system('service udev restart', shell=True, raise_exc=False)
+        return wrapper
+    return fn
+
 def lvs(*volume_groups, **long_kwds):
     try:
         long_kwds.update({
@@ -103,7 +116,7 @@ def pvs(*physical_volumes, **long_kwds):
         ret = {}
         for line in out.splitlines():
             item = PVInfo(*line.strip().split('|'))
-            ret[item.pv_name] = item
+            ret[os.path.realpath(item.pv_name)] = item
         return ret
     except linux.LinuxError, e:
         if 'not found' in str(e).lower():
@@ -132,7 +145,7 @@ def vgs(*volume_groups, **long_kwds):
             raise NotFound()
         raise
 
-
+@restart_udev
 def pvcreate(*physical_volumes, **long_kwds):
     long_kwds.update({'yes': True, 'force': True})
     return linux.system(linux.build_cmd_args(
@@ -141,6 +154,7 @@ def pvcreate(*physical_volumes, **long_kwds):
                     params=physical_volumes))
 
 
+@restart_udev
 def pvresize(*physical_volume_paths, **long_kwds):
     return linux.system(linux.build_cmd_args(
             executable='/sbin/pvresize',
@@ -148,7 +162,7 @@ def pvresize(*physical_volume_paths, **long_kwds):
             params=physical_volume_paths))
 
 
-
+@restart_udev
 def pvchange(*physical_volume_paths, **long_kwds):
     try:
         return linux.system(linux.build_cmd_args(
@@ -183,6 +197,7 @@ def pvremove(*physical_volumes, **long_kwds):
         raise
 
 
+@restart_udev
 def vgcreate(volume_group_name, *physical_volumes, **long_kwds):
     return linux.system(linux.build_cmd_args(
                     executable='/sbin/vgcreate',
@@ -190,6 +205,7 @@ def vgcreate(volume_group_name, *physical_volumes, **long_kwds):
                     params=[volume_group_name] + list(physical_volumes)))
 
 
+@restart_udev
 def vgchange(*volume_group_names, **long_kwds):
     try:
         return linux.system(linux.build_cmd_args(
@@ -218,6 +234,7 @@ def vgextend(volume_group_name, *physical_volumes, **long_kwds):
         raise
 
 
+@restart_udev
 def vgremove(*volume_group_names, **long_kwds):
     try:
         long_kwds.update({'force': True})
@@ -238,14 +255,20 @@ def vgcfgrestore(volume_group_name, **long_kwds):
             params=[volume_group_name]))
 
 
-
+@restart_udev
 def lvcreate(*params, **long_kwds):
-    return linux.system(linux.build_cmd_args(
-                    executable='/sbin/lvcreate',
-                    long=long_kwds,
-                    params=params))
+    try:
+        return linux.system(linux.build_cmd_args(
+                        executable='/sbin/lvcreate',
+                        long=long_kwds,
+                        params=params))
+    finally:
+        if linux.os['name'] == 'GCEL':
+            # Logical volumes not available for mount immediately
+            # Problem posted to Google at 29 Apr 2013.
+            time.sleep(1)
 
-
+@restart_udev
 def lvchange(*logical_volume_path, **long_kwds):
     try:
         long_kwds.update({'yes': True})
@@ -259,6 +282,7 @@ def lvchange(*logical_volume_path, **long_kwds):
         raise
 
 
+@restart_udev
 def lvremove(*logical_volume_paths, **long_kwds):
     try:
         long_kwds.update({'force': True})
@@ -266,14 +290,18 @@ def lvremove(*logical_volume_paths, **long_kwds):
                         executable='/sbin/lvremove',
                         long=long_kwds,
                         params=logical_volume_paths))
-
-        for path in logical_volume_paths:
-            path = '/dev/mapper/%s' % os.path.basename(path)
-            possible_cow = '%s-cow' % path
-            if os.path.exists(possible_cow):
-                linux.system('/sbin/dmsetup', 'remove', possible_cow)
+        '''
+        if linux.os['name'] == 'GCEL':
+            # Remove COW files
+            for path in logical_volume_paths:
+                path = '/dev/mapper/%s' % os.path.basename(path)
+                possible_cow = '%s-cow' % path
+                if os.path.exists(possible_cow):
+                    linux.system('/sbin/dmsetup', 'remove', possible_cow)
+            # Wait for sync changes properly
+            time.sleep(1)
+        '''
         return ret
-
     except linux.LinuxError, e:
         if 'not found' in str(e).lower():
             raise NotFound()

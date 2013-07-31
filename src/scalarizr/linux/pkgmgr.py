@@ -13,8 +13,10 @@ import re
 import os
 import string
 import time
+import urllib
 
 from scalarizr import linux
+from scalarizr.linux import coreutils
 from urlparse import urlparse
 
 LOG = logging.getLogger(__name__)
@@ -56,13 +58,14 @@ class AptPackageMgr(PackageMgr):
                         'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
                         raise_exc=False
         )
-        for _ in range(3):
+        for _ in range(18):  # timeout approx 3 minutes
             out, err, code = linux.system(('/usr/bin/apt-get',
                                             '-q', '-y', '--force-yes',
                                             '-o Dpkg::Options::=--force-confold') + \
                                             tuple(filter(None, command.split())), **kwds)
             if code:
-                if 'is another process using it?' in err:
+                if 'is another process using it?' in err \
+                    or 'Could not get lock' in err:
                     LOG.debug('Could not get dpkg lock (perhaps, another process is using it.)')
                     time.sleep(10)
                     continue
@@ -98,8 +101,16 @@ class AptPackageMgr(PackageMgr):
 
         return installed, candidate
 
-
     def updatedb(self):
+        try:
+            coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
+        except OSError:
+            pass
+        path = '/var/lib/apt/lists'
+        for name in os.listdir(path):
+            filename = os.path.join(path, name)
+            if name != 'lock' and os.path.isfile(filename):
+                os.remove(filename)
         self.apt_get_command('update')
 
     def install(self, name, version=None, updatedb=False, **kwds):
@@ -107,25 +118,11 @@ class AptPackageMgr(PackageMgr):
             name += '=%s' % version
         if updatedb:
             self.updatedb()
-        for _ in range(0, 30):
-            try:
-                self.apt_get_command('install %s' % name, raise_exc=True)
-                break
-            except linux.LinuxError, e:
-                if not 'E: Could not get lock' in e.err:
-                    raise
-                time.sleep(2)
+        self.apt_get_command('install %s' % name, raise_exc=True)
 
     def remove(self, name, purge=False):
         command = 'purge' if purge else 'remove'
-        for _ in xrange(0, 30):
-            try:
-                self.apt_get_command('%s %s' % (command, name), raise_exc=True)
-                break
-            except linux.LinuxError, e:
-                if not 'E: Could not get lock' in e.err:
-                    raise
-                time.sleep(2)
+        self.apt_get_command('%s %s' % (command, name), raise_exc=True)
 
     def info(self, name):
         installed, candidate = self.apt_policy(name)
@@ -194,7 +191,19 @@ class RpmVersion(object):
 class YumPackageMgr(PackageMgr):
 
     def yum_command(self, command, **kwds):
-        return linux.system((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None, command.split()))), **kwds)
+        # explicit exclude was added after yum tried to install iptables.i686
+        # on x86_64 amzn
+        exclude = ()
+        if linux.os["arch"] == "x86_64":
+            exclude = (
+                "--exclude", "*.i386",
+                "--exclude", "*.i486",
+                "--exclude", "*.i686",
+            )
+        elif linux.os["arch"] == "i386":
+            exclude = ("--exclude", "x86_64")
+
+        return linux.system((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None, command.split())) + exclude), **kwds)
 
 
     def rpm_ver_cmp(self, v1, v2):
@@ -232,6 +241,20 @@ class YumPackageMgr(PackageMgr):
             self.updatedb()
         self.yum_command('install %s' %  name, raise_exc=True)
 
+    def localinstall(self, name):
+        def do_localinstall(filename):
+             self.yum_command('localinstall --nogpgcheck %s' % filename, raise_exc=True)
+
+        if name.startswith('http://'):
+            filename = os.path.join('/tmp', os.path.basename(name))
+            urllib.urlretrieve(name, filename)
+            try:
+                do_localinstall(filename)
+            finally:
+                os.remove(filename)
+        else:
+            do_localinstall(name)
+       
 
     def remove(self, name, purge=False):
         self.yum_command('remove '+name, raise_exc=True)
@@ -351,6 +374,14 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
                                      raise_exc=False)
 
 
+def updatedb():
+	'''
+	Sync packages databases
+	'''
+	mgr = package_mgr()
+	mgr.updatedb()
+
+
 def installed(name, version=None, updatedb=False):
     '''
     Ensure that package installed
@@ -364,7 +395,7 @@ def installed(name, version=None, updatedb=False):
         mgr.install(name, version)
 
 
-def latest(name, updatedb=False):
+def latest(name, updatedb=True):
     '''
     Ensure that latest version of package installed
     '''

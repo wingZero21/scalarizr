@@ -3,6 +3,7 @@ __author__ = 'Nick Demyanchuk'
 
 from scalarizr.bus import bus
 from scalarizr import handlers
+from scalarizr import linux
 
 
 def get_handlers ():
@@ -16,6 +17,10 @@ class GceLifeCycle(handlers.Handler):
 
     def on_init(self, *args, **kwargs):
         bus.on(before_hello=self.on_before_hello)
+        try:
+            linux.system(('ntpdate', '-u', 'metadata.google.internal'))
+        except:
+            pass
 
 
     def on_before_hello(self, message):

@@ -13,6 +13,8 @@ import os
 import sys
 import time
 import shutil
+import urllib
+import urllib2
 import logging
 import datetime
 import threading
@@ -52,6 +54,7 @@ import scalarizr.services.mongodb as mongo_svc
 from scalarizr.messaging.p2p import P2pMessageStore
 from scalarizr.handlers import operation, prepare_tags
 
+from scalarizr.api import mongodb as mongodb_api
 
 __mongodb__ = __node__['mongodb']
 
@@ -75,7 +78,7 @@ REMOVE_VOLUME_KEY               = "mongodb.remove_volume"
 MONGO_VOLUME_CREATED    = "mongodb_created_volume_id"
 
 
-
+        
 def get_handlers():
     return (MongoDBHandler(), )
 
@@ -88,7 +91,7 @@ class MongoDBClusterStates:
 class MongoDBMessages:
 
     CREATE_DATA_BUNDLE = "MongoDb_CreateDataBundle"
-
+    
     CREATE_DATA_BUNDLE_RESULT = "MongoDb_CreateDataBundleResult"
     '''
     @ivar status: ok|error
@@ -96,9 +99,9 @@ class MongoDBMessages:
     @ivar snapshot_config
     @ivar used_size
     '''
-
+    
     CREATE_BACKUP = "MongoDb_CreateBackup"
-
+    
     CREATE_BACKUP_RESULT = "MongoDb_CreateBackupResult"
     """
     @ivar status: ok|error
@@ -108,54 +111,54 @@ class MongoDBMessages:
 
     """
     Also MongoDB behaviour adds params to common messages:
-
+    
     = HOST_INIT_RESPONSE =
     @ivar MongoDB=dict(
             key_file                                 A key file with at least 6 Base64 characters
             volume_config                   Master storage configuration                    (on master)
             snapshot_config                 Master storage snapshot                          (both)
     )
-
+    
     = HOST_UP =
     @ivar mysql=dict(
             root_password:                   'scalr' user password                                    (on master)
             repl_password:                   'scalr_repl' user password                             (on master)
             stat_password:                   'scalr_stat' user password                             (on master)
-            log_file:                                Binary log file                                                        (on master)
+            log_file:                                Binary log file                                                        (on master) 
             log_pos:                                 Binary log file position                               (on master)
             volume_config:                  Current storage configuration                   (both)
-            snapshot_config:                Master storage snapshot                                 (on master)
-    )
+            snapshot_config:                Master storage snapshot                                 (on master)              
+    ) 
     """
 
     INT_CREATE_DATA_BUNDLE = "MongoDb_IntCreateDataBundle"
-
+    
     INT_CREATE_DATA_BUNDLE_RESULT = "MongoDb_IntCreateDataBundle"
-
+    
     INT_CREATE_BOOTSTRAP_WATCHER = "MongoDb_IntCreateBootstrapWatcher"
-
+    
     INT_BOOTSTRAP_WATCHER_RESULT = "MongoDb_IntBootstrapWatcherResult"
 
-
+    
     CLUSTER_TERMINATE = "MongoDb_ClusterTerminate"
-
+    
     CLUSTER_TERMINATE_STATUS = "MongoDb_ClusterTerminateStatus"
-
+    
     CLUSTER_TERMINATE_RESULT = "MongoDb_ClusterTerminateResult"
 
     INT_CLUSTER_TERMINATE = "MongoDb_IntClusterTerminate"
-
+    
     INT_CLUSTER_TERMINATE_RESULT = "MongoDb_IntClusterTerminateResult"
-
+    
     REMOVE_SHARD = "MongoDb_RemoveShard"
-
+    
     REMOVE_SHARD_RESULT = "MongoDb_RemoveShardResult"
-
+    
     REMOVE_SHARD_STATUS = "MongoDb_RemoveShardStatus"
 
     INT_BEFORE_HOST_UP = "MongoDB_IntBeforeHostUp"
-
-
+    
+    
 class ReplicationState:
     INITIALIZED = 'initialized'
     STALE           = 'stale'
@@ -170,19 +173,19 @@ class TerminationState:
 
 class MongoDBHandler(ServiceCtlHandler):
     _logger = None
-
+            
     _queryenv = None
     """ @type _queryenv: scalarizr.queryenv.QueryEnvService """
-
+    
     _platform = None
     """ @type _platform: scalarizr.platform.Ec2Platform """
-
+    
     _cnf = None
     ''' @type _cnf: scalarizr.config.ScalarizrCnf '''
-
+    
     storage_vol = None
-
-
+            
+            
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         return BEHAVIOUR in behaviour and message.name in (
                         MongoDBMessages.CREATE_DATA_BUNDLE,
@@ -198,7 +201,7 @@ class MongoDBHandler(ServiceCtlHandler):
                         Messages.HOST_DOWN,
                         Messages.HOST_INIT,
                         Messages.HOST_UP)
-
+        
     def get_initialization_phases(self, hir_message):
         return {'before_host_up': [{
                 'name': self._phase_mongodb,
@@ -215,24 +218,24 @@ class MongoDBHandler(ServiceCtlHandler):
         bus.on("init", self.on_init)
         bus.define_events(
                 'before_%s_data_bundle' % BEHAVIOUR,
-
+                
                 '%s_data_bundle' % BEHAVIOUR,
-
-                # @param host: New master hostname
+                
+                # @param host: New master hostname 
                 'before_%s_change_master' % BEHAVIOUR,
-
-                # @param host: New master hostname
+                
+                # @param host: New master hostname 
                 '%s_change_master' % BEHAVIOUR,
-
+                
                 'before_slave_promote_to_master',
-
+                
                 'slave_promote_to_master'
-        )
-
+        )       
+        
         self._phase_mongodb = 'Configure MongoDB'
         self._phase_data_bundle = self._op_data_bundle = 'MongoDB data bundle'
         self._phase_backup = self._op_backup = 'MongoDB backup'
-        self._step_upload_to_cloud_storage = 'Upload data to cloud storage'
+        self._step_upload_to_cloud_storage = 'Upload data to cloud storage'             
         self._step_create_snapshot = 'Create snapshot'
         self._step_stop_balancer = 'Stop balancer'
         self._step_fsync = 'Perform fsync'
@@ -249,25 +252,26 @@ class MongoDBHandler(ServiceCtlHandler):
         self._step_auth_on_cfg_server_and_router = 'Authenticate on ConfigServer and Router'
         self._step_create_scalr_users = 'Create Scalr users'
         self._step_create_shard = 'Create Shard'
-
-
-        self.on_reload()
+        
+        self.api = mongodb_api.MongoDBAPI()
+        
+        self.on_reload()   
         self._status_trackers = dict()
 
 
     def on_init(self):
-
+                    
         bus.on("host_init_response", self.on_host_init_response)
         bus.on("before_host_up", self.on_before_host_up)
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
         self._insert_iptables_rules()
-
+        
         if 'ec2' == self._platform.name:
             __node__['ec2']['hostname_as_pubdns'] = '0'
 
         if self._cnf.state in (ScalarizrState.INITIALIZING, ScalarizrState.BOOTSTRAPPING):
             self.mongodb.stop_default_init_script()
-
+    
         if self._cnf.state == ScalarizrState.RUNNING:
             storage_vol = __mongodb__['volume']
             storage_vol.ensure(mount=True)
@@ -275,14 +279,14 @@ class MongoDBHandler(ServiceCtlHandler):
             self.mongodb.password = self.scalr_password
             self.mongodb.start_shardsvr()
             self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-
+            
             if self.shard_index == 0 and self.rs_id == 0:
                 self.mongodb.start_config_server()
 
             if self.rs_id in (0,1):
                 self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
                 self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-                self.mongodb.start_router(5)
+                self.mongodb.start_router(1)
 
 
     def on_reload(self):
@@ -292,12 +296,12 @@ class MongoDBHandler(ServiceCtlHandler):
         self._role_name = __node__['role_name']
         self._storage_path = mongo_svc.STORAGE_PATH
         self._tmp_dir = os.path.join(self._storage_path, STORAGE_TMP_DIR)
-
+        
         self.mongodb = mongo_svc.MongoDB()
         self.mongodb.disable_requiretty()
         key_path = self._cnf.key_path(BEHAVIOUR)
         self.mongodb.keyfile = mongo_svc.KeyFile(key_path)
-
+        
 
     def on_host_init_response(self, message):
         """
@@ -310,7 +314,7 @@ class MongoDBHandler(ServiceCtlHandler):
             with op.phase(self._phase_mongodb):
                 with op.step(self._step_accept_scalr_conf):
                     if not message.body.has_key(BEHAVIOUR):
-                        raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property "
+                        raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property " 
                                                         % (BEHAVIOUR, BEHAVIOUR))
 
                     mongodb_data = message.mongodb.copy()
@@ -324,8 +328,11 @@ class MongoDBHandler(ServiceCtlHandler):
                     mongodb_key = mongodb_data.pop('keyfile', None)
                     mongodb_key = mongodb_key or cryptotool.pwgen(22)
                     self._cnf.write_key(BEHAVIOUR, mongodb_key)
-
+                    
                     mongodb_data['password'] = mongodb_data.get('password') or cryptotool.pwgen(10)
+
+                    if 'mms' in mongodb_data and not mongodb_data['mms']:
+                        del mongodb_data['mms']
 
                     self._logger.debug("Update %s config with %s", (BEHAVIOUR, mongodb_data))
                     __mongodb__.update(mongodb_data)
@@ -343,10 +350,10 @@ class MongoDBHandler(ServiceCtlHandler):
 
                     first_in_rs = True
                     cfg_server_running = False
-
+    
                     local_ip = self._platform.get_private_ip()
                     role_hosts = self._queryenv.list_roles(behaviour=BEHAVIOUR, with_init=True)[0].hosts
-
+    
                     for host in role_hosts:
                         if host.internal_ip == local_ip:
                             continue
@@ -368,7 +375,7 @@ class MongoDBHandler(ServiceCtlHandler):
                     system2(('hostname', '-F', '/etc/hostname'))
 
                 rs_name = RS_NAME_TPL % self.shard_index
-
+                
                 if first_in_rs:
                     with op.step(self._step_init_master):
                         self._init_master(hostup_msg, rs_name)
@@ -384,6 +391,11 @@ class MongoDBHandler(ServiceCtlHandler):
                 if self.shard_index == 0 and self.rs_id == 0:
                     with op.step(self._step_start_cfg_server):
                         self.mongodb.start_config_server()
+
+                        # Enable MMS Agent
+                        if 'mms' in __mongodb__:
+                            self.api.enable_mms(__mongodb__['mms']['api_key'], __mongodb__['mms']['secret_key'])
+
                     hostup_msg.mongodb['config_server'] = 1
                 else:
                     hostup_msg.mongodb['config_server'] = 0
@@ -529,7 +541,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
             with op.step(self._step_start_router):
-                self.mongodb.start_router(5)
+                self.mongodb.start_router(1)
                 hostup_msg.mongodb['router'] = 1
 
             if self.rs_id == 0 and self.shard_index == 0:
@@ -537,29 +549,30 @@ class MongoDBHandler(ServiceCtlHandler):
                     try:
                         self.mongodb.router_cli.create_or_update_admin_user(mongo_svc.SCALR_USER, self.scalr_password)
                     except pymongo.errors.OperationFailure, err:
-                        if 'unauthorized' in str(err):
+                        if 'unauthorized' in str(err) or 'not authorized' in str(err):
                             self._logger.warning(err)
                         else:
                             raise
+
                     except BaseException, e:
                         self._logger.error(e)
 
-
+                        
             with op.step(self._step_auth_on_cfg_server_and_router):
                 self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
                 self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-
+                
             with op.step(self._step_create_shard):
                 self.create_shard()
 
         else:
             hostup_msg.mongodb['router'] = 0
-
+    
         STATE[CLUSTER_STATE_KEY] = MongoDBClusterStates.RUNNING
 
         hostup_msg.mongodb['keyfile'] = self._cnf.read_key(BEHAVIOUR)
         hostup_msg.mongodb['password'] = self.scalr_password
-
+        
         repl = 'primary' if first_in_rs else 'secondary'
         bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl)
 
@@ -595,7 +608,7 @@ class MongoDBHandler(ServiceCtlHandler):
                 watcher.start()
                 self._status_trackers[message.local_ip] = watcher
 
-
+                
     def create_shard(self):
         shard_index = self.shard_index
         shard_name = SHARD_NAME_TPL % shard_index
@@ -615,25 +628,48 @@ class MongoDBHandler(ServiceCtlHandler):
             return
 
         if message.local_ip != self._platform.get_private_ip():
-
+        
             shard_idx = int(message.mongodb['shard_index'])
             rs_idx = int(message.mongodb['replica_set_index'])
             hostname = HOSTNAME_TPL % (shard_idx, rs_idx)
-
+            
             self._logger.debug('Adding %s as %s to hosts file', message.local_ip, hostname)
             Hosts.set(message.local_ip, hostname)
+
+
+    def _on_new_host_mms_configure(self, new_host_shard_id, new_host_rs_id):
+        """
+        Configure MMS on new host up
+
+        :type new_host_shard_id: int
+        :param new_host_shard_id: New server shard index
+
+        :type new_host_rs_id: int
+        :param new_host_rs_id: New server replica set index
+        """
+
+        if self.shard_index == 0 and self.rs_id == 0:
+            up_node_host = HOSTNAME_TPL % (new_host_shard_id, new_host_rs_id)
+            self._add_host_to_mms(up_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
+            if new_host_rs_id < 2:
+                self._add_host_to_mms(up_node_host, mongo_svc.ROUTER_DEFAULT_PORT)
+            if new_host_shard_id == 0 and new_host_rs_id == 0:
+                self._add_host_to_mms(up_node_host, mongo_svc.CONFIG_SERVER_DEFAULT_PORT)
+            if len(self._get_shard_hosts(new_host_shard_id)) % 2 == 0:
+                self._add_host_to_mms(HOSTNAME_TPL % (new_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
+            else:
+                self._delete_host_from_mms(HOSTNAME_TPL % (new_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
 
 
     def on_HostUp(self, message):
         if BuiltinBehaviours.MONGODB not in message.behaviour:
             return
 
+        new_host_shard_idx = int(message.mongodb['shard_index'])
+        new_host_rs_id = int(message.mongodb['replica_set_index'])
+
         private_ip = self._platform.get_private_ip()
         if message.local_ip != private_ip:
-
-            new_host_shard_idx = int(message.mongodb['shard_index'])
-            new_host_rs_id = int(message.mongodb['replica_set_index'])
-
             """ If mongos runs on this instance """
 
             if self.rs_id == 0 and self.shard_index == 0:
@@ -645,10 +681,10 @@ class MongoDBHandler(ServiceCtlHandler):
                     self.mongodb.restart_router()
                 self._logger.debug('Flushing router configuration')
                 self.mongodb.router_cli.flush_router_cfg()
-
+        
             if self.mongodb.is_replication_master and \
-                                                                            self.shard_index == new_host_shard_idx:
-                r = len(self.mongodb.replicas)
+                                                                            self.shard_index == new_host_shard_idx:                    
+                r = len(self.mongodb.replicas) 
                 a = len(self.mongodb.arbiters)
                 if r % 2 == 0 and not a:
                     self.mongodb.start_arbiter()
@@ -662,6 +698,9 @@ class MongoDBHandler(ServiceCtlHandler):
             else:
                 if len(self.mongodb.replicas) % 2 != 0:
                     self.mongodb.stop_arbiter()
+
+        if 'mms' in __mongodb__:
+            self._on_new_host_mms_configure(new_host_shard_idx, new_host_rs_id)
 
 
     def update_shard(self):
@@ -717,18 +756,18 @@ class MongoDBHandler(ServiceCtlHandler):
 
         down_node_host = HOSTNAME_TPL % (shard_idx, rs_idx)
         down_node_name = '%s:%s' % (down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
-
+        
         if down_node_name not in self.mongodb.replicas:
             return
-
+    
         replica_ip = Hosts.hosts().get(down_node_host)
 
         if not replica_ip or replica_ip != message.local_ip:
             self._logger.debug("Got %s from node %s but ip address doesn't match.", message.name, down_node_host)
             return
-
+    
         is_master = self.mongodb.is_replication_master
-
+        
         if not is_master and len(self.mongodb.replicas) == 2:
             local_ip = self._platform.get_private_ip()
             possible_self_arbiter = "%s:%s" % (local_ip, mongo_svc.ARBITER_DEFAULT_PORT)
@@ -763,15 +802,15 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
             if self.mongodb.is_replication_master:
-
+            
                 """ Remove host from replica set"""
                 self.mongodb.unregister_slave(down_node_host)
-
+                
                 """ If arbiter was running on the node - unregister it """
                 possible_arbiter = "%s:%s" % (down_node_host, mongo_svc.ARBITER_DEFAULT_PORT)
                 if possible_arbiter in self.mongodb.arbiters:
                     self.mongodb.unregister_slave(down_node_host, mongo_svc.ARBITER_DEFAULT_PORT)
-
+                    
                 """ Start arbiter if necessary """
                 if len(self.mongodb.replicas) % 2 == 0:
                     self.mongodb.start_arbiter()
@@ -782,11 +821,11 @@ class MongoDBHandler(ServiceCtlHandler):
                         arb_port = int(arb_port)
                         self.mongodb.unregister_slave(arb_host, arb_port)
                     self.mongodb.stop_arbiter()
-
+                    
             else:
-                """ Get all replicas except down one,
+                """ Get all replicas except down one, 
                         since we don't know if master already removed
-                        node from replica set
+                        node from replica set 
                 """
                 replicas = [r for r in self.mongodb.replicas if r != down_node_name]
                 if len(replicas) % 2 != 0:
@@ -795,15 +834,44 @@ class MongoDBHandler(ServiceCtlHandler):
         if self.rs_id == 0 and self.shard_index == 0:
             self.update_shard()
 
-
+                            
     def on_before_reboot_start(self, *args, **kwargs):
         self.mongodb.stop_arbiter()
         self.mongodb.stop_router()
         self.mongodb.stop_config_server()
         self.mongodb.mongod.stop('Rebooting instance')
 
+                
+    def _on_host_terminate_mms_configure(self, down_host_shard_id, down_host_rs_id):
+        """
+        Configure MMS on host terminate
 
+        :type down_host_shard_id: int
+        :param down_host_shard_id: Terminated server shard index
+
+        :type down_host_rs_id: int
+        :param down_host_rs_id: Terminated server replica set index
+        """
+
+        if self.shard_index == 0 and self.rs_id == 0:
+            down_node_host = HOSTNAME_TPL % (down_host_shard_id, down_host_rs_id)
+            self._delete_host_from_mms(down_node_host, mongo_svc.REPLICA_DEFAULT_PORT)
+            if down_host_rs_id < 2:
+                self._delete_host_from_mms(down_node_host, mongo_svc.ROUTER_DEFAULT_PORT)
+            if down_host_shard_id == 0 and down_host_rs_id == 0:
+                self._delete_host_from_mms(down_node_host, self.mongodb.arbiter.port)
+            if STATE[CLUSTER_STATE_KEY] != MongoDBClusterStates.TERMINATING\
+                    and len(self._get_shard_hosts(down_host_shard_id)) % 2 == 0:
+                self._add_host_to_mms(HOSTNAME_TPL % (down_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
+            else:
+                self._delete_host_from_mms(HOSTNAME_TPL % (down_host_shard_id, 0), mongo_svc.ARBITER_DEFAULT_PORT)
+
+            
     def on_BeforeHostTerminate(self, message):
+        if 'mms' in __mongodb__:
+            down_host_shard_id = int(message.mongodb['shard_index'])
+            down_host_rs_id = int(message.mongodb['replica_set_index'])
+            self._on_host_terminate_mms_configure(down_host_shard_id, down_host_rs_id)
 
         if STATE[CLUSTER_STATE_KEY] == MongoDBClusterStates.TERMINATING:
             return
@@ -819,7 +887,7 @@ class MongoDBHandler(ServiceCtlHandler):
                 self.mongodb.cli.step_down(180, force=True)
             self.mongodb.stop_arbiter()
             self.mongodb.stop_config_server()
-            self.mongodb.mongod.stop('Server will be terminated')
+            self.mongodb.mongod.stop('Server will be terminated')   
             self._logger.info('Detaching %s storage' % BEHAVIOUR)
             storage_vol.detach()
             if STATE[REMOVE_VOLUME_KEY]:
@@ -866,57 +934,57 @@ class MongoDBHandler(ServiceCtlHandler):
 
             self.on_HostDown(message)
 
-
+            
     def on_MongoDb_IntCreateDataBundle(self, message):
         try:
             msg_data = self._create_data_bundle()
         except:
             self._logger.exception('Failed to create data bundle')
             msg_data = {'status': 'error', 'last_error': str(sys.exc_info()[1])}
-        self.send_int_message(message.local_ip,
+        self.send_int_message(message.local_ip, 
                                 MongoDBMessages.INT_CREATE_DATA_BUNDLE_RESULT,
                                 msg_data)
-
+                
 
     def on_MongoDb_CreateDataBundle(self, message):
         try:
             self.send_message(
-                            MongoDBMessages.CREATE_DATA_BUNDLE_RESULT,
+                            MongoDBMessages.CREATE_DATA_BUNDLE_RESULT, 
                             self._create_data_bundle())
         except:
             self.send_result_error_message(
-                            MongoDBMessages.CREATE_DATA_BUNDLE_RESULT,
+                            MongoDBMessages.CREATE_DATA_BUNDLE_RESULT, 
                             'Failed to create data bundle')
-
-
+                            
+            
 
     def _create_data_bundle(self):
         if not self.mongodb.is_replication_master:
             self._logger.debug('Not a master. Skipping data bundle')
             return
-
+    
         try:
             op = operation(name=self._op_data_bundle, phases=[{
-                    'name': self._phase_data_bundle,
+                    'name': self._phase_data_bundle, 
                     'steps': [
-                            self._step_stop_balancer,
-                            self._step_fsync,
+                            self._step_stop_balancer, 
+                            self._step_fsync, 
                             self._step_create_snapshot
                     ]
             }])
             op.define()
-
+            
             with op.phase(self._phase_data_bundle):
                 with op.step(self._step_stop_balancer):
                     bus.fire('before_%s_data_bundle' % BEHAVIOUR)
                     self.mongodb.router_cli.stop_balancer()
-
+                    
                 with op.step(self._step_fsync):
                     self.mongodb.cli.sync(lock=True)
-
+                    
                 with op.step(self._step_create_snapshot):
                     try:
-
+                    
                         # Creating snapshot
                         snap = self._create_snapshot()
                         used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
@@ -934,38 +1002,38 @@ class MongoDBHandler(ServiceCtlHandler):
 
         finally:
             self.mongodb.router_cli.start_balancer()
-
+    
     """
     def on_MongoDb_CreateBackup(self, message):
             if not self.mongodb.is_replication_master:
                     self._logger.debug('Not a master. Skipping backup process')
-                    return
-
+                    return 
+            
             tmpdir = backup_path = None
             try:
                     op = operation(name=self._op_backup, phases=[{
-                            'name': self._phase_backup,
-                            'steps': [self._step_fsync] +
-                                            ["Backup '%s'" % db for db in self.mongodb.router_cli.list_database_names()] +
+                            'name': self._phase_backup, 
+                            'steps': [self._step_fsync] + 
+                                            ["Backup '%s'" % db for db in self.mongodb.router_cli.list_database_names()] + 
                                             [self._step_upload_to_cloud_storage]
                     }])
-                    op.define()
-
+                    op.define()                     
+                    
                     with op.phase(self._phase_backup):
-
+                    
                             #turn balancer off
                             self.mongodb.router_cli.stop_balancer()
-
+                    
                             with op.step(self._step_fsync):
                                     #perform fsync
                                     self.mongodb.cli.sync()
-
+                            
                             #create temporary dir for dumps
                             if not os.path.exists(self._tmp_dir):
                                     os.makedirs(self._tmp_dir)
-                            tmpdir = tempfile.mkdtemp(self._tmp_dir)
+                            tmpdir = tempfile.mkdtemp(self._tmp_dir)                
                             chown_r(tmpdir, mongo_svc.DEFAULT_USER)
-
+    
                             #dump config db on router
                             r_dbs = self.mongodb.router_cli.list_database_names()
                             rdb_name = 'config'
@@ -980,22 +1048,22 @@ class MongoDBHandler(ServiceCtlHandler):
                                                     raise HandlerError('Error while dumping database %s: %s' % (rdb_name, err))
                             else:
                                     self._logger.warning('config db not found. Nothing to dump on router.')
-
+                    
                             # Get databases list
                             dbs = self.mongodb.cli.list_database_names()
-
+                            
                             # Defining archive name and path
                             rs_name = RS_NAME_TPL % self.shard_index
                             backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
                             backup_path = os.path.join(self._tmp_dir, backup_filename)
-
-                            # Creating archive
+                            
+                            # Creating archive 
                             backup = tarfile.open(backup_path, 'w:gz')
-
+                            
                             # Dump all databases
                             self._logger.info("Dumping all databases")
-                            md = mongo_svc.MongoDump()
-
+                            md = mongo_svc.MongoDump()  
+                            
                             for db_name in dbs:
                                     try:
                                             with ("Backup '%s'" % db_name):
@@ -1007,7 +1075,7 @@ class MongoDBHandler(ServiceCtlHandler):
                                     except:
                                             self._logger.exception('Cannot dump database %s', db_name)
                             backup.close()
-
+                            
                             with op.step(self._step_upload_to_cloud_storage):
                                     # Creating list of full paths to archive chunks
                                     if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
@@ -1015,43 +1083,43 @@ class MongoDBHandler(ServiceCtlHandler):
                                     else:
                                             parts = [backup_path]
                                     sizes = [os.path.getsize(file) for file in parts]
-
+                                                    
                                     cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
                                     self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
                                     trn = transfer.Transfer()
                                     cloud_files = trn.upload(parts, cloud_storage_path)
-                                    self._logger.info("%s backup uploaded to cloud storage under %s/%s",
+                                    self._logger.info("%s backup uploaded to cloud storage under %s/%s", 
                                                                     BEHAVIOUR, cloud_storage_path, backup_filename)
-
+                    
                     result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))
                     op.ok(data=result)
-
+                    
                     # Notify Scalr
                     self.send_message(MongoDBMessages.CREATE_BACKUP_RESULT, dict(
                             status = 'ok',
                             backup_parts = result
                     ))
-
+                                            
             except:
                     self.send_result_error_message(MongoDBMessages.CREATE_BACKUP_RESULT, 'Failed to create backup')
-
+                    
             finally:
                     if tmpdir:
                             shutil.rmtree(tmpdir, ignore_errors=True)
                     if backup_path and os.path.exists(backup_path):
                             os.remove(backup_path)
                     self.mongodb.router_cli.start_balancer()
-
+                            
     """
 
 
     def _init_master(self, message, rs_name):
         """
         Initialize mongodb master
-        @type message: scalarizr.messaging.Message
+        @type message: scalarizr.messaging.Message 
         @param message: HostUp message
         """
-
+        
         self._logger.info("Initializing %s primary" % BEHAVIOUR)
         self.plug_storage()
         self.mongodb.prepare(rs_name)
@@ -1067,7 +1135,7 @@ class MongoDBHandler(ServiceCtlHandler):
         else:
             self._logger.info("Previous replica set configuration found. Changing members list.")
             nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
-
+            
             rs_cfg = self.mongodb.cli.get_rs_config()
             rs_cfg['members'] = filter(lambda n: n['host'] == nodename, rs_cfg['members'])
 
@@ -1094,14 +1162,13 @@ class MongoDBHandler(ServiceCtlHandler):
 
         __mongodb__['snapshot'] = snap
 
-        # Update HostInitResponse message
+        # Update HostInitResponse message 
         msg_data = self._compat_storage_data(__mongodb__['volume'], snap)
         message.mongodb = msg_data.copy()
 
 
-    def _get_shard_hosts(self):
+    def _get_shard_hosts(self, shard_index):
         hosts = self._get_cluster_hosts()
-        shard_index = self.shard_index
         return [host for host in hosts if host.shard_index == shard_index]
 
 
@@ -1133,25 +1200,25 @@ class MongoDBHandler(ServiceCtlHandler):
     def _init_slave(self, message, rs_name):
         """
         Initialize mongodb slave
-        @type message: scalarizr.messaging.Message
+        @type message: scalarizr.messaging.Message 
         @param message: HostUp message
         """
-
+        
         msg_store = P2pMessageStore()
-
+        
         def request_and_wait_replication_status():
-
+                
             self._logger.info('Notifying primary node about joining replica set')
 
             msg_body = dict(mongodb=dict(shard_index=self.shard_index,
                                             replica_set_index=self.rs_id))
-            for host in self._get_shard_hosts():
+            for host in self._get_shard_hosts(self.shard_index):
                 self.send_int_message(host.internal_ip,
                                                 MongoDBMessages.INT_CREATE_BOOTSTRAP_WATCHER,
                                                 msg_body, broadcast=True)
-
+        
             self._logger.info('Waiting for status message from primary node')
-            initialized = stale = False
+            initialized = stale = False     
 
             my_nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
 
@@ -1178,18 +1245,18 @@ class MongoDBHandler(ServiceCtlHandler):
                 msg_queue_pairs = msg_store.get_unhandled('http://0.0.0.0:8012')
                 messages = [pair[1] for pair in msg_queue_pairs]
                 for msg in messages:
-
+                        
                     if not msg.name == MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT:
-                        continue
+                        continue                                                                                
                     try:
                         if msg.status == ReplicationState.INITIALIZED:
                             initialized = True
                             break
                         elif msg.status == ReplicationState.STALE:
                             stale = True
-                            break
+                            break                                                   
                         else:
-                            raise HandlerError('Unknown state for replication state: %s' % msg.status)
+                            raise HandlerError('Unknown state for replication state: %s' % msg.status)                                                                                                      
                     finally:
                         msg_store.mark_as_handled(msg.id)
 
@@ -1199,7 +1266,7 @@ class MongoDBHandler(ServiceCtlHandler):
                 self._logger.info('Mongo successfully joined replica set')
 
             return stale
-
+    
         self._logger.info("Initializing %s secondary" % BEHAVIOUR)
 
         self.plug_storage()
@@ -1209,7 +1276,7 @@ class MongoDBHandler(ServiceCtlHandler):
         self.mongodb.prepare(rs_name)
         self.mongodb.start_shardsvr()
 
-
+        
         first_start = not self._storage_valid()
         self.mongodb.auth = True
 
@@ -1221,7 +1288,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
         stale = request_and_wait_replication_status()
 
-        if stale:
+        if stale:                       
             new_volume = None
 
             try:
@@ -1229,7 +1296,7 @@ class MongoDBHandler(ServiceCtlHandler):
                     raise HandlerError('Platform does not support pluggable volumes')
 
                 self._logger.info('Mongodb too stale to synchronize. Trying to get snapshot from primary')
-                for host in self._get_shard_hosts():
+                for host in self._get_shard_hosts(self.shard_index):
                     self.send_int_message(host.internal_ip,
                                     MongoDBMessages.INT_CREATE_DATA_BUNDLE,
                                     include_pad=True, broadcast=True)
@@ -1247,9 +1314,9 @@ class MongoDBHandler(ServiceCtlHandler):
                             if msg.status == 'ok':
                                 self._logger.info('Received data bundle from master node.')
                                 self.mongodb.mongod.stop()
-
+                                
                                 storage_vol.detach()
-
+                                
                                 snap_cnf = msg.mongodb.snapshot_config.copy()
                                 new_volume = storage2.volume(type=snap_cnf['type'], mpoint=self._storage_path,
                                                                         snap=snap_cnf)
@@ -1257,7 +1324,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
                                 self.mongodb.start_shardsvr()
                                 stale = request_and_wait_replication_status()
-
+                                
                                 if stale:
                                     raise HandlerError('Got stale even when standing from snapshot.')
                                 else:
@@ -1265,10 +1332,10 @@ class MongoDBHandler(ServiceCtlHandler):
                                     self.mongodb.cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
                             else:
                                 raise HandlerError('Data bundle failed.')
-
+                                
                         finally:
                             msg_store.mark_as_handled(msg.id)
-
+                                                                                    
                     time.sleep(1)
             except:
                 self._logger.info('%s. Trying to perform clean sync' % sys.exc_info()[1] )
@@ -1291,7 +1358,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
         __mongodb__['volume'] = storage_vol
         message.mongodb = self._compat_storage_data(storage_vol)
-
+        
 
     def on_MongoDb_ClusterTerminate(self, message):
         try:
@@ -1301,7 +1368,13 @@ class MongoDBHandler(ServiceCtlHandler):
             cluster_terminate_watcher.start()
         except:
             self.send_result_error_message(MongoDBMessages.CLUSTER_TERMINATE_RESULT, 'Cluster terminate failed')
-
+    
+        # Delete mongodb-0-0 from MMS on terminate cluster
+        if 'mms' in __mongodb__ and self.shard_index == 0 and self.rs_id == 0:
+            self._delete_host_from_mms(self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
+            self._delete_host_from_mms(self.hostname, mongo_svc.ROUTER_DEFAULT_PORT)
+            self._delete_host_from_mms(self.hostname, mongo_svc.CONFIG_SERVER_DEFAULT_PORT)
+        
 
     def on_MongoDb_IntClusterTerminate(self, message):
         try:
@@ -1311,7 +1384,7 @@ class MongoDBHandler(ServiceCtlHandler):
             is_replication_master = self.mongodb.is_replication_master
             self.mongodb.mongod.stop()
             self.mongodb.stop_config_server()
-
+            
             msg_body = dict(status='ok',
                                             shard_index=self.shard_index,
                                             replica_set_index=self.rs_id,
@@ -1321,7 +1394,7 @@ class MongoDBHandler(ServiceCtlHandler):
                                             last_error=str(sys.exc_info()[1]),
                                             shard_index=self.shard_index,
                                             replica_set_index=self.rs_id)
-
+                    
         finally:
             self.send_int_message(message.local_ip,
                             MongoDBMessages.INT_CLUSTER_TERMINATE_RESULT, msg_body)
@@ -1367,7 +1440,7 @@ class MongoDBHandler(ServiceCtlHandler):
         if shard_name:
             dbs = filter(lambda db: db['primary'] == shard_name, dbs)
         return [db['_id'] for db in dbs]
-
+                        
 
     def _get_keyfile(self):
         try:
@@ -1380,7 +1453,7 @@ class MongoDBHandler(ServiceCtlHandler):
         system2('sync', shell=True)
 
         snap = self._create_storage_snapshot()
-
+                
         wait_until(lambda: snap.status() in (snap.COMPLETED, snap.FAILED))
         if snap.status() == snap.FAILED:
             raise HandlerError('%s storage snapshot creation failed. See log for more details' % BEHAVIOUR)
@@ -1396,7 +1469,7 @@ class MongoDBHandler(ServiceCtlHandler):
         except storage2.StorageError, e:
             self._logger.error("Cannot create %s data snapshot. %s", (BEHAVIOUR, e))
             raise
-
+    
 
     def _compat_storage_data(self, vol=None, snap=None):
         ret = dict()
@@ -1404,7 +1477,7 @@ class MongoDBHandler(ServiceCtlHandler):
             ret['volume_config'] = vol.config()
         if snap:
             ret['snapshot_config'] = snap.config()
-        return ret
+        return ret      
 
 
     def _storage_valid(self):
@@ -1422,8 +1495,8 @@ class MongoDBHandler(ServiceCtlHandler):
                 os.unlink(os.path.join(root, f))
             for d in dirs:
                 shutil.rmtree(os.path.join(root, d))
-        self.mongodb.start_shardsvr()
-
+        self.mongodb.start_shardsvr()   
+                        
 
     def _stop_watcher(self, ip):
         if ip in self._status_trackers:
@@ -1431,7 +1504,7 @@ class MongoDBHandler(ServiceCtlHandler):
             t = self._status_trackers[ip]
             t.stop()
             del self._status_trackers[ip]
-
+    
     def _insert_iptables_rules(self, *args, **kwargs):
         self._logger.debug('Adding iptables rules for scalarizr ports')
 
@@ -1442,8 +1515,42 @@ class MongoDBHandler(ServiceCtlHandler):
                     {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.REPLICA_DEFAULT_PORT)},
                     {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(mongo_svc.CONFIG_SERVER_DEFAULT_PORT)},
             ])
+    
+            
+    def _add_host_to_mms(self, host, port):
+        """
+        Function to add host to MMS
+        MMS api call https://mms.10gen.com/host/v1/addHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
+
+        :type host: string
+        :param host: hostname
+
+        :type port: string or int
+        :param port: MongoDB instance port
+        """
+
+        req = 'https://mms.10gen.com/host/v1/addHost/%s?%s'\
+            % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
+        urllib2.urlopen(req)
 
 
+    def _delete_host_from_mms(self, host, port):
+        """
+        Function to delete host from MMS
+        MMS api call https://mms.10gen.com/host/v1/deleteHost/API_KEY?hostname=URL_ENCODED_HOSTNAME&port=PORT
+
+        :type host: string
+        :param host: hostname
+
+        :type port: string or int
+        :param port: MongoDB instance port
+        """
+
+        req = 'https://mms.10gen.com/host/v1/deleteHost/%s?%s'\
+            % (__mongodb__['mms']['api_key'], urllib.urlencode({'hostname':host, 'port':port}))
+        urllib2.urlopen(req)
+        
+            
     @property
     def shard_index(self):
         if not hasattr(self, "_shard_index"):
@@ -1466,7 +1573,7 @@ class MongoDBHandler(ServiceCtlHandler):
     def shard_name(self):
         return SHARD_NAME_TPL % self.shard_index
 
-
+                
     @property
     def scalr_password(self):
         return __mongodb__['password']
@@ -1478,7 +1585,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
 class DrainingWatcher(threading.Thread):
-
+        
     def __init__(self, handler):
         """
         @type handler: MongoDBHandler
@@ -1494,7 +1601,7 @@ class DrainingWatcher(threading.Thread):
     def is_draining_complete(self, ret):
         if ret['state'] == 'completed':
             self._logger.debug('Draining process completed.')
-
+                    
             """ We can terminate shard instances now """
 
             return True
@@ -1521,8 +1628,8 @@ class DrainingWatcher(threading.Thread):
                 return
 
             self._logger.debug('Starting the process of removing shard %s' % self.shard_name)
-
-            ret = self.router_cli.remove_shard(self.shard_name)
+    
+            ret = self.router_cli.remove_shard(self.shard_name)                     
             if self.is_draining_complete(ret):
                 STATE[REMOVE_VOLUME_KEY] = 1
                 self.send_ok_result()
@@ -1532,26 +1639,26 @@ class DrainingWatcher(threading.Thread):
             """ Get initial chunks count """
             init_chunks = ret['remaining']['chunks']
             last_notification_chunks_count = init_chunks
-
+    
             self._logger.debug('Total chunks to move: %s' % init_chunks)
-
-            # Calculating 5%
+    
+            # Calculating 5% 
             trigger_step = init_chunks / 20
-
+    
             while True:
                 ret = self.router_cli.remove_shard(self.shard_name)
-
+        
                 self._logger.debug('removeShard process returned state "%s"' % ret['state'])
-
+        
                 if self.is_draining_complete(ret):
                     STATE[REMOVE_VOLUME_KEY] = 1
                     self.send_ok_result()
                     return
-
+            
                 elif ret['state'] == 'ongoing':
                     chunks_left = ret['remaining']['chunks']
                     self._logger.debug('Chunks left: %s', chunks_left)
-
+            
                     if chunks_left == 0:
                         unsharded = self.handler.get_unpartitioned_dbs(shard_name=self.shard_name)
 
@@ -1572,9 +1679,9 @@ class DrainingWatcher(threading.Thread):
 
                         msg_body = dict(shard_index=self.shard_index, total_chunks=init_chunks,
                                                 chunks_left=chunks_left, progress=progress_in_pct)
-                        self.handler.send_message(MongoDBMessages.REMOVE_SHARD_STATUS, msg_body)
-                        last_notification_chunks_count = chunks_left
-
+                        self.handler.send_message(MongoDBMessages.REMOVE_SHARD_STATUS, msg_body)                                        
+                        last_notification_chunks_count = chunks_left    
+                        
                 time.sleep(15)
 
         except:
@@ -1584,7 +1691,7 @@ class DrainingWatcher(threading.Thread):
 
 
 class StatusWatcher(threading.Thread):
-
+        
     def __init__(self, hostname, handler, local_ip):
         """
         @type handler: MongoDBHandler
@@ -1594,28 +1701,28 @@ class StatusWatcher(threading.Thread):
         self.handler=handler
         self.local_ip = local_ip
         self._stop = threading.Event()
-
+        
     def stop(self):
         self._stop.set()
-
+        
     def run(self):
         nodename = '%s:%s' % (self.hostname, mongo_svc.REPLICA_DEFAULT_PORT)
         initialized = stale = False
         while not (initialized or stale or self._stop.is_set()):
             rs_status = self.handler.mongodb.cli.get_rs_status()
-
+            
             for member in rs_status['members']:
                 if not member['name'] == nodename:
                     continue
-
+            
                 status = member['state']
-
+                
                 if status in (1,2):
                     msg = {'status' : ReplicationState.INITIALIZED}
                     self.handler.send_int_message(self.local_ip, MongoDBMessages.INT_BOOTSTRAP_WATCHER_RESULT, msg)
                     initialized = True
                     break
-
+            
                 if status == 3:
                     if 'errmsg' in member and 'RS102' in member['errmsg']:
                         msg = {'status' : ReplicationState.STALE}
@@ -1623,13 +1730,13 @@ class StatusWatcher(threading.Thread):
                         stale = True
 
             time.sleep(3)
-
+                                    
         self.handler._status_trackers.pop(self.local_ip)
-
+        
 
 
 class ClusterTerminateWatcher(threading.Thread):
-
+        
     def __init__(self, role_hosts, handler, timeout):
         """
         :type handler: MongoDBHandler
@@ -1645,7 +1752,7 @@ class ClusterTerminateWatcher(threading.Thread):
         self.node_ips = {}
         self.total_nodes_count = len(self.role_hosts)
         self.logger = self.handler._logger
-
+        
     def run(self):
         try:
             # Send cluster terminate notification to all role nodes
@@ -1750,4 +1857,4 @@ class ClusterTerminateWatcher(threading.Thread):
             self.full_status[shard_idx][rs_idx] = \
                                                             {'status' : TerminationState.UNREACHABLE}
         self.full_status[shard_idx][rs_idx] = \
-                                                        {'status' : TerminationState.PENDING}
+                                                        {'status' : TerminationState.PENDING}                                   

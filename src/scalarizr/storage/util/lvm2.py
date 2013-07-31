@@ -22,7 +22,7 @@ except ImportError:
     from scalarizr.externals.collections import namedtuple
 
 from scalarizr.util import system2, firstmatched, PopenError
-from scalarizr.util.software import whereis
+from scalarizr.util.software import which
 from scalarizr.util import dynimp
 from scalarizr.linux import coreutils
 from scalarizr.storage import StorageError
@@ -41,27 +41,27 @@ if not os.path.exists('/sbin/pvs'):
 
 
 try:
-    PVS = whereis('pvs')[0]
-    VGS = whereis('vgs')[0]
-    LVS = whereis('lvs')[0]
+    PVS = which('pvs')
+    VGS = which('vgs')
+    LVS = which('lvs')
 
-    PVSCAN = whereis('pvscan')[0]
-    PVCREATE = whereis('pvcreate')[0]
-    VGCREATE = whereis('vgcreate')[0]
-    LVCREATE = whereis('lvcreate')[0]
+    PVSCAN = which('pvscan')
+    PVCREATE = which('pvcreate')
+    VGCREATE = which('vgcreate')
+    LVCREATE = which('lvcreate')
 
-    LVCHANGE = whereis('lvchange')[0]
-    VGCHANGE = whereis('vgchange')[0]
-    VGEXTEND = whereis('vgextend')[0]
-    VGREDUCE = whereis('vgreduce')[0]
-    VGCFGRESTORE = whereis('vgcfgrestore')[0]
+    LVCHANGE = which('lvchange')
+    VGCHANGE = which('vgchange')
+    VGEXTEND = which('vgextend')
+    VGREDUCE = which('vgreduce')
+    VGCFGRESTORE = which('vgcfgrestore')
 
-    PVREMOVE = whereis('pvremove')[0]
-    VGREMOVE = whereis('vgremove')[0]
-    LVREMOVE = whereis('lvremove')[0]
-    DMSETUP  = whereis('dmsetup')[0]
+    PVREMOVE = which('pvremove')
+    VGREMOVE = which('vgremove')
+    LVREMOVE = which('lvremove')
+    DMSETUP  = which('dmsetup')
 
-except IndexError:
+except LookupError:
     raise Lvm2Error('Some of lvm2 executables were not found.')
 
 def system(*args, **kwargs):

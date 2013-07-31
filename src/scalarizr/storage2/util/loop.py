@@ -5,7 +5,8 @@ Created on Jan 6, 2011
 @author: marat
 '''
 
-from scalarizr.storage2 import system, StorageError
+from scalarizr.storage2 import StorageError
+from scalarizr.linux import system
 
 import os
 

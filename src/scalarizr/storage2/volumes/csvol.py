@@ -12,7 +12,8 @@ import string
 import threading
 import glob
 
-from scalarizr import node
+from scalarizr import node, linux
+from scalarizr.linux import coreutils
 from scalarizr.util import wait_until
 from scalarizr.util import system2
 from scalarizr import storage2
@@ -23,14 +24,23 @@ __cloudstack__ = node.__node__['cloudstack']
 LOG = logging.getLogger(__name__)
 
 
+if os.path.exists('/dev/xvda1'):
+    _device_prefix = '/dev/xvd'
+elif glob.glob('/dev/vda*'):
+    _device_prefix = '/dev/vd'
+else:
+    _device_prefix = '/dev/sd'
+
 def get_system_devname(letter):
-    return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda')
-                           else 's', letter)
+    return _device_prefix + letter
 
 
 def deviceid_to_devname(deviceid):
-    return '/dev/%sd%s' % ('xv' if os.path.exists('/dev/xvda')
-                           else 's', string.ascii_letters[deviceid])
+    for i in range(deviceid + 1):
+        device = _device_prefix + string.ascii_letters[i]
+        if not glob.glob(device + '*'):
+            return device
+    raise Exception('Cant find device for deviceid: %s' % deviceid)
 
 
 def devname_to_deviceid(devname):
@@ -40,7 +50,7 @@ def devname_to_deviceid(devname):
 class FreeDeviceLetterMgr(object):
 
     def __init__(self):
-        self._all = set(string.ascii_lowercase[1:16])
+        self._all = set(string.ascii_letters[1:3] + string.ascii_letters[4:16])
         self._acquired = set()
         self._lock = threading.Lock()
         self._local = threading.local()
@@ -49,8 +59,9 @@ class FreeDeviceLetterMgr(object):
         letters = list(self._all - self._acquired)
         letters.sort()
         for l in letters:
-            pattern = get_system_devname(l) + '*'
-            if not glob.glob(pattern):
+            #
+            #pattern = get_system_devname(l) + '*'
+            if not (glob.glob('/dev/sd' + l + '*') or glob.glob('/dev/xvd' + l + '*')):
                 with self._lock:
                     if not l in self._acquired:
                         self._acquired.add(l)
@@ -170,10 +181,9 @@ class CSVolume(base.Volume):
                     LOG.debug('Volume %s has been already created', self.id)
                     vol_list = self._conn.listVolumes(id=self.id)
                     if len(vol_list) == 0:
-                        raise storage2.StorageError("Volume %s doesn't exist" %
-                                                    self.id)
+                        raise storage2.VolumeNotExistsError(self.id)
                     self._native_vol = vol_list[0]
-                    self._check_attachement()
+                    self._check_attachement()                    
 
                 if not self.id:
                     LOG.debug('Creating new volume')
@@ -194,8 +204,8 @@ class CSVolume(base.Volume):
                             disk_offering_id=self.disk_offering_id,
                             snap_id=snapshot_id)
                         self.id = self._native_vol.id
-                        self._attach(__cloudstack__['instance_id'],
-                                     devname_to_deviceid(devname))
+                        devname = self._attach(__cloudstack__['instance_id'],
+                                     devname_to_deviceid(devname))[1]
                         self._native_vol = self._conn.listVolumes(id=self.id)[0]
             except:
                 exc_type, exc_value, exc_trace = sys.exc_info()
@@ -214,6 +224,7 @@ class CSVolume(base.Volume):
                 'id': self._native_vol.id,
                 'size': self._native_vol.size / (1024 * 1024 * 1024),
                 'device': devname,
+                'snap': None,
                 'zone_id': self._native_vol.zoneid,
                 'disk_offering_id': getattr(self._native_vol,
                                             'diskofferingid',
@@ -319,15 +330,19 @@ class CSVolume(base.Volume):
         self._conn.attachVolume(volume_id, instance_id, device_id)
 
         LOG.debug('Checking that volume %s is attached', volume_id)
+
+
         wait_until(self._attached,
                    logger=LOG,
                    timeout=self._global_timeout,
                    error_text="Volume %s wasn't attached in a reasonable time"
                    " (vm_id: %s)." % (volume_id, instance_id))
         LOG.debug('Volume %s attached', volume_id)
-
         vol = self._conn.listVolumes(id=volume_id)[0]
-        devname = deviceid_to_devname(vol.deviceid)
+
+        # Not true device name
+        #devname = deviceid_to_devname(vol.deviceid)
+        channel = '/tmp/udev-block-device'
 
         def scsi_attached():
             # Rescan all SCSI buses
@@ -335,14 +350,18 @@ class CSVolume(base.Volume):
             for name in os.listdir(scsi_host):
                 with open(scsi_host + '/' + name + '/scan', 'w') as fp:
                     fp.write('- - -')
-            return os.access(devname, os.F_OK | os.R_OK)
-        LOG.debug('Checking that device %s is available', devname)
+            return os.access(channel, os.F_OK | os.R_OK)
+        LOG.debug('Checking that device is available in OS')
         wait_until(scsi_attached,
-                   sleep=5,
+                   sleep=1,
                    logger=LOG,
                    timeout=self._global_timeout,
-                   error_text="Device %s wasn't available in a reasonable time" % devname)
-        LOG.debug('Device %s is available', devname)
+                   error_text="Device wasn't available in OS in a reasonable time")
+        LOG.debug('Device is available in OS')
+
+        with open(channel) as fp:
+            devname = fp.read()
+        os.remove(channel)        
 
         return vol, devname
 
@@ -350,11 +369,22 @@ class CSVolume(base.Volume):
         self._check_connection()
         volume_id = self.id or self._native_vol.id
 
+        # Remove volume from SCSI host
+        if self.device:
+            LOG.debug('Removing device from SCSI host')
+            scsi = coreutils.lsscsi()[self.device]
+            name = '/sys/class/scsi_host/host{host}/device/target{host}:{bus}:{target}/{host}:{bus}:{target}:{lun}/delete'.format(**scsi)
+            with open(name, 'w') as fp:
+                fp.write('1')
+
         LOG.debug('Detaching volume %s', volume_id)
         try:
             self._conn.detachVolume(volume_id)
         except Exception, e:
-            if 'not attached' not in str(e):
+            if 'not attached' in str(e) or \
+                'Please specify a VM that is either running or stopped' in str(e):
+                pass
+            else:
                 raise
 
         LOG.debug('Checking that volume %s is available', volume_id)
@@ -363,6 +393,7 @@ class CSVolume(base.Volume):
                    timeout=self._global_timeout,
                    error_text="Volume %s wasn't available in a reasonable time" % volume_id)
         LOG.debug('Volume %s is available', volume_id)
+
 
     def _delete(self):
         self._check_connection()

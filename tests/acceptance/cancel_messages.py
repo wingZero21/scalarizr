@@ -9,9 +9,12 @@ import subprocess
 import time
 import os
 import tempfile
+import string
+import random
 
 from lettuce import before, after, world, step
 import yaml
+import pymysql
 
 
 this_feature_only = world.ThisFeatureOnly("Cancel messages")
@@ -127,6 +130,25 @@ def message_info(msg_id):
     return yaml.load(out)
 
 
+def flood_db(n):
+    conn = pymysql.connect(host="127.0.0.1", user=None, passwd='', db=None)
+    conn.autocommit(True)
+
+    def fetchall(query):
+        cur = conn.cursor(None)
+        cur.execute(query)
+        return cur.fetchall()
+
+    fetchall("DROP DATABASE IF EXISTS testdb")
+    fetchall("CREATE DATABASE testdb")
+    fetchall("use testdb")
+    fetchall("CREATE TABLE testtable (one MEDIUMTEXT)")
+
+    z = ''.join(random.choice(string.lowercase) for i in xrange(1024*1023))
+
+    [fetchall("INSERT INTO testtable VALUES ('%s')" % z) for i in range(n)]
+
+
 @before.each_scenario
 @this_feature_only
 def setup(scenario):
@@ -141,6 +163,8 @@ def teardown(scenario):
 
 @step("I have used the storage for (\d+) MB")
 def i_have_used_the_storage_for(step, mb):
+    flood_db(int(mb))
+    return
     # TODO: delay on s3 instead
     subprocess.call([
             "dd",

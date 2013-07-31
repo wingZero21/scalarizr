@@ -22,13 +22,14 @@ from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.linux.coreutils import split
 from scalarizr.util import system2, disttool, software, cryptotool, initdv2
-from scalarizr.storage import transfer
+from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.linux import iptables
 from scalarizr.handlers import operation, prepare_tags
 from scalarizr.services import make_backup_steps
 from scalarizr.api import service as preset_service
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, \
-        PgUser, SU_EXEC, PgSQLPresetProvider, __postgresql__
+    PgUser, SU_EXEC, PgSQLPresetProvider, __postgresql__
+from scalarizr.services import postgresql as postgresql_svc
 from scalarizr.node import __node__
 from scalarizr import storage2
 from scalarizr.services import backup
@@ -49,13 +50,14 @@ OPT_ROOT_PASSWORD = "root_password"
 OPT_ROOT_SSH_PUBLIC_KEY = "root_ssh_public_key"
 OPT_ROOT_SSH_PRIVATE_KEY = "root_ssh_private_key"
 OPT_CURRENT_XLOG_LOCATION = 'current_xlog_location'
-OPT_REPLICATION_MASTER = "replication_master"
+OPT_REPLICATION_MASTER = postgresql_svc.OPT_REPLICATION_MASTER
+
 
 __postgresql__.update({
-        'port': 5432,
-        'storage_dir': '/mnt/pgstorage',
-        'root_user': 'scalr',
-        'pgdump_chunk_size': 200 * 1024 * 1024,
+    'port': 5432,
+    'storage_dir': '/mnt/pgstorage',
+    'root_user': 'scalr',
+    'pgdump_chunk_size': 200 * 1024 * 1024,
 })
 
 
@@ -67,12 +69,12 @@ SSH_KEYGEN_SELINUX_MODULE = """
 module local 1.0;
 
 require {
-        type initrc_tmp_t;
-        type ssh_keygen_t;
-        type initrc_t;
-        type etc_runtime_t;
-        class tcp_socket { read write };
-        class file { read write getattr };
+    type initrc_tmp_t;
+    type ssh_keygen_t;
+    type initrc_t;
+    type etc_runtime_t;
+    class tcp_socket { read write };
+    class file { read write getattr };
 }
 
 #============= ssh_keygen_t ==============
@@ -98,17 +100,17 @@ class PostgreSqlHander(ServiceCtlHandler):
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         return BEHAVIOUR in behaviour and (
-                message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
-                or message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
-                or message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
-                or message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
-                or message.name == Messages.UPDATE_SERVICE_CONFIGURATION
-                or message.name == Messages.HOST_INIT
-                or message.name == Messages.BEFORE_HOST_TERMINATE
-                or message.name == Messages.HOST_UP
-                or message.name == Messages.HOST_DOWN)
+            message.name == DbMsrMessages.DBMSR_NEW_MASTER_UP
+            or message.name == DbMsrMessages.DBMSR_PROMOTE_TO_MASTER
+            or message.name == DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE
+            or message.name == DbMsrMessages.DBMSR_CREATE_BACKUP
+            or message.name == Messages.UPDATE_SERVICE_CONFIGURATION
+            or message.name == Messages.HOST_INIT
+            or message.name == Messages.BEFORE_HOST_TERMINATE
+            or message.name == Messages.HOST_UP
+            or message.name == Messages.HOST_DOWN)
 
-
+    
     def get_initialization_phases(self, hir_message):
         if BEHAVIOUR in hir_message.body:
             steps = [self._step_accept_scalr_conf, self._step_create_storage]
@@ -117,33 +119,33 @@ class PostgreSqlHander(ServiceCtlHandler):
             else:
                 steps += [self._step_init_slave]
             steps += [self._step_collect_host_up_data]
-
+            
             return {'before_host_up': [{
-                    'name': self._phase_postgresql,
-                    'steps': steps
+                'name': self._phase_postgresql, 
+                'steps': steps
             }]}
-
-
+    
+    
     def __init__(self):
         self._service_name = SERVICE_NAME
         ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup(SERVICE_NAME))
         bus.on("init", self.on_init)
         bus.define_events(
-                'before_postgresql_data_bundle',
-
-                'postgresql_data_bundle',
-
-                # @param host: New master hostname
-                'before_postgresql_change_master',
-
-                # @param host: New master hostname
-                'postgresql_change_master',
-
-                'before_slave_promote_to_master',
-
-                'slave_promote_to_master'
-        )
-
+            'before_postgresql_data_bundle',
+            
+            'postgresql_data_bundle',
+            
+            # @param host: New master hostname 
+            'before_postgresql_change_master',
+            
+            # @param host: New master hostname 
+            'postgresql_change_master',
+            
+            'before_slave_promote_to_master',
+            
+            'slave_promote_to_master'
+        )   
+        
         self._phase_postgresql = 'Configure PostgreSQL'
         self._phase_data_bundle = self._op_data_bundle = 'PostgreSQL data bundle'
         self._phase_backup = self._op_backup = 'PostgreSQL backup'
@@ -156,45 +158,45 @@ class PostgreSqlHander(ServiceCtlHandler):
         self._step_create_data_bundle = 'Create data bundle'
         self._step_change_replication_master = 'Change replication Master'
         self._step_collect_host_up_data = 'Collect HostUp data'
+        
+        self.on_reload()        
 
-        self.on_reload()
 
-
-    def on_init(self):
+    def on_init(self):      
         #temporary fix for starting-after-rebundle issue
         if not os.path.exists(PG_SOCKET_DIR):
             os.makedirs(PG_SOCKET_DIR)
             chown_r(PG_SOCKET_DIR, 'postgres')
-
+            
         bus.on("host_init_response", self.on_host_init_response)
         bus.on("before_host_up", self.on_before_host_up)
         bus.on("before_reboot_start", self.on_before_reboot_start)
 
-        self._insert_iptables_rules()
+        self._insert_iptables_rules()       
 
         if __node__['state'] == ScalarizrState.BOOTSTRAPPING:
-
-            if disttool.is_redhat_based():
-
-                checkmodule_paths = software.whereis('checkmodule')
-                semodule_package_paths = software.whereis('semodule_package')
-                semodule_paths = software.whereis('semodule')
-
-                if all((checkmodule_paths, semodule_package_paths, semodule_paths)):
-
+            
+            if disttool.is_redhat_based():      
+                    
+                checkmodule_path = software.which('checkmodule')
+                semodule_package_path = software.which('semodule_package')
+                semodule_path = software.which('semodule')
+            
+                if all((checkmodule_path, semodule_package_path, semodule_path)):
+                    
                     with open('/tmp/sshkeygen.te', 'w') as fp:
                         fp.write(SSH_KEYGEN_SELINUX_MODULE)
-
+                    
                     self._logger.debug('Compiling SELinux policy for ssh-keygen')
-                    system2((checkmodule_paths[0], '-M', '-m', '-o',
-                                     '/tmp/sshkeygen.mod', '/tmp/sshkeygen.te'), logger=self._logger)
-
+                    system2((checkmodule_path, '-M', '-m', '-o',
+                             '/tmp/sshkeygen.mod', '/tmp/sshkeygen.te'), logger=self._logger)
+                    
                     self._logger.debug('Building SELinux package for ssh-keygen')
-                    system2((semodule_package_paths[0], '-o', '/tmp/sshkeygen.pp',
-                                     '-m', '/tmp/sshkeygen.mod'), logger=self._logger)
-
-                    self._logger.debug('Loading ssh-keygen SELinux package')
-                    system2((semodule_paths[0], '-i', '/tmp/sshkeygen.pp'), logger=self._logger)
+                    system2((semodule_package_path, '-o', '/tmp/sshkeygen.pp',
+                             '-m', '/tmp/sshkeygen.mod'), logger=self._logger)
+                    
+                    self._logger.debug('Loading ssh-keygen SELinux package')                    
+                    system2((semodule_path, '-i', '/tmp/sshkeygen.pp'), logger=self._logger)
 
 
         if __node__['state'] == 'running':
@@ -203,31 +205,31 @@ class PostgreSqlHander(ServiceCtlHandler):
             if not vol.tags:
                 vol.tags = self.resource_tags()
             vol.ensure(mount=True)
-
+            
             self.postgresql.service.start()
             self.accept_all_clients()
-
+            
             self._logger.debug("Checking presence of Scalr's PostgreSQL root user.")
             root_password = self.root_password
-
+            
             if not self.postgresql.root_user.exists():
                 self._logger.debug("Scalr's PostgreSQL root user does not exist. Recreating")
                 self.postgresql.root_user = self.postgresql.create_linux_user(ROOT_USER, root_password)
             else:
                 try:
                     self.postgresql.root_user.check_system_password(root_password)
-                    self._logger.debug("Scalr's root PgSQL user is present. Password is correct.")
+                    self._logger.debug("Scalr's root PgSQL user is present. Password is correct.")              
                 except ValueError:
                     self._logger.warning("Scalr's root PgSQL user was changed. Recreating.")
                     self.postgresql.root_user.change_system_password(root_password)
-
-            if self.is_replication_master:
+                    
+            if self.is_replication_master:  
                 #ALTER ROLE cannot be executed in a read-only transaction
-                self._logger.debug("Checking password for pg_role scalr.")
+                self._logger.debug("Checking password for pg_role scalr.")      
                 if not self.postgresql.root_user.check_role_password(root_password):
                     LOG.warning("Scalr's root PgSQL role was changed. Recreating.")
                     self.postgresql.root_user.change_role_password(root_password)
-
+            
 
     def on_reload(self):
         self._queryenv = bus.queryenv_service
@@ -236,28 +238,28 @@ class PostgreSqlHander(ServiceCtlHandler):
         self.preset_provider = PgSQLPresetProvider(self.postgresql.postgresql_conf)
         preset_service.services[BEHAVIOUR] = self.preset_provider
 
-
+    
     def on_HostInit(self, message):
         if message.local_ip != self._platform.get_private_ip() and message.local_ip in self.pg_hosts:
             LOG.debug('Got new slave IP: %s. Registering in pg_hba.conf' % message.local_ip)
             self.postgresql.register_slave(message.local_ip)
-
+            
 
     def on_HostUp(self, message):
         if message.local_ip == self._platform.get_private_ip():
             self.accept_all_clients()
         elif message.local_ip in self.farm_hosts:
             self.postgresql.register_client(message.local_ip)
-
-
-
+        
+    
+    
     def on_HostDown(self, message):
         if  message.local_ip != self._platform.get_private_ip():
             self.postgresql.unregister_client(message.local_ip)
             if self.is_replication_master and self.farmrole_id == message.farm_role_id:
                 self.postgresql.unregister_slave(message.local_ip)
-
-    @property
+    
+    @property           
     def farm_hosts(self):
         list_roles = self._queryenv.list_roles()
         servers = []
@@ -265,9 +267,9 @@ class PostgreSqlHander(ServiceCtlHandler):
             for host in serv.hosts :
                 servers.append(host.internal_ip or host.external_ip)
         LOG.debug("QueryEnv returned list of servers within farm: %s" % servers)
-        return servers
-
-
+        return servers              
+        
+        
     @property
     def pg_hosts(self):
         '''
@@ -280,26 +282,26 @@ class PostgreSqlHander(ServiceCtlHandler):
                 servers.append(pg_host.internal_ip or pg_host.external_ip)
         LOG.debug("QueryEnv returned list of %s servers: %s" % (BEHAVIOUR, servers))
         return servers
-
-
+    
+    
     def accept_all_clients(self):
         farm_hosts = self.farm_hosts
         for ip in farm_hosts:
-            self.postgresql.register_client(ip, force=False)
+                self.postgresql.register_client(ip, force=False)
         if farm_hosts:
             self.postgresql.service.reload('Granting access to all servers within farm.', force=True)
-
+                
 
     @property
     def root_password(self):
         return __postgresql__['%s_password' % ROOT_USER]
 
 
-    @property
+    @property   
     def farmrole_id(self):
         return __node__[config.OPT_FARMROLE_ID]
-
-
+    
+            
     def store_password(self, name, password):
         __postgresql__['%s_password' % name] = password
 
@@ -324,11 +326,11 @@ class PostgreSqlHander(ServiceCtlHandler):
         @type message: scalarizr.messaging.Message
         @param message: HostInitResponse
         """
-
+        
         with bus.initialization_op as op:
             with op.phase(self._phase_postgresql):
                 with op.step(self._step_accept_scalr_conf):
-
+        
                     if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
                         raise HandlerError("HostInitResponse message for PostgreSQL behaviour must have 'postgresql' property and db_type 'postgresql'")
 
@@ -373,30 +375,30 @@ class PostgreSqlHander(ServiceCtlHandler):
                         postgresql_data['compat_prior_backup_restore'] = True
                         if postgresql_data.get(OPT_VOLUME_CNF):
                             postgresql_data['volume'] = storage2.volume(
-                                    postgresql_data.pop(OPT_VOLUME_CNF))
+                                postgresql_data.pop(OPT_VOLUME_CNF))
 
                         elif postgresql_data.get(OPT_SNAPSHOT_CNF):
                             postgresql_data['volume'] = storage2.volume(
-                                    type=postgresql_data[OPT_SNAPSHOT_CNF]['type'])
+                                type=postgresql_data[OPT_SNAPSHOT_CNF]['type'])
 
                         else:
                             raise HandlerError('No volume config or snapshot config provided')
 
                         if postgresql_data['volume'].device and \
-                                                        postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+                                        postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
                             LOG.debug("Master n'th start detected. Removing snapshot config from message")
                             postgresql_data.pop(OPT_SNAPSHOT_CNF, None)
 
                         if postgresql_data.get(OPT_SNAPSHOT_CNF):
                             postgresql_data['restore'] = backup.restore(
-                                    type='snap_postgresql',
-                                    snapshot=postgresql_data.pop(OPT_SNAPSHOT_CNF),
-                                    volume=postgresql_data['volume'])
+                                type='snap_postgresql',
+                                snapshot=postgresql_data.pop(OPT_SNAPSHOT_CNF),
+                                volume=postgresql_data['volume'])
 
                         if int(postgresql_data['replication_master']):
                             postgresql_data['backup'] = backup.backup(
-                                    type='snap_postgresql',
-                                    volume=postgresql_data['volume'])
+                                type='snap_postgresql',
+                                volume=postgresql_data['volume'])
 
                     LOG.debug("Update postgresql config with %s", postgresql_data)
                     __postgresql__.update(postgresql_data)
@@ -409,22 +411,22 @@ class PostgreSqlHander(ServiceCtlHandler):
     def on_before_host_up(self, message):
         """
         Configure PostgreSQL behaviour
-        @type message: scalarizr.messaging.Message
+        @type message: scalarizr.messaging.Message      
         @param message: HostUp message
         """
 
         repl = 'master' if self.is_replication_master else 'slave'
         #bus.fire('before_postgresql_configure', replication=repl)
-
+        
         if self.is_replication_master:
-            self._init_master(message)
+            self._init_master(message)                                    
         else:
             self._init_slave(message)
         # Force to resave volume settings
         __postgresql__['volume'] = storage2.volume(__postgresql__['volume'])
         bus.fire('service_configured', service_name=SERVICE_NAME, replication=repl, preset=self.initial_preset)
-
-
+                    
+                
     def on_before_reboot_start(self, *args, **kwargs):
         """
         Stop PostgreSQL and unplug storage
@@ -441,20 +443,22 @@ class PostgreSqlHander(ServiceCtlHandler):
                 LOG.info('Destroying volume %s' % __postgresql__['volume'].id)
                 __postgresql__['volume'].destroy(remove_disks=True)
                 LOG.info('Volume %s has been destroyed.' % __postgresql__['volume'].id)
+            else:
+                __postgresql__['volume'].umount()
 
 
     def on_DbMsr_CreateDataBundle(self, message):
-
+        
         try:
             op = operation(name=self._op_data_bundle, phases=[{
-                    'name': self._phase_data_bundle,
-                    'steps': [self._step_create_data_bundle]
+                'name': self._phase_data_bundle, 
+                'steps': [self._step_create_data_bundle]
             }])
             op.define()
-
+            
             with op.phase(self._phase_data_bundle):
                 with op.step(self._step_create_data_bundle):
-
+                    
                     bus.fire('before_postgresql_data_bundle')
                     snap = self._create_snapshot()
                     used_size = int(system2(('df', '-P', '--block-size=M', STORAGE_PATH))[0].split('\n')[1].split()[2][:-1])
@@ -473,14 +477,14 @@ class PostgreSqlHander(ServiceCtlHandler):
 
         except (Exception, BaseException), e:
             LOG.exception(e)
-
+            
             # Notify Scalr about error
             self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
-                    db_type         = BEHAVIOUR,
-                    status          ='error',
-                    last_error      = str(e)
+                db_type     = BEHAVIOUR,
+                status      ='error',
+                last_error  = str(e)
             ))
-
+            
 
     def on_DbMsr_PromoteToMaster(self, message):
         """
@@ -499,8 +503,8 @@ class PostgreSqlHander(ServiceCtlHandler):
         bus.fire('before_slave_promote_to_master')
 
         msg_data = {
-                'db_type' : BEHAVIOUR,
-                'status' : 'ok',
+            'db_type' : BEHAVIOUR,
+            'status' : 'ok',
             BEHAVIOUR : {}
         }
 
@@ -548,9 +552,9 @@ class PostgreSqlHander(ServiceCtlHandler):
             LOG.exception(e)
 
             self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, dict(
-                    db_type=BEHAVIOUR,
-                    status="error",
-                    last_error=str(e)
+                db_type=BEHAVIOUR,
+                status="error",
+                last_error=str(e)
             ))
 
             self.postgresql.service.stop('Unplugging broken storage and then plugging the old one')
@@ -560,12 +564,12 @@ class PostgreSqlHander(ServiceCtlHandler):
             if old_vol:
                 old_vol.ensure(mount=True)
             self.postgresql.service.start()
-
+        
         if tx_complete and new_vol and new_vol.type not in ('eph', 'lvm'):
             # Delete slave EBS
             old_vol.destroy(remove_disks=True)
 
-
+    
     def on_DbMsr_NewMasterUp(self, message):
         """
         Switch replication to a new master server
@@ -595,15 +599,15 @@ class PostgreSqlHander(ServiceCtlHandler):
                     restore = backup.restore(**postgresql_data['restore'])
                 else:
                     restore = backup.restore(
-                            type='snap_postgresql',
-                            volume=__postgresql__['volume'],
-                            snapshot=postgresql_data[OPT_SNAPSHOT_CNF])
+                        type='snap_postgresql',
+                        volume=__postgresql__['volume'],
+                        snapshot=postgresql_data[OPT_SNAPSHOT_CNF])
 
                 if __postgresql__['volume'].type == 'eph':
                     self.postgresql.service.stop('Swapping storages to reinitialize slave')
 
                     LOG.info('Reinitializing Slave from the new snapshot %s',
-                            restore.snapshot['id'])
+                        restore.snapshot['id'])
                     new_vol = restore.run()
 
                 #self.postgresql.service.start()
@@ -613,8 +617,8 @@ class PostgreSqlHander(ServiceCtlHandler):
             bus.fire('postgresql_change_master', host=host)
 
             msg_data = dict(
-                    db_type = BEHAVIOUR,
-                    status = 'ok'
+                db_type = BEHAVIOUR,
+                status = 'ok'
             )
             self.send_message(DbMsrMessages.DBMSR_NEW_MASTER_UP_RESULT, msg_data)
 
@@ -622,14 +626,14 @@ class PostgreSqlHander(ServiceCtlHandler):
             LOG.exception(e)
 
             msg_data = dict(
-                    db_type = BEHAVIOUR,
-                    status="error",
-                    last_error=str(e))
+                db_type = BEHAVIOUR,
+                status="error",
+                last_error=str(e))
             self.send_message(DbMsrMessages.DBMSR_NEW_MASTER_UP_RESULT, msg_data)
 
 
     def on_DbMsr_CreateBackup(self, message):
-        #TODO: Think how to move the most part of it into Postgresql class
+        #TODO: Think how to move the most part of it into Postgresql class 
         # Retrieve password for scalr pg user
         tmpdir = backup_path = None
         try:
@@ -638,28 +642,28 @@ class PostgreSqlHander(ServiceCtlHandler):
             databases = psql.list_pg_databases()
             if 'template0' in databases:
                 databases.remove('template0')
-
-
+            
+            
             op = operation(name=self._op_backup, phases=[{
-                    'name': self._phase_backup
+                'name': self._phase_backup
             }])
-            op.define()
-
+            op.define()         
+            
             with op.phase(self._phase_backup):
-
+            
                 if not os.path.exists(self._tmp_path):
                     os.makedirs(self._tmp_path)
-
+                    
                 # Defining archive name and path
                 backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
                 backup_path = os.path.join(self._tmp_path, backup_filename)
-
-                # Creating archive
+                
+                # Creating archive 
                 backup = tarfile.open(backup_path, 'w:gz')
-
+    
                 # Dump all databases
                 LOG.info("Dumping all databases")
-                tmpdir = tempfile.mkdtemp(dir=self._tmp_path)
+                tmpdir = tempfile.mkdtemp(dir=self._tmp_path)       
                 chown_r(tmpdir, self.postgresql.root_user.name)
 
                 def _single_backup(db_name):
@@ -669,63 +673,65 @@ class PostgreSqlHander(ServiceCtlHandler):
                     err = system2(su_args)[1]
                     if err:
                         raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
-                    backup.add(dump_path, os.path.basename(dump_path))
+                    backup.add(dump_path, os.path.basename(dump_path))  
 
-                make_backup_steps(databases, op, _single_backup)
+                make_backup_steps(databases, op, _single_backup)                        
 
                 backup.close()
-
+                
                 with op.step(self._step_upload_to_cloud_storage):
                     # Creating list of full paths to archive chunks
-                    if os.path.getsize(backup_path) > __postgresql__['pgdump_chunk_size']:
-                        parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, __postgresql__['pgdump_chunk_size'], tmpdir)]
-                    else:
-                        parts = [backup_path]
-                    sizes = [os.path.getsize(file) for file in parts]
+                    #if os.path.getsize(backup_path) > __postgresql__['pgdump_chunk_size']:
+                    #    parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, __postgresql__['pgdump_chunk_size'], tmpdir)]
+                    #else:
+                    #    parts = [backup_path]
+                    #sizes = [os.path.getsize(file) for file in parts]
 
                     cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
                     LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-                    trn = transfer.Transfer()
-                    cloud_files = trn.upload(parts, cloud_storage_path)
+
+                    trn = LargeTransfer(backup_path, cloud_storage_path)
+                    manifest = trn.run()
                     LOG.info("Postgresql backup uploaded to cloud storage under %s/%s",
-                                                    cloud_storage_path, backup_filename)
-
-            result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))
+                                    cloud_storage_path, backup_filename)
+            
+            result = list(dict(path=os.path.join(cloud_storage_path, c[0]), size=c[2]) for c in
+                            manifest['files'][0]['chunks'])
             op.ok(data=result)
-
+                
             # Notify Scalr
             self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                    db_type = BEHAVIOUR,
-                    status = 'ok',
-                    backup_parts = result
+                db_type = BEHAVIOUR,
+                status = 'ok',
+                backup_parts = result
             ))
-
+                        
         except (Exception, BaseException), e:
             LOG.exception(e)
-
+            
             # Notify Scalr about error
             self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                    db_type = BEHAVIOUR,
-                    status = 'error',
-                    last_error = str(e)
+                db_type = BEHAVIOUR,
+                status = 'error',
+                last_error = str(e)
             ))
-
+            
         finally:
             if tmpdir:
                 shutil.rmtree(tmpdir, ignore_errors=True)
             if backup_path and os.path.exists(backup_path):
-                os.remove(backup_path)
-
-
+                os.remove(backup_path)              
+        
+                                
     def _init_master(self, message):
         """
         Initialize postgresql master
-        @type message: scalarizr.messaging.Message
+        @type message: scalarizr.messaging.Message 
         @param message: HostUp message
         """
-
+        
         LOG.info("Initializing PostgreSQL master")
-
+        
         with bus.initialization_op as op:
             with op.step(self._step_create_storage):
 
@@ -741,33 +747,33 @@ class PostgreSqlHander(ServiceCtlHandler):
 
                     __postgresql__['volume'].ensure(mount=True, mkfs=True)
                     LOG.debug('Postgres volume config after ensure: %s', dict(__postgresql__['volume']))
-
+                
             with op.step(self._step_init_master):
                 self.postgresql.init_master(mpoint=STORAGE_PATH, password=self.root_password)
-
+                
 
             with op.step(self._step_create_data_bundle):
                 if 'backup' in __postgresql__:
                     __postgresql__['restore'] = __postgresql__['backup'].run()
-
+            
             with op.step(self._step_collect_host_up_data):
-                # Update HostUp message
-                msg_data = dict({OPT_REPLICATION_MASTER                 :       str(int(self.is_replication_master)),
-                                                OPT_ROOT_USER                           :       self.postgresql.root_user.name,
-                                                OPT_ROOT_PASSWORD                       :       self.root_password,
-                                                OPT_ROOT_SSH_PRIVATE_KEY        :       self.postgresql.root_user.private_key,
-                                                OPT_ROOT_SSH_PUBLIC_KEY         :       self.postgresql.root_user.public_key,
-                                                OPT_CURRENT_XLOG_LOCATION       :       None})
+                # Update HostUp message 
+                msg_data = dict({OPT_REPLICATION_MASTER: str(int(self.is_replication_master)),
+                                OPT_ROOT_USER: self.postgresql.root_user.name,
+                                OPT_ROOT_PASSWORD: self.root_password,
+                                OPT_ROOT_SSH_PRIVATE_KEY: self.postgresql.root_user.private_key,
+                                OPT_ROOT_SSH_PUBLIC_KEY: self.postgresql.root_user.public_key,
+                                OPT_CURRENT_XLOG_LOCATION: None})
 
                 if __postgresql__['compat_prior_backup_restore']:
                     if 'restore' in __postgresql__:
                         msg_data.update(dict(
-                                snapshot_config=dict(__postgresql__['restore'].snapshot)))
+                            snapshot_config=dict(__postgresql__['restore'].snapshot)))
                     msg_data.update(dict(
-                            volume_config=dict(__postgresql__['volume'])))
+                        volume_config=dict(__postgresql__['volume'])))
                 else:
                     msg_data.update(dict(
-                            volume=dict(__postgresql__['volume'])
+                        volume=dict(__postgresql__['volume'])
                     ))
                     for key in ('backup', 'restore'):
                         if key in __postgresql__:
@@ -789,28 +795,28 @@ class PostgreSqlHander(ServiceCtlHandler):
         LOG.info("Requesting master server")
         while not master_host:
             try:
-                master_host = list(host
-                        for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
-                        if host.replication_master)[0]
+                master_host = list(host 
+                    for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts 
+                    if host.replication_master)[0]
             except IndexError:
                 LOG.debug("QueryEnv respond with no postgresql master. " +
-                                "Waiting %d seconds before the next attempt", 5)
+                        "Waiting %d seconds before the next attempt", 5)
                 time.sleep(5)
         return master_host
-
+    
     def _get_slave_hosts(self):
         LOG.info("Requesting standby servers")
-        return list(host for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
-                        if not host.replication_master)
-
+        return list(host for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts 
+                if not host.replication_master)
+                
     def _init_slave(self, message):
         """
         Initialize postgresql slave
-        @type message: scalarizr.messaging.Message
+        @type message: scalarizr.messaging.Message 
         @param message: HostUp message
         """
         LOG.info("Initializing postgresql slave")
-
+        
         with bus.initialization_op as op:
             with op.step(self._step_create_storage):
                 LOG.debug("Initialize slave storage")
@@ -819,17 +825,17 @@ class PostgreSqlHander(ServiceCtlHandler):
                     __postgresql__['restore'].run()
                 else:
                     __postgresql__['volume'].ensure(mount=True, mkfs=True)
-
+            
             with op.step(self._step_init_slave):
-                # Change replication master
+                # Change replication master 
                 master_host = self._get_master_host()
-
+                        
                 LOG.debug("Master server obtained (local_ip: %s, public_ip: %s)",
-                                master_host.internal_ip, master_host.external_ip)
-
+                        master_host.internal_ip, master_host.external_ip)
+                
                 host = master_host.internal_ip or master_host.external_ip
                 self.postgresql.init_slave(STORAGE_PATH, host, __postgresql__['port'], self.root_password)
-
+            
             with op.step(self._step_collect_host_up_data):
                 # Update HostUp message
                 message.db_type = BEHAVIOUR
@@ -838,8 +844,8 @@ class PostgreSqlHander(ServiceCtlHandler):
     def _create_snapshot(self):
         LOG.info("Creating PostgreSQL data bundle")
         backup_obj = backup.backup(type='snap_postgresql',
-                volume=__postgresql__['volume'],
-                tags=self.resource_tags())
+            volume=__postgresql__['volume'],
+            tags=self.resource_tags())
         restore = backup_obj.run()
         return restore.snapshot
 
@@ -847,5 +853,5 @@ class PostgreSqlHander(ServiceCtlHandler):
     def _insert_iptables_rules(self):
         if iptables.enabled():
             iptables.FIREWALL.ensure([
-                    {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(__postgresql__['port'])},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(__postgresql__['port'])},
             ])

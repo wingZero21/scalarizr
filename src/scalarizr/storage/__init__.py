@@ -598,7 +598,7 @@ class Volume(VolumeConfig, Observable):
         fmt = '[volume:%s] %s\n' + '%-10s : %s\n'*3
         return fmt % (
                 self.type, self.devname,
-                'id', self.id or ''
+                'id', self.id or '',
                 'mpoint', self.mpoint or '',
                 'fstype', self.fstype or ''
         )

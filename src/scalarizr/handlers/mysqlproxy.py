@@ -35,10 +35,10 @@ class MysqlProxyInitScript(initdv2.ParametrizedInitScript):
 
 
     def __init__(self):
-        res = software.whereis('mysql-proxy')
-        if not res:
+        try:
+            self.bin_path = software.which('mysql-proxy')
+        except LookupError:
             raise initdv2.InitdError("Mysql-proxy binary not found. Check your installation")
-        self.bin_path = res[0]
         version_str = system2((self.bin_path, '-V'))[0].splitlines()[0]
         self.version = tuple(map(int, version_str.split()[1].split('.')))
         self.sock = initdv2.SockParam(4040)
@@ -132,7 +132,8 @@ initdv2.explore(BEHAVIOUR, MysqlProxyInitScript)
 def is_mysql_role(behaviours):
     return bool(set((BuiltinBehaviours.MYSQL,
                BuiltinBehaviours.MYSQL2,
-               BuiltinBehaviours.PERCONA)).intersection(set(behaviours)))
+               BuiltinBehaviours.PERCONA,
+               BuiltinBehaviours.MARIADB)).intersection(set(behaviours)))
 
 
 class MysqlProxyHandler(ServiceCtlHandler):

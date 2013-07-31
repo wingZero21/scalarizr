@@ -14,6 +14,7 @@ import ConfigParser
 import time
 import hashlib
 import uuid
+import errno
 from copy import copy
 if sys.version_info[0:2] >= (2, 7):
     from collections import OrderedDict
@@ -472,10 +473,9 @@ class LargeTransfer(bases.Task):
         self.manifest_path = manifest
         self.manifest = None
         self._transfer = FileTransfer(src=self._src_generator,
-                                                        dst=self._dst_generator, **kwds)
-        self._tranzit_vol = storage2.volume(
-                                                        type='tmpfs',
-                                                        mpoint=tempfile.mkdtemp())
+                dst=self._dst_generator, **kwds)
+        self._tranzit_vol = storage2.volume(type='tmpfs',
+                mpoint=tempfile.mkdtemp())
 
         events = self._transfer.list_events()
         self.define_events(*events)
@@ -626,7 +626,9 @@ class LargeTransfer(bases.Task):
                     LOG.debug("LargeTransfer src_generator yield %s", filename)
                     yield filename
                 if cmd:
-                    cmd.communicate()
+                    out, err = cmd.communicate()
+                    if err:
+                        LOG.debug("LargeTransfer src_generator cmd pipe stderr: %s", err)
 
             # send manifest to file transfer
             if not self.multipart:
@@ -713,33 +715,50 @@ class LargeTransfer(bases.Task):
 
 
     def _split(self, stream, prefix):
-        buf_size = 4096
-        chunk_size = self.chunk_size * 1024 * 1024
+        try:
+            buf_size = 4096
+            chunk_size = self.chunk_size * 1024 * 1024
 
-        for chunk_n in itertools.count():
-            chunk_name = prefix + '%03d' % chunk_n
-            chunk_capacity = chunk_size
-            chunk_md5 = hashlib.md5()
+            for chunk_n in itertools.count():
+                chunk_name = prefix + '%03d' % chunk_n
+                chunk_capacity = chunk_size
+                chunk_md5 = hashlib.md5()
 
-            zero = int(time.time())
-            with open(chunk_name, 'w') as chunk:
-                while chunk_capacity:
-                    bytes_ = stream.read(min(buf_size, chunk_capacity))
-                    if not bytes_:
-                        break
-                    chunk.write(bytes_)
-                    chunk_capacity -= len(bytes_)
-                    chunk_md5.update(bytes_)
+                zero = int(time.time())
+                with open(chunk_name, 'w') as chunk:
+                    while chunk_capacity:
 
-            if chunk_capacity != chunk_size:  # non-empty chunk
-                LOG.debug("*** BENCH %s %s created", int(time.time() - zero),
-                                os.path.basename(chunk_name))
-                yield chunk_name, chunk_md5.hexdigest(), chunk_size - chunk_capacity
-            else:  # empty chunk
-                os.remove(chunk_name)
-            if chunk_capacity:  # empty or half-empty chunk, meaning stream
-                                                    # is empty
-                break
+                        while True:
+                            try:
+                                bytes_ = stream.read(min(buf_size, chunk_capacity))
+                            except IOError, e:
+                                if e.errno == errno.EINTR:
+                                    LOG.debug("EINTR while reading data for %s",
+                                            chunk_name)
+                                    continue
+                                else:
+                                    raise
+                            else:
+                                break
+
+                        if not bytes_:
+                            break
+                        chunk.write(bytes_)
+                        chunk_capacity -= len(bytes_)
+                        chunk_md5.update(bytes_)
+
+                if chunk_capacity != chunk_size:  # non-empty chunk
+                    LOG.debug("*** BENCH %s %s created", int(time.time() - zero),
+                                    os.path.basename(chunk_name))
+                    yield chunk_name, chunk_md5.hexdigest(), chunk_size - chunk_capacity
+                else:  # empty chunk
+                    os.remove(chunk_name)
+                if chunk_capacity:  # empty or half-empty chunk, meaning stream
+                                                        # is empty
+                    break
+        except:
+            LOG.debug(" ", exc_info=sys.exc_info())
+            self.kill()
 
 
     def _dl_restorer(self):
@@ -903,20 +922,20 @@ class Manifest(object):
 
     ::
 
-            {
-                    version: 2.0,
-                    description,
-                    tags,
-                    created_at,
-                    files: [
-                            {
-                                    name,
-                                    streamer,  # "tar" | python function | None
-                                    compressor,  # "gzip" | python function | None
-                                    chunks: [(basename001, md5sum, size_in_bytes)]
-                            }
-                    ]
-            }
+        {
+            version: 2.0,
+            description,
+            tags,
+            created_at,
+            files: [
+                {
+                    name,
+                    streamer,  # "tar" | python function | None
+                    compressor,  # "gzip" | python function | None
+                    chunks: [(basename001, md5sum, size_in_bytes)]
+                }
+            ]
+        }
 
 
     Supports reading of old ini-manifests and represents their data in the

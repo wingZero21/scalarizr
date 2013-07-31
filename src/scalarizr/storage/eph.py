@@ -11,7 +11,7 @@ from .util.lvm2 import Lvm2, lvm_group_b64, Lvm2Error
 from .util import ramdisk
 
 from scalarizr.libs.metaconf import Configuration
-from scalarizr.util.software import whereis
+from scalarizr.util.software import which
 from scalarizr.util import firstmatched
 from scalarizr import linux
 from scalarizr.linux import mount, pkgmgr
@@ -342,8 +342,10 @@ class EphSnapshotProviderLite(object):
                 mount.mount(snap_lv, snap_mpoint, *opts)
                 tar_cmd = ['tar', 'cp', '-C', snap_mpoint, '.']
 
-                pigz_bins = whereis('pigz')
-                compress_cmd = [pigz_bins[0] if pigz_bins else 'gzip', '-5']
+                if which('pigz'):
+                    compress_cmd = [which('pigz'), '-5']
+                else:
+                    compress_cmd = ['gzip', '-5']
 
                 self._logger.debug("Creating and compressing snapshot data.")
                 tar = subprocess.Popen(tar_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
@@ -623,8 +625,10 @@ class DataRestoreStrategy(RestoreStrategy):
         tmp_mpoint = mkdtemp()
         volume.mount(tmp_mpoint)
         try:
-            pigz_bins = whereis('pigz')
-            cmd1 = ('pigz' if pigz_bins else 'gzip', '-d')
+            try:
+                cmd1 = (which('pigz'), '-d')
+            except LookupError:
+                cmd1 = ('gzip', '-d')
             cmd2 = ('tar', 'px', '-C', tmp_mpoint)
 
             compressor = subprocess.Popen(cmd1, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
@@ -645,9 +649,11 @@ class DataRestoreStrategy(RestoreStrategy):
 class DeviceRestoreStrategy(RestoreStrategy):
     def restore(self, queue, volume, download_finished):
         device_fp = open(volume.device, 'w')
-        pigz_bins = whereis('pigz')
-        cmd = ('pigz' if pigz_bins else 'gzip', '-d')
-        compressor = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=device_fp, stderr=subprocess.PIPE, close_fds=True)
+        if which('pigz'):
+            compress_cmd = [which('pigz'), '-d']
+        else:
+            compress_cmd = ['gzip', '-d']
+        compressor = subprocess.Popen(compress_cmd, stdin=subprocess.PIPE, stdout=device_fp, stderr=subprocess.PIPE, close_fds=True)
         self.concat_chunks(queue, download_finished, compressor.stdin)
 
         compressor.stdin.close()

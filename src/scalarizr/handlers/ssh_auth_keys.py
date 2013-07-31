@@ -9,9 +9,11 @@ from scalarizr.util import firstmatched
 
 import re
 import os
+import sys
 import logging
 from scalarizr.util import disttool
 from scalarizr.util.initdv2 import ParametrizedInitScript
+from scalarizr import linux
 
 class UpdateSshAuthorizedKeysError(BaseException):
     pass
@@ -51,8 +53,12 @@ class SSHKeys(Handler):
         variables = {
                 'RSAAuthentication' : 'yes',
                 'PubkeyAuthentication' : 'yes',
-                'AuthorizedKeysFile' :  '%h/.ssh/authorized_keys'
+                'AuthorizedKeysFile' :  '%h/.ssh/authorized_keys',
         }
+
+        if 'Amazon' == linux.os['name']:
+            variables.update({'PermitRootLogin'   :   'without-password'})
+
         regexps = {}
         for key, value in variables.items():
             regexps[key] = re.compile(r'^%s\s+%s' % (key, value))
@@ -80,7 +86,10 @@ class SSHKeys(Handler):
             fp = open(self.sshd_config_path, 'w')
             fp.write(''.join(new_lines))
             fp.close()
-            self._sshd_init.restart()
+            try:
+                self._sshd_init.restart()
+            except:
+                self._logger.debug('Error during SSH restart', exc_info=sys.exc_info())
 
 
         # Setup .ssh directory structure

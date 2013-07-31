@@ -55,6 +55,7 @@ def setup_feature(feat):
         _RESTORE.append((s3.S3FileSystem, "_get_connection",
                                          s3.S3FileSystem._get_connection))
         s3.S3FileSystem._get_connection = lambda self: connect_s3()
+        s3.S3FileSystem._bucket_location = lambda self: ''
 
     elif STORAGE == "gcs":
         def get_pk(f="gcs_pk.p12"):  # TODO:
@@ -114,7 +115,7 @@ LOG.addHandler(logging.FileHandler("transfer_test.log", 'w'))
 
 STORAGES = {
         "s3": {
-                "url": "s3://scalr.test_bucket/vova_test",
+                "url": "s3://vova-new/vova_test",
                 "driver": s3.S3FileSystem,
         },
         "gcs": {

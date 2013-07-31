@@ -14,10 +14,12 @@ from scalarizr import handlers
 from scalarizr.api import service as preset_service
 
 from scalarizr import config, storage2, handlers
+from scalarizr.node import __node__
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
+from scalarizr.linux import iptables
 from scalarizr.linux.coreutils import split
 from scalarizr.util import system2, cryptotool, software, initdv2
 from scalarizr.services import redis, backup
@@ -38,7 +40,6 @@ STORAGE_PATH                            = '/mnt/redisstorage'
 STORAGE_VOLUME_CNF                      = 'redis.json'
 STORAGE_SNAPSHOT_CNF            = 'redis-snap.json'
 
-OPT_REPLICATION_MASTER          = 'replication_master'
 OPT_PERSISTENCE_TYPE            = 'persistence_type'
 OPT_MASTER_PASSWORD                     = "master_password"
 OPT_VOLUME_CNF                          = 'volume_config'
@@ -78,15 +79,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
     @property
     def is_replication_master(self):
         try:
-            value = __redis__[OPT_REPLICATION_MASTER]
+            value = __redis__['replication_master']
         except KeyError:
             value = None
 
         if value in (None, ''):
             value = 0
-            __redis__[OPT_REPLICATION_MASTER] = value
+            __redis__['replication_master'] = value
         else:
-            LOG.debug('Got %s : %s' % (OPT_REPLICATION_MASTER, value))
+            LOG.debug('Got %s : %s' % ('replication_master', value))
 
         return True if int(value) else False
 
@@ -143,8 +144,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         self.preset_provider = redis.RedisPresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
 
-        handlers.FarmSecurityMixin.__init__(self, ["%s:%s" %
-                 (redis.DEFAULT_PORT, redis.DEFAULT_PORT+redis.MAX_CUSTOM_PROCESSES)])
+        handlers.FarmSecurityMixin.__init__(self,
+                ["{0}:{1}".format(__redis__['ports_range'][0], __redis__['ports_range'][-1])])
         ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
         bus.on("init", self.on_init)
         bus.define_events(
@@ -179,6 +180,11 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         self.on_reload()
 
+        if self._cnf.state == ScalarizrState.RUNNING:
+            # Fix to enable access outside farm when use_passwords=True
+            if self.use_passwords:
+                self.security_off()
+
 
     def on_init(self):
 
@@ -187,7 +193,12 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
+        self._insert_iptables_rules()
+
         if self._cnf.state == ScalarizrState.RUNNING:
+            # Fix to enable access outside farm when use_passwords=True
+            # if self.use_passwords:
+            #    self.security_off()
 
             vol = storage2.volume(__redis__['volume'])
             if not vol.tags:
@@ -195,7 +206,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
             vol.ensure(mount=True)
             __redis__['volume'] = vol
 
-            ports=[redis.DEFAULT_PORT,]
+            ports=[__redis__['defaults']['port'],]
             passwords=[self.get_main_password(),]
             num_processes = 1
             farm_role_id = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
@@ -232,6 +243,16 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 
         self.default_service = initdv2.lookup(SERVICE_NAME)
+
+
+    def _insert_iptables_rules(self):
+        if self.use_passwords and iptables.enabled():
+            ports = "{0}:{1}".format(
+                        __redis__['ports_range'][0], 
+                        __redis__['ports_range'][-1])
+            iptables.FIREWALL.ensure([
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": ports}
+            ])
 
 
     def on_host_init_response(self, message):
@@ -303,10 +324,13 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     if self.default_service.running:
                         self.default_service.stop('Terminating default redis instance')
 
-                    self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type)
-                    ports = ports or [redis.DEFAULT_PORT,]
+                    self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type, self.use_passwords)
+                    ports = ports or [__redis__['defaults']['port'],]
                     passwords = passwords or [self.get_main_password(),]
                     self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)
+
+                    if self.use_passwords:
+                        self.security_off()
 
 
     def on_before_host_up(self, message):
@@ -356,6 +380,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                 LOG.info('Destroying volume %s' % __redis__['volume'].id)
                 __redis__['volume'].destroy(remove_disks=True)
                 LOG.info('Volume %s was destroyed.' % __redis__['volume'].id)
+            else:
+                __redis__['volume'].umount()
 
 
     def on_DbMsr_CreateDataBundle(self, message):
@@ -438,7 +464,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                 __redis__['volume'] = new_storage_vol
 
             self.redis_instances.init_as_masters(self._storage_path)
-            __redis__[OPT_REPLICATION_MASTER] = 1
+            __redis__['replication_master'] = 1
             msg_data[BEHAVIOUR] = {'volume_config': dict(__redis__['volume'])}
             self.send_message(DbMsrMessages.DBMSR_PROMOTE_TO_MASTER_RESULT, msg_data)
 
@@ -568,7 +594,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                 self.redis_instances.init_as_masters(mpoint=self._storage_path)
 
                 msg_data = dict()
-                msg_data.update({OPT_REPLICATION_MASTER                 :       '1',
+                msg_data.update({'replication_master'                 :       '1',
                                  OPT_MASTER_PASSWORD                    :       password})
 
             with op.step(self._step_collect_host_up_data):

@@ -218,53 +218,31 @@ class StorageAPI(object):
             return do_grow()
 
 
-    '''
     @rpc.service_method
-    def replace_raid_disk(self, volume_config, target_disk_device, replacement_disk_config, async=False):
-            assert volume_config.get('type') == 'raid', 'Configuration type is not raid'
-            raid = storage_lib.Storage.create(**volume_config)
+    def replace_raid_disk(self, volume, index, disk, async=False):
+        self._check_invalid(volume, 'volume', dict)
+        self._check_invalid(volume, 'index', int)
+        self._check_empty(volume.get('id'), 'volume.id')
 
-            def replace_disk_block():
-                    target = filter(lambda x: x.device == target_disk_device, raid.disks)
-                    if not target:
-                            raise Exception("Can't find failed disk in array")
+        def do_replace_raid_disk():
+            vol = storage2.volume(volume)
+            vol.replace_disk(index, disk)
+            return dict(vol)
 
-                    target = target[0]
-                    new_drive = storage_lib.Storage.create(**replacement_disk_config)
+        if async:
+            txt = 'Replace RAID disk'
+            op = handlers.operation(name=txt)
+            def block():
+                op.define()
+                with op.phase(txt):
+                    with op.step(txt):
+                        data = do_replace_raid_disk()
+                op.ok(data=data)
+            threading.Thread(target=block).start()
+            return op.id
 
-                    try:
-                            raid.replace_disk(target, new_drive)
-                    except:
-                            if not replacement_disk_config.get('id'):
-                                    # Disk was created during replacement. Deleting
-                                    new_drive.destroy()
-                            raise
-                    else:
-                            try:
-                                    target.destroy()
-                            except:
-                                    pass
-                            return raid.config()
-
-            if async:
-                    txt = 'Replace RAID disk'
-                    op = handlers.operation(name=txt)
-                    def block():
-                            op.define()
-                            with op.phase(txt):
-                                    with op.step(txt):
-                                            raid_config = replace_disk_block()
-                            op.ok(data=raid_config)
-                    threading.Thread(target=block).start()
-                    return op.id
-            else:
-                    return replace_disk_block()
-
-    @rpc.service_method
-    def status(self, volume_config):
-            vol = storage_lib.Storage.create(volume_config)
-            return vol.status()
-    '''
+        else:
+            return do_replace_raid_disk()
 
 
     def _check_invalid(self, param, name, type_):

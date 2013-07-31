@@ -10,7 +10,7 @@ from scalarizr.handlers.rebundle import RebundleLogHandler
 from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrState
 from scalarizr.util import system2, software, cryptotool, disttool, wait_until
-from scalarizr.util.software import whereis
+from scalarizr.util.software import which
 from scalarizr.linux.coreutils import statvfs
 from scalarizr.linux.coreutils import truncate
 from scalarizr.linux.rsync import rsync
@@ -298,10 +298,10 @@ class NimbulaRebundleHandler(Handler):
 
             """ Grub installation """
             self._logger.info('Installing grub to the image %s' % image_name)
-            grub_path = whereis('grub')
+            grub_path = which('grub')
             if not grub_path:
                 raise HandlerError("Grub executable was not found.")
-            grub_path = self.tmp_root_dir + grub_path[0]
+            grub_path = self.tmp_root_dir + grub_path
             stdin = 'device (hd0) %s\nroot (hd0,0)\nsetup (hd0)\n' % image_path
             system2('%s --batch --no-floppy --device-map=/dev/null' % grub_path, stdin = stdin, shell=True)
 
@@ -320,11 +320,11 @@ class NimbulaRebundleHandler(Handler):
 
             """ Creating and sending message """
             msg_data = dict(
-                    status                  = "ok",
-                    bundle_task_id  = message.bundle_task_id,
-                    ssh_user                = 'scalr',
-                    ssh_password    = scalr_password,
-                    snapshot_id             = image.name
+                status = "ok",
+                bundle_task_id = message.bundle_task_id,
+                ssh_user = 'scalr',
+                ssh_password = scalr_password,
+                snapshot_id = image.name
             )
             self._logger.debug("Updating message with OS and software info")
             msg_data.update(software.system_info())

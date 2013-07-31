@@ -5,6 +5,7 @@ __author__ = 'Nick Demyanchuk'
 
 import re
 import os
+import sys
 import uuid
 import time
 import random
@@ -14,11 +15,10 @@ import pexpect
 import tempfile
 
 from scalarizr.bus import bus
-from scalarizr.storage import transfer
 from scalarizr import storage2
-from scalarizr.util import system2, wait_until
-from scalarizr.linux import mount
-from scalarizr.handlers import rebundle as rebundle_hndlr
+from scalarizr.util import wait_until, capture_exception
+from scalarizr.linux import mount, system
+from scalarizr.handlers import HandlerError, rebundle as rebundle_hndlr
 from scalarizr.linux.tar import Tar
 from scalarizr.linux.rsync import rsync
 from scalarizr.linux import coreutils
@@ -33,7 +33,7 @@ LOG = logging.getLogger(__name__)
 ROLEBUILDER_USER = 'scalr-rolesbuilder'
 
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
-    exclude_dirs = set(['/tmp', '/var/run', '/proc', '/dev',
+    exclude_dirs = set(['/tmp', '/proc', '/dev',
                                        '/mnt' ,'/var/lib/google/per-instance',
                                        '/sys', '/cdrom', '/media'])
     exclude_files = ('/etc/ssh/.host_key_regenerated',
@@ -62,11 +62,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
             try:
 
                 LOG.debug('Creating partition table on image')
-                system2(('parted', image_path, 'mklabel', 'msdos'))
-                system2(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))))
+                system(('parted', image_path, 'mklabel', 'msdos'))
+                system(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))))
 
                 # Map disk image
-                out = system2(('kpartx', '-av', image_path))[0]
+                out = system(('kpartx', '-av', image_path))[0]
                 try:
                     loop = re.search('(/dev/loop\d+)', out).group(1)
                     root_dev_name = '/dev/mapper/%sp1' % loop.split('/')[-1]
@@ -74,11 +74,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                     LOG.info('Creating filesystem')
                     storage2.filesystem('ext4').mkfs(root_dev_name)
                     dev_uuid = uuid.uuid4()
-                    system2(('tune2fs', '-U', str(dev_uuid), root_dev_name))
+                    system(('tune2fs', '-U', str(dev_uuid), root_dev_name))
 
                     mount.mount(root_dev_name, tmp_mount_dir)
                     try:
-                        lines = system2(('/bin/mount', '-l'))[0].splitlines()
+                        lines = system(('/bin/mount', '-l'))[0].splitlines()
                         exclude_dirs = set()
                         for line in lines:
                             mpoint = line.split()[2]
@@ -125,7 +125,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                     finally:
                         mount.umount(root_dev_name)
                 finally:
-                    system2(('kpartx', '-d', image_path))
+                    system(('kpartx', '-d', image_path))
 
                 LOG.info('Compressing image.')
                 arch_name = '%s.tar.gz' % self._role_name.lower()
@@ -135,30 +135,25 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                 tar.create().gzip().sparse()
                 tar.archive(arch_path)
                 tar.add(image_name, rebundle_dir)
-                system2(str(tar), shell=True)
+                system(str(tar), shell=True)
 
             finally:
                 os.unlink(image_path)
 
             try:
                 LOG.info('Uploading compressed image to cloud storage')
-                uploader = transfer.Transfer(logger=LOG)
-                tmp_bucket_name = 'scalr-images-%s-%s' % (
-                                                        random.randint(1,1000000), int(time.time()))
+                tmp_bucket_name = 'scalr-images-%s-%s' % (random.randint(1,1000000), int(time.time()))
+                remote_path = 'gcs://%s/' % tmp_bucket_name
 
+                uploader = FileTransfer(src=arch_path, dst=remote_path)
+                #uploader = transfer.Transfer(logger=LOG)
                 try:
-                    remote_path = 'gcs://%s/' % tmp_bucket_name
-                    uploader.upload((arch_path,), remote_path)
+                    uploader.run()
                 except:
-                    try:
+                    with capture_exception(LOG):
                         objs = cloudstorage.objects()
                         objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
-                    except:
-                        pass
-
                     cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
-                    raise
-
             finally:
                 os.unlink(arch_path)
 
@@ -178,8 +173,16 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                                                             image=current_img_name).execute()
             kernel = current_img_obj['preferredKernel']
 
-            image_url = 'http://storage.googleapis.com/%s/%s' % (
-                                                                            tmp_bucket_name, arch_name)
+            # Getting this instance's kernel
+            #instance_id = pl.get_instance_id()
+            #zone = os.path.basename(pl.get_zone())
+            #try:
+            #    kernel = compute.instances().list(project=proj_id, zone=zone, filter='id eq %s' % instance_id,
+            #                         fields="items(kernel)").execute()['items'][0]['kernel']
+            #except KeyError:
+            #    raise HandlerError('Could not get kernel url from instance resource')
+
+            image_url = 'http://storage.googleapis.com/%s/%s' % (tmp_bucket_name, arch_name)
 
             req_body = dict(
                     name=goog_image_name,
@@ -210,9 +213,13 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
             wait_until(image_is_ready, logger=LOG, timeout=600)
 
         finally:
-            objs = cloudstorage.objects()
-            objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
-            cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
+            try:
+                objs = cloudstorage.objects()
+                objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
+                cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
+            except:
+                e = sys.exc_info()[1]
+                LOG.error('Faled to remove image compressed source: %s' % e)
 
         return '%s/images/%s' % (proj_name, goog_image_name)
 
@@ -228,4 +235,4 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
         for node in nodes:
             args = node.split()
             args[0] = os.path.join(root, 'dev', args[0])
-            system2(['mknod'] + args)
+            system(' '.join(['mknod'] + args), shell=True)

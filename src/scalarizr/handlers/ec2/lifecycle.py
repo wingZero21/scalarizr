@@ -15,7 +15,7 @@ from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.handlers import Handler
 from scalarizr.util import system2, disttool
-from scalarizr.linux import mount
+from scalarizr.linux import mount, system
 
 
 __ec2__ = __node__['ec2']
@@ -40,6 +40,11 @@ class Ec2LifeCycleHandler(Handler):
         bus.on("before_hello", self.on_before_hello)
         bus.on("before_host_init", self.on_before_host_init)
         bus.on("before_restart", self.on_before_restart)
+
+        try:
+            system(('ntpdate', '-u', '0.amazon.pool.ntp.org'))
+        except:
+            pass
 
         msg_service = bus.messaging_service
         producer = msg_service.get_producer()
