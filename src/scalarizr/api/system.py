@@ -40,8 +40,8 @@ class _ScalingMetricStrategy(object):
             raise BaseException("File is not executable: '%s'" % metric.path)
   
         exec_timeout = 3
-  
-        proc = subps.Popen(metric.path, stdout=subps.PIPE, stderr=subps.PIPE, close_fds=True)
+        close_fds = not linux.os.windows_family
+        proc = subps.Popen(metric.path, stdout=subps.PIPE, stderr=subps.PIPE, close_fds=close_fds)
  
         timeout_time = time.time() + exec_timeout
         while time.time() < timeout_time:
