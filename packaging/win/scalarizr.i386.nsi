@@ -12,7 +12,7 @@
 !define PRODUCT_NAME "Scalarizr"
 !define PRODUCT_VERSION "%VERSION%"
 !define PRODUCT_RELEASE "%RELEASE%"
-!define SZR_BASE_PATH "%BASEPATH%"
+!define SZR_BASE_PATH "%BASEPATH%" 
 !define PRODUCT_PUBLISHER "Scalr"
 !define PRODUCT_WEB_SITE "http://scalr.net"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
@@ -41,27 +41,31 @@ SetCompressor /FINAL /SOLID lzma
 !insertmacro MUI_LANGUAGE "English"
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}-${PRODUCT_RELEASE}"
-OutFile "scalarizr_${PRODUCT_VERSION}-${PRODUCT_RELEASE}.i386.exe"
-InstallDir "$PROGRAMFILES\Scalarizr"
+OutFile "scalarizr_${PRODUCT_VERSION}-${PRODUCT_RELEASE}.amd64.exe"
+InstallDir "$PROGRAMFILES64\Scalarizr"
 ShowInstDetails show
 ShowUnInstDetails show
 
 Function .onInit
+  #${IfNot} ${RunningX64}
+  #  MessageBox MB_OK "You are trying to install 64 bit package on 32 bit system. Please, download and install 32 bit package instead." /SD IDOK
+  #  Quit
+  #${EndIf}
+
   ${If} ${RunningX64}
-    MessageBox MB_OK "You are trying to install 32 bit package on 64 bit system. Please, download and install 64 bit package instead." /SD IDOK
-    Quit
+    SetRegView 64
   ${EndIf}
-  
+
   Var /GLOBAL installed_version
   Var /GLOBAL installed_release
   ReadRegStr $installed_version ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion"
   ReadRegStr $installed_release ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayRelease"
-  
+
   StrCmp $installed_version "" not_installed
   ${StrRep} $0 ${PRODUCT_VERSION} "r" ""
   ${StrRep} $1 $installed_version "r" ""
   ${VersionCompare} $0 $1 $R0
-
+    
   ${If} $R0 == 2
   ${OrIf} $R0 == 0
   ${AndIf} $installed_release > ${PRODUCT_RELEASE}
@@ -85,7 +89,7 @@ Section "MainSection" SEC01
   ${If} $installed_version != ""
 	services::IsServiceRunning 'Scalarizr'
 	Pop $0
-	StrCmp $0 'No' stopped 
+	StrCmp $0 'No' stopped
     services::SendServiceCommand 'stop' 'Scalarizr'
 	Pop $0
 	StrCmp $0 'Ok' stopped
@@ -105,29 +109,29 @@ Section "MainSection" SEC01
   SetOutPath "$INSTDIR"
   File /r /x *.svn* "${SZR_BASE_PATH}\share"
   
-  ${IfNot} ${FileExists} "$INSTDIR\Python26"
-    File /r /x *.svn* /x *.pyc /x *.pyo "i386\Python26"
+  ${IfNot} ${FileExists} "$INSTDIR\Python27"
+  	File /r /x *.svn* /x *.pyc /x *.pyo "i386\Python27"
   ${EndIf}
   
-  SetOverwrite off
+  SetOverwrite off  
   File /r /x *.svn* "noarch\*"
   
   SetOutPath "$INSTDIR\scripts\"
   #File "${SZR_BASE_PATH}\scripts\update.py"
   #File "${SZR_BASE_PATH}\scripts\win*"
-    
+  
   SetOutPath "$INSTDIR\etc\private.d"
   File /r /x *.svn* "${SZR_BASE_PATH}\etc\private.d\*"
   SetOverwrite on
   
   SetOutPath "$INSTDIR\tmp"
-  File "${SZR_BASE_PATH}\etc\public.d\*.ini"  
-  
+  File "${SZR_BASE_PATH}\etc\public.d\*.ini"
+
   SetOutPath "$SYSDIR"
   SetOverwrite try
-  File "i386\python26.dll"
-  File "i386\libeay32.dll"
-  File "i386\ssleay32.dll"
+  ${DisableX64FSRedirection}
+  File "i386\python27.dll"
+  ${EnableX64FSRedirection}
 
   SetOutPath "$INSTDIR\var\log"
 
@@ -142,8 +146,8 @@ SectionEnd
 Section -Post
   WriteUninstaller "$INSTDIR\uninst.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "InstallDir" "$INSTDIR"
-  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayRelease" "${PRODUCT_RELEASE}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayName" "$(^Name)"
+  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayRelease" "${PRODUCT_RELEASE}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninst.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
@@ -161,27 +165,45 @@ Section -PostInstall
     Goto loop
   done:
   FindClose $0
-
+  
+  #${If} $installed_version == ""
+  #	nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
+  #${EndIf}
+  
   RMDir /r $INSTDIR\tmp
   
   ReadEnvStr $R0 "PYTHONPATH"
-  StrCpy $R0 "$R0;$INSTDIR\Python26\Lib;$INSTDIR\Python26\Lib\site-packages;$INSTDIR\src"
+  StrCpy $R0 "$R0;$INSTDIR\Python27\Lib;$INSTDIR\Python27\Lib\site-packages;$INSTDIR\src"
   SetEnv::SetEnvVar "PYTHONPATH" $R0
   
-  ${If} $installed_version == ""
-  	nsExec::ExecToLog '"$INSTDIR\Python26\python.exe" "$INSTDIR\Python26\scripts\pywin32_postinstall.py" -install'
-	${ConfigWrite} "$INSTDIR\etc\public.d\config.ini" "scripts_path" " = $INSTDIR\scripts\" $R0
-	${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "exec_dir_prefix" " = %TEMP%\scalr-scripting." $R0
-	${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "logs_dir_prefix" " = $INSTDIR\var\log\scalarizr\scripting\scalr-scripting." $R0
+	${If} $installed_version == ""
 	
-  	${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python26\Lib"
- 	${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python26\Lib\site-packages"
-  	${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\src"
-  ${EndIf}
-  ; Install and start services anyway
-  nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--install-win-services"'
-
+		${If} ${RunningX64}
+		  ${DisableX64FSRedirection}
+		  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -install'
+		  ${EnableX64FSRedirection}
+		${Else}
+		  nsExec::ExecToLog '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -install'
+		${Endif}
+		${ConfigWrite} "$INSTDIR\etc\public.d\config.ini" "scripts_path" " = $INSTDIR\scripts\" $R0
+		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "exec_dir_prefix" " = %TEMP%\scalr-scripting." $R0
+		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "logs_dir_prefix" " = $INSTDIR\var\log\scalarizr\scripting\scalr-scripting." $R0
+	
+		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib"
+		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib\site-packages"
+		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\src"
+	${EndIf}
+	
+	${If} ${RunningX64}
+	  ${DisableX64FSRedirection}
+	  nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
+	  ${EnableX64FSRedirection}
+	${Else}
+	  nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
+	${EndIf}
+	
 SectionEnd
+
 
 Function un.onUninstSuccess
   HideWindow
@@ -195,18 +217,21 @@ FunctionEnd
 
 Section Uninstall
   services::SendServiceCommand 'stop' 'Scalarizr'
-  nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
+  ${DisableX64FSRedirection}
+    nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
+  ${EnableX64FSRedirection}
   RMDir /r /REBOOTOK "$INSTDIR"
   SetShellVarContext all
   RMDir /r /REBOOTOK "$SMPROGRAMS\Scalarizr"
   SetShellVarContext current
   RMDir /r /REBOOTOK "$SMPROGRAMS\Scalarizr"
-
+  
+  SetRegView 64
   DeleteRegKey ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}"
   SetAutoClose true
 
-  ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python26\Lib"
-  ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python26\Lib\site-packages"
+  ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python27\Lib"
+  ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python27\Lib\site-packages"
   ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\src"
 
 SectionEnd

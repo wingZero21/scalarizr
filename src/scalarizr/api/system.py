@@ -7,16 +7,18 @@ Created on Nov 25, 2011
 Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(chef)
 '''
 
-from __future__ import with_statement
 
 import os
 import logging
+import platform
+import threading
 import sys
 import glob
 import time
 import signal
 import subprocess as subps
 
+from Queue import Queue, Empty
 from multiprocessing import pool
 
 from scalarizr import rpc, linux
@@ -61,7 +63,7 @@ class _ScalingMetricStrategy(object):
         if proc.returncode > 0:
             raise BaseException(stderr if stderr else 'exitcode: %d' % proc.returncode)
         
-        return stdout
+        return stdout.strip()
   
   
     @staticmethod
@@ -72,7 +74,7 @@ class _ScalingMetricStrategy(object):
         except IOError:
             raise BaseException("File is not readable: '%s'" % metric.path)
   
-        return value
+        return value.strip()
 
 
     @staticmethod
@@ -177,7 +179,7 @@ class SystemAPI(object):
         '''
         Block devices list
         @return: List of block devices including ramX and loopX
-        @rtype: list 
+        @rtype: list
         '''
 
         lines = self._readlines(self._DISKSTATS)
@@ -470,10 +472,158 @@ class SystemAPI(object):
         scaling_metrics = bus.queryenv_service.get_scaling_metrics()
         
         max_threads = 10
-        wrk_pool = pool.ThreadPool(processes=max_threads)
+        result_queue = Queue()
+        workers = list()
 
-        try:
-            return wrk_pool.map_async(_ScalingMetricStrategy.get, scaling_metrics).get()
-        finally:
-            wrk_pool.close()
-            wrk_pool.join()
+        def _get_metric(metric, _queue):
+            _queue.put(_ScalingMetricStrategy.get(metric))
+
+        def list_from_queue(q):
+            """ Returns list with all elements of given queue"""
+            ret = []
+            while True:
+                try:
+                    ret.append(q.get_nowait())
+                except Empty:
+                    break
+            return ret
+
+        while True:
+            # Fill empty slots in pool, if metrics left
+            if scaling_metrics:
+                for i in range(max_threads - len(workers)):
+                    try:
+                        metric = scaling_metrics.pop()
+                        t = threading.Thread(target=_get_metric, args=(metric,result_queue))
+                        t.start()
+                        workers.append(t)
+                    except IndexError:
+                        # No metrics left
+                        break
+
+            # Check workers (join pool)
+            for t in workers:
+                if not t.is_alive():
+                    workers.remove(t)
+
+            if not workers and not scaling_metrics:
+                return list_from_queue(result_queue)
+
+
+if linux.os.windows_family:
+
+    import pythoncom
+    from win32com import client
+
+    pythoncom.CoInitialize()
+    wmi = client.GetObject('winmgmts:')
+
+    class WindowsSystemAPI(SystemAPI):
+
+
+        @rpc.service_method
+        def disk_stats(self):
+            res = dict()
+            for disk in wmi.InstancesOf('Win32_PerfRawData_PerfDisk_LogicalDisk'):
+                # Skip Total
+                if disk.Name == '_Total':
+                    continue
+
+                res[disk.Name] = dict(
+                    read=dict(
+                        bytes=int(disk.AvgDiskBytesPerRead)
+                    ),
+                    write=dict(
+                        bytes=int(disk.AvgDiskBytesPerWrite)
+                    )
+                )
+            return res
+
+        @rpc.service_method
+        def block_devices(self):
+            res = list()
+            for disk in wmi.InstancesOf('Win32_PerfRawData_PerfDisk_LogicalDisk'):
+                if disk.Name == '_Total':
+                    continue
+                res.append(disk.Name)
+            return res
+
+        @rpc.service_method
+        def dist(self):
+            uname = platform.uname()
+            return dict(system=uname[0], release=uname[2], version=uname[3])
+
+        @rpc.service_method
+        def net_stats(self):
+            res = dict()
+            for iface in wmi.InstancesOf('Win32_PerfRawData_Tcpip_NetworkInterface'):
+                res[iface.Name] = dict(
+                    receive=dict(
+                        bytes=int(iface.Properties_['BytesReceivedPersec']),
+                        packets=int(iface.Properties_['PacketsReceivedPersec']),
+                        errors=int(iface.Properties_['PacketsReceivedErrors'])
+                    ),
+                    transmit=dict(
+                        bytes=int(iface.Properties_['BytesSentPersec']),
+                        packets=int(iface.Properties_['PacketsSentPersec']),
+                        errors=int(iface.Properties_['PacketsOutboundErrors'])
+                    )
+                )
+            return res
+
+        @rpc.service_method
+        def load_average(self):
+            raise Exception('Not available on windows platform')
+
+        @rpc.service_method
+        def uname(self):
+            uname = platform.uname()
+            return dict(zip(
+                ('system', 'node', 'release', 'version', 'machine', 'processor'), uname
+            ))
+
+        @rpc.service_method
+        def cpu_stat(self):
+            user = system = idle = 0
+            for proc in wmi.InstancesOf('Win32_PerfRawData_PerfOS_Processor'):
+                if proc.Name == '_Total':
+                    idle += int(proc.PercentIdleTime)
+                    user += int(proc.PercentUserTime)
+                    system += int(proc.PercentPrivilegedTime)
+
+            return {
+                'user': user,
+                'system': system,
+                'idle': idle
+            }
+
+        @rpc.service_method
+        def mem_info(self):
+            meminfo = wmi.InstancesOf('Win32_PerfFormattedData_PerfOS_Memory')[0]
+            sysinfo = wmi.InstancesOf('Win32_ComputerSystem')[0]
+            return {
+                'total_swap': int(meminfo.CommitLimit) / 1024,
+                'avail_swap': (int(meminfo.CommitLimit) - int(meminfo.CommittedBytes)) / 1024,
+                'total_real': int(sysinfo.Properties_('totalphysicalmemory')) / 1024,
+                'total_free': int(meminfo.Properties_('AvailableKBytes'))
+            }
+
+        @rpc.service_method
+        def statvfs(self, mpoints=None):
+            # mpoints == disks letters on Windows
+            mpoints = map(lambda s: s[0].lower(), mpoints)
+            if not isinstance(mpoints, list):
+                raise Exception('Argument "mpoints" should be a list of strings, '
+                            'not %s' % type(mpoints))
+
+            ret = dict()
+            for disk in wmi.InstancesOf('Win32_LogicalDisk'):
+                letter = disk.DeviceId[0].lower()
+                if letter in mpoints:
+                    ret[letter] = dict(
+                        total=int(disk.Size),
+                        free=int(disk.FreeSpace)
+                    )
+            return ret
+
+    SystemAPI = WindowsSystemAPI
