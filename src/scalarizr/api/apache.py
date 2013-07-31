@@ -125,19 +125,20 @@ class ApacheAPI(object):
             cert.ensure()
 
         body = template.replace('/etc/aws/keys/ssl', __apache__['cert_path'])
-        vhost = ApacheVirtualHost(hostname, port, body, cert)
-        vhost.ensure()
+        vhost_path = self.get_vhost_path(hostname, cert)
+        with open(vhost_path, 'w') as fp:
+            fp.write(body)
+
+        self.ensure_document_root(vhost_path)
 
         if reload:
             self.reload_service()
-            assert vhost in self.list_served_hosts()
 
 
     @rpc.service_method
-    def delete_vhost(self, hostname_pattern, reload=True):
-        for vhost in self.list_served_hosts:
-            if vhost.is_like(hostname_pattern):
-                vhost.delete()
+    def delete_vhosts(self, vhosts, reload=True):
+        for vhost in vhosts:
+            pass
 
         if reload:
             self.reload_service()
@@ -307,6 +308,78 @@ class ApacheAPI(object):
         if not os.path.exists(path):
             with open(path, 'w') as fp:
                 fp.write(__apache__['logrotate_conf'])
+
+
+    def _get_log_directories(self, vhost_path):
+        result = []
+        with ApacheConfig(vhost_path) as c:
+            error_logs = c.get_list('.//ErrorLog')
+            custom_logs = c.get_list('.//CustomLog')
+        for val in error_logs + custom_logs:
+            path = os.path.dirname(val)
+            if path not in result:
+                result.append(path)
+        return result
+
+
+    def _get_document_root_paths(self, vhost_path):
+        result = []
+        with ApacheConfig(vhost_path) as c:
+            for item in c.items('VirtualHost'):
+                if item[0]=='DocumentRoot':
+                    doc_root = item[1][:-1] if item[1][-1]=='/' else item[1]
+                    result.append(doc_root)
+        return result
+
+
+    def ensure_document_root(self, vhost_path):
+        for log_dir in self._get_log_directories(vhost_path):
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+
+        for doc_root in self._get_document_root_paths(vhost_path):
+            if not os.path.exists(doc_root):
+
+                LOG.debug('Trying to create virtual host document root: %s'
+                        % doc_root)
+
+                if not os.path.exists(os.path.dirname(doc_root)):
+                    os.makedirs(os.path.dirname(doc_root), 0755)
+
+                shutil.copytree(os.path.join(bus.share_path,
+                        'apache/html'), doc_root)
+                LOG.debug('Copied documentroot files: %s'
+                         % ', '.join(os.listdir(doc_root)))
+
+                try:
+                    pwd.getpwnam('apache')
+                    uname = 'apache'
+                except:
+                    uname = 'www-data'
+
+                coreutils.chown_r(doc_root, uname)
+                LOG.debug('Changed owner to %s: %s'
+                         % (uname, ', '.join(os.listdir(doc_root))))
+
+
+    def get_vhost_path(self, hostname, ssl=True):
+        ext = __apache__['vhost_extension']
+        end = ext if not ssl else '-ssl' + ext
+        return os.path.join(__apache__['vhosts_dir'], hostname + end)
+
+    '''
+    def ensure(self):
+        with open(self.vhost_path, 'w') as fp:
+            fp.write(self.body)
+        self.ensure_document_root()
+        if self.cert:
+            self.mod_ssl.set_default_certificate(self.cert)
+        #TODO: check ssl.conf, debian.conf, etc. if needed
+
+
+    def delete(self):
+        os.remove(self.vhost_path)
+    '''
 
 
 class ApacheConfig(object):
@@ -541,106 +614,6 @@ class SSLCertificate(object):
     def ca_crt_path(self):
         id = '_' + str(self.id) if self.id else ''
         return os.path.join(__apache__['keys_dir'], 'https%s-ca.crt' % id)
-
-
-class ApacheVirtualHost(object):
-
-    hostname = None
-    body = None
-    port = None
-    cert = None
-
-    _instances = None
-
-
-    def __new__(cls, *args, **kwargs):
-        hostname = args[0] if args else kwargs['hostname']
-        port = args[1] if len(args) > 1 else kwargs['port']
-        if not cls._instances:
-            cls._instances = {}
-        if (hostname,port) not in cls._instances:
-            cls._instances[(hostname,port)] = super(ApacheVirtualHost, cls).__new__(cls,*args,**kwargs)
-        return cls._instances[(hostname,port)]
-
-
-    def __init__(self, hostname, port, body=None, cert=None):
-        self.mod_ssl = ModSSL()
-        self.hostname = hostname
-        self.body = body
-        self.port = port
-        self.cert = cert
-
-
-    @property
-    def vhost_path(self):
-        ext = __apache__['vhost_extension']
-        end = ext if not self.cert else '-ssl' + ext
-        return os.path.join(__apache__['vhosts_dir'], self.hostname + end)
-
-
-    def ensure(self):
-        with open(self.vhost_path, 'w') as fp:
-            fp.write(self.body)
-        self.ensure_document_root()
-        if self.cert:
-            self.mod_ssl.set_default_certificate(self.cert)
-        #TODO: check ssl.conf, debian.conf, etc. if needed
-
-
-    def delete(self):
-        os.remove(self.vhost_path)
-
-
-    def _get_log_directories(self):
-        result = []
-        with ApacheConfig(self.vhost_path) as c:
-            error_logs = c.get_list('.//ErrorLog')
-            custom_logs = c.get_list('.//CustomLog')
-        for val in error_logs + custom_logs:
-            path = os.path.dirname(val)
-            if path not in result:
-                result.append(path)
-        return result
-
-
-    def _get_document_root_paths(self):
-        result = []
-        with ApacheConfig(self.vhost_path) as c:
-            for item in c.items('VirtualHost'):
-                if item[0]=='DocumentRoot':
-                    doc_root = item[1][:-1] if item[1][-1]=='/' else item[1]
-                    result.append(doc_root)
-        return result
-
-
-    def ensure_document_root(self):
-        for log_dir in self._get_log_directories():
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
-
-        for doc_root in self._get_document_root_paths():
-            if not os.path.exists(doc_root):
-
-                LOG.debug('Trying to create virtual host document root: %s'
-                        % doc_root)
-
-                if not os.path.exists(os.path.dirname(doc_root)):
-                    os.makedirs(os.path.dirname(doc_root), 0755)
-
-                shutil.copytree(os.path.join(bus.share_path,
-                        'apache/html'), doc_root)
-                LOG.debug('Copied documentroot files: %s'
-                         % ', '.join(os.listdir(doc_root)))
-
-                try:
-                    pwd.getpwnam('apache')
-                    uname = 'apache'
-                except:
-                    uname = 'www-data'
-
-                coreutils.chown_r(doc_root, uname)
-                LOG.debug('Changed owner to %s: %s'
-                         % (uname, ', '.join(os.listdir(doc_root))))
 
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
