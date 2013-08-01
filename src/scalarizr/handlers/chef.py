@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 
+from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.util import system2
@@ -49,12 +50,13 @@ class ChefHandler(Handler):
         )
 
     def on_reload(self):
+        _is_win = linux.os.windows_family
         self._chef_client_bin = None
         self._chef_data = None
-        self._client_conf_path = '/etc/chef/client.rb'
-        self._validator_key_path = '/etc/chef/validation.pem'
-        self._client_key_path = '/etc/chef/client.pem'
-        self._json_attributes_path = '/etc/chef/first-run.json'
+        self._client_conf_path = _is_win and r'C:\chef\client.rb' or '/etc/chef/client.rb'
+        self._validator_key_path = _is_win and r'C:\chef\validation.pem' or '/etc/chef/validation.pem'
+        self._client_key_path = _is_win and r'C:\chef\client.pem' or '/etc/chef/client.pem'
+        self._json_attributes_path = _is_win and r'C:\chef\first-run.json' or ' /etc/chef/first-run.json'
         self._with_json_attributes = False
         self._platform = bus.platform
         self._global_variables = {}
