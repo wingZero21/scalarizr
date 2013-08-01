@@ -234,6 +234,14 @@ rebundle = scalarizr.handlers.gce.rebundle
 EOF
 fi
 
+if [ ! -f "$pub_cnf_dir/haproxy.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/haproxy.ini"
+[haproxy]
+
+[handlers]
+haproxy = scalarizr.handlers.haproxy
+EOF
+fi
 
 if [ ! -f "$pub_cnf_dir/hooks.ini" ]; then
 	cat <<EOF > "$pub_cnf_dir/hooks.ini"
