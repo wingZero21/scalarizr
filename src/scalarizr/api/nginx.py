@@ -559,6 +559,14 @@ class NginxAPI(object):
 
         return locations_and_backends
 
+    def _is_redirector(self, conf, server_xpath):
+        try:
+            _ = conf.get('%s/rewrite' % server_xpath)
+        except metaconf.NoPathError:
+            return False
+        else:
+            return True
+
     def _make_redirector_conf(self, hostname, port, ssl_port):
         """
         Makes config (metaconf.Configuration object) for server section of
@@ -568,7 +576,7 @@ class NginxAPI(object):
         config.add('server', '')
 
         config.add('server/listen', str(port))
-        config.add('server/server_name', hostname + '_redirector')
+        config.add('server/server_name', hostname)
 
         redirect_regex = '^(.*)$ https://localhost:%s$1 permanent' % (ssl_port)
         config.add('server/rewrite', redirect_regex)
@@ -712,6 +720,8 @@ class NginxAPI(object):
         grouped_destinations = self._group_destinations(destinations)
         if not grouped_destinations:
             raise BaseException('No destinations given given')
+        if ssl_port == port:
+            raise BaseException("HTTP and HTTPS ports can't be the same")
 
         if reread_conf:
             self._load_app_servers_inc()
@@ -769,7 +779,7 @@ class NginxAPI(object):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
 
-            if name == server_name or name == server_name + '_redirector':
+            if name == server_name:
                 location_xpath = '%s/location' % server_xpath
                 location_qty = len(self.proxies_inc.get_list(location_xpath))
                 
@@ -1016,7 +1026,6 @@ class NginxAPI(object):
         if update_conf:
             self._load_app_servers_inc()
 
-        # TODO: ensure that this is fine behaviour
         if not server:
             return
         if not role_id:
@@ -1092,8 +1101,9 @@ class NginxAPI(object):
         for i, _ in enumerate(self.proxies_inc.get_list('server')):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
+            redirector = self._is_redirector(self.proxies_inc, server_xpath)
 
-            if hostname == server_name:
+            if hostname == server_name and not redirector:
                 try:
                     # trying get ssl param from config
                     # if it raises exception, then we need to set up ssl
@@ -1128,8 +1138,9 @@ class NginxAPI(object):
         for i, _ in enumerate(self.proxies_inc.get_list('server')):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
+            redirector = self._is_redirector(self.proxies_inc, server_xpath)
 
-            if hostname == server_name:
+            if hostname == server_name and not redirector:
                 try:
                     if self.proxies_inc.get('%s/ssl' % server_xpath) is 'on':
                         self.proxies_inc.set('%s/ssl' % server_xpath, 'off')
