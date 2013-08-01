@@ -52,7 +52,9 @@ def get_handlers():
 class RabbitMQHandler(ServiceCtlHandler):
 
     def __init__(self):
-        if not software.whereis('rabbitmqctl'):
+        try:
+            software.which('rabbitmqctl')
+        except LookupError:
             raise HandlerError("Rabbitmqctl binary was not found. Check your installation.")
 
         bus.on("init", self.on_init)
@@ -107,17 +109,14 @@ class RabbitMQHandler(ServiceCtlHandler):
         self.queryenv = bus.queryenv_service
         self.platform = bus.platform
 
-
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-        return BEHAVIOUR in behaviour and message.name in (
-                                                                                        Messages.HOST_INIT,
-                                                                                        Messages.HOST_DOWN,
-                                                                                        Messages.UPDATE_SERVICE_CONFIGURATION,
-                                                                                        Messages.BEFORE_HOST_TERMINATE,
-                                                                                        RabbitMQMessages.RABBITMQ_RECONFIGURE,
-                                                                                        RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL,
-                                                                                        RabbitMQMessages.INT_RABBITMQ_HOST_INIT)
-
+        return BEHAVIOUR in behaviour and message.name in (Messages.HOST_INIT,
+                                                           Messages.HOST_DOWN,
+                                                           Messages.UPDATE_SERVICE_CONFIGURATION,
+                                                           Messages.BEFORE_HOST_TERMINATE,
+                                                           RabbitMQMessages.RABBITMQ_RECONFIGURE,
+                                                           RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL,
+                                                           RabbitMQMessages.INT_RABBITMQ_HOST_INIT)
 
     def get_initialization_phases(self, hir_message):
         self._phase_rabbitmq = 'Configure RabbitMQ'
@@ -127,16 +126,13 @@ class RabbitMQHandler(ServiceCtlHandler):
         self._step_join_cluster = 'Join cluster'
         self._step_collect_hostup_data = 'Collect HostUp data'
 
-        return {'before_host_up': [{
-                        'name': self._phase_rabbitmq,
-                        'steps': [
-                                self._step_accept_scalr_conf,
-                                self._step_create_storage,
-                                self._step_patch_conf,
-                                self._step_join_cluster,
-                                self._step_collect_hostup_data
-                        ]
-                }]}
+        return {'before_host_up': 
+            [{'name': self._phase_rabbitmq,
+              'steps': [self._step_accept_scalr_conf,
+                        self._step_create_storage,
+                        self._step_patch_conf,
+                        self._step_join_cluster,
+                        self._step_collect_hostup_data]}]}
 
     def cleanup_hosts_file(self, rootdir):
         """ Clean /etc/hosts file """
@@ -148,9 +144,6 @@ class RabbitMQHandler(ServiceCtlHandler):
                     dns.ScalrHosts.delete(hostname=hostname)
             finally:
                 dns.ScalrHosts.HOSTS_FILE_PATH = '/etc/hosts'
-
-
-
 
     def on_before_hello(self, message):
         try:
@@ -346,8 +339,11 @@ class RabbitMQHandler(ServiceCtlHandler):
                                                 nodes_to_cluster_with, is_disk_node)
 
                     self.rabbitmq.delete_user('guest')
-                    password = __rabbitmq__['password']
-                    self.rabbitmq.check_scalr_user(password)
+                    scalr_user_password = __rabbitmq__['password']
+                    self.rabbitmq.check_scalr_user(scalr_user_password)
+
+                    master_user_password = __rabbitmq__['password']
+                    self.rabbitmq.check_master_user(master_user_password)
 
                     cluster_nodes = self.rabbitmq.cluster_nodes()
                     if not all([node in cluster_nodes for node in nodes_to_cluster_with]):
@@ -358,7 +354,7 @@ class RabbitMQHandler(ServiceCtlHandler):
                     msg_data = dict()
                     msg_data['volume_config'] = dict(__rabbitmq__['volume'])
                     msg_data['node_type'] = self.rabbitmq.node_type
-                    msg_data['password'] = password
+                    msg_data['password'] = scalr_user_password
                     self._logger.debug('Updating HostUp message with %s' % msg_data)
                     message.rabbitmq = msg_data
 

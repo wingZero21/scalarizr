@@ -86,6 +86,9 @@ class __os(dict):
                 self['lsb_%s' % key.lower()] = value  # override /etc/lsb-release
         except ImportError:
             pass
+        if 'lsb_codename' in self:
+            self['codename'] = self['lsb_codename']
+
         if osmod.path.isfile('/etc/arch-release'):
             self['name'] = 'Arch'
             self['family'] = 'Arch'
@@ -149,9 +152,16 @@ class __os(dict):
                 self['name'] = 'RedHat'
         elif osmod.path.isfile('/etc/system-release'):
             self['family'] = 'RedHat'
-            data = open('/etc/system-release', 'r').read()
+            data = open('/etc/system-release', 'r').read().strip()
             if 'amazon' in data.lower():
                 self['name'] = 'Amazon'
+                code = data[-7:]
+                bases = {
+                '2012.09': '6.3',
+                '2013.03': '6.4'
+                }
+                self['release'] = Version(bases.get(code, '6.3'))
+                self['codename'] = code
         elif osmod.path.isfile('/etc/SuSE-release'):
             self['family'] = 'Suse'
             data = open('/etc/SuSE-release', 'r').read()
@@ -166,8 +176,12 @@ class __os(dict):
         name, release, codename = platform.dist()
         if not 'name' in self:
             self['name'] = name
-        self['release'] = Version(release)
-        self['codename'] = codename
+        if not 'release' in self:
+            self['release'] = Version(release)
+        self['version'] = self['release']
+        if not 'codename' in self:
+            self['codename'] = codename
+
 
         if not 'name' in self:
             self['name'] = 'Unknown %s' % self['kernel']
@@ -179,7 +193,9 @@ class __os(dict):
         o, e, ret_code = system(['modprobe', '-l'], raise_exc=False, silent=True)
         self['mods_enabled'] = 0 if ret_code else 1
 
-        arch = osmod.uname()[-1]
+        uname = osmod.uname()
+        self['kernel_release'] = Version(uname[2])
+        arch = uname[-1]
         if re.search(r'i\d86', arch):
             arch = 'i386'
         self['arch'] = arch

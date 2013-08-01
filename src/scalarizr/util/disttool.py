@@ -8,6 +8,8 @@ import re
 import os
 import string
 
+from scalarizr import linux
+
 _uname = None
 _linux_dist = None
 _dist_base = None
@@ -49,7 +51,7 @@ if _is_linux:
         _linux_dist = platform.dist()
 
     dist_name = _linux_dist[0].lower()
-    _is_redhat_based = dist_name in _redhat_based_dists
+    _is_redhat_based = linux.os['family'] == 'RedHat' #fix for Amazon Linux
     _is_debian_based = dist_name in _debian_based_dists
     _is_debian = dist_name == "debian"
     _is_ubuntu = dist_name in ("ubuntu", "gcel")
@@ -74,7 +76,7 @@ def is_rhel(): return _is_rhel
 
 def uname(): return _uname
 def linux_dist(): return _linux_dist
-def version_info(): return tuple(map(int, linux_dist()[1].split('.')))
+def version_info(): return tuple(map(int, str(linux.os['release']).split('.'))) #LooseVersion->tuple
 
 redhat = is_redhat_based() and version_info() or (0, 0)
 ubuntu = is_ubuntu() and version_info() or (0, 0)

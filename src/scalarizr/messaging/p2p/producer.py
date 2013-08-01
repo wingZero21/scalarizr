@@ -97,8 +97,7 @@ class P2pMessageProducer(messaging.MessageProducer):
 
     def _send0(self, queue, message, success_callback=None, fail_callback=None):
         try:
-
-            use_json = bus.scalr_version >= (5, 0, 0)
+            use_json = __node__['message_format'] == 'json'
             data = message.tojson() if use_json else message.toxml()
 
             content_type = 'application/%s' % 'json' if use_json else 'xml'

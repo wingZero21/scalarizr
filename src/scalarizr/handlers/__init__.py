@@ -7,7 +7,6 @@ from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
 from scalarizr.linux import iptables
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
-from scalarizr.node import __node__
 
 import os
 import logging
@@ -232,7 +231,7 @@ class Handler(object):
         if hasattr(self, fn) and callable(getattr(self, fn)):
             getattr(self, fn)(message)
         else:
-            raise HandlerError("Handler has no method %s" % (fn))
+            raise HandlerError("Handler %s has no method %s", self.__class__.__name__, fn)
 
 
     def get_ready_behaviours(self):
@@ -255,13 +254,13 @@ class Handler(object):
                 elif name == 'memcached':
                     handlers.append(config.BuiltinBehaviours.MEMCACHED)
 
-                elif name == 'postgresql' and Version('9.0') <= version < Version('9.2'):
+                elif name == 'postgresql' and Version('9.0') <= version < Version('9.3'):
                     handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-                elif name == 'redis' and Version('2.2') <= version < Version('2.6'):
+                elif name == 'redis' and Version('2.2') <= version < Version('2.7'):
                     handlers.append(config.BuiltinBehaviours.REDIS)
-                elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.0'):
+                elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.2'):
                     handlers.append(config.BuiltinBehaviours.RABBITMQ)
-                elif name == 'mongodb' and Version('2.0') <= version < Version('2.3'):
+                elif name == 'mongodb' and Version('2.0') <= version < Version('2.5'):
                     handlers.append(config.BuiltinBehaviours.MONGODB)
                 elif name == 'apache' and Version('2.0') <= version < Version('2.3'):
                     handlers.append(config.BuiltinBehaviours.APP)
@@ -269,8 +268,13 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.MYSQL)
                     if 'Percona' in str_ver:
                         handlers.append(config.BuiltinBehaviours.PERCONA)
+                    elif 'Maria' in str_ver:
+                        handlers.append(config.BuiltinBehaviours.MARIADB)
                     else:
                         handlers.append(config.BuiltinBehaviours.MYSQL2)
+                elif name == 'tomcat':
+                    handlers.append(config.BuiltinBehaviours.TOMCAT)
+
         return handlers
 
 
@@ -301,19 +305,35 @@ class MessageListener:
 
     def get_handlers_chain (self):
         if self._handlers_chain is None:
-            self._handlers_chain = []
+            hds = []
             LOG.debug("Collecting message handlers...");
 
             cnf = bus.cnf
             for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
                 __import__(module_str)
                 try:
-                    self._handlers_chain.extend(sys.modules[module_str].get_handlers())
+                    hds.extend(sys.modules[module_str].get_handlers())
                 except:
                     LOG.error("Can't get module handlers (module: %s)", module_str)
                     raise
 
+            def cls_weight(obj):
+                cls = obj.__class__.__name__
+                if cls in ('EbsHandler', 'BlockDeviceHandler'):
+                    return 10
+                elif cls == 'DeploymentHandler':
+                    return 1
+                else:
+                    return 0
+
+            def sort_fn(a, b):
+                return cmp(cls_weight(a), cls_weight(b))
+
+            self._handlers_chain = list(reversed(sorted(hds, sort_fn)))
+            bus._listeners['init'] = list(reversed(sorted(bus._listeners['init'], sort_fn)))
+            bus._listeners['start'] = list(reversed(sorted(bus._listeners['start'], sort_fn)))
             LOG.debug("Message handlers chain:\n%s", pprint.pformat(self._handlers_chain))
+
 
         return self._handlers_chain
 
@@ -733,9 +753,10 @@ class DbMsrMessages:
 
 
 class FarmSecurityMixin(object):
-    def __init__(self, ports):
+    def __init__(self, ports, enabled=True):
         self._logger = logging.getLogger(__name__)
         self._ports = ports
+        self._enabled = enabled
         self._iptables = iptables
         if self._iptables.enabled():
             bus.on('init', self.__on_init)
@@ -747,14 +768,29 @@ class FarmSecurityMixin(object):
                 reload=self.__on_reload
         )
         self.__on_reload()
-        self.__insert_iptables_rules()
+        if self._enabled:
+        	self.__insert_iptables_rules()
 
     def __on_reload(self):
         self._queryenv = bus.queryenv_service
         self._platform = bus.platform
 
+    def security_off(self):
+        self._enabled = False
+        for port in self._ports:
+            try:
+                self._iptables.FIREWALL.remove({
+                    "protocol": "tcp", 
+                    "match": "tcp", 
+                    "dport": port,
+                    "jump": "DROP"
+                })
+            except:
+                self._logger.debug('caught from iptables', exc_info=sys.exc_info())
 
     def on_HostInit(self, message):
+    	if not self._enabled:
+    		return
         # Append new server to allowed list
         if not self._iptables.enabled():
             return
@@ -767,6 +803,8 @@ class FarmSecurityMixin(object):
 
 
     def on_HostDown(self, message):
+    	if not self._enabled:
+    		return
         # Remove terminated server from allowed list
         if not self._iptables.enabled():
             return

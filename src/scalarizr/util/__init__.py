@@ -1,8 +1,10 @@
 from __future__ import with_statement
-from __future__ import with_statement
+
 import socket
-import os, re
+import os
+import re
 import logging
+import locale
 import threading
 import weakref
 import time
@@ -11,11 +13,11 @@ import signal
 import string
 import pkgutil
 import traceback
-import contextlib
+
 
 from scalarizr.bus import bus
 from scalarizr import exceptions
-import subprocess
+
 
 class UtilError(BaseException):
     pass
@@ -24,9 +26,9 @@ class UtilError(BaseException):
 class LocalObject:
     def __init__(self, creator, pool_size=50):
         self._logger = logging.getLogger(__name__)
-        self._creator = creator
+        self._creator = creator         
         self._object = threading.local()
-
+        
         self._all_conns = []
         self.size = pool_size
 
@@ -42,7 +44,7 @@ class LocalObject:
                 self._logger.debug("Current weakref is empty")
         except AttributeError, e:
             self._logger.debug("Caught: %s", e)
-
+    
         self._logger.debug("Creating new object...")
         o = self.do_create()
         self._logger.debug("Created %s", o)
@@ -69,7 +71,7 @@ class _SqliteConnection(object):
     _conn = None
     #_lo = None
     _creator = None
-
+    
     def __init__(self, lo, creator):
         #self._lo = lo
         self._creator = creator
@@ -80,7 +82,7 @@ class _SqliteConnection(object):
         return self._conn
 
 class dicts:
-
+        
     @staticmethod
     def merge(a, b):
         res = {}
@@ -88,7 +90,7 @@ class dicts:
             if not key in b:
                 res[key] = a[key]
                 continue
-
+        
             if type(a[key]) != type(b[key]):
                 res[key] = b[key]
             elif dict == type(a[key]):
@@ -98,7 +100,7 @@ class dicts:
             else:
                 res[key] = b[key]
             del(b[key])
-
+    
         res.update(b)
         return res
 
@@ -110,7 +112,7 @@ class dicts:
         for key, value in a.items():
             ret[key.encode(encoding)] = dicts.encode(value, encoding) \
                             if isinstance(value, dict) else value.encode(encoding) \
-                            if isinstance(value, basestring) else value
+                            if isinstance(value, basestring) else value 
         return ret
 
     @staticmethod
@@ -132,30 +134,30 @@ def cached(f, cache={}):
         if key not in cache:
             cache[key] = f(*args, **kwargs)
         return cache[key]
-    return g
+    return g        
 
 def firstmatched(function, sequence, default=None):
     for s in sequence:
         if function(s):
             return s
     else:
-        return default
+        return default  
 
 def daemonize():
     # First fork
     pid = os.fork()
     if pid > 0:
-        sys.exit(0)
+        sys.exit(0)     
 
     os.chdir("/")
     os.setsid()
     os.umask(0)
-
+    
     # Second fork
     pid = os.fork()
     if pid > 0:
         sys.exit(0)
-
+        
     # Redirect standard file descriptors
     sys.stdout.flush()
     sys.stderr.flush()
@@ -165,13 +167,13 @@ def daemonize():
     os.dup2(si.fileno(), sys.stdin.fileno())
     os.dup2(so.fileno(), sys.stdout.fileno())
     os.dup2(se.fileno(), sys.stderr.fileno())
-
-
+    
+    
 def system(args, shell=True):
     import subprocess
     logger = logging.getLogger(__name__)
     logger.debug("system: %s", hasattr(args, '__iter__') and ' '.join(args) or args)
-    p = subprocess.Popen(args, shell=shell, env={'LANG' : 'en_US'},
+    p = subprocess.Popen(args, shell=shell, env={'LANG' : 'en_US'}, 
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = p.communicate()
     if out:
@@ -181,7 +183,7 @@ def system(args, shell=True):
     return out, err, p.returncode
 
 class PopenError(BaseException):
-
+        
     def __str__(self):
         if len(self.args) >= 5:
             args = [self.error_text + '. ' if self.error_text else '']
@@ -215,48 +217,50 @@ class PopenError(BaseException):
 
 def system2(*popenargs, **kwargs):
     import subprocess, cStringIO
-
-    silent          = kwargs.get('silent', False)
-    logger          = kwargs.get('logger', logging.getLogger(__name__))
-    warn_stderr = kwargs.get('warn_stderr')
-    raise_exc   = kwargs.get('raise_exc', kwargs.get('raise_error',  True))
-    ExcClass        = kwargs.get('exc_class', PopenError)
-    error_text      = kwargs.get('error_text')
-    input           = None
-
+    
+    silent = kwargs.pop('silent', False)
+    logger = kwargs.pop('logger', logging.getLogger(__name__))
+    log_level = kwargs.pop('log_level', logging.DEBUG)
+    warn_stderr = kwargs.pop('warn_stderr', False)
+    raise_exc = kwargs.pop('raise_exc', kwargs.pop('raise_error',  True))
+    ExcClass = kwargs.pop('exc_class', PopenError)
+    error_text = kwargs.pop('error_text', '')
+    input = None
+    
     if kwargs.get('err2out'):
         # Redirect stderr -> stdout
         kwargs['stderr'] = subprocess.STDOUT
-
+        
     if not 'stdout' in kwargs:
         # Capture stdout
         kwargs['stdout'] = subprocess.PIPE
-
+        
     if not 'stderr' in kwargs:
         # Capture stderr
         kwargs['stderr'] = subprocess.PIPE
-
+        
     if isinstance(kwargs.get('stdin'),  basestring):
         # Pass string into stdin
         input = kwargs['stdin']
         kwargs['stdin'] = subprocess.PIPE
-
+        
     if len(popenargs) > 0 and hasattr(popenargs[0], '__iter__'):
         # Cast arguments to str
         popenargs = list(popenargs)
         popenargs[0] = tuple('%s' % arg for arg in popenargs[0])
+        
 
-    # Set en_US locale
     if not 'env' in kwargs:
         kwargs['env'] = os.environ
-    kwargs['env']['LANG'] = 'en_US'
-
-    for k in ('logger', 'err2out', 'warn_stderr', 'raise_exc', 'raise_error', 'exc_class', 'error_text', 'silent'):
-        try:
-            del kwargs[k]
-        except KeyError:
-            pass
-
+        
+    # Set en_US locale or C
+    if not kwargs['env'].get('LANG'):
+        default_locale = locale.getdefaultlocale()
+        if default_locale == ('en_US', 'UTF-8'):
+            kwargs['env']['LANG'] = 'en_US.UTF-8'
+        else:
+            kwargs['env']['LANG'] = 'C'
+    
     logger.debug('system: %s' % (popenargs[0],))
     p = subprocess.Popen(*popenargs, **kwargs)
     out, err = p.communicate(input=input)
@@ -268,9 +272,9 @@ def system2(*popenargs, **kwargs):
         return out, err, p.returncode
 
     if out:
-        logger.debug('stdout: ' + out)
+        logging.log(log_level, 'stdout: ' + out)
     if err:
-        logger.log(logging.WARN if warn_stderr else logging.DEBUG, 'stderr: ' + err)
+        logger.log(logging.WARN if warn_stderr else log_level, 'stderr: ' + err)
 
     return out, err, p.returncode
 
@@ -307,18 +311,18 @@ def xml_strip(el):
             el.removeChild(child)
         else:
             xml_strip(child)
-    return el
+    return el       
 
 
 def url_replace_hostname(url, newhostname):
-    import urlparse
+    import urlparse 
     r = url if isinstance(url, tuple) else urlparse.urlparse(url)
     r2 = list(r)
     r2[1] = newhostname
     if r.port:
         r2[1] += ":" + str(r.port)
     return urlparse.urlunparse(r2)
-
+    
 
 
 def read_shebang(path=None, script=None):
@@ -352,17 +356,17 @@ def parse_size(size):
     Read string like 10K, 12M, 1014B and return size in bytes
     """
     ret = str(size)
-    dim = ret[-1]
+    dim = ret[-1]           
     ret = float(ret[0:-1])
     if dim.lower() == "b":
-        pass
+        pass            
     elif dim.lower() == "k":
         ret *= 1024
     elif dim.lower() == "m":
-        ret *= 1048576
+        ret *= 1048576  
 
     return ret
-
+    
 def format_size(size, precision=2):
     """
     Format size in Bytes, KBytes and MBytes
@@ -375,17 +379,17 @@ def format_size(size, precision=2):
     if ret > 1000:
         ret = ret/1000
         dim = "M"
-
+        
     s = "%."+str(precision)+"f%s"
-    return s % (ret, dim)
+    return s % (ret, dim)   
 
 def backup_file(filename):
     import shutil
     logger = logging.getLogger(__name__)
     max_backups = 50
-
+    
     for i in range(0, max_backups):
-        bkname = '%s.bak.%s' % (filename, i)
+        bkname = '%s.bak.%s' % (filename, i)            
         if not os.path.exists(bkname):
             logger.debug('Backuping %s to %s', filename, bkname)
             shutil.copy(filename, bkname)
@@ -398,8 +402,8 @@ def timethis(what):
         import time
     except ImportError:
         import timemodule as time
-    from contextlib import contextmanager
-
+    from contextlib import contextmanager   
+    
     @contextmanager
     def benchmark():
         start = time.time()
@@ -416,8 +420,8 @@ def timethis(what):
 
 
 def split_ex(value, separator=",", allow_empty=False, ct=list):
-    return ct(v.strip()
-                    for v in value.split(separator)
+    return ct(v.strip() 
+                    for v in value.split(separator) 
                     if allow_empty or (not allow_empty and v)) if value else ct()
 
 
@@ -434,13 +438,13 @@ def get_free_devname():
                 pass
     except:
         pass
-
+        
     dev_list = os.listdir('/dev')
     for letter in avail_letters:
         device = 'sd'+letter
         if not device in dev_list:
             return '/dev/'+device
-
+    
 def kill_childs(pid):
     ppid_re = re.compile('^PPid:\s*(?P<pid>\d+)\s*$', re.M)
     for process in os.listdir('/proc'):
@@ -452,7 +456,7 @@ def kill_childs(pid):
             fp.close()
         except:
             pass
-
+    
         Ppid_result = re.search(ppid_re, process_info)
         if not Ppid_result:
             continue
@@ -474,7 +478,7 @@ def ping_socket(host, port, exc_str=None):
 def port_in_use(port):
     s = socket.socket()
     try:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)         
         s.bind(('0.0.0.0', port))
         return False
     except socket.error:
@@ -482,14 +486,14 @@ def port_in_use(port):
     finally:
         s.close()
 
-
+        
 class PeriodicalExecutor:
     _logger = None
     _tasks = None
     _lock = None
     _ex_thread = None
     _shutdown = None
-
+    
     def __init__(self):
         self._logger = logging.getLogger(__name__ + '.PeriodicalExecutor')
         self._tasks = dict()
@@ -498,9 +502,9 @@ class PeriodicalExecutor:
         self._lock = threading.Lock()
 
     def start(self):
-        self._shutdown = False
+        self._shutdown = False          
         self._ex_thread.start()
-
+        
     def shutdown(self):
         self._shutdown = True
         self._ex_thread.join(1)
@@ -509,7 +513,7 @@ class PeriodicalExecutor:
         self._lock.acquire()
         try:
             if fn in self._tasks:
-                raise BaseException('Task %s already registered in executor with an interval %s minutes',
+                raise BaseException('Task %s already registered in executor with an interval %s minutes', 
                         fn, self._tasks[fn])
             if interval <= 0:
                 raise ValueError('interval should be > 0')
@@ -524,16 +528,16 @@ class PeriodicalExecutor:
                 del self._tasks[fn]
         finally:
             self._lock.release()
-
+    
     def _tasks_to_execute(self):
-        self._lock.acquire()
+        self._lock.acquire()            
         try:
-            now = time.time()
+            now = time.time()                       
             return list(task for task in self._tasks.values()
                             if now - task['last_exec_time'] > task['interval'])
         finally:
             self._lock.release()
-
+    
     def _executor(self):
         while not self._shutdown:
             for task in self._tasks_to_execute():
@@ -547,17 +551,18 @@ class PeriodicalExecutor:
                     break
             if not self._shutdown:
                 time.sleep(1)
-
-
-
+        
+                
+                
 def run_detached(binary, args=[], env=None):
     if not os.path.exists(binary):
         from . import software
         binary_base = os.path.basename(binary)
-        res = software.whereis(binary_base)
-        if not res:
+        try:
+            binary = software.which(binary_base)
+        except LookupError:
             raise Exception('Cannot find %s executable' % binary_base)
-        binary = res[0]
+
 
     pid = os.fork()
     if pid == 0:
@@ -568,12 +573,12 @@ def run_detached(binary, args=[], env=None):
 
         os.chdir('/')
         os.umask(0)
-
+        
         import resource         # Resource usage information.
         maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
         if (maxfd == resource.RLIM_INFINITY):
             maxfd = 1024
-
+            
         for fd in range(0, maxfd):
             try:
                 os.close(fd)
@@ -583,8 +588,8 @@ def run_detached(binary, args=[], env=None):
         os.open('/dev/null', os.O_RDWR)
 
         os.dup2(0, 1)
-        os.dup2(0, 2)
-
+        os.dup2(0, 2)   
+        
         try:
             if env:
                 args.append(env)
@@ -593,8 +598,8 @@ def run_detached(binary, args=[], env=None):
                 os.execl(binary, binary, *args)
         except Exception:
             os._exit(255)
-
-
+            
+            
 def which(arg):
     return system2(['/bin/which', arg], raise_exc=False)[0].strip()
 
@@ -615,7 +620,7 @@ def import_class(import_str):
         except (ValueError, AttributeError):
             pass
     raise exceptions.NotFound('Class %s cannot be found' % import_str)
-
+    
 
 def import_object(import_str, *args, **kwds):
     """Returns an object including a module or module and class"""
@@ -631,15 +636,15 @@ def import_object(import_str, *args, **kwds):
 def linux_package(name):
     # @todo install package with apt or yum. raise beautiful errors
     raise NotImplementedError()
+                            
 
-
-class Hosts:
+class Hosts:    
     @classmethod
     def set(cls, addr, hostname):
         hosts = cls.hosts()
         hosts[hostname] = addr
         cls._write(hosts)
-
+        
     @classmethod
     def delete(cls, addr=None, hostname=None):
         hosts = cls.hosts()
@@ -649,9 +654,9 @@ class Hosts:
         if addr:
             hostnames = hosts.keys()
             for host in hostnames:
-                if addr == hosts[host]:
+                if addr == hosts[host]: 
                     del hosts[host]
-        cls._write(hosts)
+        cls._write(hosts)               
 
     @classmethod
     def hosts(cls):

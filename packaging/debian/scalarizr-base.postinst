@@ -338,6 +338,17 @@ EOF
 fi
 
 
+if [ ! -f "$pub_cnf_dir/router.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/router.ini"
+[router]
+
+[handlers]
+
+router = scalarizr.handlers.router
+EOF
+fi
+
+
 if [ ! -f "$pub_cnf_dir/nimbula.ini" ]; then
         cat <<EOF > "$pub_cnf_dir/nimbula.ini"
 [nimbula]
@@ -414,6 +425,16 @@ logs_truncate_over=20K
 EOF
 fi
 
+if [ ! -f "$pub_cnf_dir/tomcat.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/tomcat.ini"
+[tomcat]
+
+[handlers]
+
+tomcat = scalarizr.handlers.tomcat
+EOF
+fi
+
 if [ ! -f "$pub_cnf_dir/www.ini" ]; then
 	cat <<EOF > "$pub_cnf_dir/www.ini"
 [www]
@@ -452,6 +473,7 @@ if [ -f cloudfoundry.ini ]; then
 	done
 fi
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
+[ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini 
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini 
 popd
@@ -764,8 +786,14 @@ NAME="scalarizr"
 INIT_SCRIPT="/etc/init.d/$NAME"
 
 if [ -x $INIT_SCRIPT ]; then
-	update-rc.d $NAME defaults 99 >/dev/null
-	update-rc.d scalarizr_update defaults 98 >/dev/null
+	if which insserv > /dev/null && test -e /etc/issue.net && ! grep -q 'Ubuntu' /etc/issue.net; then
+		insserv scalarizr_update
+		insserv $NAME
+	else
+		update-rc.d scalarizr_update defaults 98 >/dev/null
+		update-rc.d $NAME defaults 99 >/dev/null
+	fi
+
 
 	snmp_pid=$(netstat -anp | grep ^udp | grep 0\.0\.0\.0:8014 | awk '{ print $6 }' | cut -d/ -f1)
 

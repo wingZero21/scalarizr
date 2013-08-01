@@ -41,82 +41,82 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     _producer = None
     _platform = None
     _cnf = None
-
+    
     _new_crypto_key = None
-
+    
     FLAG_REBOOT = "reboot"
     FLAG_HALT = "halt"
 
     def __init__(self):
         self._logger = logging.getLogger(__name__)
-
+        
         bus.define_events(
-                # Fires before HostInit message is sent
-                # @param msg
-                "before_host_init",
-
-                # Fires after HostInit message is sent
-                "host_init",
-
-                # Fires when HostInitResponse received
-                # @param msg
-                "host_init_response",
-
-                # Fires before HostUp message is sent
-                # @param msg
-                "before_host_up",
-
-                # Fires after HostUp message is sent
-                "host_up",
-
-                # Fires before RebootStart message is sent
-                # @param msg
-                "before_reboot_start",
-
-                # Fires after RebootStart message is sent
-                "reboot_start",
-
-                # Fires before RebootFinish message is sent
-                # @param msg
-                "before_reboot_finish",
-
-                # Fires after RebootFinish message is sent
-                "reboot_finish",
-
-                # Fires before Restart message is sent
-                # @param msg: Restart message
-                "before_restart",
-
-                # Fires after Restart message is sent
-                "restart",
-
-                # Fires before Hello message is sent
-                # @param msg
-                "before_hello",
-
-                # Fires after Hello message is sent
-                "hello",
-
-                # Fires after HostDown message is sent
-                # @param msg
-                "before_host_down",
-
-                # Fires after HostDown message is sent
-                "host_down",
-
-                #
-                # Service events
-                #
-
-                # Fires when behaviour is configured
-                # @param service_name: Service name. Ex: mysql
-                "service_configured"
+            # Fires before HostInit message is sent
+            # @param msg 
+            "before_host_init",
+            
+            # Fires after HostInit message is sent
+            "host_init",
+            
+            # Fires when HostInitResponse received
+            # @param msg
+            "host_init_response",
+            
+            # Fires before HostUp message is sent
+            # @param msg
+            "before_host_up",
+            
+            # Fires after HostUp message is sent
+            "host_up",
+            
+            # Fires before RebootStart message is sent
+            # @param msg
+            "before_reboot_start",
+            
+            # Fires after RebootStart message is sent
+            "reboot_start",
+            
+            # Fires before RebootFinish message is sent
+            # @param msg
+            "before_reboot_finish",
+            
+            # Fires after RebootFinish message is sent
+            "reboot_finish",
+            
+            # Fires before Restart message is sent
+            # @param msg: Restart message
+            "before_restart",
+            
+            # Fires after Restart message is sent
+            "restart",
+            
+            # Fires before Hello message is sent
+            # @param msg
+            "before_hello",
+            
+            # Fires after Hello message is sent
+            "hello",
+            
+            # Fires after HostDown message is sent
+            # @param msg
+            "before_host_down",
+            
+            # Fires after HostDown message is sent
+            "host_down",
+            
+            # 
+            # Service events
+            #
+            
+            # Fires when behaviour is configured
+            # @param service_name: Service name. Ex: mysql
+            "service_configured"
         )
         bus.on(
-                init=self.on_init,
-                start=self.on_start,
-                reload=self.on_reload,
-                shutdown=self.on_shutdown
+            init=self.on_init, 
+            start=self.on_start, 
+            reload=self.on_reload, 
+            shutdown=self.on_shutdown
         )
         self.on_reload()
 
@@ -124,9 +124,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         return message.name == Messages.INT_SERVER_REBOOT \
-                or message.name == Messages.INT_SERVER_HALT     \
-                or message.name == Messages.HOST_INIT_RESPONSE \
-                or message.name == Messages.SCALARIZR_UPDATE_AVAILABLE
+            or message.name == Messages.INT_SERVER_HALT \
+            or message.name == Messages.HOST_INIT_RESPONSE \
+            or message.name == Messages.SCALARIZR_UPDATE_AVAILABLE
 
 
     def on_init(self):
@@ -136,9 +136,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         # Add internal messages to scripting skip list
         try:
             map(scalarizr.handlers.script_executor.skip_events.add, (
-                    Messages.INT_SERVER_REBOOT,
-                    Messages.INT_SERVER_HALT,
-                    Messages.HOST_INIT_RESPONSE
+                Messages.INT_SERVER_REBOOT, 
+                Messages.INT_SERVER_HALT, 
+                Messages.HOST_INIT_RESPONSE
             ))
         except AttributeError:
             pass
@@ -149,6 +149,17 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         # Add firewall rules
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
         self._insert_iptables_rules()
+        if __node__['state'] !=  ScalarizrState.IMPORTING:
+            self._fetch_globals()
+
+    def _fetch_globals(self):
+        queryenv = bus.queryenv_service
+        glob_vars = queryenv.list_global_variables()
+        os.environ.update(glob_vars)
+
+        with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
+            for kv in glob_vars.items():
+                fp.write('export %s="%s"\n' % kv)
 
 
     def on_start(self):
@@ -156,12 +167,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             iptables.save()
 
         optparser = bus.optparser
-
+        
         if self._flag_exists(self.FLAG_REBOOT) or self._flag_exists(self.FLAG_HALT):
             self._logger.info("Scalarizr resumed after reboot")
             self._clear_flag(self.FLAG_REBOOT)
-            self._clear_flag(self.FLAG_HALT)
-            self._check_control_ports()
+            self._clear_flag(self.FLAG_HALT)    
+            self._check_control_ports() 
             self._start_after_reboot()
 
         elif optparser.values.import_server:
@@ -184,7 +195,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         msg = self.new_message(Messages.REBOOT_FINISH, broadcast=True)
         bus.fire("before_reboot_finish", msg)
         self.send_message(msg)
-        bus.fire("reboot_finish")
+        bus.fire("reboot_finish")       
 
 
     def _start_after_stop(self):
@@ -197,12 +208,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _start_init(self):
         # Regenerage key
         new_crypto_key = cryptotool.keygen()
-
+        
         # Prepare HostInit
         msg = self.new_message(Messages.HOST_INIT, dict(
-                crypto_key = new_crypto_key,
-                snmp_port = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
-                snmp_community_name = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
+            crypto_key = new_crypto_key,
+            snmp_port = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
+            snmp_community_name = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
         ), broadcast=True)
         bus.fire("before_host_init", msg)
 
@@ -219,9 +230,16 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         # Send Hello
         msg = self.new_message(Messages.HELLO, data,
-                broadcast=True # It's not really broadcast but need to contain broadcast message data
+            broadcast=True # It's not really broadcast but need to contain broadcast message data 
         )
-        msg.body['behaviour'] = self.get_ready_behaviours()
+        behs = self.get_ready_behaviours()
+        if 'mysql2' in behs:
+            # only mysql2 should be returned to Scalr
+            try:
+                behs.remove('mysql')
+            except IndexError:
+                pass
+        msg.body['behaviour'] = behs
         bus.fire("before_hello", msg)
         self.send_message(msg)
         bus.fire("hello")
@@ -232,7 +250,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         self._producer = self._msg_service.get_producer()
         self._cnf = bus.cnf
         self._platform = bus.platform
-
+        
         if self._cnf.state == ScalarizrState.RUNNING and self._cnf.key_exists(self._cnf.FARM_KEY):
             self._start_int_messaging()
 
@@ -242,11 +260,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if iptables.enabled():
             # Scalarizr ports
             iptables.FIREWALL.ensure([
-                    {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8008"},
-                    {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8010"},
-                    {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8012"},
-                    {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8013"},
-                    {"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8008"},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8010"},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8012"},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": "8013"},
+                {"jump": "ACCEPT", "protocol": "udp", "match": "udp", "dport": "8014"},
             ])
 
 
@@ -255,7 +273,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         # Shutdown internal messaging
         int_msg_service = bus.int_messaging_service
         if int_msg_service:
-            self._logger.debug('Shutdowning internal messaging')
+            self._logger.debug('Shutdowning internal messaging')            
             int_msg_service.get_consumer().shutdown()
         bus.int_messaging_service = None
 
@@ -265,12 +283,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if farm_crypto_key:
             self._cnf.write_key(self._cnf.FARM_KEY, farm_crypto_key)
             if not port_in_use(8012):
-                ''' This cond was added to avoid 'Address already in use'
+                ''' This cond was added to avoid 'Address already in use' 
                 when scalarizr reinitialized with `szradm --reinit` '''
                 self._start_int_messaging()
         else:
-            self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. "
-                            + "Cross-scalarizr messaging not initialized")
+            self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
+                    + "Cross-scalarizr messaging not initialized")
+
+        self._fetch_globals()
 
 
     def _start_int_messaging(self):
@@ -281,30 +301,27 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             t.start()
 
     def _check_control_ports(self):
-        sn = bus.api_server.socket.getsockname()
-        if sn[1] != 8010 or STATE['global.api_port']:
-            # API on non-default port
-            self.send_message(Messages.UPDATE_CONTROL_PORTS, {
-                    'api': sn[1],
-                    'messaging': 8013,
-                    'snmp': 8014
-            })
-            if sn[1] == 8010:
-                STATE['global.api_port'] = ''
+		if STATE['global.api_port'] != 8010 or STATE['global.msg_port'] != 8013:
+			# API or Messaging on non-default port
+			self.send_message(Messages.UPDATE_CONTROL_PORTS, {
+				'api': STATE['global.api_port'],
+				'messaging': STATE['global.msg_port'],
+				'snmp': 8014
+			})
 
 
     def on_IntServerReboot(self, message):
         # Scalarizr must detect that it was resumed after reboot
         self._set_flag(self.FLAG_REBOOT)
-        # Send message
+        # Send message 
         msg = self.new_message(Messages.REBOOT_START, broadcast=True)
         try:
             bus.fire("before_reboot_start", msg)
         finally:
             self.send_message(msg)
         bus.fire("reboot_start")
-
-
+        
+    
     def on_IntServerHalt(self, message):
         self._set_flag(self.FLAG_HALT)
         msg = self.new_message(Messages.HOST_DOWN, broadcast=True)
@@ -327,22 +344,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             self._define_initialization(message)
             bus.fire("host_init_response", message)
             hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)
-            ###
-            if 'volumes' in message.body:
-                self._logger.debug('HIR volumes:\n%s' % message.volumes)
-                volumes = message.volumes or []
-                hostup_msg.body['volumes'] = []
-                for vol_info in volumes:
-                    vol = storage2_volume(**vol_info)
-                    vol.ensure()
-                    if not vol.is_fs_created():
-                        vol.mkfs()
-                    if vol.mpoint:
-                        vol.mount()
-                    vol_config = vol.config()
-                    hostup_msg.body['volumes'].append(vol_config)
-                self._logger.debug('HU volumes:\n%s' % hostup_msg.body['volumes'])
-            ###
             bus.fire("before_host_up", hostup_msg)
             if bus.scalr_version >= (2, 2, 3):
                 self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_subhandler=True)
@@ -377,9 +378,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
         message.meta[MetaOptions.TIMESTAMP] = time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
 
-
+        
     def _define_initialization(self, hir_message):
-        # XXX: from the asshole
+        # XXX: from the hole
         handlers = bus.messaging_service.get_consumer().listeners[0].get_handlers_chain()
         phases = {'host_init_response': [], 'before_host_up': []}
         for handler in handlers:
@@ -388,14 +389,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                 phases[key] += h_phases.get(key, [])
 
         phases = phases['host_init_response'] + phases['before_host_up']
-
+        
         op = bus.initialization_op
         op.phases = phases
         op.define()
-
+        
         STATE['lifecycle.initialization_id'] = op.id
 
-
+        
     def _get_flag_filename(self, name):
         return self._cnf.private_path('.%s' % name)
 
@@ -405,38 +406,38 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         try:
             self._logger.debug("Touch file '%s'", file)
             open(file, "w+").close()
-
+            
         except IOError, e:
             self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))
 
 
     def _flag_exists(self, name):
         return os.path.exists(self._get_flag_filename(name))
-
+    
     def _clear_flag(self, name):
         if self._flag_exists(name):
             os.remove(self._get_flag_filename(name))
-
+    
 
 class IntMessagingService(object):
 
     _msg_service = None
-
+    
     def __init__(self):
         cnf = bus.cnf
         f = MessageServiceFactory()
         self._msg_service = f.new_service("p2p", **{
-                P2pConfigOptions.SERVER_ID : cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID),
-                P2pConfigOptions.CRYPTO_KEY_PATH : cnf.key_path(cnf.FARM_KEY),
-                P2pConfigOptions.CONSUMER_URL : 'http://0.0.0.0:8012',
-                P2pConfigOptions.MSG_HANDLER_ENABLED : False
+            P2pConfigOptions.SERVER_ID : cnf.rawini.get(config.SECT_GENERAL, config.OPT_SERVER_ID),
+            P2pConfigOptions.CRYPTO_KEY_PATH : cnf.key_path(cnf.FARM_KEY),
+            P2pConfigOptions.CONSUMER_URL : 'http://0.0.0.0:8012',
+            P2pConfigOptions.MSG_HANDLER_ENABLED : False
         })
 
 
     def get_consumer(self):
         return self._msg_service.get_consumer()
 
-
+    
     def new_producer(self, host):
         return self._msg_service.new_producer(endpoint="http://%s:8012" % host)
 

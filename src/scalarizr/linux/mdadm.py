@@ -1,16 +1,20 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 import re
 import os
 from scalarizr import linux
+from scalarizr.linux import coreutils
 from scalarizr.storage2 import StorageError
 
 
 if not linux.which('mdadm'):
     from scalarizr.linux import pkgmgr
     pkgmgr.installed('mdadm')
+
 mdadm_binary = linux.which('mdadm')
+
+if not os.path.exists('/proc/mdstat'):
+    coreutils.modprobe('md_mod')
 
 
 def mdadm(mode, md_device=None, *devices, **long_kwds):
@@ -39,6 +43,7 @@ def mdfind(*devices):
             array = '/dev/%s' % line.split()[0]
             md_info = detail(array)
             md_devices = md_info['devices'].keys()
+            md_devices = map(os.path.realpath, md_devices)
             if sorted(md_devices) == sorted(devices):
                 return array
     else:

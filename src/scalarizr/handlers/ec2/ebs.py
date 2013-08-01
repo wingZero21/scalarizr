@@ -6,7 +6,7 @@ Created on Mar 1, 2010
 '''
 
 from scalarizr.handlers.block_device import BlockDeviceHandler
-from scalarizr.platform.ec2 import ebstool
+from scalarizr.storage2.volumes import ebs
 
 
 def get_handlers ():
@@ -18,4 +18,4 @@ class EbsHandler(BlockDeviceHandler):
         BlockDeviceHandler.__init__(self, 'ebs')
 
     def get_devname(self, devname):
-        return ebstool.get_ebs_devname(devname)
+        return ebs.device2name(devname)

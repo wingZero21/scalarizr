@@ -395,6 +395,10 @@ class MysqlMessages:
     @ivar log_pos?
     """
 
+    CONVERT_TO_DBMSR = "Mysql_ConvertToDbMsr"
+
+    CONVERT_TO_DBMSR_RESULT = "Mysql_ConvertToDbMsrResult"
+
     """
     Also MySQL behaviour adds params to common messages:
 
@@ -669,12 +673,11 @@ class MysqlHandler(ServiceCtlHandler):
             self._stop_service('Configuring')
 
             # Add SELinux rule
-            try:
-                if not system2((software.which('selinuxenabled'), ), raise_exc=False)[2]:
+            selinuxenabled_exec = software.which('selinuxenabled')
+            if selinuxenabled_exec:
+                if not system2((selinuxenabled_exec, ), raise_exc=False)[2]:
                     if not system2((software.which('getsebool'), 'mysqld_disable_trans'), raise_exc=False)[2]:
                         system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
-            except LookupError:
-                pass
 
 
         elif self._cnf.state == ScalarizrState.RUNNING:
@@ -750,6 +753,7 @@ class MysqlHandler(ServiceCtlHandler):
                         or      message.name == MysqlMessages.CREATE_DATA_BUNDLE
                         or      message.name == MysqlMessages.CREATE_BACKUP
                         or      message.name == MysqlMessages.CREATE_PMA_USER
+                        or      message.name == MysqlMessages.CONVERT_TO_DBMSR
                         or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
 
     def get_initialization_phases(self, hir_message):
@@ -777,6 +781,16 @@ class MysqlHandler(ServiceCtlHandler):
                 self.storage_vol.destroy(remove_disks=True)
                 LOG.info('Volume %s has been destroyed.' % self.storage_vol.id)
 
+
+    def on_Mysql_ConvertToDbmsr(self, message):
+        old_path = bus.cnf.private_path('mysql')
+        new_path = bus.cnf.private_path('mysql2')
+        shutil.copy(old_path, new_path)
+        system2("sed -i 's/\^\[mysql/\^\[mysql2/1' %s" % new_path, shell=True)
+        self.send_message(MysqlMessages.CONVERT_TO_DBMSR_RESULT, {
+            'status': 'ok'
+        })
+ 
 
     def on_Mysql_CreatePmaUser(self, message):
         try:
@@ -951,7 +965,7 @@ class MysqlHandler(ServiceCtlHandler):
         data_dir = os.path.join(storage_path, STORAGE_DATA_DIR),
         pid_file = os.path.join(storage_path, 'mysql.pid')
         socket_file = os.path.join(storage_path, 'mysql.sock')
-        mysqld_safe_bin = software.whereis('mysqld_safe')[0]
+        mysqld_safe_bin = software.which('mysqld_safe')
 
         '''
         ndb_support = any(row['Engine'] == 'ndbcluster' and row['Support'] == 'YES'
@@ -1020,7 +1034,7 @@ class MysqlHandler(ServiceCtlHandler):
                             mysql.sendline("STOP SLAVE;")
                             mysql.expect("mysql>", timeout=timeout)
                         except pexpect.TIMEOUT:
-                            raise HandlerError("Timeout (%d seconds) reached " +
+                            raise HandlerError("Timeout (%d seconds) reached " 
                                             "while waiting for slave stop" % (timeout,))
                         finally:
                             mysql.close()
@@ -1281,11 +1295,11 @@ class MysqlHandler(ServiceCtlHandler):
 
     def _change_selinux_ctx(self):
         if disttool.is_rhel():
-            chcon = software.whereis('chcon')
-            if not chcon:
+            chcon_exec = software.which('chcon')
+            if not chcon_exec:
                 return
             LOG.debug('Changing SELinux file security context for new mysql home')
-            system2((chcon[0], '-R', '-u', 'system_u', '-r',
+            system2((chcon_exec, '-R', '-u', 'system_u', '-r',
                      'object_r', '-t', 'mysqld_db_t', os.path.dirname(STORAGE_PATH)), raise_exc=False)
 
     def _init_master(self, message):
@@ -1333,6 +1347,7 @@ class MysqlHandler(ServiceCtlHandler):
                     self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
                     self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
                     self._change_selinux_ctx()
+
 
                 with op.step(self._step_patch_conf):
                     # Init replication
@@ -1543,12 +1558,37 @@ class MysqlHandler(ServiceCtlHandler):
         if disttool.is_debian_based() and os.path.exists(debian_cnf):
             LOG.debug("Copying debian.cnf from storage to mysql configuration directory")
             shutil.copy(debian_cnf, '/etc/mysql/')
+            self._fix_percona_debian_cnf()
 
 
     def _copy_debian_cnf(self):
+
         if os.path.exists('/etc/mysql/debian.cnf'):
+            self._fix_percona_debian_cnf()
             LOG.debug("Copying debian.cnf file to mysql storage")
             shutil.copy('/etc/mysql/debian.cnf', self._storage_path)
+
+
+    def _fix_percona_debian_cnf(self):
+        deb_cnf_path = '/etc/mysql/debian.cnf'
+
+        if os.path.exists(deb_cnf_path):
+            self._logger.info('Fixing socket options in %s', deb_cnf_path)
+            debian_cnf = Configuration('mysql')
+            debian_cnf.read(deb_cnf_path)
+
+            sock = None
+            try:
+                out = system2("my_print_defaults mysqld", shell=True)
+                m = re.search("--socket=(.*)", out[0], re.MULTILINE)
+                if m:
+                    sock = m.group(1)
+            except:
+                pass
+
+            debian_cnf.set('client/socket', sock)
+            debian_cnf.set('mysql_upgrade/socket', sock)
+            debian_cnf.write(deb_cnf_path)
 
 
     def _storage_valid(self, path=None):
@@ -1654,7 +1694,7 @@ class MysqlHandler(ServiceCtlHandler):
                 should_term_mysqld = True
             my_cli = spawn_mysql_cli()
 
-        # Generate passwords
+        # HERE:
         root_password = root_pass if root_pass else cryptotool.pwgen(20)
         repl_password = repl_pass if repl_pass else cryptotool.pwgen(20)
         stat_password = stat_pass if stat_pass else cryptotool.pwgen(20)
@@ -1818,10 +1858,10 @@ class MysqlHandler(ServiceCtlHandler):
                 os.makedirs(directory)
                 src_dir = os.path.dirname(raw_value + "/") + "/"
                 if os.path.isdir(src_dir):
-                    set_se_path = software.whereis('setsebool')
-                    if set_se_path:
+                    if software.which('setsebool'):
                         LOG.debug('Make SELinux rule for rsync')
-                        system2((set_se_path[0], 'rsync_disable_trans', 'on'), raise_exc=False)
+                        system2((software.which('setsebool'), 'rsync_disable_trans', 'on'), raise_exc=False)
+
                     LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, directory)
                     rsync(src_dir, directory, archive=True, exclude='ib_logfile*')
                     self._mysql_config.set(directive, dirname)

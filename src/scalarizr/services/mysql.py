@@ -23,10 +23,12 @@ import errno
 
 from pymysql import cursors
 
+from scalarizr import node
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy, PresetProvider
 from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
 from scalarizr.util.initdv2 import wait_sock, InitdError
+from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
@@ -36,7 +38,7 @@ LOG = logging.getLogger(__name__)
 
 MYSQL_DEFAULT_PORT=3306
 MYSQL_PATH  = '/usr/bin/mysql' # old mysql_path
-MYCNF_PATH      = '/etc/mysql/my.cnf' if disttool.is_ubuntu() else '/etc/my.cnf'
+MYCNF_PATH      = '/etc/mysql/my.cnf' if linux.os.debian_family else '/etc/my.cnf'
 MYSQLD_PATH = firstmatched(lambda x: os.access(x, os.X_OK), ('/usr/sbin/mysqld', '/usr/libexec/mysqld'))
 MYSQLDUMP_PATH = '/usr/bin/mysqldump'
 DEFAULT_DATADIR = "/var/lib/mysql"
@@ -128,13 +130,12 @@ class MySQL(BaseService):
                     src_dir = os.path.dirname(raw_value + "/") + "/"
                     LOG.debug('source path: %s' % src_dir)
                     if os.path.isdir(src_dir) and src_dir != dest:
-                        try:
-                            if not system2((software.which('selinuxenabled'), ), raise_exc=False)[2]:
+                        selinuxenabled = software.which('selinuxenabled')
+                        if selinuxenabled:
+                            if not system2((selinuxenabled, ), raise_exc=False)[2]:
                                 if not system2((software.which('getsebool'), 'mysqld_disable_trans'), raise_exc=False)[2]:
                                     LOG.debug('Make SELinux rule for rsync')
                                     system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
-                        except LookupError:
-                            pass
 
                         LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
                         rsync(src_dir, dest, archive=True, exclude=['ib_logfile*', '*.sock'])
@@ -221,6 +222,10 @@ class MySQLClient(object):
         return self.fetchone("STOP SLAVE IO_THREAD")
 
 
+	def start_slave_io_thread(self):
+		return self.fetchone("START SLAVE IO_THREAD")
+	
+	
     def lock_tables(self):
         return self.fetchone('FLUSH TABLES WITH READ LOCK')
 
@@ -254,7 +259,7 @@ class MySQLClient(object):
 
     def user_exists(self, login, host):
         ret = self.fetchone("select User,Host from mysql.user where User='%s' and Host='%s'" % (login, host))
-        result = True if ret and len(ret)==2 and ret[0]==login and ret[1]==host else False
+        result = ret and len(ret)==2 and ret[0]==login and ret[1]==host
         LOG.debug('user_exists query returned value: %s for user %s on host %s. User exists: %s' % (str(ret), login, host, str(result)))
         return result
 
@@ -519,6 +524,12 @@ class MySQLConf(BaseConfig):
     def _set_socket(self, path):
         self.set('mysqld/socket', path)
 
+    def _get_pid_file(self):
+        return self.get('mysqld/pid-file')
+
+
+    def _set_pid_file(self, path):
+        self.set('mysqld/pid-file', path)
 
     log_bin = property(_get_log_bin, _set_log_bin)
     server_id = property(_get_server_id, _set_server_id)
@@ -530,6 +541,7 @@ class MySQLConf(BaseConfig):
     read_only = property(_get_read_only, _set_read_only)
     datadir_default = DEFAULT_DATADIR
     socket = property(_get_socket, _set_socket)
+    pid_file = property(_get_pid_file, _set_pid_file)
 
 
 
@@ -646,6 +658,9 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
 
     def __init__(self):
+        if 'gce' == node.__node__['platform']:
+            self.ensure_pid_directory()
+
         self.mysql_cli = MySQLClient()
 
 
@@ -715,6 +730,31 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
         return initdv2.Status.RUNNING if self.mysql_cli.test_connection() else initdv2.Status.NOT_RUNNING
 
 
+    def _get_mysql_logerror_path(self):
+        cmd = 'my_print_defaults mysqld | grep log_error'
+        out = system2(cmd, shell=True, raise_exc=False)[0]
+        return out.split('=')[1] if out else '/var/log/mysql/error.log'
+
+
+    def _get_mysql_error(self):
+        error = ''
+        cmd = "cat %s | tail -256" % self._get_mysql_logerror_path()
+        content = reversed(system2(cmd, shell=True, raise_exc=False)[0].split('\n'))
+        start = re.compile("^.*[ ]Fatal error:[ ].*$")
+        end = re.compile(r'^[0-9]{6}[ ][0-9]{2}:[0-9]{2}:[0-9]{2}[ ]\[?ERROR\]?[ ]Aborting$')
+        for line in content:
+            if end.match(line):
+                error = '%s\n' % line + error
+                while not start.match(line):
+                    try:
+                        line = content.next()
+                    except StopIteration:
+                        break
+                    error = '%s\n' % line + error
+                break
+        return error
+
+
     def start(self):
         '''
         Commented, cause Dima said this code is useless
@@ -735,22 +775,15 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                 LOG.info("Starting mysql")
                 initdv2.ParametrizedInitScript.start(self)
                 LOG.debug("mysql started")
-            except:
+            except Exception as e:
                 if self._is_sgt_process_exists():
                     LOG.warning('MySQL service is running with skip-grant-tables mode.')
                 elif not self.running:
-                    raise
-
-
-        try:
-            LOG.info("Starting mysql")
-            initdv2.ParametrizedInitScript.start(self)
-            LOG.debug("mysql started")
-        except:
-            if self._is_sgt_process_exists():
-                LOG.warning('MySQL service is running with skip-grant-tables mode.')
-            elif not self.running:
-                raise
+                    error = self._get_mysql_error()
+                    if error:
+                        raise Exception('%s' % error)
+                    else:
+                        raise e
 
 
     def stop(self, reason=None):
@@ -798,6 +831,16 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                 LOG.warning('Unable to stop mysql running with skip-grant-tables. PID not found.')
         else:
             LOG.debug('Skip stopping mysqld with a skip-grant-tables')
+
+
+    def ensure_pid_directory(self):
+        if 'CentOS' == linux.os['name']:
+            '''
+            Due to rebundle algorythm complications on GCE we must ensure that pid dir actually exists
+            '''
+            pid_dir = '/var/run/mysqld'
+            if not os.path.exists(pid_dir):
+                os.makedirs(pid_dir)
 
 
 

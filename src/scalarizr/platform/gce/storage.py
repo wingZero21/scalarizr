@@ -21,26 +21,6 @@ CHUNK_SIZE = 2*1024*1024
 
 
 
-def get_op_status(conn, proj_id, op_name, fields=None):
-    fields = ', '.join(fields) if fields else None
-    return conn.globalOperations().get(project=proj_id,
-                                                             operation=op_name, fields=fields).execute()
-
-
-def wait_for_operation_to_complete(connection, project_id, operation_name, timeout=3600):
-    def op_complete():
-        status = get_op_status(connection, project_id, operation_name,
-                                                   ('status', 'error'))
-        if 'DONE' == status['status']:
-            error = status.get('error')
-            if error:
-                err_msg = '\n'.join([err['message'] for err in error['errors']])
-                raise Exception(err_msg)
-            return True
-        return False
-
-    util.wait_until(op_complete, timeout=timeout)
-
 
 class GoogleCSTransferProvider(transfer.TransferProvider):
 
@@ -236,11 +216,8 @@ class GcePersistentVolumeProvider(GceEphemeralVolumeProvider):
             connection = __node__['gce']['compute_connection']
             project_id = __node__['gce']['project_id']
 
-            op = connection.snapshots().delete(project=project_id,
-                                                                               snapshot=snap.name).execute()
-
-            wait_for_operation_to_complete(connection, project_id,
-                                                                               op['name'])
+            op = connection.snapshots().delete(project=project_id, snapshot=snap.name).execute()
+            wait_for_operation_to_complete(connection, project_id, op['name'])
         except:
             e = sys.exc_info()[1]
             raise storage.StorageError('Failed to delete google disk snapshot.'

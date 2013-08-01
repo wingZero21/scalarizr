@@ -17,7 +17,7 @@ from scalarizr.util.cryptotool import pwgen
 
 class MySQLAPI(object):
     """
-    @xxx: reporting is an anal pain
+    @xxx: reporting is a pain
     """
 
     error_messages = {
@@ -44,7 +44,7 @@ class MySQLAPI(object):
                 self._mysql_init.start()
 
         if async:
-            txt = 'Grow MySQL/Percona data volume'
+            txt = 'Grow MySQL/Percona/MariaDB data volume'
             op = handlers.operation(name=txt)
 
             def block():
@@ -68,18 +68,33 @@ class MySQLAPI(object):
 
     @rpc.service_method
     def reset_password(self, new_password=None):
-        """ Reset password for MySQL user 'scalr'. Return new password """
+        """
+        Reset password for MySQL user 'scalr_master'. Return new password
+        """
         if not new_password:
             new_password = pwgen(20)
-        mysql_cli = mysql_svc.MySQLClient()
-        mysql_cli.set_user_password('scalr', 'localhost', new_password)
+        mysql_cli = mysql_svc.MySQLClient(__mysql__['root_user'],
+                                          __mysql__['root_password'])
+        master_user = __mysql__['master_user']
+
+        if mysql_cli.user_exists(master_user, 'localhost'):
+            mysql_cli.set_user_password(master_user, 'localhost', new_password)
+        else:
+            mysql_cli.create_user(master_user, 'localhost', new_password)
+
+        if mysql_cli.user_exists(master_user, '%'):
+            mysql_cli.set_user_password(master_user, '%', new_password)
+        else:
+            mysql_cli.create_user(master_user, '%', new_password)
+
         mysql_cli.flush_privileges()
-        __mysql__['root_password'] = new_password
+
         return new_password
 
     @rpc.service_method
     def replication_status(self):
-        mysql_cli = mysql_svc.MySQLClient()
+        mysql_cli = mysql_svc.MySQLClient(__mysql__['root_user'],
+                                          __mysql__['root_password'])
         if int(__mysql__['replication_master']):
             master_status = mysql_cli.master_status()
             result = {'master': {'status': 'up',
@@ -90,8 +105,10 @@ class MySQLAPI(object):
             try:
                 slave_status = mysql_cli.slave_status()
                 slave_status = dict(zip(map(string.lower, slave_status.keys()),
-                                    slave_status.values()))
-                slave_status['status'] = 'up'
+                                        slave_status.values()))
+                slave_running = slave_status['slave_io_running'] == 'Yes' and \
+                    slave_status['slave_sql_running'] == 'Yes'
+                slave_status['status'] = 'up' if slave_running else 'down'
                 return {'slave': slave_status}
             except ServiceError:
                 return {'slave': {'status': 'down'}}

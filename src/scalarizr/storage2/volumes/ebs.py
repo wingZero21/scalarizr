@@ -260,7 +260,12 @@ class EbsVolume(base.Volume, EbsMixin):
             size = self.size() if callable(self.size) else self.size
 
             if self.id:
-                ebs = self._conn.get_all_volumes([self.id])[0]
+                try:
+                    ebs = self._conn.get_all_volumes([self.id])[0]
+                except boto.exception.BotoServerError, e:
+                    if e.code == 'InvalidVolume.NotFound':
+                        raise storage2.VolumeNotExistsError(self.id)
+                    raise
                 if ebs.zone != zone:
                     LOG.warn('EBS volume %s is in the different '
                                     'availability zone (%s). Snapshoting it '
@@ -317,8 +322,7 @@ class EbsVolume(base.Volume, EbsMixin):
         '''
 
         self._check_ec2()
-        snapshot = self._create_snapshot(self.id, description, tags,
-                                                                        kwds.get('nowait', True))
+        snapshot = self._create_snapshot(self.id, description, tags, kwds.get('nowait', True))
         return storage2.snapshot(
                         type='ebs',
                         id=snapshot.id,

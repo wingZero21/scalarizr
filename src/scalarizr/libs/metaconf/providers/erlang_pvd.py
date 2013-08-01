@@ -16,7 +16,7 @@ except:
     from StringIO import StringIO
 
 class ErlangFormatProvider(FormatProvider):
-    
+        
     def create_element(self, etree, path, value):
         el = FormatProvider.create_element(self, etree, path, value)
         
@@ -45,7 +45,7 @@ class ErlangFormatProvider(FormatProvider):
                     list_el = sym
                     while True:
                         sym = fp.read(1)
-                        if sym == ',':                          
+                        if sym == ',':                                                  
                             node = ET.Element(quote(list_el.strip()))
                             nodes.append(node)
                             list_el = ''
@@ -53,17 +53,17 @@ class ErlangFormatProvider(FormatProvider):
                         elif sym == ']':
                             if list_el:
                                 node = ET.Element(quote(list_el.strip()))
-                                nodes.append(node)                          
+                                nodes.append(node)                                                      
                             return nodes
                         elif sym in string.whitespace:
                             continue
                         else:
                             list_el += sym
-            
-                    continue                
-                                    
-                raise ParseError('Unknown symbol: %s' % sym)            
-    
+
+                    continue                                
+                                                    
+                raise ParseError('Unknown symbol: %s' % sym)                    
+
         def parse_hash(fp):
             node_name = ''
             while True:
@@ -81,7 +81,7 @@ class ErlangFormatProvider(FormatProvider):
                     for child in value:
                         node.append(child)
                     break
-                        
+                            
                 elif sym not in string.whitespace:
                     value = sym
                     while True:
@@ -91,7 +91,7 @@ class ErlangFormatProvider(FormatProvider):
                         value += letter
                     node.text = value
                     break
-            return node     
+            return node             
 
         """ Read whole config in single string """
         cfg_str = ''.join(line.strip() for line in fp.readlines())
@@ -99,14 +99,14 @@ class ErlangFormatProvider(FormatProvider):
         """ Check for erlang configuration format """ 
         if not cfg_str.startswith('[') or not cfg_str.endswith('].'):
             raise ParseError('No valid erlang configuration was found.')
-        
+    
         """ Strip main quotes """
         cfg_fp = StringIO(cfg_str[1:-1])
         return parse_list(cfg_fp)
-    
+
 
     def write(self, fp, etree, close=True):
-        
+            
         """ Open configuration """
         self.ident = '    '
         fp.write('[\n')
@@ -129,8 +129,8 @@ class ErlangFormatProvider(FormatProvider):
                     fp.write('}')
             else:
                 fp.write(node.text)
-                fp.write('}')                   
-            
+                fp.write('}')                                   
+        
         def write_list(nodes):
             fp.write('[')
             count = len(nodes)
@@ -145,7 +145,7 @@ class ErlangFormatProvider(FormatProvider):
                         if i+1 != count:
                             fp.write(',\n')
                             
-                    
+            
                 else:
                     ''' list of simple values '''
                     list_val = ', '.join([unquote(el.tag) for el in nodes])
@@ -153,7 +153,7 @@ class ErlangFormatProvider(FormatProvider):
                     
                     
             fp.write(']')
-        
+    
         root = etree.getroot()
         count = len(list(root))
         for i in range(count):
@@ -163,11 +163,10 @@ class ErlangFormatProvider(FormatProvider):
         fp.write('\n].')
         if close:
             fp.close()
-                        
+                                    
             
 
             
-        
-                
+    
                     
-                    
+                            

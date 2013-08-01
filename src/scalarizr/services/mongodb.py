@@ -6,11 +6,13 @@ Created on Sep 30, 2011
 '''
 import re
 import os
+import sys
 import time
 import glob
 import shutil
 import logging
 import functools
+import resource
 
 
 from scalarizr.config import BuiltinBehaviours
@@ -37,11 +39,11 @@ SERVICE_NAME = BuiltinBehaviours.MONGODB
 STORAGE_PATH = "/mnt/mongodb-storage"
 
 LOG_DIR = glob.glob('/var/log/mongo*')[0]
-LOG_PATH_DEFAULT = os.path.join(LOG_DIR, 'mongodb.shardsrv.log')
+LOG_PATH_DEFAULT = os.path.join(LOG_DIR, 'mongodb.shardsrv.log') 
 DEFAULT_UBUNTU_DB_PATH = '/var/lib/mongodb'
 DEFAULT_CENTOS_DB_PATH = '/var/lib/mongo'
 LOCK_FILE = 'mongod.lock'
-DEFAULT_USER = 'mongodb' if disttool.is_ubuntu() else 'mongod'
+DEFAULT_USER = 'mongodb' if disttool.is_debian_based() else 'mongod'
 SCALR_USER = 'scalr'
 STORAGE_DATA_DIR = os.path.join(STORAGE_PATH, 'data')
 
@@ -49,12 +51,12 @@ UBUNTU_CONFIG_PATH = '/etc/mongodb.conf'
 CENTOS_CONFIG_PATH = '/etc/mongod.conf'
 CONFIG_PATH_DEFAULT = '/etc/mongodb.shardsrv.conf'
 ARBITER_DATA_DIR = '/tmp/arbiter'
-ARBITER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.arbiter.log')
+ARBITER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.arbiter.log') 
 ARBITER_CONF_PATH = '/etc/mongodb.arbiter.conf'
 
 CONFIG_SERVER_DATA_DIR = os.path.join(STORAGE_PATH, 'config_server')
 CONFIG_SERVER_CONF_PATH = '/etc/mongodb.configsrv.conf'
-CONFIG_SERVER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.configsrv.log')
+CONFIG_SERVER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.configsrv.log') 
 
 ROUTER_LOG_PATH = os.path.join(LOG_DIR, 'mongodb.router.log')
 
@@ -62,28 +64,28 @@ MAX_START_TIMEOUT = 600
 MAX_STOP_TIMEOUT = 180
 
 
-
+                                
 class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
     socket_file = None
-
+    
     @lazy
     def __new__(cls, *args, **kws):
         obj = super(MongoDBDefaultInitScript, cls).__new__(cls, *args, **kws)
         cls.__init__(obj)
         return obj
-
+                
     def __init__(self):
         initd_script = None
         if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
             initd_script = ('/usr/sbin/service', 'mongodb')
         else:
             initd_script = firstmatched(os.path.exists, ('/etc/init.d/mongodb', '/etc/init.d/mongod'))
-        initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME,
+        initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
                         initd_script=initd_script)
-
+        
     def status(self):
         '''
-        By default Ubuntu automatically starts mongodb process on 27017
+        By default Ubuntu automatically starts mongodb process on 27017 
         which is exactly the port number used by our router process.
         '''
         p = MongoCLI(port=ROUTER_DEFAULT_PORT)
@@ -98,16 +100,16 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
 
     def reload(self, reason=None):
         initdv2.ParametrizedInitScript.restart(self)
-
+        
     def start(self):
         initdv2.ParametrizedInitScript.start(self)
         wait_until(lambda: self.status() == initdv2.Status.RUNNING, sleep=1)
         #error_text="In %s seconds after start Mongodb state still isn't 'Running'" % MAX_START_TIMEOUT)
 
-
+        
 initdv2.explore(SERVICE_NAME, MongoDBDefaultInitScript)
-
-
+        
+                
 class MongoDB(BaseService):
     _arbiter = None
     _instance = None
@@ -119,14 +121,14 @@ class MongoDB(BaseService):
     password = None
     auth = True
 
-
+    
     def __init__(self, keyfile=None):
         self.keyfile = keyfile
         self._objects = {}
         self._logger = logging.getLogger(__name__)
         self.default_init_script = initdv2.lookup(SERVICE_NAME)
 
-
+                                                        
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
             cls._instance = super(MongoDB, cls).__new__(
@@ -171,6 +173,7 @@ class MongoDB(BaseService):
         self.arbiter_conf.shardsvr = True
         self.arbiter_conf.port = ARBITER_DEFAULT_PORT
         self.arbiter_conf.logpath = ARBITER_LOG_PATH
+        self.arbiter_conf.nojournal = True
 
 
     def _prepare_config_server(self):
@@ -179,10 +182,10 @@ class MongoDB(BaseService):
             os.makedirs(CONFIG_SERVER_DATA_DIR)
         chown_r(CONFIG_SERVER_DATA_DIR, DEFAULT_USER)
         '''
-        configsvr changes the default port and turns on the diaglog,
-        a log that keeps every action the config database performs
+        configsvr changes the default port and turns on the diaglog, 
+        a log that keeps every action the config database performs 
         in a replayable format, just in case.
-        For mongo 1.8+ use --port 27019 and --journal (instead of --diaglog).
+        For mongo 1.8+ use --port 27019 and --journal (instead of --diaglog). 
         Journaling gives mostly the same effect as the diaglog with better performance.
         P.S. Assume that mongodb roles Scalr will be build on x64 platform only
         Wchich means journal option by default will be on.
@@ -198,12 +201,13 @@ class MongoDB(BaseService):
         '''
         self.cli.initiate_rs()
         wait_until(lambda: self.is_replication_master, sleep=5, logger=self._logger,
-                                timeout=120, start_text='Wait until node becomes replication primary')
+                                timeout=120, start_text='Wait until node becomes replication primary')          
         self._logger.debug('Server became replication master')
 
 
     def start_shardsvr(self):
         self.working_dir.unlock()
+        self.working_dir.set_permissions()
         if self.auth:
             self._logger.info('Starting main mongod process with auth enabled')
         else:
@@ -221,23 +225,32 @@ class MongoDB(BaseService):
 
     def stop_arbiter(self):
         self.arbiter.stop(reason='Stopping mongo arbiter')
-
+        
 
     def start_config_server(self):
         self._prepare_config_server()
         self._logger.info('Starting mongo config server')
         self.config_server.start()
-
-
+        
+        
     def stop_config_server(self):
         self.config_server.stop('Stopping mongo config server')
-
-
+        
+        
     def start_router(self, verbose = 0):
         self.stop_default_init_script()
         Mongos.set_keyfile(self.keyfile.path)
         Mongos.verbose = verbose
-        Mongos.start()
+        try:
+            Mongos.start()
+        except:
+            # XXX: Ugly workaround for those cases when for some reason mongos can't connect to mongo config server
+            # and dies without trying to reconnect again (it's normal behaviour). Restart usually helps
+            e = sys.exc_info()[1]
+            if 'Timeout' in str(e) and not Mongos.is_running():
+                Mongos.start()
+            else:
+                raise
 
 
     def stop_router(self):
@@ -247,25 +260,28 @@ class MongoDB(BaseService):
     def restart_router(self):
         Mongos.restart()
 
-
+                
     def stop_default_init_script(self):
         if self.default_init_script.running:
-            if not self.router_cli.is_router_connection():
+            try:
+                if not self.router_cli.is_router_connection():
+                    self.default_init_script.stop('Stopping default mongod service')
+            except:
                 self.default_init_script.stop('Stopping default mongod service')
-
-
+                
+                        
     def register_slave(self, ip, port=None):
         ret = self.cli.add_replica(ip, port)
         if ret['ok'] == '0':
             self._logger.error('Could not add replica %s to set: %s' % (ip, ret['errmsg']))
-
-
+    
+            
     def register_arbiter(self,ip,port=None):
         ret = self.cli.add_arbiter(ip, port or ARBITER_DEFAULT_PORT)
         if ret['ok'] == '0':
             self._logger.error('Could not add arbiter %s to set: %s' % (ip, ret['errmsg']))
-
-
+            
+            
     def unregister_slave(self,ip,port=None):
         ret = self.cli.remove_slave(ip, port)
         if ret['ok'] == '0':
@@ -287,7 +303,7 @@ class MongoDB(BaseService):
     def status(self):
         '''
         rs.status['myState']
-
+        
         0        Starting up, phase 1 (parsing configuration)
         1        Primary
         2        Secondary
@@ -302,17 +318,17 @@ class MongoDB(BaseService):
         self._logger.debug('Getting rs status')
         ret = self.cli.get_rs_status()
         if 'errmsg' in ret:
-            self._logger.error('Could not get status of replica set' % (ret['errmsg']))
+            self._logger.error('Could not get status of replica set: %s' % (ret['errmsg']))
         else:
             return int(ret['myState']) if 'myState' in ret else None
-
-
+                    
+                    
     @property
     def replicas(self):
         self._logger.debug('Querying list of replicas')
         ret = self.cli.is_master()
         rep_list = ret['hosts'] if 'hosts' in ret else []
-        self._logger.debug('Current replicas are %s' % rep_list)
+        self._logger.debug('Current replicas are %s' % rep_list) 
         return rep_list
 
 
@@ -321,7 +337,7 @@ class MongoDB(BaseService):
         self._logger.debug('Querying list of arbiters')
         ret = self.cli.is_master()
         arbiter_list = ret['arbiters'] if 'arbiters' in ret else []
-        self._logger.debug('Current arbiters are %s' % arbiter_list)
+        self._logger.debug('Current arbiters are %s' % arbiter_list) 
         return arbiter_list
 
     @property
@@ -355,13 +371,13 @@ class MongoDB(BaseService):
 
     def disable_requiretty(self):
         '''
-        requiretty      If set, sudo will only run when the user is logged in to a real tty.
-        When this flag is set, sudo can only be  run from a login session and not via other means
+        requiretty      If set, sudo will only run when the user is logged in to a real tty.  
+        When this flag is set, sudo can only be  run from a login session and not via other means 
         such  as cron(8) or cgi-bin scripts.  This flag is off by default on all systems but CentOS5.
         '''
         path = '/etc/sudoers'
         self._logger.debug('Disabling requiretty in %s' % path)
-        if not disttool.is_ubuntu():
+        if not disttool.is_debian_based():
             orig = None
             with open(path, 'r') as fp:
                 orig = fp.read()
@@ -396,7 +412,7 @@ class MongoDB(BaseService):
 
     def _get_working_directory(self):
         return self._get('working_directory', WorkingDirectory.find, self.config)
-
+        
     def _set_working_directory(self, obj):
         self._set('working_directory', obj)
 
@@ -406,15 +422,15 @@ class MongoDB(BaseService):
 
     def _set_config(self, obj):
         self._set('mongodb_conf', obj)
-
-
+        
+        
     def _get_arbiter_conf(self):
         return self._get('arbiter_config', ArbiterConf.find, '/etc')
 
     def _set_arbiter_conf(self, obj):
         self._set('arbiter_config', obj)
-
-
+        
+        
     def _get_cfg_srv_conf(self):
         return self._get('cfg_srv_config', ConfigServerConf.find, '/etc')
 
@@ -440,17 +456,17 @@ class MongoDB(BaseService):
     router_cli = property(_get_router_cli, _set_router_cli)
     configsrv_cli = property(_get_configsrv_cli, _set_configsrv_cli)
     mongod = property(_get_mongod, _set_mongod)
-    working_dir = property(_get_working_directory, _set_working_directory)
+    working_dir = property(_get_working_directory, _set_working_directory)  
     config = property(_get_config, _set_config)
     arbiter_conf = property(_get_arbiter_conf, _set_arbiter_conf)
     config_server_conf = property(_get_cfg_srv_conf, _set_cfg_srv_conf)
 
-
+    
 class MongoDump(object):
-
+        
     host = None
     port = None
-
+    
     def __init__(self, host=None, port=None):
         self._logger = logging.getLogger(__name__)
         self.host = host
@@ -463,12 +479,12 @@ class MongoDump(object):
             args += ('-h', self.host if not self.port else "%s:%s" % (self.host, self.port))
         return system2(args)
 
-
+        
 class KeyFile(object):
-
+        
     def __init__(self, path):
         self.path = path
-
+                
     @classmethod
     def find(cls, path):
         return cls(path)
@@ -481,22 +497,22 @@ class KeyFile(object):
 
 
 class WorkingDirectory(object):
-
+        
     path = None
     user = DEFAULT_USER
-
+    
     def __init__(self, path=None):
-        self._logger = logging.getLogger(__name__)
+        self._logger = logging.getLogger(__name__)  
         self.path = path
-
+        
     @classmethod
     def find(cls, mongo_conf):
         dir = mongo_conf.dbpath
         if not dir:
-            dir = DEFAULT_UBUNTU_DB_PATH if disttool.is_ubuntu() else DEFAULT_CENTOS_DB_PATH
-        return cls(dir)
+            dir = DEFAULT_UBUNTU_DB_PATH if disttool.is_debian_based() else DEFAULT_CENTOS_DB_PATH
+        return cls(dir) 
 
-    def is_initialized(self, path):
+    def is_initialized(self, path): 
         if os.path.exists(path):
             fnames = os.listdir(path)
             return 'local.0' in fnames
@@ -508,18 +524,20 @@ class WorkingDirectory(object):
     def unlock(self):
         if self.is_locked():
             self._logger.debug('Lock was found in database directory %s. Last time Mongodb was not shut down properly.' % self.path)
-            os.remove(self.lock_path)
-
+            os.remove(self.lock_path)       
+            
     def create(self, dst):
         if not os.path.exists(dst):
             self._logger.debug('Creating directory structure for mongodb files: %s' % dst)
             os.makedirs(dst)
 
-        self._logger.debug("changing directory owner to %s" % self.user)
-        chown_r(dst, self.user)
         self.path = dst
-
+        self.set_permissions()
         return dst
+
+    def set_permissions(self):
+        self._logger.debug("Changing working directory owner to %s" % self.user)
+        chown_r(self.path, self.user)
 
     @property
     def lock_path(self):
@@ -527,10 +545,10 @@ class WorkingDirectory(object):
 
 
 class MongoDBConfig(BaseConfig):
-
+        
     config_type = 'mongodb'
     config_name = os.path.basename(CONFIG_PATH_DEFAULT)
-
+    
     @classmethod
     def find(cls, config_dir=None):
         #conf_path = UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
@@ -564,25 +582,25 @@ class MongoDBConfig(BaseConfig):
         return self.get('logpath')
 
     def _set_logpath(self, path):
-        self.set('logpath', path)
+        self.set('logpath', path)    
 
     def _get_replSet(self):
         return self.get('replSet')
 
     def _set_replSet(self, name):
-        self.set('replSet', name)
+        self.set('replSet', name)    
 
     def _get_port(self):
         return self.get_numeric_option('port')
 
     def _set_port(self, number):
-        self.set_numeric_option('port', number)
+        self.set_numeric_option('port', number)    
 
     def _get_logappend(self):
         return self.get_bool_option('logappend')
 
     def _set_logappend(self, on=True):
-        self.set_bool_option('logappend', on)
+        self.set_bool_option('logappend', on)    
 
     def _get_dbpath(self):
         return self.get('dbpath')
@@ -594,20 +612,20 @@ class MongoDBConfig(BaseConfig):
         return self.get_bool_option('nojournal')
 
     def _set_nojournal(self, on=False):
-        self.set_bool_option('nojournal', on)
+        self.set_bool_option('nojournal', on)      
 
     def _get_nohttpinterface(self):
         return self.get_bool_option('nohttpinterface')
 
     def _set_nohttpinterface(self, on=False):
-        self.set_bool_option('nohttpinterface', on)
+        self.set_bool_option('nohttpinterface', on) 
 
     def _get_rest(self):
         return self.get_bool_option('rest')
 
     def _set_rest(self, on=False):
         self.set_bool_option('rest', on)
-
+        
     def _set_shardsvr(self, value):
         self.set_bool_option('shardsvr', value)
 
@@ -639,7 +657,7 @@ class ConfigServerConf(MongoDBConfig):
     @classmethod
     def find(cls, config_dir='/etc'):
         return cls(os.path.join(config_dir, cls.config_name))
-
+                                
     def _set_configsvr(self, value):
         self.set_bool_option('configsvr', value)
 
@@ -648,9 +666,18 @@ class ConfigServerConf(MongoDBConfig):
 
     configsvr = property(_get_configsvr, _set_configsvr)
 
+  
+def mongo_preexec_fn():
+    unlimited = (resource.RLIM_INFINITY, resource.RLIM_INFINITY)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (64000, 64000))
+    resource.setrlimit(resource.RLIMIT_NPROC, (32000, 32000))
+    resource.setrlimit(resource.RLIMIT_FSIZE, unlimited)
+    resource.setrlimit(resource.RLIMIT_CPU, unlimited)
+    os.setsid()
 
-class Mongod(object):
-    def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=2):
+
+class Mongod(object):   
+    def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=1):
         self._logger = logging.getLogger(__name__)
         self.configpath = configpath
         self.dbpath = dbpath
@@ -659,7 +686,7 @@ class Mongod(object):
         self.port = port
         self.sock = initdv2.SockParam(self.port or REPLICA_DEFAULT_PORT)
         self.verbose = verbose
-
+        
     @classmethod
     def find(cls, mongo_conf=None, keyfile=None, cli=None):
         #config_path = mongo_conf.path or UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
@@ -682,11 +709,14 @@ class Mongod(object):
 
         return s
 
+
+
+
     def start(self):
         try:
             if not self.is_running:
                 self._logger.debug('Starting %s' % MONGOD)
-                system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args, close_fds=True, preexec_fn=os.setsid)
+                system2(['sudo', '-u', DEFAULT_USER, MONGOD,] + self.args, close_fds=True, preexec_fn=mongo_preexec_fn)
                 '''
                 mongod process takes some time before it actualy starts accepting connections
                 it can easily be as long as 160 seconds on a Large instance
@@ -694,7 +724,7 @@ class Mongod(object):
                 wait_until(lambda: self.is_running, timeout=MAX_START_TIMEOUT)
                 wait_until(lambda: self.cli.has_connection, timeout=MAX_START_TIMEOUT)
                 self._logger.debug('%s process has been started.' % MONGOD)
-
+                
         except PopenError, e:
             self._logger.error('Unable to start mongod process: %s' % e)
 
@@ -708,7 +738,7 @@ class Mongod(object):
     def restart(self, reason=None):
         if self.is_running:
             self.stop(reason)
-            self.start()
+            self.start()    
 
     @property
     def is_running(self):
@@ -767,7 +797,7 @@ class Mongos(object):
             if os.path.exists(ROUTER_LOG_PATH):
                 chown_r(ROUTER_LOG_PATH, DEFAULT_USER)
 
-            system2(args, close_fds=True, preexec_fn=os.setsid)
+            system2(args, close_fds=True, preexec_fn=mongo_preexec_fn)
             wait_until(lambda: cls.is_running, timeout=MAX_START_TIMEOUT)
             wait_until(lambda: cls.get_cli().has_connection, timeout=MAX_START_TIMEOUT)
             cls._logger.debug('%s process has been started.' % MONGOS)
@@ -857,8 +887,8 @@ class MongoCLI(object):
     def auth(self,login,password):
         self.login = login
         self.password = password
-
-
+        
+        
     @property
     def connection(self):
         if not hasattr(self, '_con'):
@@ -917,7 +947,7 @@ class MongoCLI(object):
         if self.connection.local.system.replset.find_one():
             self._logger.debug('Replica set already initialized. Nothing to do')
             return
-
+    
         res = self.connection.admin.command('replSetInitiate')
         if int(res['ok']) == 0:
             raise BaseException('Could not initialize replica set: %s' % res['errmsg'])
@@ -945,10 +975,10 @@ class MongoCLI(object):
         new_member['host'] = host
         cfg['version'] = cfg['version'] + 1
         new_member['_id'] = max([m['_id'] for m  in cfg['members']]) + 1
-
+        
         if arbiter:
             new_member['arbiterOnly'] = True
-
+            
         cfg['members'].append(new_member)
         return self.rs_reconfig(cfg, force=True)
 
@@ -968,7 +998,7 @@ class MongoCLI(object):
     def get_rs_config(self):
         self._logger.debug('Getting rs config')
         rs_count = self.connection.local.system.replset.count()
-        assert rs_count, "No replica set found"
+        assert rs_count, "No replica set found" 
         return self.connection.local.system.replset.find_one()
 
 
@@ -996,8 +1026,8 @@ class MongoCLI(object):
     def remove_slave(self, ip, port=None):
         port = port or REPLICA_DEFAULT_PORT
         host_to_del = "%s:%s" % (ip, port)
-
-        self._logger.debug('Removing replica %s' % host_to_del)
+                        
+        self._logger.debug('Removing replica %s' % host_to_del)         
 
         cfg = self.get_rs_config()
         cfg['version'] = cfg['version'] + 1
@@ -1044,14 +1074,14 @@ class MongoCLI(object):
     def stop_balancer(self):
         '''
         // connect to mongos (not a config server!)
-
+        
         > use config
-        > db.settings.update( { _id: "balancer" }, { $set : { stopped: true } } , true );
+        > db.settings.update( { _id: "balancer" }, { $set : { stopped: true } } , true ); 
         >
         > // wait for any migrations that were in progress to finish
         > // "state" field is zero if no migrations in progress
         > while( db.locks.findOne({_id: "balancer"}).state ) { print("waiting..."); sleep(1000); }
-
+        
         http://www.mongodb.org/display/DOCS/Backing+Up+Sharded+Cluster
         '''
         self._logger.info('Stopping balancer')
@@ -1059,7 +1089,7 @@ class MongoCLI(object):
         self._logger.debug("Waiting until balancer finishes it's round")
         while self.connection.locks.find_one({'_id': "balancer"})['state']:
             time.sleep(1)
-        self._logger.debug('Balancer has been stopped.')
+        self._logger.debug('Balancer has been stopped.')        
 
 
     @autoreconnect
