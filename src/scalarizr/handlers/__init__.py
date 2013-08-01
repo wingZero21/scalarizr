@@ -885,3 +885,21 @@ def transfer_result_to_backup_result(mnf):
                                     for file_ in mnf['files']
                                     for chunk in file_['chunks'])
     return list(dict(path=path, size=size) for path, size in files_sizes)
+
+
+def get_role_servers(role_id=None, role_name=None):
+    """ Method is used to get role servers from scalr """
+    if type(role_id) is int:
+        role_id = str(role_id)
+
+    server_location = __node__['cloud_location']
+    queryenv = bus.queryenv_service
+    roles = queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
+    servers = []
+    for role in roles:
+        ips = [h.internal_ip if server_location == h.cloud_location else
+               h.external_ip
+               for h in role.hosts]
+        servers.extend(ips)
+
+    return servers
