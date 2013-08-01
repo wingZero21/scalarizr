@@ -7,6 +7,7 @@ from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
 from scalarizr.linux import iptables
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
+from scalarizr.node import __node__
 
 import os
 import logging

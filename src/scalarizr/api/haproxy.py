@@ -12,6 +12,7 @@ from scalarizr.libs import validate
 from scalarizr.services import haproxy
 from scalarizr.linux import iptables
 from scalarizr import rpc
+from scalarizr.handlers import get_role_servers
 
 import logging
 LOG = logging.getLogger(__name__)
@@ -39,11 +40,6 @@ def rename(params):
 _rule_protocol = validate.rule(choises=['tcp', 'http', 'TCP', 'HTTP'])
 _rule_backend = validate.rule(re=r'^role:\d+$')
 _rule_hc_target = validate.rule(re='^[tcp|http]+:\d+$')
-
-
-# for testing; TODO: import
-def get_servers(*args):
-    return []
 
 
 class HAProxyAPI(object):
@@ -131,7 +127,8 @@ class HAProxyAPI(object):
         for role in roles:
             role_id, role_params = role.pop("farm_role_id"), role
 
-            role_servers = map(lambda ip: {"host": ip}, get_servers(role_id))
+            role_servers = map(lambda ip: {"host": ip}, get_role_servers(role_id))
+            LOG.debug("get_role_servers response: %s", pformat(role_servers))
 
             # for testing on a single machine purposes / get_servers retunrs "host:port"
             for server in role_servers:

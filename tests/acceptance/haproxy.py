@@ -181,6 +181,8 @@ class Role(object):
     def get_servers(cls, role_id):
         return map(str, cls._instances[role_id].servers)
 
+    get_role_servers = get_servers
+
 
 haproxy_api.get_servers = Role.get_servers
 
