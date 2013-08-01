@@ -126,6 +126,8 @@ Section "MainSection" SEC01
   
   SetOutPath "$INSTDIR\tmp"
   File "${SZR_BASE_PATH}\etc\public.d\*.ini"
+  File "x86_64\vcredist_x64.exe"
+
 
   SetOutPath "$SYSDIR"
   SetOverwrite try
@@ -166,9 +168,9 @@ Section -PostInstall
   done:
   FindClose $0
   
-  #${If} $installed_version == ""
-  #	nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
-  #${EndIf}
+  ${If} $installed_version == "" ${AndIf} ${RunningX64}
+  	nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
+  ${EndIf}
   
   RMDir /r $INSTDIR\tmp
   
