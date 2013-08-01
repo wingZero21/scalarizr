@@ -168,7 +168,8 @@ Section -PostInstall
   done:
   FindClose $0
   
-  ${If} $installed_version == "" ${AndIf} ${RunningX64}
+  ${If} $installed_version == ""
+  ${AndIf} ${RunningX64}
   	nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
   ${EndIf}
   
