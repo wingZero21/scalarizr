@@ -146,6 +146,7 @@ Group:          Applications/Internet
 Requires:       python26-cloudstack >= 0.1.r16
 %else
 Requires:       python-cloudstack >= 0.1.r16
+Requires:       lsscsi
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
