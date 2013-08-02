@@ -164,8 +164,8 @@ class ChefHandler(Handler):
         environ.update(os.environ)
         environ.update(self._global_variables)
         system2(cmd, 
-            close_fds=True, 
-            log_level=logging.INFO, 
+            close_fds=linux.os.linux_family,
+            log_level=logging.INFO,
             preexec_fn=linux.os.linux_family and os.setsid or None,
             env=environ
         )
