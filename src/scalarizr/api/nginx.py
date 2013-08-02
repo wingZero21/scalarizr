@@ -707,7 +707,7 @@ class NginxAPI(object):
         """
         # typecast is needed because scalr sends bool params as strings: '1' for True, '0' for False 
         ssl = _bool_from_scalr_str(ssl)
-        http = _bool_from_scalr_str(http)
+        http = _bool_from_scalr_str(http) if ssl else True
         backend_ip_hash = _bool_from_scalr_str(backend_ip_hash)
         reread_conf = _bool_from_scalr_str(reread_conf)
         reload_service = _bool_from_scalr_str(reload_service)
