@@ -78,7 +78,11 @@ class ChefHandler(Handler):
             self._global_variables[kv['name']] = kv['value'] or ''
 
         if 'chef' in message.body and message.body['chef']:
-            self._chef_client_bin = which('chef-client')   # Workaround for 'chef' behavior enabled, but chef not installed
+            if linux.os.windows_family:
+                self._chef_client_bin = r'C:\opscode\chef\bin\chef-client.bat'
+            else:
+                self._chef_client_bin = which('chef-client')   # Workaround for 'chef' behavior enabled, but chef not installed
+
             self._chef_data = message.chef.copy()
             if not self._chef_data.get('node_name'):
                 self._chef_data['node_name'] = self.get_node_name()
@@ -94,9 +98,9 @@ class ChefHandler(Handler):
                 try:
                     with op.step(self._step_register_node):
                         # Create client configuration
-                        dir = os.path.dirname(self._client_conf_path)
-                        if not os.path.exists(dir):
-                            os.makedirs(dir)
+                        _dir = os.path.dirname(self._client_conf_path)
+                        if not os.path.exists(_dir):
+                            os.makedirs(_dir)
                         with open(self._client_conf_path, 'w+') as fp:
                             fp.write(CLIENT_CONF_TPL % self._chef_data)
                         os.chmod(self._client_conf_path, 0644)
@@ -162,7 +166,7 @@ class ChefHandler(Handler):
         system2(cmd, 
             close_fds=True, 
             log_level=logging.INFO, 
-            preexec_fn=os.setsid, 
+            preexec_fn=linux.os.linux_family and os.setsid or None,
             env=environ
         )
 
