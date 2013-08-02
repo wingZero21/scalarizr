@@ -511,7 +511,7 @@ class ServerSerializer(OptionSerializer):
                     del d['port']
 
             for key in d.keys():
-                if isinstance(d[key], bool):
+                if isinstance(d[key], bool) and d[key]:
                     res.append(key)
                 else:
                     LOG.debug('d[key]: `%s`', d[key])
