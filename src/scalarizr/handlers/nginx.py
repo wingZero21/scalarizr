@@ -168,7 +168,7 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('message data: %s' % data)
             if data and 'preset' in data:
                 self.initial_preset = data['preset'].copy()
-            if data and 'proxies' in data:
+            if data and data.get('proxies'):
                 self._set_nginx_v2_mode_flag(True)
                 self._proxies = list(data.get('proxies', []))
             else:
@@ -197,7 +197,7 @@ class NginxHandler(ServiceCtlHandler):
 
     def _set_nginx_v2_mode_flag(self, on):
         if on and not self._get_nginx_v2_mode_flag():
-            open(self._nginx_v2_flag_filepath).close()
+            open(self._nginx_v2_flag_filepath, 'w').close()
         elif not on and self._get_nginx_v2_mode_flag():
             os.remove(self._nginx_v2_flag_filepath)
 
@@ -209,7 +209,7 @@ class NginxHandler(ServiceCtlHandler):
         if __node__['state'] == 'running':
             role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
             nginx_params = role_params.get(BEHAVIOUR)
-            v2_mode = (nginx_params and 'proxies' in nginx_params) \
+            v2_mode = (nginx_params and nginx_params.get('proxies')) \
                 or self._get_nginx_v2_mode_flag()
 
             self._logger.debug('Updating main config')
