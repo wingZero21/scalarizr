@@ -163,6 +163,10 @@ class ChefHandler(Handler):
         }
         environ.update(os.environ)
         environ.update(self._global_variables)
+        if linux.os.windows_family:
+            # Windows env should contain only strings, unicode is not an option
+            environ = dict((str(x), str(y)) for x, y in environ.items())
+
         system2(cmd, 
             close_fds=linux.os.linux_family,
             log_level=logging.INFO,
