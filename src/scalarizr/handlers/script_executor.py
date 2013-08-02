@@ -61,6 +61,7 @@ class ScriptExecutor(Handler):
     def __init__(self):
         self.queue = Queue.Queue()
         self.in_progress = []
+        self.global_variables = None
         bus.on(
                 init=self.on_init,
                 start=self.on_start,
@@ -201,13 +202,21 @@ class ScriptExecutor(Handler):
                 self._logger.debug('Empty scripts list. Breaking')
                 return
 
+            environ = os.environ.copy()
+
+            global_variables = message.body.get('global_variables') or []
+            global_variables = dict((kv['name'], kv['value'] or '') for kv in global_variables)
+            environ.update(global_variables)
+
             LOG.debug('Fetching scripts from incoming message')
             scripts = [Script(name=item['name'], body=item['body'],
                                             asynchronous=int(item['asynchronous']),
-                                            exec_timeout=item['timeout'], event_name=event_name,
+                                            exec_timeout=item['timeout'], 
                                             role_name=role_name,
                                             event_server_id=message.body.get('server_id'),
-                                            event_id=message.body.get('event_id'))
+                                            event_id=message.body.get('event_id'),
+                                            event_name=event_name,
+                                            environ=environ)
                                     for item in message.body['scripts']]
         else:
             # TODO: remove obsolete code
@@ -222,9 +231,7 @@ class ScriptExecutor(Handler):
                                     exec_timeout=s.exec_timeout, event_name=event_name, role_name=role_name) \
                                     for s in queryenv_scripts]
 
-        global_variables = message.body.get('global_variables') or []
-        for kv in global_variables:
-            os.environ[kv['name']] = kv['value'] or ''
+
 
         LOG.debug('Fetched %d scripts', len(scripts))
         self.execute_scripts(scripts)
@@ -246,6 +253,7 @@ class Script(object):
     interpreter = None
     start_time = None
     exec_path = None
+    environ = None
 
     logger = None
     proc = None
@@ -319,8 +327,8 @@ class Script(object):
                         '\n  timeout: %s seconds',
                         self.interpreter, self.exec_path, self.stdout_path,
                         self.stderr_path, self.exec_timeout)
-        self.proc = subprocess.Popen(self.exec_path, stdout=stdout,
-                                                stderr=stderr, close_fds=True)
+        self.proc = subprocess.Popen(self.exec_path, 
+                        stdout=stdout, stderr=stderr, close_fds=True, env=self.environ)
         self.pid = self.proc.pid
         self.start_time = time.time()
 
