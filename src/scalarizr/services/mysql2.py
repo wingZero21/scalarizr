@@ -275,12 +275,16 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
                         [self._xbak.stdout],
                         self.cloudfs_target,
                         compressor=self.compressor)
+
+        stderr_thread, stderr = cloudfs.readfp_thread(self._xbak.stderr)
+
         manifesto = self._transfer.run()
         if self._killed:
             raise Error("Canceled")
-        stderr = self._xbak.communicate()[1]
+        stderr_thread.join()
+        self._xbak.wait()
         if self._xbak.returncode:
-            raise Error(stderr)
+            raise Error(stderr[0])
 
         with self._xbak_init_lock:
             self._xbak = None
