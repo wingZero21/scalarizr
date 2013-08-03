@@ -84,6 +84,15 @@ class NamedStream(object):
         return getattr(self._stream, attr)
 
 
+def readfp_thread(fp):
+    buf = []
+    def reader(fp, buf):
+        buf.append(fp.read())
+    t = threading.Thread(target=reader, args=(fp, buf))
+    t.setDaemon(True)
+    t.start()
+    return t, buf
+
 class BaseTransfer(bases.Task):
 
     def __init__(self, src=None, dst=None, **kwds):
@@ -815,6 +824,9 @@ class LargeTransfer(bases.Task):
                     else:  # custom streamer
                         LOG.debug("RESTORER custom decompressor popen")
                         cmd = self.streamer.popen(stdin=compressor_out)
+                        # avoid process chain deadlock when streamer stderr is more then PIPE_BUF
+                        readfp_thread(cmd.stderr)  
+
                         LOG.debug("RESTORER after custom decompressor popen")
 
                     if file_["compressor"]:
