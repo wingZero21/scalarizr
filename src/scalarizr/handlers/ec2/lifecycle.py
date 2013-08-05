@@ -9,7 +9,6 @@ import os
 import re
 import sys
 import logging
-import ConfigParser
 
 from scalarizr.bus import bus
 from scalarizr.node import __node__
@@ -50,16 +49,17 @@ class Ec2LifeCycleHandler(Handler):
         producer = msg_service.get_producer()
         producer.on("before_send", self.on_before_message_send)
 
-        # Set the hostname to this instance's public hostname
-        try:
-            hostname_as_pubdns = int(__ec2__['hostname_as_pubdns'])
-        except:
-            hostname_as_pubdns = True
+        if not os_dist.windows_family:
+            # Set the hostname to this instance's public hostname
+            try:
+                hostname_as_pubdns = int(__ec2__['hostname_as_pubdns'])
+            except:
+                hostname_as_pubdns = True
 
-        if hostname_as_pubdns:
-            pub_hostname = self._platform.get_public_hostname()
-            self._logger.debug('Setting hostname to %s' % pub_hostname)
-            system2("hostname " + pub_hostname, shell=True)
+            if hostname_as_pubdns:
+                pub_hostname = self._platform.get_public_hostname()
+                self._logger.debug('Setting hostname to %s' % pub_hostname)
+                system2("hostname " + pub_hostname, shell=True)
 
         if disttool.is_ubuntu():
             # Ubuntu cloud-init scripts may disable root ssh login
