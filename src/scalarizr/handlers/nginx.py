@@ -350,7 +350,7 @@ class NginxHandler(ServiceCtlHandler):
         else:
             server = message.remote_ip
 
-        self._remove_shut_down_server(server, role_id, behaviours, True)
+        self._remove_shut_down_server(server, role_id, role_name, behaviours, True)
 
     def on_VhostReconfigure(self, message):
         if self._in_default_mode():
