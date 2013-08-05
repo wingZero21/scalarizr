@@ -557,6 +557,9 @@ if linux.os.windows_family:
         def net_stats(self):
             res = dict()
             for iface in wmi.InstancesOf('Win32_PerfRawData_Tcpip_NetworkInterface'):
+                if iface.Name == '_Total':
+                    continue
+
                 res[iface.Name] = dict(
                     receive=dict(
                         bytes=int(iface.Properties_['BytesReceivedPersec']),
