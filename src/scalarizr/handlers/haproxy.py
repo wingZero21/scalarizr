@@ -14,6 +14,7 @@ import sys
 import logging
 from pprint import pformat
 from copy import deepcopy
+import hashlib
 
 
 def get_handlers():
@@ -142,9 +143,15 @@ class HAProxyHandler(Handler):
         self._data = deepcopy(msg.haproxy)
         LOG.debug("data for add proxy %s", pformat(self._data))
 
-    def on_BeforeHostUp(self, msg):
-        LOG.debug("HAProxyHandler on_BeforeHostUp")
-        if self.svs.status() != 0:
+    def on_before_host_up(self, msg):
+        LOG.debug('HAProxyHandler.on_before_host_up')
+        with open(self.api.cfg.cnf_path) as f:
+            conf_md5 = hashlib.md5(f.read()).hexdigest()
+        if conf_md5 = "0117f6d05c5aec6c5841ba4cd217d8c6":  # TODO: remove actual sum
+            LOG.debug("Haproxy conf md5 sum is: %s, creating new conf", conf_md5)
+            self.api.recreate_conf()
+
+        if self.svs.status() != 0:  # TODO: adjust make proxy so this could be at the end
             self.svs.start()
 
         healthcheck_names = {
@@ -170,11 +177,9 @@ class HAProxyHandler(Handler):
 
         msg.haproxy = "test"
 
-    def on_before_host_up(self, msg):
-        LOG.debug('HAProxyHandler.on_before_host_up')
-        return
 
         """
+    def on_before_host_up(self, msg):
         try:
             if self.svs.status() != 0:
                 self.svs.start()

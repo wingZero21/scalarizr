@@ -188,6 +188,20 @@ class HAProxyAPI(object):
         self.svc.reload()
 
 
+    def recreate_conf(self):
+        LOG.debug("Recreating haproxy conf at %s", self.cfg.cnf_path)
+        with open(self.cfg.cnf_path, 'w') as f:
+            f.write("defaults\n")
+        self.cfg.reload()
+
+        self.cfg.defaults['timeout']['connect'] = '5000ms'
+        self.cfg.defaults['timeout']['client'] = '5000ms'
+        self.cfg.defaults['timeout']['server'] = '5000ms'
+
+        self.cfg.save()
+        self.cfg.reload()
+
+
     @rpc.service_method
     @validate.param('backend', optional=_rule_backend)
     def add_server(self, server=None, backend=None):
