@@ -161,7 +161,7 @@ class ApacheAPI(object):
                 cert = SSLCertificate()
                 cert.ensure()
 
-            vhost_path = self.get_vhost_path(hostname, cert)
+            vhost_path = self.get_vhost_path(hostname, vhost_data.https)
             body = vhost_data.raw.replace('/etc/aws/keys/ssl', __apache__['cert_path'])
             with open(vhost_path, 'w') as fp:
                 fp.write(body)
