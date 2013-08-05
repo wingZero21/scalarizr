@@ -42,11 +42,13 @@ if linux.os.debian_family:
         'ports_conf_deb'  : '/etc/apache2/ports.conf',
         'ssl_load_deb'    : '/etc/apache2/mods-enabled/ssl.load',
         'mod_rpaf_path'   : '/etc/apache2/mods-available/rpaf.conf',
+        'default-ssl_path': '/etc/apache2/sites-enabled/default-ssl',
         'key_path_default': '/etc/ssl/private/ssl-cert-snakeoil.key',
         'crt_path_default': '/etc/ssl/certs/ssl-cert-snakeoil.pem',
         'apachectl'       : '/usr/sbin/apache2ctl',
         'bin_path'        : '/usr/sbin/apache2',
         'a2enmod_path'    : '/usr/sbin/a2enmod',
+        'a2ensite_path'   : '/usr/sbin/a2ensite',
         'initd_script'    : '/etc/init.d/apache2',
         'group'           : 'www-data',
 
@@ -71,7 +73,8 @@ else:
     apache.update({
         'httpd.conf'      : '/etc/httpd/conf/httpd.conf',
         'default_vhost'   : '/etc/httpd/sites-enabled/000-default',
-        'ssl_conf_path'   : '/etc/httpd/conf.d/ssl.conf',
+        ':q'
+        ''   : '/etc/httpd/conf.d/ssl.conf',
         'mod_ssl_file'    : '/etc/httpd/modules/mod_ssl.so',
         'mod_rpaf_path'   : '/etc/httpd/conf.d/mod_rpaf.conf',
         'key_path_default': '/etc/pki/tls/private/localhost.key',
@@ -137,8 +140,10 @@ class ApacheAPI(object):
 
     @rpc.service_method
     def delete_vhosts(self, vhosts, reload=True):
-        for vhost in vhosts:
-            pass
+        for hostname, is_ssl in vhosts:
+            vhost_path = self.get_vhost_path(hostname, is_ssl)
+            if os.path.exists(vhost_path):
+                os.remove(vhost_path)
 
         if reload:
             self.reload_service()
@@ -155,18 +160,18 @@ class ApacheAPI(object):
             if vhost_data.https:
                 cert = SSLCertificate()
                 cert.ensure()
-                body = vhost_data.raw.replace('/etc/aws/keys/ssl', __apache__['cert_path'])
-                vhost = ApacheVirtualHost(hostname, port, body, cert)
-            else:
-                vhost = ApacheVirtualHost(hostname, port, vhost_data.raw)
-            vhost.ensure()
-            deployed_vhosts.append(vhost)
+
+            vhost_path = self.get_vhost_path(hostname, cert)
+            body = vhost_data.raw.replace('/etc/aws/keys/ssl', __apache__['cert_path'])
+            with open(vhost_path, 'w') as fp:
+                fp.write(body)
+            deployed_vhosts.append(vhost_path)
 
         #cleanup
         vhosts_dir = __apache__['vhosts_dir']
         for fname in os.listdir(vhosts_dir):
             old_vhost_path = os.path.join(vhosts_dir, fname)
-            if old_vhost_path not in [vhost.vhost_path for vhost in deployed_vhosts]:
+            if old_vhost_path not in deployed_vhosts:
                 LOG.debug('Removing old vhost file %s' % old_vhost_path)
                 os.remove(old_vhost_path)
         self.service.reload()
@@ -210,13 +215,9 @@ class ApacheAPI(object):
         Server uptime
         Total accesses
         CPU Usage
+
+        Available only when mod_stat is enabled
         '''
-        pass
-
-
-
-    @rpc.service_method
-    def list_webserver_ssl_certificates(self):
         pass
 
 
@@ -367,20 +368,6 @@ class ApacheAPI(object):
         end = ext if not ssl else '-ssl' + ext
         return os.path.join(__apache__['vhosts_dir'], hostname + end)
 
-    '''
-    def ensure(self):
-        with open(self.vhost_path, 'w') as fp:
-            fp.write(self.body)
-        self.ensure_document_root()
-        if self.cert:
-            self.mod_ssl.set_default_certificate(self.cert)
-        #TODO: check ssl.conf, debian.conf, etc. if needed
-
-
-    def delete(self):
-        os.remove(self.vhost_path)
-    '''
-
 
 class ApacheConfig(object):
 
@@ -460,6 +447,10 @@ class ModSSL(object):
         if not os.path.exists(__apache__['ssl_load_deb']):
             LOG.info('Enabling mod_ssl')
             system2((__apache__['a2enmod_path'], 'ssl'))
+
+        if not os.path.exists(__apache__['default-ssl_path']):
+            LOG.debug('Enabling default SSL virtualhost')
+            system2((__apache__['a2ensite_path'], 'default-ssl'))
 
         LOG.debug('Ensuring NameVirtualHost *:%s' % ssl_port)
         if os.path.exists(__apache__['ports_conf_deb']):
@@ -584,13 +575,11 @@ class SSLCertificate(object):
 
 
     def ensure(self):
-        if not os.path.exists(self.cert_path) or not os.path.exists(self.key_path):
-            LOG.debug("Retrieving ssl cert and private key from Scalr.")
-            cert_data = self._queryenv.get_ssl_certificate(self.id)
-            cacert = cert_data[2] if len(cert_data) > 2 else None
-            self.update(cert_data[0],cert_data[1],cacert)
-        else:
-            LOG.debug('Cert files are already in place')
+        #TODO: check if certificate files exist and contain the same data
+        LOG.debug("Retrieving ssl cert and private key from Scalr.")
+        cert_data = self._queryenv.get_ssl_certificate(self.id)
+        cacert = cert_data[2] if len(cert_data) > 2 else None
+        self.update(cert_data[0],cert_data[1],cacert)
 
 
     def delete(self):
