@@ -128,7 +128,7 @@ class ApacheAPI(object):
             cert.ensure()
 
         body = template.replace('/etc/aws/keys/ssl', __apache__['cert_path'])
-        vhost_path = self.get_vhost_path(hostname, cert)
+        vhost_path = self.get_vhost_path(hostname, ssl_certificate_id)
         with open(vhost_path, 'w') as fp:
             fp.write(body)
 
@@ -156,7 +156,8 @@ class ApacheAPI(object):
         for vhost_data in received_vhosts:
             hostname = vhost_data.hostname
             port = 443 if vhost_data.https else 80
-            self.create_vhost(hostname, port, vhost_data.raw, 0, False)
+            cert_id = 0 if vhost_data.https else None
+            self.create_vhost(hostname, port, vhost_data.raw, cert_id, reload=False)
             deployed_vhosts.append(self.get_vhost_path(hostname, vhost_data.https))
 
         #cleanup
