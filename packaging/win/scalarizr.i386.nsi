@@ -136,6 +136,8 @@ Section "MainSection" SEC01
   ${EnableX64FSRedirection}
 
   SetOutPath "$INSTDIR\var\log"
+  
+  SetOutPath "$INSTDIR\var\run"
 
 SectionEnd
 
