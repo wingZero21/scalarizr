@@ -603,17 +603,14 @@ if linux.os.windows_family:
 
         @rpc.service_method
         def cpu_stat(self):
-            user = system = idle = 0
-            for proc in wmi.InstancesOf('Win32_PerfRawData_PerfOS_Processor'):
-                if proc.Name == '_Total':
-                    idle += int(proc.PercentIdleTime)
-                    user += int(proc.PercentUserTime)
-                    system += int(proc.PercentPrivilegedTime)
+            processors = wmi.InstancesOf('Win32_Processor')
+            avg_percentage = float(sum([cpu.LoadPercentage for cpu in processors])) / len(processors)
 
             return {
-                'user': user,
-                'system': system,
-                'idle': idle
+                'user': avg_percentage,
+                'system': 0,
+                'idle': 0,
+                'nice': 0
             }
 
         @rpc.service_method

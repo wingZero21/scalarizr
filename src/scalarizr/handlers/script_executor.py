@@ -39,7 +39,7 @@ skip_events = set()
 """
 
 exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
-logs_dir = '/var/log/scalarizr/scripting'
+logs_dir = os_dist.linux_family and '/var/log/scalarizr/scripting' or r'C:\Program Files\Scalarizr\var\log\scripting'
 logs_truncate_over = 20 * 1000
 
 

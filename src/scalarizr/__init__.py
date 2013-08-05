@@ -1066,6 +1066,30 @@ if 'Windows' == linux.os['family']:
                 # Install win services
                 sys.argv = [sys.argv[0], '--startup', 'auto', 'install']
                 win32serviceutil.HandleCommandLine(WindowsService)
+                # Make scalarizr service bullet-proof
+                hscm = win32service.OpenSCManager(None,None,win32service.SC_MANAGER_ALL_ACCESS)
+                try:
+                    hs = win32serviceutil.SmartOpenService(hscm,
+                                        WindowsService._svc_name_, win32service.SERVICE_ALL_ACCESS)
+                    try:
+                        service_failure_actions = {
+                                'ResetPeriod': 100,
+                                'RebootMsg': u'',
+                                'Command': u'',
+                                'Actions': [
+                                        (win32service.SC_ACTION_RESTART, 1000),
+                                        (win32service.SC_ACTION_RESTART, 1000),
+                                        (win32service.SC_ACTION_RESTART, 1000)
+                                    ]
+                            }
+                        win32service.ChangeServiceConfig2(hs,
+                                            win32service.SERVICE_CONFIG_FAILURE_ACTIONS,
+                                            service_failure_actions)
+                    finally:
+                        win32service.CloseServiceHandle(hs)
+                finally:
+                    win32service.CloseServiceHandle(hscm)
+
                 win32serviceutil.StartService(WindowsService._svc_name_)
                 sys.exit()
 
