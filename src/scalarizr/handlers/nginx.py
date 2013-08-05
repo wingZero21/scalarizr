@@ -344,6 +344,7 @@ class NginxHandler(ServiceCtlHandler):
     def on_BeforeHostTerminate(self, message):
         server = ''
         role_id = message.farm_role_id
+        role_name = message.role_name
         behaviours = message.behaviour
         if message.cloud_location == __node__['cloud_location']:
             server = message.local_ip
