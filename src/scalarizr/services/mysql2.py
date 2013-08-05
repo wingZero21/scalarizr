@@ -277,6 +277,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
                         compressor=self.compressor)
 
         stderr_thread, stderr = cloudfs.readfp_thread(self._xbak.stderr)
+        stderr = stderr[0]
 
         manifesto = self._transfer.run()
         if self._killed:
@@ -284,7 +285,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
         stderr_thread.join()
         self._xbak.wait()
         if self._xbak.returncode:
-            raise Error(stderr[0])
+            raise Error(stderr)
 
         with self._xbak_init_lock:
             self._xbak = None
