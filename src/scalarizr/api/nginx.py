@@ -592,7 +592,7 @@ class NginxAPI(object):
         config.add('server/if/return', '302')
 
     def _add_ssl_params(self, config, server_xpath, ssl_port, ssl_certificate_id):
-        config.add('%s/listen' % server_xpath, '%s default ssl' % (ssl_port or '443'))
+        config.add('%s/listen' % server_xpath, '%s ssl' % (ssl_port or '443'))
         config.add('%s/ssl' % server_xpath, 'on')
         ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
@@ -722,7 +722,7 @@ class NginxAPI(object):
         grouped_destinations = self._group_destinations(destinations)
         if not grouped_destinations:
             raise BaseException('No destinations given given')
-        if ssl_port == port:
+        if ssl_port == port and ssl_port != None:
             raise BaseException("HTTP and HTTPS ports can't be the same")
 
         if reread_conf:
