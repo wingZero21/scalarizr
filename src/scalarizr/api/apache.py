@@ -123,6 +123,10 @@ class ApacheAPI(object):
 
     @rpc.service_method
     def create_vhost(self, hostname, port, template, ssl_certificate_id=None, reload=True):
+        if ssl_certificate_id == True:
+            #XXX: compatibility
+            cert = SSLCertificate()
+            cert.ensure()
         if ssl_certificate_id:
             cert = SSLCertificate(ssl_certificate_id)
             cert.ensure()
@@ -133,7 +137,6 @@ class ApacheAPI(object):
             fp.write(body)
 
         self.ensure_document_root(vhost_path)
-
         if reload:
             self.reload_service()
 
@@ -156,7 +159,7 @@ class ApacheAPI(object):
         for vhost_data in received_vhosts:
             hostname = vhost_data.hostname
             port = 443 if vhost_data.https else 80
-            cert_id = 0 if vhost_data.https else None
+            cert_id = vhost_data.https
             self.create_vhost(hostname, port, vhost_data.raw, cert_id, reload=False)
             deployed_vhosts.append(self.get_vhost_path(hostname, vhost_data.https))
 
@@ -208,6 +211,9 @@ class ApacheAPI(object):
         Server uptime
         Total accesses
         CPU Usage
+
+        The machine readable file can be accessed by using the following link:
+        http://your.server.name/server-status?auto
 
         Available only when mod_stat is enabled
         '''
