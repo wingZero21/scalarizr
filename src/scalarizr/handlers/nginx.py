@@ -253,6 +253,9 @@ class NginxHandler(ServiceCtlHandler):
         # Assuming backend `backend` can be only in default behaviour mode
         if self._in_default_mode():
             upstream_role = __nginx__['upstream_app_role']
+            self._logger.debug('upstream app role is %s and server is up in role %s',
+                __nginx__['upstream_app_role'],
+                role_name)
             if (upstream_role and upstream_role == role_name) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
 
