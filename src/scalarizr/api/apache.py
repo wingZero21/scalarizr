@@ -127,7 +127,7 @@ class ApacheAPI(object):
             #XXX: compatibility
             cert = SSLCertificate()
             cert.ensure()
-        if ssl_certificate_id:
+        elif ssl_certificate_id:
             cert = SSLCertificate(ssl_certificate_id)
             cert.ensure()
 
@@ -159,7 +159,7 @@ class ApacheAPI(object):
         for vhost_data in received_vhosts:
             hostname = vhost_data.hostname
             port = 443 if vhost_data.https else 80
-            cert_id = vhost_data.https
+            cert_id = vhost_data.https #XXX: compatibility
             self.create_vhost(hostname, port, vhost_data.raw, cert_id, reload=False)
             deployed_vhosts.append(self.get_vhost_path(hostname, vhost_data.https))
 
