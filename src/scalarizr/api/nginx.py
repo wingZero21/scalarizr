@@ -265,6 +265,8 @@ class NginxAPI(object):
 
     @rpc.service_method
     def recreate_proxying(self, proxy_list):
+        if not proxy_list:
+            proxy_list = []
         if proxy_list == [None]:
             return
 
