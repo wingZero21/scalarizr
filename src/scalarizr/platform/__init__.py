@@ -214,7 +214,7 @@ class Ec2LikePlatform(Platform):
 
     def _get_property(self, name):
         if not self._metadata.has_key(name):
-            full_name = os.path.join(self._metadata_key, name)
+            full_name = self._metadata_key + "/" + name
             self._metadata[name] = self._fetch_metadata(full_name)
         return self._metadata[name]
 
