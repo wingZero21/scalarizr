@@ -820,8 +820,9 @@ class Service(object):
         consumer = msg_service.get_consumer()
         consumer.listeners.append(MessageListener())
 
-        logger.debug('Schedule SNMP process')
-        self._snmp_scheduled_start_time = time.time()
+        if linux.os.linux_family:
+            logger.debug('Schedule SNMP process')
+            self._snmp_scheduled_start_time = time.time()
 
         Storage.maintain_volume_table = True
 
