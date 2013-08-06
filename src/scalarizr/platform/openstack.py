@@ -111,7 +111,7 @@ class OpenstackPlatform(platform.Platform):
         servers = nova.servers.list()
         my_private_ip = self.get_private_ip()
         for server in servers:
-            private_ip = 'private' in server.addresses and server.addresses['private']['addr']
+            private_ip = 'private' in server.addresses and server.addresses['private'][0]['addr']
             if not private_ip:
                 ips = [address['addr'] 
                         for network in server.addresses.values()
