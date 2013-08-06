@@ -185,7 +185,7 @@ class HAProxyAPI(object):
         )
 
         self.cfg.save()
-        if self.svc.status() = 0:
+        if self.svc.status() == 0:
             self.svc.reload()
 
 
