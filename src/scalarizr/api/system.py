@@ -632,7 +632,7 @@ if linux.os.windows_family:
             return {
                 'user': avg_percentage,
                 'system': 0,
-                'idle': 0,
+                'idle': 100 - avg_percentage,
                 'nice': 0
             }
 
