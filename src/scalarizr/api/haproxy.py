@@ -185,7 +185,8 @@ class HAProxyAPI(object):
         )
 
         self.cfg.save()
-        self.svc.reload()
+        if self.svс.status() = 0:
+            self.svc.reload()
 
 
     def recreate_conf(self):
