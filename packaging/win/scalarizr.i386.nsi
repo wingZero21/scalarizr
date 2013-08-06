@@ -78,7 +78,6 @@ Function .onInit
 FunctionEnd
 
 Section "MainSection" SEC01
-  LogSet on
   ${If} $installed_version != ""
 	services::IsServiceRunning 'Scalarizr'
 	Pop $0
