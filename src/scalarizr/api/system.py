@@ -18,6 +18,7 @@ import time
 import signal
 import weakref
 import threading
+import functools
 import subprocess as subps
 
 from Queue import Queue, Empty
@@ -534,6 +535,7 @@ if linux.os.windows_family:
     from win32com import client
 
     def coinitialized(fn):
+        @functools.wraps(fn)
         def decorator(*args, **kwargs):
             pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
             try:
