@@ -219,8 +219,13 @@ class ApacheAPI(object):
         Available only when mod_stat is enabled
         '''
         d = dict()
-        f = urllib2.urlopen('http://127.0.0.1/server-status?auto')
-        data = f.read()
+        try:
+            f = urllib2.urlopen('http://127.0.0.1/server-status?auto')
+            data = f.read()
+        except urllib2.HTTPError, e:
+            if '404' in str(e):
+                return {'errmsg': 'mod_status is not enabled'}
+            return {'errmsg':str(e)}
         if data:
             for line in data.split('\n'):
                 pairs = line.split(':')
