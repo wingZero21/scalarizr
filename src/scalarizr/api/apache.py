@@ -195,8 +195,40 @@ class ApacheAPI(object):
 
 
     @rpc.service_method
-    def update_vhost(self, hostname, new_hostname=None, template=None, ssl_certificate_id=None, port=80, reload=True):
-        pass
+    def update_vhost(self, hostname, new_hostname=None, template=None, is_ssl=False, ssl_certificate_id=None, port=80, reload=True):
+        if new_hostname:
+            old_path = self.get_vhost_path(hostname, is_ssl)
+            new_path = self.get_vhost_path(new_hostname, is_ssl)
+            if os.path.exists(old_path):
+                os.rename(old_path, new_path)
+            if template:
+                with open(new_path, 'w') as fp:
+                    fp.write(template)
+            if ssl_certificate_id:
+                cert = SSLCertificate(ssl_certificate_id)
+                cert.ensure()
+                with ApacheConfig(new_path) as apache_conf:
+                    apache_conf.set('.//SSLCertificateFile', cert.cert_path)
+                    apache_conf.set('.//SSLCertificateKeyFile', cert.key_path)
+
+                    if not os.path.exists(cert.ca_crt_path):
+                        try:
+                            old_ca_crt_path = apache_conf.get(".//SSLCertificateChainFile")
+                        except:
+                            old_ca_crt_path = None
+                        else:
+                            if old_ca_crt_path and not os.path.exists(old_ca_crt_path):
+                                apache_conf.comment(".//SSLCertificateChainFile")
+
+                    else:
+                        try:
+                            self._set('.//SSLCertificateChainFile', cert.ca_crt_path, force=False)
+                        except NoPathError:
+                            parent = apache_conf.etree.find('.//SSLCertificateFile/..')
+                            before_el = apache_conf.etree.find('.//SSLCertificateFile')
+                            ch = apache_conf._provider.create_element(apache_conf.etree, './/SSLCertificateChainFile', ca_crt_path)
+                            ch.text = cert.ca_crt_path
+                            parent.insert(list(parent).index(before_el), ch)
 
 
     @rpc.service_method
