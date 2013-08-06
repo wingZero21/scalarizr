@@ -62,14 +62,15 @@ NET_SNMPD = False
 SNMP_RESTART_DELAY = 5 # Seconds
 SNMP_POLL_INTERVAL = 10 # Seconds
 
-
-PID_FILE = '/var/run/scalarizr.pid' 
-
-if 'Windows' == linux.os['family']:
-    LOGFILES_BASEPATH = os.path.normpath(os.path.join(__file__, r'..\..\..\var\log'))
+if linux.os.windows_family:
+    from scalarizr.util import reg_value
+    INSTALL_DIR = reg_value('InstallDir')
 else:
-    LOGFILES_BASEPATH = '/var/log/'
+    INSTALL_DIR = '/'
 
+PID_FILE = os.path.join(INSTALL_DIR, 'var', 'run', 'scalarizr.pid')
+
+LOGFILES_BASEPATH = os.path.join(INSTALL_DIR, 'var', 'log')
 LOG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr.log')
 LOG_DEBUG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr_debug.log')
 

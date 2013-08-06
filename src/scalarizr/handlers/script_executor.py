@@ -9,10 +9,12 @@ from scalarizr.bus import bus
 from scalarizr import LOGFILES_BASEPATH, config as szrconfig
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
-from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
+from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until, system2
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
 from scalarizr.linux import os as os_dist
+if os_dist['family'] == 'Windows':
+    import win32process
 
 import time
 import ConfigParser
@@ -43,6 +45,7 @@ if os_dist.linux_family:
     logs_dir = '/var/log/scalarizr/scripting'
 elif os_dist.windows_family:
     logs_dir = os.path.join(LOGFILES_BASEPATH, 'scripting')
+
 
 logs_truncate_over = 20 * 1000
 
@@ -289,14 +292,13 @@ class Script(object):
         for key, value in kwds.items():
             setattr(self, key, value)
 
-        if os_dist['family'] == 'Windows' and self.body:
-            self.body = '\n'.join(self.body.splitlines()[1:])
 
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
 
         if self.name and self.body:
             self.id = str(time.time())
+            LOG.debug('script: %s', self.body)
             interpreter = read_shebang(script=self.body)
             if not interpreter:
                 raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
@@ -304,15 +306,32 @@ class Script(object):
                                                 "interpreter directive is as follows:\n"
                                                 "#!interpreter [optional-arg]" % (self.name, ))
             self.interpreter = interpreter
+            LOG.debug('IsWow64Process: %s', win32process.IsWow64Process())
+            if os_dist['family'] == 'Windows':
+                # Erase first line with #!
+                self.body = '\n'.join(self.body.splitlines()[1:])
+                '''
+                if not os.path.exists(self.interpreter):
+                    out, code = system2('where {0}'.format(self.interpreter), shell=True)[0:2]
+                    if not code:
+                        self.interpreter = out.strip().replace('\\System32', '\\Sysnative')
+                    else:
+                        msg = 'Interpreter %s not found with `where` utility' % self.interpreter
+                        raise Exception(msg)
+                '''
         else:
             assert self.id, '`id` required'
             assert self.pid, '`pid` required'
             assert self.start_time, '`start_time` required'
             if self.interpreter:
                 self.interpreter = split_strip(self.interpreter)[0]
+                
 
         self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
         self.exec_path = os.path.join(exec_dir_prefix + self.id, self.name)
+        if  self.interpreter == 'powershell' \
+                and os.path.splitext(self.exec_path)[1] not in ('ps1', 'psm1'):
+            self.exec_path += '.ps1'
         if self.exec_timeout:
             self.exec_timeout = int(self.exec_timeout)
         args = (self.name, self.event_name, self.role_name, self.id)
@@ -323,7 +342,7 @@ class Script(object):
         # Check interpreter here, and not in __init__
         # cause scripts can create sequences when previous script
         # installs interpreter for the next one
-        if not os.path.exists(self.interpreter):
+        if not os.path.exists(self.interpreter) and os_dist['family'] != 'Windows':
             raise HandlerError("Can't execute script '%s' cause "
                                             "interpreter '%s' not found" % (self.name, self.interpreter))
 
@@ -348,7 +367,10 @@ class Script(object):
                         self.interpreter, self.exec_path, self.stdout_path,
                         self.stderr_path, self.exec_timeout)
         self.proc = subprocess.Popen(self.exec_path, 
-                        stdout=stdout, stderr=stderr, close_fds=True, env=self.environ)
+                        stdout=stdout, stderr=stderr, 
+                        close_fds=os_dist['family'] != 'Windows',
+                        shell=True,
+                        env=self.environ)
         self.pid = self.proc.pid
         self.start_time = time.time()
 
