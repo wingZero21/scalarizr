@@ -1076,6 +1076,7 @@ if 'Windows' == linux.os['family']:
                 sys.argv = [sys.argv[0], '--startup', 'auto', 'install']
                 win32serviceutil.HandleCommandLine(WindowsService)
                 # Make scalarizr service bullet-proof
+                """
                 hscm = win32service.OpenSCManager(None,None,win32service.SC_MANAGER_ALL_ACCESS)
                 try:
                     hs = win32serviceutil.SmartOpenService(hscm,
@@ -1098,7 +1099,7 @@ if 'Windows' == linux.os['family']:
                         win32service.CloseServiceHandle(hs)
                 finally:
                     win32service.CloseServiceHandle(hscm)
-
+                """
                 win32serviceutil.StartService(WindowsService._svc_name_)
                 sys.exit()
 
