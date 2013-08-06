@@ -41,11 +41,11 @@ skip_events = set()
 """
 
 exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
-if os_dist.linux_family:
-    logs_dir = '/var/log/scalarizr/scripting'
-elif os_dist.windows_family:
+if os_dist.windows_family:
     logs_dir = os.path.join(LOGFILES_BASEPATH, 'scripting')
-
+else:
+    logs_dir = '/var/log/scalarizr/scripting'
+    
 
 logs_truncate_over = 20 * 1000
 
@@ -129,6 +129,9 @@ class ScriptExecutor(Handler):
     def on_start(self):
         # Start log rotation
         self.log_rotate_thread.start()
+
+        if os_dist.windows_family:
+            system2(['powershell', '-noprofile', '-command', 'Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force'])
 
         # Restore in-progress scripts
         LOG.debug('STATE[script_executor.in_progress]: %s', szrconfig.STATE['script_executor.in_progress'])

@@ -1124,6 +1124,7 @@ if 'Windows' == linux.os['family']:
         def SvcStop(self):
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
             win32event.SetEvent(self.hWaitStop)
+            '''
             if self._running:
                 self._running = False
             else:
@@ -1131,6 +1132,7 @@ if 'Windows' == linux.os['family']:
                     self._shutdown()
                 finally:
                     self._stopping = True
+            '''
 
 
         def SvcShutdown(self):
