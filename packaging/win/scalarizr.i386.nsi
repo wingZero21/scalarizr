@@ -78,6 +78,7 @@ Function .onInit
 FunctionEnd
 
 Section "MainSection" SEC01
+  LogSet on
   ${If} $installed_version != ""
 	services::IsServiceRunning 'Scalarizr'
 	Pop $0
@@ -205,11 +206,10 @@ Section Uninstall
   nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
   nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
 
-  RMDir /r /REBOOTOK "$INSTDIR"
-  SetShellVarContext all
-  RMDir /r /REBOOTOK "$SMPROGRAMS\Scalarizr"
-  SetShellVarContext current
-  RMDir /r /REBOOTOK "$SMPROGRAMS\Scalarizr"
+  Rename $INSTDIR\etc $PLUGINSDIR\etc
+  RMDir /R $INSTDIR
+  CreateDirectory $INSTDIR
+  Rename $PLUGINSDIR\etc $INSTDIR\etc
 
   DeleteRegKey ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}"
   SetAutoClose true
