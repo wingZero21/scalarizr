@@ -145,12 +145,11 @@ class HAProxyHandler(Handler):
 
     def on_before_host_up(self, msg):
         LOG.debug('HAProxyHandler.on_before_host_up')
-        LOG.debug("%s", self.api.cfg.cnf_path)
         with open(self.api.cfg.cnf_path) as f:
             conf_md5 = hashlib.md5(f.read()).hexdigest()
-        LOG.debug("%s", conf_md5)
-        if conf_md5 == "0117f6d05c5aec6c5841ba4cd217d8c6":  # TODO: remove actual sum
-            LOG.debug("Haproxy conf md5 sum is: %s, creating new conf", conf_md5)
+        LOG.debug("%s md5 sum: %s", self.api.cfg.cnf_path, conf_md5)
+        if conf_md5 == "c3bfb0c86138552475dea458e8ab36f3":  # TODO: remove actual sum
+            LOG.debug("Creating new haproxy conf", conf_md5)
             self.api.recreate_conf()
 
         if self.svs.status() != 0:  # TODO: adjust make proxy so this could be at the end
