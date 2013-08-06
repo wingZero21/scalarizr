@@ -486,6 +486,7 @@ class SystemAPI(object):
         finally:
             wrk_pool.close()
             wrk_pool.join()
+
         '''
         rewrite without ThreadPool
         max_threads = 10
@@ -669,3 +670,4 @@ if linux.os.windows_family:
             return ret
 
     SystemAPI = WindowsSystemAPI
+

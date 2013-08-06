@@ -242,6 +242,7 @@ class NginxHandler(ServiceCtlHandler):
     def on_HostUp(self, message):
         server = ''
         role_id = message.farm_role_id
+        role_name = message.role_name
         behaviours = message.behaviour
         if message.cloud_location == __node__['cloud_location']:
             server = message.local_ip
@@ -252,7 +253,10 @@ class NginxHandler(ServiceCtlHandler):
         # Assuming backend `backend` can be only in default behaviour mode
         if self._in_default_mode():
             upstream_role = __nginx__['upstream_app_role']
-            if (upstream_role and upstream_role == role_id) or \
+            self._logger.debug('upstream app role is %s and server is up in role %s',
+                __nginx__['upstream_app_role'],
+                role_name)
+            if (upstream_role and upstream_role == role_name) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
 
                 for default_backend in ['backend', 'backend.ssl']:
@@ -282,6 +286,7 @@ class NginxHandler(ServiceCtlHandler):
     def _remove_shut_down_server(self,
                                  server,
                                  role_id,
+                                 role_name,
                                  behaviours,
                                  cache_remove=False):
         if server in self._terminating_servers:
@@ -293,7 +298,7 @@ class NginxHandler(ServiceCtlHandler):
         # Assuming backend `backend` can be only in default behaviour mode
         if self._in_default_mode():
             upstream_role = __nginx__['upstream_app_role']
-            if (upstream_role and upstream_role == role_id) or \
+            if (upstream_role and upstream_role == role_name) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
 
                 self._logger.info('removing server %s from default backend' %
@@ -327,24 +332,26 @@ class NginxHandler(ServiceCtlHandler):
     def on_HostDown(self, message):
         server = ''
         role_id = message.farm_role_id
+        role_name = message.role_name
         behaviours = message.behaviour
         if message.cloud_location == __node__['cloud_location']:
             server = message.local_ip
         else:
             server = message.remote_ip
 
-        self._remove_shut_down_server(server, role_id, behaviours)
+        self._remove_shut_down_server(server, role_id, role_name, behaviours)
 
     def on_BeforeHostTerminate(self, message):
         server = ''
         role_id = message.farm_role_id
+        role_name = message.role_name
         behaviours = message.behaviour
         if message.cloud_location == __node__['cloud_location']:
             server = message.local_ip
         else:
             server = message.remote_ip
 
-        self._remove_shut_down_server(server, role_id, behaviours, True)
+        self._remove_shut_down_server(server, role_id, role_name, behaviours, True)
 
     def on_VhostReconfigure(self, message):
         if self._in_default_mode():
