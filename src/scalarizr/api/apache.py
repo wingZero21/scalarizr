@@ -12,6 +12,7 @@ import pwd
 import time
 import shutil
 import logging
+import urllib2
 
 from scalarizr import rpc
 from scalarizr import linux
@@ -217,7 +218,16 @@ class ApacheAPI(object):
 
         Available only when mod_stat is enabled
         '''
-        pass
+        d = dict()
+        f = urllib2.urlopen('http://127.0.0.1/server-status?auto')
+        data = f.read()
+        if data:
+            for line in data.split('\n'):
+                pairs = line.split(':')
+                if len(pairs) > 1:
+                    key, value = pairs
+                    d[key.strip()] = value.strip()
+        return d
 
 
     def init_service(self):
