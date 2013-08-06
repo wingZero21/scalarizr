@@ -329,9 +329,11 @@ class Script(object):
 
         self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
         self.exec_path = os.path.join(exec_dir_prefix + self.id, self.name)
+
         if  self.interpreter == 'powershell' \
                 and os.path.splitext(self.exec_path)[1] not in ('ps1', 'psm1'):
             self.exec_path += '.ps1'
+
         if self.exec_timeout:
             self.exec_timeout = int(self.exec_timeout)
         args = (self.name, self.event_name, self.role_name, self.id)
@@ -357,6 +359,10 @@ class Script(object):
 
         stdout = open(self.stdout_path, 'w+')
         stderr = open(self.stderr_path, 'w+')
+        if self.interpreter == 'powershell':
+            command = [self.interpreter, self.exec_path]
+        else:
+            command = self.exec_path
 
         # Start process
         self.logger.debug('Executing %s'
@@ -366,10 +372,9 @@ class Script(object):
                         '\n  timeout: %s seconds',
                         self.interpreter, self.exec_path, self.stdout_path,
                         self.stderr_path, self.exec_timeout)
-        self.proc = subprocess.Popen(self.exec_path, 
+        self.proc = subprocess.Popen(command, 
                         stdout=stdout, stderr=stderr, 
                         close_fds=os_dist['family'] != 'Windows',
-                        shell=True,
                         env=self.environ)
         self.pid = self.proc.pid
         self.start_time = time.time()
