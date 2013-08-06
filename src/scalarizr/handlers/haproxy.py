@@ -152,9 +152,6 @@ class HAProxyHandler(Handler):
             LOG.debug("Creating new haproxy conf", conf_md5)
             self.api.recreate_conf()
 
-        if self.svs.status() != 0:  # TODO: adjust make proxy so this could be at the end
-            self.svs.start()
-
         healthcheck_names = {
             "healthcheck.fallthreshold": "fall_threshold",
             "healthcheck.interval": "check_interval",
@@ -175,6 +172,9 @@ class HAProxyHandler(Handler):
             self.api.make_proxy(port=proxy["port"],
                                 backends=proxy["backends"],
                                 **healthcheck_params)
+
+        if self.svs.status() != 0:
+            self.svs.start()
 
         msg.haproxy = "test"
 
