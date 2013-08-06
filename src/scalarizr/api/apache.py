@@ -226,6 +226,10 @@ class ApacheAPI(object):
             if '404' in str(e):
                 return {'errmsg': 'mod_status is not enabled'}
             return {'errmsg':str(e)}
+        except urllib2.URLError,e:
+            if '111' in str(e):
+                return {'errmsg': 'Connection refused'}
+            return {'errmsg':str(e)}
         if data:
             for line in data.split('\n'):
                 pairs = line.split(':')
