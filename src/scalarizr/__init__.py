@@ -66,7 +66,11 @@ SNMP_POLL_INTERVAL = 10 # Seconds
 
 PID_FILE = '/var/run/scalarizr.pid' 
 
-LOGFILES_BASEPATH = '/var/log/' if linux.os['family'] != 'Windows' else r'C:\Program Files\Scalarizr\var\log'
+if 'Windows' == linux.os['family']:
+    LOGFILES_BASEPATH = os.path.normpath(os.path.join(__file__, r'..\..\..\var\log'))
+else:
+    LOGFILES_BASEPATH = '/var/log/'
+
 LOG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr.log')
 LOG_DEBUG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr_debug.log')
 

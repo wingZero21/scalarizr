@@ -6,7 +6,7 @@ Created on Dec 24, 2009
 '''
 
 from scalarizr.bus import bus
-from scalarizr import config as szrconfig
+from scalarizr import LOGFILES_BASEPATH, config as szrconfig
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
@@ -39,7 +39,11 @@ skip_events = set()
 """
 
 exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
-logs_dir = os_dist.linux_family and '/var/log/scalarizr/scripting' or r'C:\Program Files\Scalarizr\var\log\scripting'
+if os_dist.linux_family:
+    logs_dir = '/var/log/scalarizr/scripting'
+elif os_dist.windows_family:
+    logs_dir = os.path.join(LOGFILES_BASEPATH, 'scripting')
+
 logs_truncate_over = 20 * 1000
 
 
