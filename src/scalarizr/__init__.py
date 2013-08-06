@@ -6,7 +6,6 @@ if sys.version_info < (2, 6):
     from scalarizr.util import compat
     compat.patch()
 
-
 # Core
 from scalarizr import config, rpc, linux
 from scalarizr.bus import bus
