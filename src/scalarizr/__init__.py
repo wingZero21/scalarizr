@@ -924,7 +924,12 @@ class Service(object):
 
     def _start_update_client(self):
         if linux.os['family'] == 'Windows':
-            pass
+            try:
+                win32serviceutil.StartService('ScalrUpdClient')
+            except:
+                e = sys.exc_info()[1]
+                self._logger.warn('Could not start scalr update client service: %s' % e)
+
         else:
             upd = ScalrUpdClientScript()
             if not upd.running:
