@@ -42,19 +42,11 @@ SetCompressor /FINAL /SOLID lzma
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}-${PRODUCT_RELEASE}"
 OutFile "scalarizr_${PRODUCT_VERSION}-${PRODUCT_RELEASE}.i386.exe"
-InstallDir "$PROGRAMFILES64\Scalarizr"
+InstallDir "$PROGRAMFILES\Scalarizr"
 ShowInstDetails show
 ShowUnInstDetails show
 
 Function .onInit
-  #${IfNot} ${RunningX64}
-  #  MessageBox MB_OK "You are trying to install 64 bit package on 32 bit system. Please, download and install 32 bit package instead." /SD IDOK
-  #  Quit
-  #${EndIf}
-
-  ${If} ${RunningX64}
-    SetRegView 64
-  ${EndIf}
 
   Var /GLOBAL installed_version
   Var /GLOBAL installed_release
@@ -131,12 +123,10 @@ Section "MainSection" SEC01
 
   SetOutPath "$SYSDIR"
   SetOverwrite try
-  ${DisableX64FSRedirection}
   File "i386\python27.dll"
-  ${EnableX64FSRedirection}
 
   SetOutPath "$INSTDIR\var\log"
-  
+
   SetOutPath "$INSTDIR\var\run"
 
 SectionEnd
@@ -183,13 +173,7 @@ Section -PostInstall
   
 	${If} $installed_version == ""
 	
-		${If} ${RunningX64}
-		  ${DisableX64FSRedirection}
-		  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
-		  ${EnableX64FSRedirection}
-		${Else}
-		  nsExec::ExecToLog '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
-		${Endif}
+		nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
 		${ConfigWrite} "$INSTDIR\etc\public.d\config.ini" "scripts_path" " = $INSTDIR\scripts\" $R0
 		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "exec_dir_prefix" " = %TEMP%\scalr-scripting." $R0
 		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "logs_dir_prefix" " = $INSTDIR\var\log\scalarizr\scripting\scalr-scripting." $R0
@@ -199,16 +183,10 @@ Section -PostInstall
 		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\src"
 	${EndIf}
 	
-	${If} ${RunningX64}
-	  ${DisableX64FSRedirection}
-	  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
-	  nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
-	  ${EnableX64FSRedirection}
-	${Else}
-	  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
-	  nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
-	${EndIf}
-	
+
+    nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
+    nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
+
 SectionEnd
 
 
@@ -224,23 +202,15 @@ FunctionEnd
 
 Section Uninstall
   services::SendServiceCommand 'stop' 'Scalarizr'
-  ${If} ${RunningX64}
-    ${DisableX64FSRedirection}
-      nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
-      nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
-    ${EnableX64FSRedirection}
-  ${Else}
-    nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
-    nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
-  ${EndIf}
+  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
+  nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
 
   RMDir /r /REBOOTOK "$INSTDIR"
   SetShellVarContext all
   RMDir /r /REBOOTOK "$SMPROGRAMS\Scalarizr"
   SetShellVarContext current
   RMDir /r /REBOOTOK "$SMPROGRAMS\Scalarizr"
-  
-  SetRegView 64
+
   DeleteRegKey ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}"
   SetAutoClose true
 

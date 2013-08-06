@@ -292,6 +292,7 @@ class SystemAPI(object):
 
     @rpc.service_method
     def cpu_stat(self):
+
         '''
         Return CPU stat from /proc/stat
         @rtype: dict
@@ -531,14 +532,23 @@ if linux.os.windows_family:
     import pythoncom
     from win32com import client
 
-    pythoncom.CoInitialize()
-    wmi = client.GetObject('winmgmts:')
+    def coinitialized(fn):
+        def decorator(*args, **kwargs):
+            pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                pythoncom.CoUninitialize()
+        return decorator
+
 
     class WindowsSystemAPI(SystemAPI):
 
-
+        @coinitialized
         @rpc.service_method
         def disk_stats(self):
+            wmi = client.GetObject('winmgmts:')
+
             res = dict()
             for disk in wmi.InstancesOf('Win32_PerfRawData_PerfDisk_LogicalDisk'):
                 # Skip Total
@@ -555,8 +565,11 @@ if linux.os.windows_family:
                 )
             return res
 
+        @coinitialized
         @rpc.service_method
         def block_devices(self):
+            wmi = client.GetObject('winmgmts:')
+
             res = list()
             for disk in wmi.InstancesOf('Win32_PerfRawData_PerfDisk_LogicalDisk'):
                 if disk.Name == '_Total':
@@ -564,13 +577,17 @@ if linux.os.windows_family:
                 res.append(disk.Name)
             return res
 
+        @coinitialized
         @rpc.service_method
         def dist(self):
             uname = platform.uname()
             return dict(system=uname[0], release=uname[2], version=uname[3])
 
+        @coinitialized
         @rpc.service_method
         def net_stats(self):
+            wmi = client.GetObject('winmgmts:')
+
             res = dict()
             for iface in wmi.InstancesOf('Win32_PerfRawData_Tcpip_NetworkInterface'):
                 if iface.Name == '_Total':
@@ -601,8 +618,11 @@ if linux.os.windows_family:
                 ('system', 'node', 'release', 'version', 'machine', 'processor'), uname
             ))
 
+        @coinitialized
         @rpc.service_method
         def cpu_stat(self):
+            wmi = client.GetObject('winmgmts:')
+
             processors = wmi.InstancesOf('Win32_Processor')
             avg_percentage = float(sum([cpu.LoadPercentage for cpu in processors])) / len(processors)
 
@@ -613,8 +633,11 @@ if linux.os.windows_family:
                 'nice': 0
             }
 
+        @coinitialized
         @rpc.service_method
         def mem_info(self):
+            wmi = client.GetObject('winmgmts:')
+
             meminfo = wmi.InstancesOf('Win32_PerfFormattedData_PerfOS_Memory')[0]
             sysinfo = wmi.InstancesOf('Win32_ComputerSystem')[0]
             return {
@@ -624,8 +647,11 @@ if linux.os.windows_family:
                 'total_free': int(meminfo.Properties_('AvailableKBytes'))
             }
 
+        @coinitialized
         @rpc.service_method
         def statvfs(self, mpoints=None):
+            wmi = client.GetObject('winmgmts:')
+
             # mpoints == disks letters on Windows
             mpoints = map(lambda s: s[0].lower(), mpoints)
             if not isinstance(mpoints, list):
