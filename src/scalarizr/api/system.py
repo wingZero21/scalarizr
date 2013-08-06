@@ -488,8 +488,8 @@ class SystemAPI(object):
             wrk_pool.close()
             wrk_pool.join()
 
-        '''
-        rewrite without ThreadPool
+        """
+        #rewrite without ThreadPool
         max_threads = 10
         result_queue = Queue()
         workers = list()
@@ -498,7 +498,7 @@ class SystemAPI(object):
             _queue.put(_ScalingMetricStrategy.get(metric))
 
         def list_from_queue(q):
-            """ Returns list with all elements of given queue"""
+            # Returns list with all elements of given queue
             ret = []
             while True:
                 try:
@@ -527,7 +527,7 @@ class SystemAPI(object):
 
             if not workers and not scaling_metrics:
                 return list_from_queue(result_queue)
-        '''
+        """
 
 if linux.os.windows_family:
 
