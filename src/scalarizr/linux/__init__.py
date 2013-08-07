@@ -69,12 +69,13 @@ class __os(dict):
         # Detect windows
         _uname = platform.uname()
         if _uname[0].lower() == 'windows':
+            win32_ver = platform.win32_ver()
             self['family'] = 'Windows'
             self['name'] = 'Windows'
-            self['release'] = _uname[2]
-            return
+            self['release'] = win32_ver[1]
+            self['codename'] = win32_ver[0]
 
-        if osmod.path.isfile('/etc/lsb-release'):
+        elif osmod.path.isfile('/etc/lsb-release'):
             for line in open('/etc/lsb-release').readlines():
                 # Matches any possible format:
                 #     DISTRIB_ID="Ubuntu"
