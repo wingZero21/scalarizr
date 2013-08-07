@@ -117,8 +117,8 @@ class HAProxyHandler(Handler):
         LOG.debug("HAProxyHandler on_start_2")
         queryenv = bus.queryenv_service
         role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
-        LOG.debug("role params: %s" % pformat(role_params)
-        LOG.debug("list roles: %s", % pformat(queryenv.list_roles()))
+        LOG.debug("role params: %s", pformat(role_params))
+        LOG.debug("list roles: %s", pformat(queryenv.list_roles()))
 
     def on_start(self):
         LOG.debug("HAProxyHandler on_start")
