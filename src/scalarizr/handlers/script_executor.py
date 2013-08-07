@@ -6,15 +6,14 @@ Created on Dec 24, 2009
 '''
 
 from scalarizr.bus import bus
-from scalarizr import LOGFILES_BASEPATH, config as szrconfig
+from scalarizr import config as szrconfig
+from scalarizr import linux
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until, system2
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
-from scalarizr.linux import os as os_dist
-if os_dist['family'] == 'Windows':
-    import win32process
+
 
 import time
 import ConfigParser
@@ -39,15 +38,15 @@ skip_events = set()
 """
 @var ScriptExecutor will doesn't request scripts on passed events
 """
-
-exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
-if os_dist.windows_family:
-    logs_dir = os.path.join(LOGFILES_BASEPATH, 'scripting')
-else:
-    logs_dir = '/var/log/scalarizr/scripting'
     
 
 logs_truncate_over = 20 * 1000
+if linux.os.windows_family:
+    exec_dir_prefix = r'%Temp%\scalr-scripting.'
+    logs_dir = r'%ProgramFiles%\Scalarizr\var\log\scripting'
+else:
+    exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
+    logs_dir = '/var/log/scalarizr/scripting'
 
 
 def get_truncated_log(logfile, maxsize=None):
@@ -100,20 +99,22 @@ class ScriptExecutor(Handler):
         # read exec_dir_prefix
         try:
             exec_dir_prefix = ini.get(self.name, 'exec_dir_prefix')
-            if os_dist['family'] == 'Windows':
-                exec_dir_prefix = os.path.expandvars(exec_dir_prefix)
-            if not os.path.isabs(exec_dir_prefix):
-                os.path.join(bus.base_path, exec_dir_prefix)
         except ConfigParser.Error:
             pass
+        if linux.os['family'] == 'Windows':
+            exec_dir_prefix = os.path.expandvars(exec_dir_prefix)
+        if not os.path.isabs(exec_dir_prefix):
+            os.path.join(bus.base_path, exec_dir_prefix)
 
-        # read logs_dir_prefix
+        # read logs_dir
         try:
             logs_dir = ini.get(self.name, 'logs_dir')
-            if not os.path.exists(logs_dir):
-                os.makedirs(logs_dir)
         except ConfigParser.Error:
             pass
+        if linux.os['family'] == 'Windows':
+            logs_dir = os.path.expandvars(logs_dir)    
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
 
         # logs_truncate_over
         try:
@@ -130,8 +131,9 @@ class ScriptExecutor(Handler):
         # Start log rotation
         self.log_rotate_thread.start()
 
-        if os_dist.windows_family:
-            system2(['powershell', '-noprofile', '-command', 'Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force'])
+        #if linux.os.windows_family:
+        #    system2(['C:\\Windows\\sysnative\\WindowsPowerShell\\v1.0\\powershell.exe', 
+        #           '-Command', 'Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force'])
 
         # Restore in-progress scripts
         LOG.debug('STATE[script_executor.in_progress]: %s', szrconfig.STATE['script_executor.in_progress'])
@@ -309,19 +311,10 @@ class Script(object):
                                                 "interpreter directive is as follows:\n"
                                                 "#!interpreter [optional-arg]" % (self.name, ))
             self.interpreter = interpreter
-            LOG.debug('IsWow64Process: %s', win32process.IsWow64Process())
-            if os_dist['family'] == 'Windows':
+            if linux.os['family'] == 'Windows':
                 # Erase first line with #!
                 self.body = '\n'.join(self.body.splitlines()[1:])
-                '''
-                if not os.path.exists(self.interpreter):
-                    out, code = system2('where {0}'.format(self.interpreter), shell=True)[0:2]
-                    if not code:
-                        self.interpreter = out.strip().replace('\\System32', '\\Sysnative')
-                    else:
-                        msg = 'Interpreter %s not found with `where` utility' % self.interpreter
-                        raise Exception(msg)
-                '''
+
         else:
             assert self.id, '`id` required'
             assert self.pid, '`pid` required'
@@ -336,6 +329,9 @@ class Script(object):
         if  self.interpreter == 'powershell' \
                 and os.path.splitext(self.exec_path)[1] not in ('ps1', 'psm1'):
             self.exec_path += '.ps1'
+        elif self.interpreter == 'cmd' \
+                and os.path.splitext(self.exec_path)[1] not in ('cmd', 'bat'):
+            self.exec_path += '.bat'
 
         if self.exec_timeout:
             self.exec_timeout = int(self.exec_timeout)
@@ -347,7 +343,7 @@ class Script(object):
         # Check interpreter here, and not in __init__
         # cause scripts can create sequences when previous script
         # installs interpreter for the next one
-        if not os.path.exists(self.interpreter) and os_dist['family'] != 'Windows':
+        if not os.path.exists(self.interpreter) and linux.os['family'] != 'Windows':
             raise HandlerError("Can't execute script '%s' cause "
                                             "interpreter '%s' not found" % (self.name, self.interpreter))
 
@@ -358,12 +354,16 @@ class Script(object):
 
         with open(self.exec_path, 'w') as fp:
             fp.write(self.body.encode('utf-8'))
-        os.chmod(self.exec_path, stat.S_IREAD | stat.S_IEXEC)
+        if not linux.os.windows_family:
+            os.chmod(self.exec_path, stat.S_IREAD | stat.S_IEXEC)
 
         stdout = open(self.stdout_path, 'w+')
         stderr = open(self.stderr_path, 'w+')
         if self.interpreter == 'powershell':
-            command = [self.interpreter, self.exec_path]
+            command = [r'C:\Windows\sysnative\WindowsPowerShell\v1.0\powershell.exe', 
+                    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'RemoteSigned', '-File', self.exec_path]
+        elif self.interpreter == 'cmd':
+            command = [r'C:\Windows\sysnative\cmd.exe', '/C', self.exec_path]
         else:
             command = self.exec_path
 
@@ -377,7 +377,7 @@ class Script(object):
                         self.stderr_path, self.exec_timeout)
         self.proc = subprocess.Popen(command, 
                         stdout=stdout, stderr=stderr, 
-                        close_fds=os_dist['family'] != 'Windows',
+                        close_fds=linux.os['family'] != 'Windows',
                         env=self.environ)
         self.pid = self.proc.pid
         self.start_time = time.time()
