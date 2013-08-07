@@ -210,6 +210,7 @@ Function un.onInit
 FunctionEnd
 
 Section Uninstall
+  SetRegView 64
   services::SendServiceCommand 'stop' 'Scalarizr'
   nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
   nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
