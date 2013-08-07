@@ -190,6 +190,7 @@ Section -PostInstall
 		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib"
 		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib\site-packages"
 		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\src"
+		${EnvVarUpdate} $0 "PATH" "A" "HKLM" "$INSTDIR"
 	${EndIf}
 	
 
