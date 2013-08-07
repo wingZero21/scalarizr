@@ -1,4 +1,3 @@
-from __future__ import with_statement
 '''
 Created on Dec 24, 2009
 
@@ -360,10 +359,12 @@ class Script(object):
         stdout = open(self.stdout_path, 'w+')
         stderr = open(self.stderr_path, 'w+')
         if self.interpreter == 'powershell':
-            command = [r'C:\Windows\sysnative\WindowsPowerShell\v1.0\powershell.exe', 
-                    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'RemoteSigned', '-File', self.exec_path]
+            command = ['powershell.exe', 
+                    '-NoProfile', '-NonInteractive', 
+                    '-ExecutionPolicy', 'RemoteSigned', 
+                    '-File', self.exec_path]
         elif self.interpreter == 'cmd':
-            command = [r'C:\Windows\sysnative\cmd.exe', '/C', self.exec_path]
+            command = ['cmd.exe', '/C', self.exec_path]
         else:
             command = self.exec_path
 
