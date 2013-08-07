@@ -179,6 +179,16 @@ class CSVolume(base.Volume):
 
                 if self.id:
                     LOG.debug('Volume %s has been already created', self.id)
+                    try:
+                        LOG.debug('XXX: Volumes attached to terminated instances ' \
+                                'are not visible in listVolumes view. ' \
+                                'Calling detachVolume to force volume be visibile')
+                        self._conn.detachVolume(id=self.id)
+                    except Exception, e:
+                        if 'does not exist' in str(e):
+                            raise storage2.VolumeNotExistsError(self.id)
+                        # pass other errors
+
                     vol_list = self._conn.listVolumes(id=self.id)
                     if len(vol_list) == 0:
                         raise storage2.VolumeNotExistsError(self.id)
