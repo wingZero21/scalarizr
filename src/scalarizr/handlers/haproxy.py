@@ -8,6 +8,7 @@ from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
+from scalarizr.node import __node__
 
 import os
 import sys
@@ -102,14 +103,22 @@ class HAProxyHandler(Handler):
 
     def on_init(self, *args, **kwds):
         bus.on(
-                host_init_response=self.on_host_init_response,
-                before_host_up=self.on_before_host_up,
+            start=self.on_start_2,
+            host_init_response=self.on_host_init_response,
+            before_host_up=self.on_before_host_up,
         )
 
     def on_reload(self, *args):
         LOG.debug("HAProxyHandler on_reload")
         self.cnf = bus.cnf
         self.svs = haproxy_svs.HAProxyInitScript()
+
+    def on_start_2(self):
+        LOG.debug("HAProxyHandler on_start_2")
+        queryenv = bus.queryenv_service
+        role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
+        LOG.debug("role params: %s" % pformat(role_params)
+        LOG.debug("list roles: %s", % pformat(queryenv.list_roles()))
 
     def on_start(self):
         LOG.debug("HAProxyHandler on_start")
@@ -175,6 +184,8 @@ class HAProxyHandler(Handler):
 
         if self.svs.status() != 0:
             self.svs.start()
+
+        # TODO: healthcheck init
 
         msg.haproxy = "test"
 
