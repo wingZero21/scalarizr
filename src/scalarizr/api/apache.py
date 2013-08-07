@@ -204,6 +204,9 @@ class ApacheAPI(object):
             if template:
                 with open(new_path, 'w') as fp:
                     fp.write(template)
+            if port:
+                with ApacheConfig(new_path) as apache_conf:
+                    apache_conf.set('.//VirtualHost', {'value': '*:%s' % port})
             if ssl_certificate_id:
                 cert = SSLCertificate(ssl_certificate_id)
                 cert.ensure()
@@ -226,7 +229,7 @@ class ApacheAPI(object):
                         except NoPathError:
                             parent = apache_conf.etree.find('.//SSLCertificateFile/..')
                             before_el = apache_conf.etree.find('.//SSLCertificateFile')
-                            ch = apache_conf._provider.create_element(apache_conf.etree, './/SSLCertificateChainFile', ca_crt_path)
+                            ch = apache_conf._provider.create_element(apache_conf.etree, './/SSLCertificateChainFile', cert.ca_crt_path)
                             ch.text = cert.ca_crt_path
                             parent.insert(list(parent).index(before_el), ch)
 
