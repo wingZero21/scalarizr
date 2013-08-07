@@ -182,7 +182,8 @@ Section -PostInstall
 	${If} $installed_version == ""
 	    ${DisableX64FSRedirection}
 		nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
-	    ${EnableX64FSRedirection}
+	    ${EnableX64FSRedirection}   
+
 		${ConfigWrite} "$INSTDIR\etc\public.d\config.ini" "scripts_path" " = $INSTDIR\scripts\" $R0
 		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "exec_dir_prefix" " = %TEMP%\scalr-scripting." $R0
 		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "logs_dir_prefix" " = $INSTDIR\var\log\scalarizr\scripting\scalr-scripting." $R0
@@ -191,11 +192,14 @@ Section -PostInstall
 		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib\site-packages"
 		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\src"
 		${EnvVarUpdate} $0 "PATH" "A" "HKLM" "$INSTDIR"
+
+    nsExec::ExecToStack "netsh advfirewall firewall add rule name=Scalarizr dir=in protocol=tcp localport=8008-8014 action=allow"
 	${EndIf}
 	
 
     nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
     nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
+
 
 SectionEnd
 
