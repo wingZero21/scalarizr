@@ -53,7 +53,6 @@ Function .onInit
   ${EndIf}
 
   SetRegView 64
-  ${DisableX64FSRedirection}
 
   Var /GLOBAL installed_version
   Var /GLOBAL installed_release
@@ -130,7 +129,9 @@ Section "MainSection" SEC01
 
   SetOutPath "$SYSDIR"
   SetOverwrite try
-  File "x86_64\python27.dll"
+  ${DisableX64FSRedirection}
+    File "x86_64\python27.dll"
+  ${EnableX64FSRedirection}
 
   SetOutPath "$INSTDIR\var\log"
 
@@ -179,8 +180,9 @@ Section -PostInstall
   SetEnv::SetEnvVar "PYTHONPATH" $R0
   
 	${If} $installed_version == ""
-	
+	    ${DisableX64FSRedirection}
 		nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
+	    ${EnableX64FSRedirection}
 		${ConfigWrite} "$INSTDIR\etc\public.d\config.ini" "scripts_path" " = $INSTDIR\scripts\" $R0
 		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "exec_dir_prefix" " = %TEMP%\scalr-scripting." $R0
 		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "logs_dir_prefix" " = $INSTDIR\var\log\scalarizr\scripting\scalr-scripting." $R0
@@ -208,7 +210,6 @@ Function un.onInit
 FunctionEnd
 
 Section Uninstall
-  ${DisableX64FSRedirection}
   services::SendServiceCommand 'stop' 'Scalarizr'
   nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
   nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
