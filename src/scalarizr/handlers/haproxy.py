@@ -116,9 +116,38 @@ class HAProxyHandler(Handler):
     def on_start_2(self):
         LOG.debug("HAProxyHandler on_start_2")
         queryenv = bus.queryenv_service
-        role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
-        LOG.debug("role params: %s", pformat(role_params))
-        LOG.debug("list roles: %s", pformat(queryenv.list_roles()))
+        role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])
+        haproxy_params = role_params["params"]["haproxy"]
+        LOG.debug("Haproxy params from queryenv: %s", pformat(haproxy_params))
+
+        with open(self.api.cfg.cnf_path) as f:
+            conf_md5 = hashlib.md5(f.read()).hexdigest()
+        LOG.debug("%s md5 sum: %s", self.api.cfg.cnf_path, conf_md5)
+        if conf_md5 == "c3bfb0c86138552475dea458e8ab36f3":  # TODO: remove actual sum
+            LOG.debug("Creating new haproxy conf")
+            self.api.recreate_conf()
+
+        healthcheck_names = {
+            "healthcheck.fallthreshold": "fall_threshold",
+            "healthcheck.interval": "check_interval",
+            "healthcheck.risethreshold": "rise_threshold",
+        }
+        for proxy in haproxy_params["proxies"]:
+            for backend in proxy["backends"]:
+                for name in ("backup", "down"):
+                    if name in backend:
+                        backend[name] = bool(int(backend[name]))
+            healthcheck_params = {}
+            for name in healthcheck_names:
+                if name in proxy:
+                    healthcheck_params[healthcheck_names[name]] = proxy[name]
+                    
+            LOG.debug("make_proxy args: port=%s, backends=%s, %s", proxy["port"],
+                    pformat(proxy["backends"]), pformat(healthcheck_params))
+            self.api.make_proxy(port=proxy["port"],
+                                backends=proxy["backends"],
+                                **healthcheck_params)
+
 
     def on_start(self):
         LOG.debug("HAProxyHandler on_start")
@@ -149,39 +178,11 @@ class HAProxyHandler(Handler):
 
     def on_HostInitResponse(self, msg):
         LOG.debug("HAProxyHandler on_HostInitResponse")
-        self._data = deepcopy(msg.haproxy)
-        LOG.debug("data for add proxy %s", pformat(self._data))
+        # self._data = deepcopy(msg.haproxy)
+        # LOG.debug("data for add proxy %s", pformat(self._data))
 
     def on_before_host_up(self, msg):
         LOG.debug('HAProxyHandler.on_before_host_up')
-        with open(self.api.cfg.cnf_path) as f:
-            conf_md5 = hashlib.md5(f.read()).hexdigest()
-        LOG.debug("%s md5 sum: %s", self.api.cfg.cnf_path, conf_md5)
-        if conf_md5 == "c3bfb0c86138552475dea458e8ab36f3":  # TODO: remove actual sum
-            LOG.debug("Creating new haproxy conf", conf_md5)
-            self.api.recreate_conf()
-
-        healthcheck_names = {
-            "healthcheck.fallthreshold": "fall_threshold",
-            "healthcheck.interval": "check_interval",
-            "healthcheck.risethreshold": "rise_threshold",
-        }
-        for proxy in self._data["proxies"]:
-            for backend in proxy["backends"]:
-                for name in ("backup", "down"):
-                    if name in backend:
-                        backend[name] = bool(int(backend[name]))
-            healthcheck_params = {}
-            for name in healthcheck_names:
-                if name in proxy:
-                    healthcheck_params[healthcheck_names[name]] = proxy[name]
-                    
-            LOG.debug("make_proxy args: port=%s, backends=%s, %s", proxy["port"],
-                    pformat(proxy["backends"]), pformat(healthcheck_params))
-            self.api.make_proxy(port=proxy["port"],
-                                backends=proxy["backends"],
-                                **healthcheck_params)
-
         if self.svs.status() != 0:
             self.svs.start()
 
