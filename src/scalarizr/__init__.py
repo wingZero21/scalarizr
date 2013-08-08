@@ -8,6 +8,7 @@ if sys.version_info < (2, 6):
 
 # Core
 from scalarizr import config, rpc, linux
+from scalarizr.linux import coreutils
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
 from scalarizr.handlers import MessageListener
@@ -473,8 +474,11 @@ def _cleanup_after_rebundle():
         if file in ('.user-data', '.update'):
             continue
         path = os.path.join(priv_path, file)
+
+        coreutils.chmod_r(path, 0700)
         os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
-    system2('sync', shell=True)
+    if not linux.os.windows_family:
+        system2('sync', shell=True)
 
 def do_validate_cnf():
     errors = list()

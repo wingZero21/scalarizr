@@ -102,6 +102,14 @@ def chown_r(path, owner, group=None):
 				long={'recursive': True}, 
 				params=[owner if not group else owner + ':' + group, path]))	
 
+def chmod_r(path, mode):
+	if os.path.isdir(path):
+		for root, dirs, files in os.walk(path):
+			for f in dirs + files:
+				os.chmod(os.path.join(root, f), mode)
+	else:
+		os.chmod(path, mode)
+
 
 def remove(path):
 	if os.path.isfile(path):
