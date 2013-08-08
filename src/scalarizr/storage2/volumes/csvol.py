@@ -380,7 +380,9 @@ class CSVolume(base.Volume):
         volume_id = self.id or self._native_vol.id
 
         # Remove volume from SCSI host
-        if self.device:
+        if self.device and \
+            ((self._native_vol and self._native_vol.virtualmachineid == __cloudstack__['instance_id']) or \
+                not self._native_vol):
             LOG.debug('Removing device from SCSI host')
             scsi = coreutils.lsscsi()[self.device]
             name = '/sys/class/scsi_host/host{host}/device/target{host}:{bus}:{target}/{host}:{bus}:{target}:{lun}/delete'.format(**scsi)
