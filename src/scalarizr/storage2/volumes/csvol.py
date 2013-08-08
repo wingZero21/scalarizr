@@ -139,6 +139,7 @@ class CSVolume(base.Volume):
             if self._native_vol.virtualmachineid == __cloudstack__['instance_id']:
                 LOG.debug('Volume %s is attached to this instance', self.id)
                 return
+            self.device = None  # Volume will have a new device name
 
             LOG.warning('Volume %s is not available. '
                         'It is attached to different instance %s. '
@@ -161,8 +162,9 @@ class CSVolume(base.Volume):
         with self._free_device_letter_mgr:
             letter = self._free_device_letter_mgr.get()
             devname = get_system_devname(letter)
-            self._attach(__cloudstack__['instance_id'],
-                         devname_to_deviceid(devname))
+            return self._attach(__cloudstack__['instance_id'],
+                         devname_to_deviceid(devname))[1]
+
 
     def _ensure(self):
         self._native_vol = None
@@ -193,7 +195,7 @@ class CSVolume(base.Volume):
                     if len(vol_list) == 0:
                         raise storage2.VolumeNotExistsError(self.id)
                     self._native_vol = vol_list[0]
-                    self._check_attachement()                    
+                    devname = self._check_attachement()                    
 
                 if not self.id:
                     LOG.debug('Creating new volume')
