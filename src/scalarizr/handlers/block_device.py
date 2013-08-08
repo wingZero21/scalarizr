@@ -222,6 +222,9 @@ class BlockDeviceHandler(handlers.Handler):
 			bus.fire("block_device_detached", device=message.devname)
 
 	def on_BeforeHostTerminate(self, message):
+		if message.local_ip != __node__['private_ip']:
+			return
+
 		if __node__['platform'] == 'cloudstack':
 			devices = string.ascii_letters[1:4] + string.ascii_letters[5:10]
 			devices = filter(lambda device: os.path.exists(device), devices)
