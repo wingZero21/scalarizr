@@ -226,7 +226,7 @@ class BlockDeviceHandler(handlers.Handler):
 			return
 
 		if __node__['platform'] == 'cloudstack':
-			devices = string.ascii_letters[1:4] + string.ascii_letters[5:10]
+			devices = ['/dev/xvd' + a for a in string.ascii_letters[1:4] + string.ascii_letters[5:10]]
 			devices = filter(lambda device: os.path.exists(device), devices)
 			for device in devices:
 				try:
