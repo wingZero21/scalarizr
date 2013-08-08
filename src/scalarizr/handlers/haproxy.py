@@ -87,7 +87,8 @@ class HAProxyHandler(Handler):
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
             Messages.HOST_INIT_RESPONSE,
-            Messages.BEFORE_HOST_UP,
+            Messages.REBOOT_FINISH,
+            # Messages.BEFORE_HOST_UP,
             # Messages.HOST_UP, 
             # Messages.HOST_DOWN, 
             # Messages.BEFORE_HOST_TERMINATE,
@@ -103,7 +104,7 @@ class HAProxyHandler(Handler):
 
     def on_init(self, *args, **kwds):
         bus.on(
-            start=self.on_start_2,
+            start=self.on_start,
             host_init_response=self.on_host_init_response,
             before_host_up=self.on_before_host_up,
         )
@@ -113,8 +114,8 @@ class HAProxyHandler(Handler):
         self.cnf = bus.cnf
         self.svs = haproxy_svs.HAProxyInitScript()
 
-    def on_start_2(self):
-        LOG.debug("HAProxyHandler on_start_2")
+    def on_start(self):
+        LOG.debug("HAProxyHandler on_start")
         queryenv = bus.queryenv_service
         role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])
         haproxy_params = role_params["params"]["haproxy"]
@@ -148,7 +149,13 @@ class HAProxyHandler(Handler):
                                 backends=proxy["backends"],
                                 **healthcheck_params)
 
+    def on_RebootFinish(self, msg):
+        LOG.debug('HAProxyHandler.on_RebootFinish')
+        if self.svs.status() != 0:
+            self.svs.start()
+        # TODO: move to on_start?
 
+    """
     def on_start(self):
         LOG.debug("HAProxyHandler on_start")
         if bus.cnf.state == ScalarizrState.INITIALIZING:
@@ -157,6 +164,7 @@ class HAProxyHandler(Handler):
         if bus.cnf.state == ScalarizrState.RUNNING:
             #remove all servers from backends and add its from queryenv
             self._remove_add_servers_from_queryenv()
+    """
 
     def on_host_init_response(self, msg):
         LOG.debug('HAProxyHandler.on_host_init_response')
