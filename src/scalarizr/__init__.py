@@ -1073,7 +1073,7 @@ if 'Windows' == linux.os['family']:
             optparser = bus.optparser
             if optparser and optparser.values.install_win_services:
                 # Install win services
-                sys.argv = [sys.argv[0], '--startup', 'auto', 'install']
+                sys.argv = [sys.argv[0], '--startup', 'manual', 'install']
                 win32serviceutil.HandleCommandLine(WindowsService)
                 # Make scalarizr service bullet-proof
                 """
