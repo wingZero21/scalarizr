@@ -11,13 +11,13 @@ import os
 import logging
 
 from scalarizr.bus import bus
-from scalarizr import storage2
+from scalarizr import storage2, linux
 from scalarizr import config
 from scalarizr import handlers
 from scalarizr.node import __node__
 from scalarizr.messaging import Messages
 from scalarizr.util import wait_until
-from scalarizr.linux import mount
+from scalarizr.linux import mount, coreutils
 
 
 LOG = logging.getLogger(__name__)
@@ -57,7 +57,9 @@ class BlockDeviceHandler(handlers.Handler):
 		self._queryenv = bus.queryenv_service
 
 	def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-		return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, Messages.MOUNTPOINTS_RECONFIGURE)
+		return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, 
+				Messages.MOUNTPOINTS_RECONFIGURE, 
+				Messages.BEFORE_HOST_TERMINATE)
 
 	def on_init(self):
 		bus.on(
@@ -217,3 +219,13 @@ class BlockDeviceHandler(handlers.Handler):
 			)
 			
 			bus.fire("block_device_detached", device=message.devname)
+
+	def on_BeforeHostTerminate(self, message):
+		if linux.which('lsscsi'):
+			devices = coreutils.lsscsi().keys()
+			for device in devices:
+				try:
+					mount.umount(device)
+				except:
+					pass
+

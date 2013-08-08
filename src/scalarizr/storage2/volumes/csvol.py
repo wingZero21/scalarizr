@@ -383,11 +383,13 @@ class CSVolume(base.Volume):
         if self.device and \
             ((self._native_vol and self._native_vol.virtualmachineid == __cloudstack__['instance_id']) or \
                 not self._native_vol):
-            LOG.debug('Removing device from SCSI host')
-            scsi = coreutils.lsscsi()[self.device]
-            name = '/sys/class/scsi_host/host{host}/device/target{host}:{bus}:{target}/{host}:{bus}:{target}:{lun}/delete'.format(**scsi)
-            with open(name, 'w') as fp:
-                fp.write('1')
+            if linux.which('lsscsi'):
+                scsi = coreutils.lsscsi().get(self.device)
+                if scsi:
+                    LOG.debug('Removing device from SCSI host')
+                    name = '/sys/class/scsi_host/host{host}/device/target{host}:{bus}:{target}/{host}:{bus}:{target}:{lun}/delete'.format(**scsi)
+                    with open(name, 'w') as fp:
+                        fp.write('1')
 
         LOG.debug('Detaching volume %s', volume_id)
         try:

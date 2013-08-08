@@ -227,7 +227,8 @@ ubuntu_release_to_codename = {
         '11.10': 'oneiric',
         '12.04': 'precise',
         '12.10': 'quantal',
-        '13.04': 'raring'
+        '13.04': 'raring',
+        '13.10': 'saucy'
 }
 
 def build_cmd_args(executable=None,
