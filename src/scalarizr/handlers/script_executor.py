@@ -301,7 +301,7 @@ class Script(object):
         assert self.exec_timeout, '`exec_timeout` required'
 
         if self.name and self.body:
-            self.id = str(time.time())
+            self.id = '%f' % time.time()
             LOG.debug('script: %s', self.body)
             interpreter = read_shebang(script=self.body)
             if not interpreter:
