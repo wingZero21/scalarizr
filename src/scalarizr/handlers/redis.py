@@ -26,7 +26,7 @@ from scalarizr.services import redis, backup
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
-from scalarizr.handlers import operation, prepare_tags
+from scalarizr.handlers import operation, build_tags
 from scalarizr import storage2, node
 
 
@@ -94,7 +94,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
     @property
     def redis_tags(self):
-        return prepare_tags(BEHAVIOUR, db_replication_role=self.is_replication_master)
+        purpose = 'mysql-' + 'master' if self.is_replication_master else 'slave'
+        return build_tags(purpose, 'active')
 
 
     @property

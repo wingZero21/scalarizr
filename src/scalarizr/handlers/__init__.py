@@ -2,6 +2,7 @@ from __future__ import with_statement
 
 from scalarizr import config
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
@@ -874,6 +875,40 @@ class FarmSecurityMixin(object):
 
         self._iptables.FIREWALL.ensure(rules)
         self._iptables.FIREWALL.ensure(drop_rules, append=True)
+
+
+def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
+    tags = dict(creator='scalarizr')
+
+    if purpose:
+        tags['scalr-purpose'] = purpose
+
+    if state:
+        tags['scalr-object-state'] = state
+
+    if set_owner:
+        tags['farm_id'] = __node__['farm_id']
+        tags['farm_role_id'] = __node__['farm_role_id']
+        tags['env_id'] = __node__['env_id']
+        tags['role_id'] = __node__['role_id']
+
+    if kwargs:
+        # example: tmp = 1
+        tags.update(kwargs)
+
+    excludes = []
+    for k,v in tags.items():
+        if not v:
+            excludes.append(v)
+            del tags[k]
+        else:
+            try:
+                tags[k] = str(v)
+            except:
+                excludes.append(k)
+
+    LOG.debug('Prepared tags: %s. Excluded empty tags: %s' % (tags, excludes))
+    return tags
 
 
 def prepare_tags(handler=None, **kwargs):

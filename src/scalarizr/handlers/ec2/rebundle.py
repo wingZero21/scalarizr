@@ -6,7 +6,7 @@ Created on Mar 11, 2010
 
 import scalarizr
 from scalarizr.bus import bus
-from scalarizr.handlers import HandlerError, prepare_tags
+from scalarizr.handlers import HandlerError, build_tags
 from scalarizr.util import system2, disttool, cryptotool,\
         wait_until, firstmatched
 from scalarizr.linux import mount
@@ -583,7 +583,7 @@ class RebundleEbsStrategy(RebundleStratery):
         LOG.info('Creating snapshot of root device image %s', vol.id)
         description = "Root device snapshot created from role: %s instance: %s" \
                                 % (self._role_name, self._platform.get_instance_id())
-        self._snap = vol.snapshot(description, tags=prepare_tags(tmp=1), nowait=False)
+        self._snap = vol.snapshot(description, tags=build_tags(tmp=1), nowait=False)
 
         #LOG.debug('Checking that snapshot %s is completed', self._snap.id)
         #wait_until(lambda: self._snap.state in (storage.Snapshot.COMPLETED, storage.Snapshot.FAILED), logger=LOG)

@@ -15,11 +15,10 @@ import tempfile
 import threading
 
 # Core
-from scalarizr import handlers
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError, \
-        prepare_tags, operation
+        build_tags, operation
 import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
@@ -29,12 +28,10 @@ from scalarizr.util import system2, disttool, firstmatched, initdv2, software, c
 
 
 from scalarizr import storage2, linux
-from scalarizr.storage2 import cloudfs
 from scalarizr.linux import iptables, coreutils
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
-from scalarizr.services import make_backup_steps
 from scalarizr.api import service as preset_service
 
 # Libs
@@ -1357,5 +1354,5 @@ class MysqlHandler(DBMSRHandler):
 
 
     def resource_tags(self):
-        return prepare_tags(__mysql__['behavior'],
-                        db_replication_role=__mysql__['replication_master'])
+        purpose = '%s-'%__mysql__['behavior'] + 'master' if int(__mysql__['replication_master'])==1 else 'slave'
+        return build_tags(purpose, 'active')

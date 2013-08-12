@@ -20,11 +20,10 @@ from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrState, BuiltinBehaviours
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.linux.coreutils import chown_r
-from scalarizr.linux.coreutils import split
 from scalarizr.util import system2, disttool, software, cryptotool, initdv2
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.linux import iptables
-from scalarizr.handlers import operation, prepare_tags
+from scalarizr.handlers import operation, build_tags
 from scalarizr.services import make_backup_steps
 from scalarizr.api import service as preset_service
 from scalarizr.services.postgresql import PostgreSql, PSQL, ROOT_USER, PG_DUMP, \
@@ -317,7 +316,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
     def resource_tags(self):
-        return prepare_tags(BEHAVIOUR, db_replication_role=self.is_replication_master)
+        purpose = '%s-'%BEHAVIOUR + 'master' if self.is_replication_master else 'slave'
+        return build_tags(purpose, 'active')
 
 
     def on_host_init_response(self, message):
