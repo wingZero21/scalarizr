@@ -1533,7 +1533,7 @@ class MysqlHandler(ServiceCtlHandler):
     @property
     def mysql_tags(self):
         is_master = bool(int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]))
-        purpose = '%s-'%BEHAVIOUR + 'master' if is_master else 'slave'
+        purpose = '%s-'%BEHAVIOUR + ('master' if is_master else 'slave')
         return build_tags(purpose, 'active')
 
 

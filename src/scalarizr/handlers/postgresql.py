@@ -316,7 +316,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
     def resource_tags(self):
-        purpose = '%s-'%BEHAVIOUR + 'master' if self.is_replication_master else 'slave'
+        purpose = '%s-'%BEHAVIOUR + ('master' if self.is_replication_master else 'slave')
         return build_tags(purpose, 'active')
 
 

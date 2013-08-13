@@ -94,7 +94,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
     @property
     def redis_tags(self):
-        purpose = 'mysql-' + 'master' if self.is_replication_master else 'slave'
+        purpose = 'mysql-' + ('master' if self.is_replication_master else 'slave')
         return build_tags(purpose, 'active')
 
 
