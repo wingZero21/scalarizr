@@ -87,7 +87,6 @@ class HAProxyHandler(Handler):
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
             Messages.HOST_INIT_RESPONSE,
-            Messages.REBOOT_FINISH,
             # Messages.BEFORE_HOST_UP,
             # Messages.HOST_UP, 
             # Messages.HOST_DOWN, 
@@ -106,7 +105,7 @@ class HAProxyHandler(Handler):
         bus.on(
             start=self.on_start,
             host_init_response=self.on_host_init_response,
-            before_host_up=self.on_before_host_up,
+            # before_host_up=self.on_before_host_up,
         )
 
     def on_reload(self, *args):
@@ -151,11 +150,14 @@ class HAProxyHandler(Handler):
                                 backends=proxy["backends"],
                                 **healthcheck_params)
 
-    def on_RebootFinish(self, msg):
-        LOG.debug('HAProxyHandler.on_RebootFinish')
         if self.svs.status() != 0:
-            self.svs.start()
-        # TODO: move to on_start?
+            try:
+                self.svs.start()
+            except Exception, e:
+                if "no <listen> line. Nothing to do" in e.err:
+                    LOG.debug("Not starting haproxy daemon: nothing to do")
+                else:
+                    raise
 
     """
     def on_start(self):
@@ -190,15 +192,6 @@ class HAProxyHandler(Handler):
         LOG.debug("HAProxyHandler on_HostInitResponse")
         # self._data = deepcopy(msg.haproxy)
         # LOG.debug("data for add proxy %s", pformat(self._data))
-
-    def on_before_host_up(self, msg):
-        LOG.debug('HAProxyHandler.on_before_host_up')
-        if self.svs.status() != 0:
-            self.svs.start()
-
-        # TODO: healthcheck init
-
-        msg.haproxy = "test"
 
 
         """
