@@ -238,7 +238,10 @@ class ScriptExecutor(Handler):
 
             global_variables = message.body.get('global_variables') or []
             global_variables = dict((kv['name'], kv['value'] or '') for kv in global_variables)
+            if linux.os.windows_family:
+                global_variables = dict((k.encode('ascii'), v.encode('ascii')) for k, v in global_variables.items())
             environ.update(global_variables)
+
 
             LOG.debug('Fetching scripts from incoming message')
             scripts = [Script(name=item['name'], body=item['body'],
