@@ -1354,5 +1354,5 @@ class MysqlHandler(DBMSRHandler):
 
 
     def resource_tags(self):
-        purpose = '%s-'%__mysql__['behavior'] + 'master' if int(__mysql__['replication_master'])==1 else 'slave'
+        purpose = '%s-'%__mysql__['behavior'] + ('master' if int(__mysql__['replication_master'])==1 else 'slave')
         return build_tags(purpose, 'active')
