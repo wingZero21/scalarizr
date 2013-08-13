@@ -9,6 +9,7 @@ from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.node import __node__
+from scalarizr.util import PopenError
 
 import os
 import sys
@@ -155,7 +156,7 @@ class HAProxyHandler(Handler):
         if self.svs.status() != 0:
             try:
                 self.svs.start()
-            except Exception, e:
+            except PopenError, e:
                 if "no <listen> line. Nothing to do" in e.err:
                     LOG.debug("Not starting haproxy daemon: nothing to do")
                 else:
