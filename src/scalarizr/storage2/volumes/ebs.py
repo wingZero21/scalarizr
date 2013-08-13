@@ -4,6 +4,7 @@ from __future__ import with_statement
 import sys
 import os
 import glob
+import time
 import string
 import logging
 import threading
@@ -341,6 +342,7 @@ class EbsVolume(base.Volume, EbsMixin):
 
     def _destroy(self, force, **kwds):
         self._check_ec2()
+        self._create_tags(self.id, {'scalr-object-state':'pending-delete'})
         self._conn.delete_volume(self.id)
 
 
@@ -366,13 +368,28 @@ class EbsVolume(base.Volume, EbsMixin):
         LOG.debug('EBS volume %s available', ebs.id)
 
         if tags:
-            try:
-                LOG.debug('Applying tags to EBS volume %s (tags: %s)', ebs.id, tags)
-                self._conn.create_tags([ebs.id], tags)
-            except:
-                LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
-                                ebs.id, sys.exc_info()[1])
+            t = threading.Thread(target=self._create_tags, name="Applying tags", args=(ebs.id, tags))
+            t.setDaemon(True)
+            t.start()
         return ebs
+
+
+    def _create_tags(self, obj_id, tags):
+        for i in range(12):
+            try:
+                LOG.debug('Applying tags to EBS volume %s (tags: %s)', obj_id, tags)
+                self._conn.create_tags([obj_id], tags)
+                break
+            except boto.exception.EC2ResponseError,e:
+                if e.errno == 400:
+                    LOG.debug('Failed to apply tags. Retrying in 10s.')
+                    time.sleep(10)
+                    continue
+            except (Exception, BaseException), e:
+                LOG.warn('Applying tags failed: %s' % e)
+        else:
+            LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
+                                obj_id, sys.exc_info()[1])
 
 
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
@@ -381,13 +398,9 @@ class EbsVolume(base.Volume, EbsMixin):
         snapshot = self._conn.create_snapshot(volume, description)
         LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
         if tags:
-            try:
-                LOG.debug('Applying tags to EBS snapshot %s (tags: %s)',
-                                snapshot.id, tags)
-                self._conn.create_tags([snapshot.id], tags)
-            except:
-                LOG.warn('Cannot apply tags to EBS snapshot %s. Error: %s',
-                                snapshot.id, sys.exc_info()[1])
+            t = threading.Thread(target=self._create_tags, name="Applying tags", args=(snapshot.id, tags))
+            t.setDaemon(True)
+            t.start()
         if not nowait:
             self._wait_snapshot(snapshot)
         return snapshot
@@ -496,6 +509,7 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 
     def _destroy(self):
         self._check_ec2()
+        self._create_tags(self.id, {'scalr-object-state':'pending-delete'})
         self._conn.delete_snapshot(self.id)
 
 
