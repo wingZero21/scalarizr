@@ -118,6 +118,8 @@ class HAProxyHandler(Handler):
         queryenv = bus.queryenv_service
         role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])
         haproxy_params = role_params["params"]["haproxy"]
+        if haproxy_params["proxies"] is None:
+            haproxy_params["proxies"] = []
         LOG.debug("Haproxy params from queryenv: %s", pformat(haproxy_params))
 
         with open(self.api.cfg.cnf_path) as f:
