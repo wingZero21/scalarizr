@@ -128,6 +128,8 @@ class HAProxyHandler(Handler):
             LOG.debug("Creating new haproxy conf")
             self.api.recreate_conf()
 
+        self.api.reset_conf()
+
         healthcheck_names = {
             "healthcheck.fallthreshold": "fall_threshold",
             "healthcheck.interval": "check_interval",

@@ -203,6 +203,17 @@ class HAProxyAPI(object):
         self.cfg.reload()
 
 
+    def reset_conf(self):
+        self.cfg.reload()
+        # TODO: remove all iptables rules as well?
+
+        backends = map(lambda listener: listener["backend"], self.list_listeners())
+
+        for backend in backends:
+            for server in self.list_servers(backend=backend):
+                self.remove_server(server=server, backend=backend)
+
+
     @rpc.service_method
     @validate.param('backend', optional=_rule_backend)
     def add_server(self, server=None, backend=None):
@@ -237,7 +248,6 @@ class HAProxyAPI(object):
 
 
     @rpc.service_method
-    @validate.param('backend', optional=_rule_backend)
     def remove_server(self, server, backend=None):
         #? add possibility to remove all records associated with a single ip?
         '''Remove server from backend section with ipaddr'''
@@ -250,7 +260,8 @@ class HAProxyAPI(object):
                 del self.cfg.backends[bd]['server'][srv_name]
 
         self.cfg.save()
-        self.svc.reload()
+        if self.svc.status() == 0:
+            self.svc.reload()
 
 
     def health(self):
@@ -526,18 +537,19 @@ class HAProxyAPI(object):
 
 
     @rpc.service_method
-    @validate.param('backend', optional=_rule_backend)
     def list_servers(self, backend=None):
         '''
         List all servers, or servers from particular backend
         @rtype: [<ipaddr>, ...]
         '''
-        if backend: backend = backend.strip()
+        if backend:
+            backend = backend.strip()
         list_section = self.cfg.sections(haproxy.naming('backend', backend=backend))
 
         res = []
         for bnd in list_section:
             for srv_name in self.cfg.backends[bnd]['server']:
-                res.append(self.cfg.backends[bnd]['server'][srv_name]['address'])
+                res.append(srv_name)
+                #res.append(self.cfg.backends[bnd]['server'][srv_name]['host'])
         res = list(set(res))
         return res
