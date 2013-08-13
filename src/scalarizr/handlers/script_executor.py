@@ -15,6 +15,7 @@ from scalarizr.handlers import operation
 
 
 import time
+import random
 import ConfigParser
 import subprocess
 import threading
@@ -304,7 +305,10 @@ class Script(object):
         assert self.exec_timeout, '`exec_timeout` required'
 
         if self.name and self.body:
-            self.id = '%f' % time.time()
+            random.seed()
+            # time.time() can produce the same microseconds fraction in different async script execution threads, 
+            # and therefore produce the same id. solution is to seed random millisecods number
+            self.id = '%d.%d' % (time.time(), random.randint(0, 100))
             LOG.debug('script: %s', self.body)
             interpreter = read_shebang(script=self.body)
             if not interpreter:
