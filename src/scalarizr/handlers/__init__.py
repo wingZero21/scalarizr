@@ -887,10 +887,11 @@ def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
         tags['scalr-object-state'] = state
 
     if set_owner:
-        tags['farm_id'] = __node__['farm_id']
-        tags['farm_role_id'] = __node__['farm_role_id']
-        tags['env_id'] = __node__['env_id']
-        tags['owner_email'] = __node__['owner_email']
+        for opt in ('farm_id', 'farm_role_id', 'env_id', 'owner_email'):
+            try:
+                tags[opt] = __node__[opt]
+            except KeyError:
+                tags[opt] = None #will be filtered and logged later
 
     if kwargs:
         # example: tmp = 1
