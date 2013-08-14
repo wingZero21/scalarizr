@@ -900,7 +900,7 @@ def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
     excludes = []
     for k,v in tags.items():
         if not v:
-            excludes.append(v)
+            excludes.append(k)
             del tags[k]
         else:
             try:
