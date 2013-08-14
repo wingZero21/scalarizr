@@ -321,7 +321,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     # Update configs
                     __redis__.update(redis_data)
                     __redis__['volume'].mpoint = __redis__['storage_dir']
-                    __redis__['volume'].tags = self.resource_tags()
+                    __redis__['volume'].tags = self.redis_tags
                     if self.default_service.running:
                         self.default_service.stop('Terminating default redis instance')
 
