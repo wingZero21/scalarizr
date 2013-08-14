@@ -196,7 +196,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         self._insert_iptables_rules()
 
-        if self._cnf.state == ScalarizrState.RUNNING:
+        if __node__['state'] == 'running':
             # Fix to enable access outside farm when use_passwords=True
             # if self.use_passwords:
             #    self.security_off()
@@ -321,7 +321,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     # Update configs
                     __redis__.update(redis_data)
                     __redis__['volume'].mpoint = __redis__['storage_dir']
-
+                    __redis__['volume'].tags = self.resource_tags()
                     if self.default_service.running:
                         self.default_service.stop('Terminating default redis instance')
 
