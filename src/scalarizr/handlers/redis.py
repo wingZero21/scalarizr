@@ -13,21 +13,19 @@ import logging
 from scalarizr import handlers
 from scalarizr.api import service as preset_service
 
-from scalarizr import config, storage2, handlers
+from scalarizr import config, storage2
 from scalarizr.node import __node__
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
-from scalarizr.linux import iptables
-from scalarizr.linux.coreutils import split
 from scalarizr.util import system2, cryptotool, software, initdv2
+from scalarizr.linux import iptables
 from scalarizr.services import redis, backup
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.handlers import operation, build_tags
-from scalarizr import storage2, node
+from scalarizr import node
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
