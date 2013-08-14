@@ -917,47 +917,6 @@ def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
     return tags
 
 
-def prepare_tags(handler=None, **kwargs):
-    '''
-    @return dict(tags for volumes and snapshots)
-    '''
-
-    def get_cfg_option(option):
-        id = None
-        cnf = bus.cnf
-        if cnf.rawini.has_option(config.SECT_GENERAL, option):
-            id = cnf.rawini.get(config.SECT_GENERAL, option)
-        return id
-
-    tags = dict(creator = 'scalarizr')
-    farmid = get_cfg_option(config.OPT_FARM_ID)
-    roleid = get_cfg_option(config.OPT_ROLE_ID)
-    farmroleid = get_cfg_option(config.OPT_FARMROLE_ID)
-    tags.update(farm_id = farmid, role_id = roleid, farm_role_id = farmroleid)
-
-    if handler:
-        tags['service'] = handler
-    if kwargs:
-        # example: tmp = 1
-        if 'db_replication_role' in kwargs and type(kwargs['db_replication_role']) == bool:
-            kwargs['db_replication_role'] = 'master' if kwargs['db_replication_role'] else 'slave'
-        tags.update(kwargs)
-
-    excludes = []
-    for k,v in tags.items():
-        if not v:
-            excludes.append(v)
-            del tags[k]
-        else:
-            try:
-                tags[k] = str(v)
-            except:
-                excludes.append(k)
-
-    LOG.debug('Prepared tags: %s. Excluded empty tags: %s' % (tags, excludes))
-    return tags
-
-
 def transfer_result_to_backup_result(mnf):
     base = os.path.dirname(mnf.cloudfs_path)
     files_sizes = list((os.path.join(base, chunk[0]), chunk[2])
