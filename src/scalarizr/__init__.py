@@ -445,7 +445,8 @@ def _apply_user_data(cnf):
             'env_id' : g(UserDataOptions.ENV_ID), 
             'farm_id' : g(UserDataOptions.FARM_ID),
             'role_id' : g(UserDataOptions.ROLE_ID),
-            'region' : g(UserDataOptions.REGION)
+            'region' : g(UserDataOptions.REGION),
+            'owner_email' : g(UserDataOptions.OWNER_EMAIL)
         },
         messaging_p2p={
             'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),

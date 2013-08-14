@@ -42,6 +42,7 @@ class UserDataOptions:
     ROLE_ID = 'roleid'
     REGION = 'region'
     MESSAGE_FORMAT = 'message_format'
+    OWNER_EMAIL = 'owner_email'
 
 class PlatformFactory(object):
     _platforms = {}

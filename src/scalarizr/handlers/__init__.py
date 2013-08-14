@@ -878,7 +878,7 @@ class FarmSecurityMixin(object):
 
 
 def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
-    tags = dict(creator='scalarizr')
+    tags = dict()
 
     if purpose:
         tags['scalr-purpose'] = purpose
@@ -890,7 +890,7 @@ def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
         tags['farm_id'] = __node__['farm_id']
         tags['farm_role_id'] = __node__['farm_role_id']
         tags['env_id'] = __node__['env_id']
-        tags['role_id'] = __node__['role_id']
+        tags['owner_email'] = __node__['owner_email']
 
     if kwargs:
         # example: tmp = 1
