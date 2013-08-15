@@ -191,9 +191,14 @@ class CSVolume(base.Volume):
                             raise storage2.VolumeNotExistsError(self.id)
                         # pass other errors
 
-                    vol_list = self._conn.listVolumes(id=self.id)
-                    if len(vol_list) == 0:
-                        raise storage2.VolumeNotExistsError(self.id)
+                    try:
+                        vol_list = self._conn.listVolumes(id=self.id)
+                    except:
+                        if 'Expected list, got null' in str(sys.exc_info()[1]):
+                            raise storage2.VolumeNotExistsError(self.id)
+                    else:
+                        if len(vol_list) == 0:
+                            raise storage2.VolumeNotExistsError(self.id)
                     self._native_vol = vol_list[0]
                     devname = self._check_attachement()                    
 
