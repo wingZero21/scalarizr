@@ -15,6 +15,7 @@ import sys
 import glob
 import time
 import signal
+import binascii
 import subprocess as subps
 
 from multiprocessing import pool
@@ -25,6 +26,7 @@ from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
 from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
+from scalarizr.handlers.script_executor import logs_dir, logs_truncate_over
 
 LOG = logging.getLogger(__name__)
 
@@ -477,3 +479,36 @@ class SystemAPI(object):
         finally:
             wrk_pool.close()
             wrk_pool.join()
+
+
+    @rpc.service_method
+    def exec_script_logs(self, exec_script_id=None):
+        '''
+        :return: out and err logs
+        :rtype: dict(stdout: base64encoded, stderr: base64encoded)
+        '''
+        stdout_path = os.path.join(logs_dir, '%s-out.log' % exec_script_id)
+        stderr_path = os.path.join(logs_dir, '%s-err.log' % exec_script_id)
+
+        if not os.path.exists(stdout_path):
+            raise BaseException('Scripting log %s not found' % stdout_path)
+        if not os.path.exists(stderr_path):
+            raise BaseException('Scripting error log %s not found' % stderr_path)
+
+        stdout=binascii.b2a_base64(get_truncated_log(stdout_path))
+        stderr=binascii.b2a_base64(get_truncated_log(stderr_path))
+
+        return dict(stdout=stdout, stderr=stderr)
+
+
+def get_truncated_log(logfile, maxsize=None):
+    maxsize = maxsize or logs_truncate_over
+    f = open(logfile, "r")
+    try:
+        ret = unicode(f.read(int(maxsize)), 'utf-8')
+        if (os.path.getsize(logfile) > maxsize):
+            ret += u"... Truncated. See the full log in " + logfile.encode('utf-8')
+        return ret.encode('utf-8')
+    finally:
+        f.close()
+        

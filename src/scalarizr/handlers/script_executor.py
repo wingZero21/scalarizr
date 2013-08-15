@@ -6,7 +6,6 @@ Created on Dec 24, 2009
 '''
 
 from scalarizr.bus import bus
-#from scalarizr.config import STATE
 from scalarizr import config as szrconfig
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
@@ -23,7 +22,6 @@ import shutil
 import stat
 import signal
 import logging
-import binascii
 import Queue
 
 
@@ -41,18 +39,6 @@ skip_events = set()
 exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
 logs_dir = '/var/log/scalarizr/scripting'
 logs_truncate_over = 20 * 1000
-
-
-def get_truncated_log(logfile, maxsize=None):
-    maxsize = maxsize or logs_truncate_over
-    f = open(logfile, "r")
-    try:
-        ret = unicode(f.read(int(maxsize)), 'utf-8')
-        if (os.path.getsize(logfile) > maxsize):
-            ret += u"... Truncated. See the full log in " + logfile.encode('utf-8')
-        return ret.encode('utf-8')
-    finally:
-        f.close()
 
 
 class ScriptExecutor(Handler):
@@ -386,10 +372,11 @@ class Script(object):
                             format_size(os.path.getsize(self.stderr_path)),
                             self.return_code,
                             elapsed_time)
-
+            args = (self.name, self.event_name, self.role_name, self.id)
             ret = dict(
-                    stdout=binascii.b2a_base64(get_truncated_log(self.stdout_path)),
-                    stderr=binascii.b2a_base64(get_truncated_log(self.stderr_path)),
+                    stdout=None,
+                    stderr=None,
+                    exec_script_id='%s.%s.%s.%s' % args,
                     time_elapsed=elapsed_time,
                     script_name=self.name,
                     script_path=self.exec_path,
