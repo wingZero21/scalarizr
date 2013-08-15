@@ -1,0 +1,3 @@
+[submodule "cookbooks"]
+	path = cookbooks
+	url = git@github.com:Scalr/int-cookbooks.git
