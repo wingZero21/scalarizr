@@ -56,7 +56,7 @@ class ChefHandler(Handler):
         self._client_conf_path = _is_win and r'C:\chef\client.rb' or '/etc/chef/client.rb'
         self._validator_key_path = _is_win and r'C:\chef\validation.pem' or '/etc/chef/validation.pem'
         self._client_key_path = _is_win and r'C:\chef\client.pem' or '/etc/chef/client.pem'
-        self._json_attributes_path = _is_win and r'C:\chef\first-run.json' or ' /etc/chef/first-run.json'
+        self._json_attributes_path = _is_win and r'C:\chef\first-run.json' or '/etc/chef/first-run.json'
         self._with_json_attributes = False
         self._platform = bus.platform
         self._global_variables = {}

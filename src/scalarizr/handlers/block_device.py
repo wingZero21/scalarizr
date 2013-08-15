@@ -225,12 +225,12 @@ class BlockDeviceHandler(handlers.Handler):
 		if message.local_ip != __node__['private_ip']:
 			return
 
-		if __node__['platform'] == 'cloudstack':
-			devices = ['/dev/xvd' + a for a in string.ascii_letters[1:4] + string.ascii_letters[5:10]]
-			devices = filter(lambda device: os.path.exists(device), devices)
-			for device in devices:
-				try:
-					mount.umount(device)
-				except:
-					pass
+		volumes = message.body.get('volumes', [])
+		volumes = volumes or []
+		
+		for volume in volumes:
+			volume = storage2.volume(volume)
+			volume.umount()
+			volume.detach()
+
 

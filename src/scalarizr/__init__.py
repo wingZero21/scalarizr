@@ -1104,7 +1104,7 @@ if 'Windows' == linux.os['family']:
                 finally:
                     win32service.CloseServiceHandle(hscm)
                 """
-                win32serviceutil.StartService(WindowsService._svc_name_)
+                #win32serviceutil.StartService(WindowsService._svc_name_)
                 sys.exit()
 
             elif optparser and optparser.values.uninstall_win_services:
