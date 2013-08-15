@@ -342,7 +342,7 @@ class EbsVolume(base.Volume, EbsMixin):
 
     def _destroy(self, force, **kwds):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-object-state':'pending-delete'})
+        self._create_tags(self.id, {'scalr-status':'pending-delete'})
         self._conn.delete_volume(self.id)
 
 
@@ -509,7 +509,7 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 
     def _destroy(self):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-object-state':'pending-delete'})
+        self._create_tags(self.id, {'scalr-status':'pending-delete'})
         self._conn.delete_snapshot(self.id)
 
 

@@ -884,7 +884,7 @@ def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
         tags['scalr-purpose'] = purpose
 
     if state:
-        tags['scalr-object-state'] = state
+        tags['scalr-status'] = state
 
     if set_owner:
         for opt in ('farm_id', 'farm_role_id', 'env_id'):
