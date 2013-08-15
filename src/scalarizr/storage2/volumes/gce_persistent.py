@@ -1,6 +1,7 @@
 __author__ = 'Nick Demyanchuk'
 
 import os
+import re
 import time
 import sys
 import uuid
@@ -10,11 +11,19 @@ import datetime
 from apiclient.errors import HttpError
 
 from scalarizr import storage2
+from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.storage2.util import gce as gce_util
 
 LOG = logging.getLogger(__name__)
+compute_api_version = bus.platform.compute_api_version
+
+
+def to_current_api_version(link):
+    if link:
+        return re.sub('compute/[^/]+/projects', 'compute/%s/projects' % compute_api_version, link, 1)
+
 
 class GcePersistentVolume(base.Volume):
     '''
@@ -70,9 +79,10 @@ class GcePersistentVolume(base.Volume):
                     create_request_body = dict(name=self.name, sizeGb=self.size)
                     if self.snap:
                         self.snap = storage2.snapshot(self.snap)
-                        create_request_body['sourceSnapshot'] = self.snap.link
+                        create_request_body['sourceSnapshot'] = to_current_api_version(self.snap.link)
                     create = True
                 else:
+                    self.link = to_current_api_version(self.link)
                     self._check_attr('zone')
                     if self.zone != zone:
                         # Volume is in different zone, snapshot it,
@@ -82,7 +92,7 @@ class GcePersistentVolume(base.Volume):
                         new_name = self.name + zone
                         create_request_body = dict(name=new_name,
                                                    sizeGb=self.size,
-                                                   sourceSnapshot=temp_snap.link)
+                                                   sourceSnapshot=to_current_api_version(temp_snap.link))
                         create = True
 
                 attach = False
@@ -105,7 +115,11 @@ class GcePersistentVolume(base.Volume):
                 else:
                     if self.last_attached_to and self.last_attached_to != server_name:
                         LOG.debug("Making sure that disk %s detached from previous attachment place." % self.name)
-                        gce_util.ensure_disk_detached(connection, project_id, zone, self.last_attached_to, self.link)
+                        gce_util.ensure_disk_detached(connection,
+                                                      project_id,
+                                                      zone,
+                                                      self.last_attached_to,
+                                                      self.link)
 
                     attachment_inf = self._attachment_info(connection)
                     if attachment_inf:
@@ -146,6 +160,7 @@ class GcePersistentVolume(base.Volume):
 
 
     def _attachment_info(self, con):
+        self.link = to_current_api_version(self.link)
         zone = os.path.basename(__node__['gce']['zone'])
         project_id = __node__['gce']['project_id']
         server_name = __node__['server_id']
