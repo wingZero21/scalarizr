@@ -1,5 +1,4 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler, HandlerError
@@ -9,10 +8,15 @@ from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
+from scalarizr.node import __node__
+from scalarizr.util import PopenError
 
 import os
 import sys
 import logging
+from pprint import pformat
+from copy import deepcopy
+import hashlib
 
 
 def get_handlers():
@@ -38,7 +42,9 @@ def _result_message(name):
 
 
 class HAProxyHandler(Handler):
+
     def __init__(self):
+        LOG.debug("HAProxyHandler __init__")
         self.api = haproxy_api.HAProxyAPI()
         self.on_reload()
         bus.on(init=self.on_init, reload=self.on_reload)
@@ -81,50 +87,118 @@ class HAProxyHandler(Handler):
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
-                Messages.HOST_UP, Messages.HOST_DOWN, Messages.BEFORE_HOST_TERMINATE,
-                'HAProxy_AddServer',
-                'HAProxy_ConfigureHealthcheck',
-                'HAProxy_GetServersHealth',
-                'HAProxy_ListListeners',
-                'HAProxy_ListServers',
-                'HAProxy_RemoveServer',
-                'HAProxy_ResetHealthcheck'
-                )
+            Messages.HOST_INIT_RESPONSE,
+            # Messages.BEFORE_HOST_UP,
+            # Messages.HOST_UP, 
+            # Messages.HOST_DOWN, 
+            # Messages.BEFORE_HOST_TERMINATE,
+            # 'HAProxy_AddServer',
+            # 'HAProxy_ConfigureHealthcheck',
+            # 'HAProxy_GetServersHealth',
+            # 'HAProxy_ListListeners',
+            # 'HAProxy_ListServers',
+            # 'HAProxy_RemoveServer',
+            # 'HAProxy_ResetHealthcheck'
+        )
         return accept_res
 
     def on_init(self, *args, **kwds):
         bus.on(
-                host_init_response=self.on_host_init_response,
-                before_host_up=self.on_before_host_up,
+            start=self.on_start,
+            host_init_response=self.on_host_init_response,
+            # before_host_up=self.on_before_host_up,
         )
 
     def on_reload(self, *args):
+        LOG.debug("HAProxyHandler on_reload")
         self.cnf = bus.cnf
         self.svs = haproxy_svs.HAProxyInitScript()
 
     def on_start(self):
+        LOG.debug("HAProxyHandler on_start")
+        queryenv = bus.queryenv_service
+        role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])
+        haproxy_params = role_params["params"]["haproxy"]
+        if haproxy_params["proxies"] is None:
+            haproxy_params["proxies"] = []
+        LOG.debug("Haproxy params from queryenv: %s", pformat(haproxy_params))
+
+        with open(self.api.cfg.cnf_path) as f:
+            conf_md5 = hashlib.md5(f.read()).hexdigest()
+        LOG.debug("%s md5 sum: %s", self.api.cfg.cnf_path, conf_md5)
+        if conf_md5 == "c3bfb0c86138552475dea458e8ab36f3":  # TODO: remove actual sum
+            LOG.debug("Creating new haproxy conf")
+            self.api.recreate_conf()
+
+        self.api.reset_conf()
+
+        healthcheck_names = {
+            "healthcheck.fallthreshold": "fall_threshold",
+            "healthcheck.interval": "check_interval",
+            "healthcheck.risethreshold": "rise_threshold",
+        }
+        for proxy in haproxy_params["proxies"]:
+            for backend in proxy["backends"]:
+                for name in ("backup", "down"):
+                    if name in backend:
+                        backend[name] = bool(int(backend[name]))
+            healthcheck_params = {}
+            for name in healthcheck_names:
+                if name in proxy:
+                    healthcheck_params[healthcheck_names[name]] = proxy[name]
+                    
+            LOG.debug("make_proxy args: port=%s, backends=%s, %s", proxy["port"],
+                    pformat(proxy["backends"]), pformat(healthcheck_params))
+            self.api.make_proxy(port=proxy["port"],
+                                backends=proxy["backends"],
+                                **healthcheck_params)
+
+        if self.svs.status() != 0:
+            try:
+                self.svs.start()
+            except PopenError, e:
+                if "no <listen> line. Nothing to do" in e.err:
+                    LOG.debug("Not starting haproxy daemon: nothing to do")
+                else:
+                    raise
+
+    """
+    def on_start(self):
+        LOG.debug("HAProxyHandler on_start")
         if bus.cnf.state == ScalarizrState.INITIALIZING:
             # todo: Repair data from HIR
             pass
         if bus.cnf.state == ScalarizrState.RUNNING:
             #remove all servers from backends and add its from queryenv
             self._remove_add_servers_from_queryenv()
+    """
 
     def on_host_init_response(self, msg):
         LOG.debug('HAProxyHandler.on_host_init_response')
+        return
+
+        """
         if not 'haproxy' in msg.body:
             raise HandlerError('HostInitResponse message for HAProxy behaviour must \
                             have `haproxy` property')
         data = msg.haproxy.copy()
+        self._data = data
+        LOG.debug("data for add proxy %s", pformat(data))
 
         self._listeners = data.get('listeners', [])
         self._healthchecks = data.get('healthchecks', [])
         LOG.debug('listeners = `%s`', self._listeners)
         LOG.debug('healthchecks = `%s`', self._healthchecks)
+        """
+
+    def on_HostInitResponse(self, msg):
+        LOG.debug("HAProxyHandler on_HostInitResponse")
+        # self._data = deepcopy(msg.haproxy)
+        # LOG.debug("data for add proxy %s", pformat(self._data))
 
 
+        """
     def on_before_host_up(self, msg):
-        LOG.debug('HAProxyHandler.on_before_host_up')
         try:
             if self.svs.status() != 0:
                 self.svs.start()
@@ -156,9 +230,11 @@ class HAProxyHandler(Handler):
         msg.haproxy = data
 
         self._remove_add_servers_from_queryenv()
+        """
 
 
     def on_HostUp(self, msg):
+        LOG.debug('HAProxyHandler on_HostUp')
         self._farm_role_id = msg.body.get('farm_role_id')
         self._local_ip = msg.body.get('local_ip')
         try:
