@@ -123,9 +123,15 @@ class GcePersistentVolume(base.Volume):
                     gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
                     disk_devicename = self.name
 
-                device = gce_util.devicename_to_device(disk_devicename)
-                if not device:
+                for i in range(10):
+                    device = gce_util.devicename_to_device(disk_devicename)
+                    if device:
+                        break
+                    LOG.debug('Device not found in system. Retrying in 1s.')
+                    time.sleep(1)
+                else:
                     raise storage2.StorageError("Disk should be attached, but corresponding device not found in system")
+
                 self.device = device
                 self.last_attached_to = server_name
                 self.snap = None
