@@ -45,6 +45,7 @@ class QueryEnvService(object):
         """
         # Perform HTTP request
         url = "%s/%s/%s" % (self.url, self.api_version, command)
+        self._logger.debug('Call QueryEnv: %s', url)
         request_body = {}
         request_body["operation"] = command
         request_body["version"] = self.api_version

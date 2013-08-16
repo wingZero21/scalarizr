@@ -1,10 +1,20 @@
 import BaseHTTPServer
 import uuid
 import os
+import sys
+import re
 import shutil
 import subprocess
 import xml.dom.minidom as dom
+import xml.etree.ElementTree as etree
+import urllib2
 import string
+import logging
+import threading
+import binascii
+import json
+import copy
+import cgi
 
 
 from lettuce import step
@@ -13,6 +23,11 @@ import mock
 from habibi import crypto
 
 
+logging.basicConfig(
+        stream=sys.stderr, 
+        level=logging.DEBUG, 
+        format='%(name)-20s %(levelname)-8s - %(message)s')
+LOG = logging.getLogger('habibi')
 VAGRANT_FILE = '''
 Vagrant.configure("2") do |config|
   config.vm.box = "ubuntu1204"
@@ -26,180 +41,275 @@ Vagrant.configure("2") do |config|
 end
 '''
 
-ROUTER_IP = '10.0.3.1'
+
+class PrettyHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    LOG = globals()['LOG']
+
+    def render_html(self, http_code, http_body=None):
+        if http_code >= 400:
+            if not http_body:
+                exc_info = sys.exc_info()
+                http_body = '{0}: {1}'.format(exc_info[0].__class__.__name__, exc_info[1])
+            self.send_error(http_code)
+        else:
+            self.send_response(http_code)
+
+        http_body = http_body or ''
+        self.send_header('Content-length', len(http_body))
+        self.end_headers()
+        self.wfile.write(http_body) 
+
+    def log_message(self, format, *args):
+        self.LOG.debug(format, *args)
+
 
 class Habibi(object):
-	def __init__(self, behaviors, base_dir=None, queryenv_mock=None):
-		if 'chef' not in behaviors:
-			behaviors.append('chef')
-		self.behaviors = behaviors
-		self.base_dir = base_dir or '.habibi'
-		self.queryenv_mock = queryenv_mock or mock.Mock()
-		#self.messaging_mock = messaging_mock or mock.Mock()
-		self.MessagingHTTPHandler.habibi = self
-		self.QueryEnvHTTPHandler.habibi = self
-		self.servers = []
+    def __init__(self, behaviors, base_dir=None, queryenv_mock=None):
+        if 'chef' not in behaviors:
+            behaviors.append('chef')
+        self.role = {
+            'behaviors': behaviors,
+            'name': 'habibi-lxc'
+        }
+        self.router_ip = '10.0.3.1'
+        self.messaging_port = 10001
+        self.queryenv_port = 10002
+        self.queryenv_version = '2012-07-01'
+        self.base_dir = base_dir or '.habibi'
+        self.queryenv_mock = queryenv_mock or mock.Mock()
+        #self.messaging_mock = messaging_mock or mock.Mock()
+        self.MessagingHTTPHandler.habibi = self
+        self.QueryEnvHTTPHandler.habibi = self
+        self.queryenv_server = self.queryenv_thread = None
+        self.messaging_server = self.messaging_thread = None
+        self.servers = []
 
 
-	def run_server(self):
-		server = {
-			'server_id': str(uuid.uuid4()),
-			'crypto_key': crypto.keygen(),
-			'public_ip': None,
-			'private_ip': None,
-			'status': 'pending',
-			'index': self._next_server_index()
-		}
-		self.servers.append(server)
+    def run_server(self):
+        server = {
+            'server_id': str(uuid.uuid4()),
+            'crypto_key': crypto.keygen(),
+            'farm_hash': crypto.keygen(10),
+            'public_ip': None,
+            'private_ip': None,
+            'status': 'pending',
+            'index': self._next_server_index()
+        }
+        self.servers.append(server)
 
-		server_dir = self.base_dir + '/' + server['server_id']
-		os.makedirs(server_dir)
-		with open(server_dir + '/Vagrantfile', 'w+') as fp:
-			tpl = string.Template(VAGRANT_FILE)
-			fp.write(tpl.substitute(
-				user_data=self._pack_user_data(self._user_data(server))
-			))
+        server_dir = self.base_dir + '/' + server['server_id']
+        os.makedirs(server_dir)
+        with open(server_dir + '/Vagrantfile', 'w+') as fp:
+            tpl = string.Template(VAGRANT_FILE)
+            fp.write(tpl.substitute(
+                user_data=self._pack_user_data(self._user_data(server))))
 
-		#subprocess.Popen('vagrant init ubuntu1210', shell=True, cwd=server_dir).communicate()
-		# TODO: init Vagrnatfile from VAGRANT_FILE template
-		subprocess.Popen('vagrant up --provider lxc', shell=True, cwd=server_dir).communicate()
-		# TODO: server['machine_id']
+        #subprocess.Popen('vagrant init ubuntu1210', shell=True, cwd=server_dir).communicate()
+        # TODO: init Vagrnatfile from VAGRANT_FILE template
+        subprocess.Popen('vagrant up --provider lxc', shell=True, cwd=server_dir).communicate()
+        # TODO: server['machine_id']
 
-	def start(self):
-		self.messaging_server = BaseHTTPServer.HTTPServer(('', 10001), self.MessagingHTTPHandler)
-		self.messaging_thread = threading.Thread(self.messaging_server.serve_forever)
-		self.messaging_thread.setDaemon(True)
-		self.messaging_thread.start()
+    def start(self):
+        self.messaging_server = BaseHTTPServer.HTTPServer(('', self.messaging_port), self.MessagingHTTPHandler)
+        self.messaging_thread = threading.Thread(
+            name='Messaging', 
+            target=self.messaging_server.serve_forever)
+        self.messaging_thread.setDaemon(True)
+        self.messaging_thread.start()
 
-		self.queryenv_server = BaseHTTPServer.HTTPServer(('', 10002), self.QueryEnvHTTPHandler)
-		self.queryenv_thread = threading.Thread(self.queryenv_server.serve_forever)
-		self.queryenv_thread.setDaemon(True)
-		self.queryenv_thread.start()
+        self.queryenv_server = BaseHTTPServer.HTTPServer(('', self.queryenv_port), self.QueryEnvHTTPHandler)
+        self.queryenv_thread = threading.Thread(
+            name='QueryEnv', 
+            target=self.queryenv_server.serve_forever)
+        self.queryenv_thread.setDaemon(True)
+        self.queryenv_thread.start()
 
-		if os.path.eixsts(self.base_dir):
-			shutil.rmtree(self.base_dir)
-		os.makedirs(self.base_dir)
+        if os.path.exists(self.base_dir):
+            shutil.rmtree(self.base_dir)
+        os.makedirs(self.base_dir)
 
-	def stop(self):
-		self.messaging_server.shutdown()
-		self.queryenv_server.shutdown()
-
-
-	def _next_server_index(self):
-		# TODO: handle holes
-		return len(self.servers)
-
-	def _user_data(self, server):
-		return {
-			'szr_key': server['crypto_key'],
-            'serverid': server['server_id'],
-            'p2p_producer_endpoint': 'http://' + ROUTER_IP + '/messaging',
-            'queryenv_url': 'http://' + ROUTER_IP + '/query-env',
-            'behaviors': ','.join(self.behaviors),
-            'farm_roleid': '1',
-            'roleid': '1',
-            'env_id': '1',
-            'platform': 'lxc',
-            'server_index': server['index']
-		}
-
-	def _pack_user_data(self, user_data):
-		return ';'.join(['{0}={1}'.format(k, v) for k, v in user_data.items()])
+    def stop(self):
+        self.messaging_server.shutdown()
+        self.queryenv_server.shutdown()
 
 
-	def render_html(self, hdlr, http_code, http_body=None):
-		if http_code >= 400 and not http_body:
-			exc_info = sys.exc_info()
-			http_body = '{0}: {1}'.format(exc_info[0].__class__.__name__, exc_info[1])
-		http_body = http_body or ''
-		hdlr.send_response(http_code)
-		hdlr.send_header('Content-length', len(http_body))
-		hdlr.end_headers()
-		hdlr.wfile.write(http_body)
+    def _next_server_index(self):
+        # TODO: handle holes
+        return len(self.servers)
 
-	def servers(self, pattern):
-		if pattern:
-			if re.search(r'\w{8}-\w{4}-\w{4}-\w{4}-\w{12}', pattern):
-				for server in servers:
-					if server['server_id'] == pattern:
-						return [server]
-		else:
-			return self.servers
-		msg = 'Empty results for search servers by pattern: {0}'.format(pattern)
-		raise LookupError(msg)
+    def _user_data(self, server):
+        return {'szr_key': server['crypto_key'],
+                'hash': server['farm_hash'],
+                'serverid': server['server_id'],
+                'p2p_producer_endpoint': 'http://{0}:{1}/messaging'.format(self.router_ip, self.messaging_port),
+                'queryenv_url': 'http://{0}:{1}/query-env'.format(self.router_ip, self.queryenv_port),
+                'behaviors': ','.join(self.role['behaviors']),
+                'farm_roleid': '1',
+                'roleid': '1',
+                'env_id': '1',
+                'platform': 'lxc',
+                'server_index': server['index']}
 
-	def send(self, msg_name, server_pattern=None, source_msg=None):
-		servers = self.servers(server_pattern)
+    def _pack_user_data(self, user_data):
+        return ';'.join(['{0}={1}'.format(k, v) for k, v in user_data.items()])
 
-		for server in servers:
-			msg = Message()
-			msg.id = str(uuid4.uuid())
-			msg.name = msg_name
-			msg.body = source_msg.body
+    def find_servers(self, pattern):
+        if pattern:
+            if re.search(r'\w{8}-\w{4}-\w{4}-\w{4}-\w{12}', pattern):
+                for server in self.servers:
+                    if server['server_id'] == pattern:
+                        return [server]
+            else:
+                LOG.warn('pattern %s doesnt match uuid4', pattern)
+        else:
+            return self.servers
+        msg = 'Empty results for search servers by pattern: {0}'.format(pattern)
+        raise LookupError(msg)
 
-			# call hook
+    def send(self, msg_name, server_pattern=None, source_msg=None):
+        servers = self.find_servers(server_pattern)
 
-			try:
-				xml_data = msg.toxml()
-				encrypted_data = crypto.encrypt(xml_data, server['crypto_key'])
-				signature, timestamp = crypto.sign_http_request(encrypted_data, server['crypto_key'])
+        for server in servers:
+            msg = Message()
+            msg.id = str(uuid.uuid4())
+            msg.name = msg_name
+            msg.body = source_msg.body
 
-				url = server['public_ip'] + '/control'
-				req = urllib2.Request(url, encrypted_data, {
-					'Content-type': 'application/xml',
-					'Date': timestamp,
-					'X-Signature': signature,
-					'X-Server-Id': server['server_id']
-				})
-				opener = urllib2.build_opener(urllib2.HTTPRedirectHandler())
-				opener.open(req)
-			except:
-				LOG.warn('Undelivered message: %s' % msg)
-		
+            # call hook
 
-	def on_message(self, msg):
-		server = self.servers(msg.meta['server_id'])[0]
-		if msg.name == 'HostInit':
-			server['status'] = 'initializing'
-			self.send('HostInitResponse', server=server, source_msg=msg)
-			self.send('HostInit', source_msg=msg)
-		elif msg.name == 'BeforeHostUp':
-			self.send('BeforeHostUp', source_msg=msg)
-		elif msg.name == 'HostUp':
-			server['status'] = 'running'
-			self.send('HostUp', source_msg=msg)
-		else:
-			raise Exception('Unprocessed message: %s' % msg)
+            LOG.debug('<~ %s to %s', msg.name, server['server_id'])
+            xml_data = msg.toxml()
+            LOG.debug(xml_data)
+            crypto_key = binascii.a2b_base64(server['crypto_key'])
+            encrypted_data = crypto.encrypt(xml_data, crypto_key)
+            signature, timestamp = crypto.sign(encrypted_data, crypto_key)
 
+            url = 'http://{0}:8013/control'.format(server['public_ip'])
+            req = urllib2.Request(url, encrypted_data, {
+                'Content-type': 'application/xml',
+                'Date': timestamp,
+                'X-Signature': signature,
+                'X-Server-Id': server['server_id']})
+            opener = urllib2.build_opener(urllib2.HTTPRedirectHandler())
+            opener.open(req)
 
+        
+    def on_message(self, msg):
+        server_id = msg.meta['server_id']
+        LOG.debug('~> %s from %s', msg.name, server_id)
+        server = self.find_servers(server_id)[0]
 
-	class MessagingHTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-		habibi = None
+        if msg.name == 'HostInit':
+            server['status'] = 'initializing'
+            server['public_ip'] = msg.body['remote_ip']
+            server['private_ip'] = msg.body['local_ip']
+            server['crypto_key'] = msg.body['crypto_key'].strip()
 
+            self.send('HostInitResponse', server_pattern=server_id, source_msg=msg)
+            self.send('HostInit', source_msg=msg)
+        elif msg.name == 'BeforeHostUp':
+            self.send('BeforeHostUp', source_msg=msg)
+        elif msg.name == 'HostUp':
+            server['status'] = 'running'
+            self.send('HostUp', source_msg=msg)
+        else:
+            raise Exception('Unprocessed message: %s' % msg)
 
-		def do_POST(self):
-			if os.path.basename(self.path) != 'control':
-				habibi.render_html(self, 201)
-				return
+ 
 
-			try:
-				encrypted_data = self.rfile.read(int(self.headers['Content-length']))
-				server_id = self.headers['X-Server-Id']
-				crypto_key = self.find_server(server_id)['crypto_key']
-				xml_data = crypto.decrypt(encrypted_data, crypto_key)
-				message = Message.fromxml(xml_data)
-				habibi.render_html(self, 201)
-			except:
-				habibi.render_html(self, 400)
-			else:
-				habibi.on_message(message)
+    class MessagingHTTPHandler(PrettyHTTPRequestHandler):
+        habibi = None
+        LOG = logging.getLogger('habibi.messaging')
 
 
-	class QueryEnvHTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-		habibi = None
+        def do_POST(self):
+            if os.path.basename(self.path) != 'control':
+                self.render_html(201)
+                return
 
-		def do_POST(self):
-			pass
+            try:
+                server_id = self.headers['X-Server-Id']
+                server = self.habibi.find_servers(server_id)[0]
+
+                encrypted_data = self.rfile.read(int(self.headers['Content-length']))
+                xml_data = crypto.decrypt(encrypted_data, binascii.a2b_base64(server['crypto_key']))
+
+                msg = Message()
+                msg.fromxml(xml_data)
+                self.render_html(201)
+            except:
+                LOG.exception('Caught exception')
+                self.render_html(400)
+            else:
+                self.habibi.on_message(msg)
+
+
+    class QueryEnvHTTPHandler(PrettyHTTPRequestHandler):
+        habibi = None
+        operation = None
+        fields = None
+        LOG = logging.getLogger('habibi.queryenv')
+
+        def do_POST(self):
+            try:
+                self.operation = self.path.rsplit('/', 1)[-1]
+                self.fields = cgi.FieldStorage(
+                    fp=self.rfile,
+                    keep_blank_values=True
+                )
+                response = self.queryenv()
+                self.render_html(200, response)
+            except:
+                LOG.exception('Caught exception')
+                self.render_html(500)
+
+        def queryenv(self):
+            method_name = self.operation.replace('-', '_')
+            response = etree.Element('response')
+            response.append(getattr(self, method_name)())
+            return etree.tostring(response)
+
+        def get_latest_version(self):
+            ret = etree.Element('version')
+            ret.text = self.habibi.queryenv_version
+            return ret
+
+        def list_global_variables(self):
+            return etree.Element('variables')
+
+        def get_global_config(self):
+            ret = etree.Element('settings')
+            settings = {
+                'dns.static.endpoint': 'scalr-dns.com',
+                'scalr.version': '4.5.0',
+                'scalr.id': '884c7c0'}
+            for key, val in settings.items():
+                setting = etree.Element('setting', key=key)
+                setting.text = val
+                ret.append(setting)
+            return ret
+
+        def list_roles(self):
+            ret = etree.Element('roles')
+            role = etree.Element('role')
+            role.attrib.update({
+                'id': 1,
+                'role-id': 1,
+                'behaviour': ','.join(self.role['behaviors']),
+                'name': self.role['name']})
+            hosts = etree.Element('hosts')
+            role.append(hosts)
+            for server in self.servers:
+                host = etree.Element('host')
+                host.attrib.update({
+                    'internal-ip': server['private_ip'],
+                    'external-ip': server['public_ip'],
+                    'status': server['status'],
+                    'index': server['index'],
+                    'cloud-location': 'lxc'})
+                hosts.append(host)
+            ret.append(role)
+            return ret
 
 
 class Message(object):
@@ -296,42 +406,50 @@ class Message(object):
             el.appendChild(doc.createTextNode(value or ''))
 
 
+def xml_strip(el):
+    for child in list(el.childNodes):
+        if child.nodeType == child.TEXT_NODE and child.nodeValue.strip() == '':
+            el.removeChild(child)
+        else:
+            xml_strip(child)
+    return el 
+
 
 class breakpoint(object):
-	def __init__(self, **kwds):
-		for name, value in kwds.items():
-			setattr(self, name, value)
+    def __init__(self, **kwds):
+        for name, value in kwds.items():
+            setattr(self, name, value)
 
-	def __call__(self, f):
-		f.breakpoint = self
+    def __call__(self, f):
+        f.breakpoint = self
 
 class Spy1(object):
 
-	@breakpoint(msg='HostInit', sender='base.1')
-	def hi(self):
-		print 'recv HI from server'
+    @breakpoint(msg='HostInit', sender='base.1')
+    def hi(self):
+        print 'recv HI from server'
 
-	@breakpoint(msg='HostInit', receiver='base')
-	def hi_all(self):
-		print 'send HI to all servers'
+    @breakpoint(msg='HostInit', receiver='base')
+    def hi_all(self):
+        print 'send HI to all servers'
 
-	@breakpoint(msg='HostInitResponse', msg_to='base.1')
-	def hir(self):
-		print 'send HIR to server'
+    @breakpoint(msg='HostInitResponse', msg_to='base.1')
+    def hir(self):
+        print 'send HIR to server'
 
-	@breakpoint(msg='BeforeHostUp', msg_from='base.1')
-	def bhup_in(self):
-		print 'recv BeforeHostUp from server'
+    @breakpoint(msg='BeforeHostUp', msg_from='base.1')
+    def bhup_in(self):
+        print 'recv BeforeHostUp from server'
 
-	@breakpoint(msg='BeforeHostUp', msg_to='base.1')
-	def bhup_out(self):
-		print 'send BeforeHostUp to server'
+    @breakpoint(msg='BeforeHostUp', msg_to='base.1')
+    def bhup_out(self):
+        print 'send BeforeHostUp to server'
 
-	@breakpoint(msg='HostUp', msg_from='base.1')
-	def hup(self):
-		print 'recv HostUp from server'
+    @breakpoint(msg='HostUp', msg_from='base.1')
+    def hup(self):
+        print 'recv HostUp from server'
 
 
 class Barrier(object):
-	def __init__(self, size):
-		selkf.size = size
+    def __init__(self, size):
+        self.size = size

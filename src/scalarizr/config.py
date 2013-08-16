@@ -1061,8 +1061,9 @@ class BuiltinPlatforms:
     CLOUDSTACK      = 'cloudstack'
     IDCF            = 'idcf'
     UCLOUD          = 'ucloud'
-    GCE                     = 'gce'
+    GCE             = 'gce'
     OPENSTACK       = 'openstack'
+    LXC             = 'lxc'
 
     @staticmethod
     def values():
