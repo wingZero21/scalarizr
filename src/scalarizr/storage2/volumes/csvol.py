@@ -224,6 +224,8 @@ class CSVolume(base.Volume):
                         devname = self._attach(__cloudstack__['instance_id'],
                                      devname_to_deviceid(devname))[1]
                         self._native_vol = self._conn.listVolumes(id=self.id)[0]
+            except storage2.StorageError:
+                raise
             except:
                 exc_type, exc_value, exc_trace = sys.exc_info()
                 if self._native_vol:
