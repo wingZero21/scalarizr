@@ -482,7 +482,7 @@ class SystemAPI(object):
 
 
     @rpc.service_method
-    def exec_script_logs(self, exec_script_id=None):
+    def exec_script_logs(self, exec_script_id):
         '''
         :return: out and err logs
         :rtype: dict(stdout: base64encoded, stderr: base64encoded)
@@ -511,4 +511,3 @@ def get_truncated_log(logfile, maxsize=None):
         return ret.encode('utf-8')
     finally:
         f.close()
-        
