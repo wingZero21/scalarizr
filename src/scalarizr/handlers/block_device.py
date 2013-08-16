@@ -8,6 +8,7 @@ Created on Oct 13, 2011
 from __future__ import with_statement
 
 import os
+import sys
 import logging
 import string
 
@@ -115,7 +116,12 @@ class BlockDeviceHandler(handlers.Handler):
 				LOG.info('Ensuring %s volume %s', vol.type, dict(vol))
 				try:
 					vol.ensure(mount=bool(vol.mpoint), mkfs=True)
-				except storage2.VolumeNotExistsError, e:
+				#except storage2.VolumeNotExistsError, e:
+				except:
+					et, e, _ = sys.exc_info()
+					LOG.debug('class: %s, value: %s', et, e)
+					LOG.debug('template: %s, from_template_if_missing: %s', template, from_template_if_missing)
+
 					if template and from_template_if_missing == '1':
 						vol = storage2.volume(**template)
 						LOG.warn('Volume %s not exists, re-creating %s volume from config: %s', 
