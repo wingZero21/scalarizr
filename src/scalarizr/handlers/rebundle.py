@@ -172,7 +172,7 @@ class RebundleHandler(Handler):
 
 
     def cleanup_image(self, rootdir):
-        LOG.info('Perforing image cleanup')
+        LOG.info('Performing image cleanup')
         # Truncate logs
         LOG.debug('Cleanuping image')
 
