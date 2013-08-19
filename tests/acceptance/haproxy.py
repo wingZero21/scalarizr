@@ -184,7 +184,7 @@ class Role(object):
     get_role_servers = get_servers
 
 
-haproxy_api.get_servers = Role.get_servers
+haproxy_api.get_role_servers = Role.get_servers
 
 
 PARAMS = {
