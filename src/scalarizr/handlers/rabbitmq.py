@@ -15,7 +15,7 @@ import logging
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr import storage2
-from scalarizr.handlers import HandlerError, ServiceCtlHandler, prepare_tags
+from scalarizr.handlers import HandlerError, ServiceCtlHandler, build_tags
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import system2, initdv2, software, dns, cryptotool
 from scalarizr.node import __node__
@@ -361,7 +361,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 
     @property
     def rabbitmq_tags(self):
-        return prepare_tags(BEHAVIOUR)
+        return build_tags(BEHAVIOUR, 'active')
 
 
     def _get_cluster_nodes(self):

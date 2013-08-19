@@ -2,6 +2,7 @@ from __future__ import with_statement
 
 from scalarizr import config
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
@@ -877,36 +878,35 @@ class FarmSecurityMixin(object):
         self._iptables.FIREWALL.ensure(drop_rules, append=True)
 
 
-def prepare_tags(handler=None, **kwargs):
-    '''
-    @return dict(tags for volumes and snapshots)
-    '''
+def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
+    tags = dict()
 
-    def get_cfg_option(option):
-        id = None
-        cnf = bus.cnf
-        if cnf.rawini.has_option(config.SECT_GENERAL, option):
-            id = cnf.rawini.get(config.SECT_GENERAL, option)
-        return id
+    if purpose:
+        tags['scalr-purpose'] = purpose
 
-    tags = dict(creator = 'scalarizr')
-    farmid = get_cfg_option(config.OPT_FARM_ID)
-    roleid = get_cfg_option(config.OPT_ROLE_ID)
-    farmroleid = get_cfg_option(config.OPT_FARMROLE_ID)
-    tags.update(farm_id = farmid, role_id = roleid, farm_role_id = farmroleid)
+    if state:
+        tags['scalr-status'] = state
 
-    if handler:
-        tags['service'] = handler
+    if set_owner:
+        for opt in ('farm_id', 'farm_role_id', 'env_id'):
+            try:
+                tags[opt] = __node__[opt]
+            except KeyError:
+                tags[opt] = None
+
+        try:
+            tags['scalr-owner'] = __node__['owner_email']
+        except KeyError:
+                tags['scalr-owner'] = None
+
     if kwargs:
         # example: tmp = 1
-        if 'db_replication_role' in kwargs and type(kwargs['db_replication_role']) == bool:
-            kwargs['db_replication_role'] = 'master' if kwargs['db_replication_role'] else 'slave'
         tags.update(kwargs)
 
     excludes = []
     for k,v in tags.items():
         if not v:
-            excludes.append(v)
+            excludes.append(k)
             del tags[k]
         else:
             try:
