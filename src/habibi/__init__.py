@@ -8,6 +8,7 @@ import subprocess
 import xml.dom.minidom as dom
 import xml.etree.ElementTree as etree
 import urllib2
+import time
 import string
 import logging
 import threading
@@ -64,25 +65,25 @@ class PrettyHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
 class Habibi(object):
-    def __init__(self, behaviors, base_dir=None, queryenv_mock=None):
-        if 'chef' not in behaviors:
-            behaviors.append('chef')
+    def __init__(self, behavior, base_dir=None):
+        #if 'chef' not in behaviors:
+        #    behaviors.append('chef')
         self.role = {
-            'behaviors': behaviors,
+            'behaviors': [behavior],
             'name': 'habibi-lxc'
         }
+        self.servers = []
+        self.breakpoints = []
         self.router_ip = '10.0.3.1'
         self.messaging_port = 10001
         self.queryenv_port = 10002
         self.queryenv_version = '2012-07-01'
         self.base_dir = base_dir or '.habibi'
-        self.queryenv_mock = queryenv_mock or mock.Mock()
-        #self.messaging_mock = messaging_mock or mock.Mock()
         self.MessagingHTTPHandler.habibi = self
         self.QueryEnvHTTPHandler.habibi = self
         self.queryenv_server = self.queryenv_thread = None
         self.messaging_server = self.messaging_thread = None
-        self.servers = []
+
 
 
     def run_server(self):
@@ -93,6 +94,7 @@ class Habibi(object):
             'public_ip': None,
             'private_ip': None,
             'status': 'pending',
+            'behaviors': self.role['behaviors'],
             'index': self._next_server_index()
         }
         self.servers.append(server)
@@ -132,10 +134,23 @@ class Habibi(object):
         self.messaging_server.shutdown()
         self.queryenv_server.shutdown()
 
+    def spy(self, spy):
+        self.breakpoints = []
+        for name in dir(spy):
+            fn = getattr(spy, name)
+            if hasattr(fn, 'breakpoint'):
+                bp = Breakpoint(fn.breakpoint)
+                self.breakpoints.append((fn, bp))
+
+    def apply_breakpoints(self, cond, kwds):
+        test_bp = Breakpoint(cond)
+        for bp in self.breakpoints:
+            if bp[1] == test_bp:
+                bp[0](**kwds)
 
     def _next_server_index(self):
         # TODO: handle holes
-        return len(self.servers)
+        return str(len(self.servers) + 1)
 
     def _user_data(self, server):
         return {'szr_key': server['crypto_key'],
@@ -143,7 +158,7 @@ class Habibi(object):
                 'serverid': server['server_id'],
                 'p2p_producer_endpoint': 'http://{0}:{1}/messaging'.format(self.router_ip, self.messaging_port),
                 'queryenv_url': 'http://{0}:{1}/query-env'.format(self.router_ip, self.queryenv_port),
-                'behaviors': ','.join(self.role['behaviors']),
+                'behaviors': ','.join(server['behaviors']),
                 'farm_roleid': '1',
                 'roleid': '1',
                 'env_id': '1',
@@ -168,18 +183,29 @@ class Habibi(object):
 
     def send(self, msg_name, server_pattern=None, source_msg=None):
         servers = self.find_servers(server_pattern)
+        source_server = self.find_servers(source_msg.meta['server_id'])[0]
 
         for server in servers:
             msg = Message()
             msg.id = str(uuid.uuid4())
             msg.name = msg_name
-            msg.body = source_msg.body
+            msg.body = source_msg.body.copy()
+            msg.body['scripts'] = []
 
-            # call hook
+            self.apply_breakpoints(
+                cond={
+                    'msg_name': msg.name, 
+                    'target_index': server['index'],
+                    'target_behavior': server['behaviors'][0]}, 
+                kwds={
+                    'target_msg': msg,
+                    'target_server': server,
+                    'source_msg': source_msg})
 
             LOG.debug('<~ %s to %s', msg.name, server['server_id'])
             xml_data = msg.toxml()
-            LOG.debug(xml_data)
+            LOG.debug(' * data: %s', xml_data)
+            LOG.debug(' * key: %s', server['crypto_key'])
             crypto_key = binascii.a2b_base64(server['crypto_key'])
             encrypted_data = crypto.encrypt(xml_data, crypto_key)
             signature, timestamp = crypto.sign(encrypted_data, crypto_key)
@@ -199,12 +225,21 @@ class Habibi(object):
         LOG.debug('~> %s from %s', msg.name, server_id)
         server = self.find_servers(server_id)[0]
 
+        self.apply_breakpoints(
+            cond={
+                'msg_name': msg.name, 
+                'source_index': server['index'],
+                'source_behavior': server['behaviors'][0]}, 
+            kwds={
+                'source_msg': msg})
+
         if msg.name == 'HostInit':
             server['status'] = 'initializing'
             server['public_ip'] = msg.body['remote_ip']
             server['private_ip'] = msg.body['local_ip']
             server['crypto_key'] = msg.body['crypto_key'].strip()
 
+            time.sleep(1)  # It's important gap for Scalarizr
             self.send('HostInitResponse', server_pattern=server_id, source_msg=msg)
             self.send('HostInit', source_msg=msg)
         elif msg.name == 'BeforeHostUp':
@@ -212,11 +247,12 @@ class Habibi(object):
         elif msg.name == 'HostUp':
             server['status'] = 'running'
             self.send('HostUp', source_msg=msg)
+        elif msg.name in ('OperationDefinition', 'OperationProgress', 'OperationResult'):
+            pass
         else:
             raise Exception('Unprocessed message: %s' % msg)
 
  
-
     class MessagingHTTPHandler(PrettyHTTPRequestHandler):
         habibi = None
         LOG = logging.getLogger('habibi.messaging')
@@ -293,13 +329,13 @@ class Habibi(object):
             ret = etree.Element('roles')
             role = etree.Element('role')
             role.attrib.update({
-                'id': 1,
-                'role-id': 1,
-                'behaviour': ','.join(self.role['behaviors']),
-                'name': self.role['name']})
+                'id': '1',
+                'role-id': '1',
+                'behaviour': ','.join(self.habibi.role['behaviors']),
+                'name': self.habibi.role['name']})
             hosts = etree.Element('hosts')
             role.append(hosts)
-            for server in self.servers:
+            for server in self.habibi.servers:
                 host = etree.Element('host')
                 host.attrib.update({
                     'internal-ip': server['private_ip'],
@@ -406,6 +442,30 @@ class Message(object):
             el.appendChild(doc.createTextNode(value or ''))
 
 
+class Breakpoint(object):
+    def __init__(self, cond):
+        bp = cond.copy()
+        for key in ('source', 'target'):
+            if bp.get(key):
+                if '.' in bp[key]:
+                    bp[key + '_behavior'], bp[key + '_index'] = bp[key].split('.')
+                else:
+                    bp[key + '_behavior'] = bp[key]
+                del bp[key]
+        self.cond = bp
+
+    def __eq__(self, test_cond):
+        if not isinstance(test_cond, Breakpoint):
+            test_bp = Breakpoint(test_cond)
+        else:
+            test_bp = test_cond
+        inc_cond = {}
+        for k in self.cond.keys():
+            inc_cond[k] = test_bp.cond.get(k)
+        #LOG.debug('Compare test/self: %s and %s', inc_cond, self.cond)
+        return inc_cond == self.cond
+
+
 def xml_strip(el):
     for child in list(el.childNodes):
         if child.nodeType == child.TEXT_NODE and child.nodeValue.strip() == '':
@@ -415,41 +475,32 @@ def xml_strip(el):
     return el 
 
 
-class breakpoint(object):
-    def __init__(self, **kwds):
-        for name, value in kwds.items():
-            setattr(self, name, value)
+def breakpoint(**kwds):
+    def wrapper(fn):
+        fn.breakpoint = kwds
+        return fn
+    return wrapper
 
-    def __call__(self, f):
-        f.breakpoint = self
 
-class Spy1(object):
+class SampleSpy(object):
 
-    @breakpoint(msg='HostInit', sender='base.1')
-    def hi(self):
-        print 'recv HI from server'
+    @breakpoint(msg_name='HostInit', source='base.1')
+    def hi(self, source_msg=None, **kwds):
+        print 'recv HI from server %s' % source_msg.meta['server_id']
 
-    @breakpoint(msg='HostInit', receiver='base')
-    def hi_all(self):
-        print 'send HI to all servers'
+    @breakpoint(msg_name='HostInitResponse')
+    def hi_all(self, target_msg=None, target_server=None, **kwds):
+        target_msg.body['chef'] = {
+            'server_url': 'http://example.test',
+            'run_list': ['recipe[example]']
+        }
+        print 'send HIR to %s' % target_server['server_id']
 
-    @breakpoint(msg='HostInitResponse', msg_to='base.1')
-    def hir(self):
-        print 'send HIR to server'
+    @breakpoint(msg_name='BeforeHostUp', target='base')
+    def bhup(self, **kwds):
+        print 'send BeforeHostUp to all servers'
 
-    @breakpoint(msg='BeforeHostUp', msg_from='base.1')
-    def bhup_in(self):
-        print 'recv BeforeHostUp from server'
-
-    @breakpoint(msg='BeforeHostUp', msg_to='base.1')
-    def bhup_out(self):
-        print 'send BeforeHostUp to server'
-
-    @breakpoint(msg='HostUp', msg_from='base.1')
-    def hup(self):
+    @breakpoint(msg_name='HostUp', source='base')
+    def hup(self, **kwds):
         print 'recv HostUp from server'
 
-
-class Barrier(object):
-    def __init__(self, size):
-        self.size = size
