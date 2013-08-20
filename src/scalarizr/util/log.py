@@ -17,6 +17,7 @@ import os
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Queues, Messages
+from scalarizr.linux import os as os_dist
 
 
 INTERVAL_RE = re.compile('((?P<minutes>\d+)min\s?)?((?P<seconds>\d+)s)?')
@@ -25,8 +26,9 @@ class RotatingFileHandler(logging.handlers.RotatingFileHandler):
     def __init__(self, filename, mode, maxBytes, backupCount, chmod = 0600):
         logging.handlers.RotatingFileHandler.__init__(self, filename, mode, maxBytes, backupCount)
         try:
-            os.chown(self.baseFilename, os.getuid(), os.getgid())
-            os.chmod(self.baseFilename, chmod)
+            if os_dist['family'] != 'Windows':
+                os.chown(self.baseFilename, os.getuid(), os.getgid())
+                os.chmod(self.baseFilename, chmod)
         except OSError:
             pass
 

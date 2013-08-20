@@ -10,15 +10,18 @@ import re
 import socket
 import urllib2
 import logging
+import platform
 import sys
-import socket
 import struct
 import array
-import fcntl
+
 
 import ConfigParser
 
 from scalarizr.bus import bus
+from scalarizr.linux import os as os_dist
+if os_dist['family'] != 'Windows':
+    import fcntl
 
 
 class PlatformError(BaseException):
@@ -114,13 +117,20 @@ class Platform():
         @return Architectures
         """
         if self._arch is None:
-            uname = os.uname()
-            if re.search("^i\\d86$", uname[4]):
-                self._arch = Architectures.I386
-            elif re.search("^x86_64$", uname[4]):
-                self._arch = Architectures.X86_64
+
+            if os_dist['family'] == 'Windows':
+                if '32' in platform.architecture()[0]:
+                    self._arch = Architectures.I386
+                else:
+                    self._arch = Architectures.X86_64
             else:
-                self._arch = Architectures.UNKNOWN
+                uname = os.uname()
+                if re.search("^i\\d86$", uname[4]):
+                    self._arch = Architectures.I386
+                elif re.search("^x86_64$", uname[4]):
+                    self._arch = Architectures.X86_64
+                else:
+                    self._arch = Architectures.UNKNOWN
         return self._arch
 
     @property
@@ -205,7 +215,7 @@ class Ec2LikePlatform(Platform):
 
     def _get_property(self, name):
         if not self._metadata.has_key(name):
-            full_name = os.path.join(self._metadata_key, name)
+            full_name = self._metadata_key + "/" + name
             self._metadata[name] = self._fetch_metadata(full_name)
         return self._metadata[name]
 

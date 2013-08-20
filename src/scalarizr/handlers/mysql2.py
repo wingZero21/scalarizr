@@ -887,7 +887,8 @@ class MysqlHandler(DBMSRHandler):
                     user=__mysql__['repl_user'],
                     password=mysql2['repl_password'],
                     log_file=log_file,
-                    log_pos=log_pos
+                    log_pos=log_pos,
+                    timeout=120
             )
 
             LOG.debug("Replication switched")
@@ -1159,7 +1160,8 @@ class MysqlHandler(DBMSRHandler):
                                 user=__mysql__['repl_user'],
                                 password=__mysql__['repl_password'],
                                 log_file=__mysql__['restore'].log_file,
-                                log_pos=__mysql__['restore'].log_pos)
+                                log_pos=__mysql__['restore'].log_pos,
+                                timeout=120)
 
             with op.step(self._step_collect_hostup_data):
                 # Update HostUp message

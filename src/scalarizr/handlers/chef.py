@@ -12,6 +12,7 @@ import json
 import signal
 import logging
 
+from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.util import system2, initdv2, PopenError
@@ -102,12 +103,13 @@ class ChefHandler(Handler):
         )
 
     def on_reload(self):
+        _is_win = linux.os.windows_family
         self._chef_client_bin = None
         self._chef_data = None
-        self._client_conf_path = '/etc/chef/client.rb'
-        self._validator_key_path = '/etc/chef/validation.pem'
-        self._client_key_path = '/etc/chef/client.pem'
-        self._json_attributes_path = '/etc/chef/attributes.json'
+        self._client_conf_path = _is_win and r'C:\chef\client.rb' or '/etc/chef/client.rb'
+        self._validator_key_path = _is_win and r'C:\chef\validation.pem' or '/etc/chef/validation.pem'
+        self._client_key_path = _is_win and r'C:\chef\client.pem' or '/etc/chef/client.pem'
+        self._json_attributes_path = _is_win and r'C:\chef\first-run.json' or '/etc/chef/first-run.json'
         self._with_json_attributes = False
         self._platform = bus.platform
         self._global_variables = {}
@@ -141,7 +143,11 @@ class ChefHandler(Handler):
             self._global_variables[kv['name']] = kv['value'] or ''
 
         if 'chef' in message.body and message.body['chef']:
-            self._chef_client_bin = which('chef-client')   # Workaround for 'chef' behavior enabled, but chef not installed
+            if linux.os.windows_family:
+                self._chef_client_bin = r'C:\opscode\chef\bin\chef-client.bat'
+            else:
+                self._chef_client_bin = which('chef-client')   # Workaround for 'chef' behavior enabled, but chef not installed
+
             self._chef_data = message.chef.copy()
             self._chef_data['node_name'] = self.get_node_name()
             self._daemonize = self._chef_data.get('daemonize')
@@ -163,9 +169,9 @@ class ChefHandler(Handler):
                 try:
                     with op.step(self._step_register_node):
                         # Create client configuration
-                        dir = os.path.dirname(self._client_conf_path)
-                        if not os.path.exists(dir):
-                            os.makedirs(dir)
+                        _dir = os.path.dirname(self._client_conf_path)
+                        if not os.path.exists(_dir):
+                            os.makedirs(_dir)
                         with open(self._client_conf_path, 'w+') as fp:
                             fp.write(CLIENT_CONF_TPL % self._chef_data)
                         os.chmod(self._client_conf_path, 0644)
@@ -210,10 +216,10 @@ class ChefHandler(Handler):
         cmd = [self._chef_client_bin]
         if with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
-        system2(cmd,
-            close_fds=True, 
-            log_level=logging.INFO, 
-            preexec_fn=os.setsid, 
+        system2(cmd, 
+            close_fds=linux.os.linux_family,
+            log_level=logging.INFO,
+            preexec_fn=linux.os.linux_family and os.setsid or None,
             env=self._environ_variables
         )
 
@@ -229,8 +235,10 @@ class ChefHandler(Handler):
         }
         environ.update(os.environ)
         environ.update(self._global_variables)
+        if linux.os.windows_family:
+            # Windows env should contain only strings, unicode is not an option
+            environ = dict((str(x), str(y)) for x, y in environ.items())
         return environ
-
 
     def get_node_name(self):
         return '%s-%s-%s' % (self._platform.name, self._platform.get_public_ip(), time.time())

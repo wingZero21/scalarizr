@@ -459,6 +459,9 @@ def enabled():
         else:  # 6.4 and higher
             # Upgrading iptables-1.4.18-1.16 to iptables-1.4.18-1.19 did
             # the job
+            # We need to remove iptables first because it can be i686 version
+            # installed and installing x86_64 over it causes error
+            pkgmgr.remove("iptables")
             pkgmgr.latest("iptables")
 
     if linux.os['family'] in ('RedHat', 'Oracle'):

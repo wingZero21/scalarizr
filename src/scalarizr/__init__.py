@@ -6,25 +6,30 @@ if sys.version_info < (2, 6):
     from scalarizr.util import compat
     compat.patch()
 
-
 # Core
 from scalarizr import config, rpc, linux
 from scalarizr import node
+from scalarizr.linux import coreutils
+
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
 from scalarizr.storage import Storage
 from scalarizr.handlers import MessageListener
-from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer
+from scalarizr.messaging import MessageServiceFactory, MessageService, MessageConsumer, Queues, Messages
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.platform import PlatformFactory, UserDataOptions
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.api.binding import jsonrpc_http
+
 from scalarizr.linux import pkgmgr
+if not linux.os.windows_family:
+    from scalarizr.snmp.agent import SnmpServer
 
 # Utils
 from scalarizr.util import initdv2, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
 from scalarizr.util import wait_until, sqlite_server
+from scalarizr.util.flag import Flag
 
 # Stdlibs
 import cStringIO
@@ -57,10 +62,21 @@ EMBED_SNMPD = True
 NET_SNMPD = False
 
 SNMP_RESTART_DELAY = 5 # Seconds
+SNMP_POLL_INTERVAL = 10 # Seconds
 
-PID_FILE = '/var/run/scalarizr.pid' 
+if linux.os.windows_family:
+    from scalarizr.util import reg_value
+    INSTALL_DIR = reg_value('InstallDir')
+else:
+    INSTALL_DIR = '/'
 
-LOGGING_CONFIG = '''
+PID_FILE = os.path.join(INSTALL_DIR, 'var', 'run', 'scalarizr.pid')
+
+LOGFILES_BASEPATH = os.path.join(INSTALL_DIR, 'var', 'log')
+LOG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr.log')
+LOG_DEBUG_PATH = os.path.join(LOGFILES_BASEPATH, 'scalarizr_debug.log')
+
+LOGGING_CONFIG = r'''
 [loggers]
 keys=root,scalarizr
 
@@ -90,13 +106,13 @@ args=(sys.stderr,)
 class=scalarizr.util.log.RotatingFileHandler
 level=INFO
 formatter=user
-args=('/var/log/scalarizr.log', 'a+', 5242880, 5, 0600)
+args=(r'LOG_PATH', 'a+', 5242880, 5, 0600)
 
 [handler_debug_log]
 class=scalarizr.util.log.RotatingFileHandler
 level=DEBUG
 formatter=debug
-args=('/var/log/scalarizr_debug.log', 'a+', 5242880, 5, 0600)
+args=(r'LOG_DEBUG_PATH', 'a+', 5242880, 5, 0600)
 
 [handler_scalr]
 class=scalarizr.util.log.MessagingHandler
@@ -110,9 +126,10 @@ format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
 class=scalarizr.util.log.NoStacktraceFormatter
 '''
+LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_PATH', LOG_PATH)
+LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_DEBUG_PATH', LOG_DEBUG_PATH)
 
 
-_running = False
 '''
 True when scalarizr daemon should be running
 '''
@@ -122,17 +139,11 @@ _pid = None
 Scalarizr main process PID
 '''
 
-_snmp_pid = None
-'''
-Embed SNMP server process PID
-'''
 
 _snmp_scheduled_start_time = None
 '''
 Next time when SNMP process should be forked
 '''
-
-_msg_thread = None
 
 _logging_configured = False
 
@@ -214,6 +225,25 @@ def _init():
     # Registering in init.d
     initdv2.explore("scalarizr", ScalarizrInitScript)
 
+
+def prepare_snmp():
+    _init()
+    cnf = bus.cnf; ini = cnf.rawini
+    cnf.on('apply_user_data', _apply_user_data)
+    cnf.bootstrap()
+
+    server_id = ini.get('general', 'server_id')
+    queryenv_url = ini.get('general', 'queryenv_url')
+    queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY))
+
+    bus.queryenv_service = queryenv
+
+    snmp_server = SnmpServer(
+        port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
+        security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
+        community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
+    )
+    return snmp_server
     
 
 DB_NAME = 'db.sqlite'
@@ -272,7 +302,8 @@ def _create_db(db_file=None, script_file=None):
     conn.close()
     
     #conn.commit()
-    system2('sync', shell=True)    
+    if linux.os['family'] != 'Windows':
+        system2('sync', shell=True)
 
 def _init_logging():
     optparser = bus.optparser
@@ -307,7 +338,7 @@ def _init_platform():
         logger.debug('Enable RedHat subscription')
         urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
 
-    if cnf.state != ScalarizrState.RUNNING:
+    if cnf.state != ScalarizrState.RUNNING and linux.os.linux_family:
         try:
             pkgmgr.updatedb()
         except:
@@ -321,100 +352,6 @@ def _init_platform():
     else:
         raise ScalarizrError("Platform not defined")
 
-
-
-def _init_services():
-    logger = logging.getLogger(__name__)
-    cnf = bus.cnf; ini = cnf.rawini
-    server_id = ini.get('general', 'server_id')
-    queryenv_url = ini.get('general', 'queryenv_url')
-    messaging_adp = ini.get('messaging', 'adapter')
-
-    # Set base URL
-    pr = urlparse(queryenv_url)
-    bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
-    logger.debug("Got scalr url: '%s'" % bus.scalr_url)
-
-    # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
-    bus.periodical_executor = PeriodicalExecutor()
-
-    logger.debug("Initialize QueryEnv client")
-    queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), '2008-12-16')
-    queryenv_latest = queryenv.get_latest_version()
-    queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), queryenv_latest)
-
-    if tuple(map(int, queryenv_latest.split('-'))) >= (2012, 7, 1):
-        scalr_version = queryenv.get_global_config()['params'].get('scalr.version')
-        if scalr_version:
-            bus.scalr_version = tuple(map(int, scalr_version.split('.')))
-            version_file = cnf.private_path('.scalr-version')
-            with open(version_file, 'w') as fp:
-                fp.write(scalr_version)
-
-    bus.queryenv_service = queryenv
-    bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
-    
-    logger.debug("Initialize messaging")
-    factory = MessageServiceFactory()
-    try:
-        params = dict(ini.items("messaging_" + messaging_adp))
-        params[P2pConfigOptions.SERVER_ID] = server_id
-        params[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.key_path(cnf.DEFAULT_KEY)
-        
-        msg_service = factory.new_service(messaging_adp, **params)
-        bus.messaging_service = msg_service
-    except (BaseException, Exception):
-        raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
-        
-    logger.debug('Initialize message handlers')
-    consumer = msg_service.get_consumer()
-    consumer.listeners.append(MessageListener())
-
-    logger.debug('Schedule SNMP process')
-    globals()['_snmp_scheduled_start_time'] = time.time()       
-
-    Storage.maintain_volume_table = True
-    
-    if not bus.api_server:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        api_port = 8010
-        try:
-            sock.connect(('0.0.0.0', api_port))
-            api_port = 8009
-            sock.close()
-        except socket.error:
-            pass
-        STATE['global.api_port'] = api_port
-        api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes), 
-                                            cnf.key_path(cnf.DEFAULT_KEY))
-        class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
-            pass
-        bus.api_server = wsgiref.simple_server.make_server('0.0.0.0', api_port, api_app, server_class=ThreadingWSGIServer)
-
-
-def _start_services():
-    logger = logging.getLogger(__name__)
-    # Create message server thread
-    msg_service = bus.messaging_service
-    consumer = msg_service.get_consumer()
-    msg_thread = threading.Thread(target=consumer.start, name="Message server")
-
-    # Start SNMP
-    _start_snmp_server()
-
-    # Start message server
-    msg_thread.start()
-    globals()['_msg_thread'] = msg_thread
-    
-    # Start API server
-    api_server = bus.api_server
-    logger.info('Starting API server on http://0.0.0.0:8010')
-    api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
-    api_thread.start()
-
-    # Start periodical executor
-    ex = bus.periodical_executor
-    ex.start()
 
 def _apply_user_data(cnf):
     logger = logging.getLogger(__name__)
@@ -520,158 +457,6 @@ def init_script():
     bus.messaging_service = msg_service
 
 
-def _start_snmp_server():
-    logger = logging.getLogger(__name__)
-
-    remove_snmp_since = (4, 5, 0)
-    if bus.scalr_version >= remove_snmp_since:
-        logger.debug('Skip SNMP process starting cause condition matched: Scalr version %s >= %s', 
-            bus.scalr_version, remove_snmp_since)
-        globals()['_snmp_pid'] = -1
-        return
-
-    # Start SNMP server in a separate process
-    pid = os.fork()
-    if pid == 0:
-        from scalarizr.snmp.agent import SnmpServer
-        globals()['_pid'] = 0
-        cnf = bus.cnf; ini = cnf.rawini     
-        snmp_server = SnmpServer(
-            port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
-            security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
-            community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
-        )
-        bus.snmp_server = snmp_server
-        
-        try:
-            snmp_server.start()
-            logger.info('[pid: %d] SNMP process terminated', os.getpid())
-            sys.exit(0)
-        except SystemExit:
-            raise
-        except (BaseException, Exception), e:
-            logger.warn('Caught SNMP error: %s', str(e))
-            sys.exit(1)
-    else:
-        globals()["_snmp_pid"] = pid
-
-def onSIGHUP(*args):
-    pid = os.getpid()
-    logger = logging.getLogger(__name__)
-    logger.debug('Received SIGHUP (pid: %d)', pid)
-    if pid != _pid:
-        return
-    
-    logger.info('Reloading scalarizr')
-    signal.signal(signal.SIGCHLD, signal.SIG_IGN)
-    globals()["_running"] = False
-    bus.fire('shutdown')
-    _shutdown_services()
-    
-    
-    globals()["_running"] = True
-    signal.signal(signal.SIGCHLD, onSIGCHILD)        
-    cnf = bus.cnf
-    cnf.bootstrap(force_reload=True)
-    _init_services()
-    _start_services()
-    bus.fire('reload')
-    
-
-def onSIGTERM(*args):
-    pid = os.getpid()    
-    logger = logging.getLogger(__name__)
-    logger.debug('Received SIGTERM (pid: %d)', pid)
-        
-    if pid == _pid:
-        # Main process
-        logger.debug('Shutdown main process (pid: %d)', pid)
-        _shutdown()
-    else:
-        # SNMP process
-        logger.debug('Shutdown SNMP server process (pid: %d)', pid)
-        snmp = bus.snmp_server
-        snmp.stop()
-
-def onSIGCHILD(*args):
-    logger = logging.getLogger(__name__)
-    #logger.debug("Received SIGCHILD")
-    
-    if globals()["_running"] and _snmp_pid:
-        try:
-            # Restart SNMP process if it terminates unexpectedly
-            pid, sts = os.waitpid(_snmp_pid, os.WNOHANG)
-            '''
-            logger.debug(
-                'Child terminated (pid: %d, status: %s, WIFEXITED: %s, '
-                'WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)', 
-                pid, sts, os.WIFEXITED(sts), 
-                os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts)
-            )
-            '''
-            if pid == _snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
-                logger.warning(
-                    'SNMP process [pid: %d] died unexpectedly. Restarting it', 
-                    _snmp_pid
-                )
-                globals()['_snmp_scheduled_start_time'] = time.time() + SNMP_RESTART_DELAY
-                globals()['_snmp_pid'] = None
-        except OSError:
-            pass    
-    
-
-def _shutdown(*args):
-    logger = logging.getLogger(__name__)
-    globals()["_running"] = False
-
-    try:
-        bus.fire("shutdown")
-    except:
-        logger.debug('Shutdown hooks exception', exc_info=sys.exc_info())
-        
-    try:
-        logger.info("[pid: %d] Stopping scalarizr %s", os.getpid(), __version__)
-        _shutdown_services()
-    except:
-        logger.debug('Shutdown services exception', exc_info=sys.exc_info())
-    finally:
-        if os.path.exists(PID_FILE):
-            os.remove(PID_FILE)
-        
-    logger.info('[pid: %d] Scalarizr terminated', os.getpid())
-
-def _shutdown_services(force=False):
-    logger = logging.getLogger(__name__)
-    
-    # Shutdown SNMP
-    if _snmp_pid:
-        logger.debug('Send SIGTERM to SNMP process (pid: %d)', _snmp_pid)
-        try:
-            os.kill(_snmp_pid, signal.SIGTERM)
-        except (Exception, BaseException), e:
-            logger.debug("Can't kill SNMP process: %s" % e)
-        globals()['_snmp_pid'] = None
-    
-    # Shutdown messaging
-    logger.debug('Shutdowning external messaging')
-    msg_service = bus.messaging_service
-    msg_service.get_consumer().shutdown(force=True)
-    msg_service.get_producer().shutdown()
-    bus.messaging_service = None
-    
-    # Shutdown API server
-    logger.debug('Shutdowning API server')
-    api_server = bus.api_server
-    api_server.shutdown()
-    bus.api_server = None
-
-    # Shutdown periodical executor
-    logger.debug('Shutdowning periodical executor')
-    ex = bus.periodical_executor
-    ex.shutdown()
-    bus.periodical_executor = None
-
-
 def _cleanup_after_rebundle():
     cnf = bus.cnf
     pl = bus.platform
@@ -691,8 +476,11 @@ def _cleanup_after_rebundle():
         if file in ('.user-data', '.update'):
             continue
         path = os.path.join(priv_path, file)
+        coreutils.chmod_r(path, 0700)
         os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
-    system2('sync', shell=True)
+    if not linux.os.windows_family:
+        system2('sync', shell=True)
+
 
 def do_validate_cnf():
     errors = list()
@@ -732,8 +520,6 @@ def main():
                 help='Show version information')
         optparser.add_option('-c', '--etc-path', dest='etc_path',
                 help='Configuration directory path')
-        optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
-                help='Daemonize process')
         optparser.add_option('-l', dest='debug', action='store_true', default=False,
                 help='Enable debug log')
         optparser.add_option('-n', '--configure', dest='configure', action="store_true", default=False, 
@@ -749,19 +535,27 @@ def main():
                 help='Answer "yes" to all questions')
         optparser.add_option('-o', dest='cnf', action='append',
                 help='Runtime .ini option key=value')
-        
+
+        if linux.os['family'] != 'Windows':
+            optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
+                                               help='Daemonize process')
+        else:
+            optparser.add_option("--install-win-services", dest="install_win_services", action="store_true",
+                                 default=False, help='Install scalarizr as windows service')
+            optparser.add_option("--uninstall-win-services", dest="uninstall_win_services", action="store_true",
+                                 default=False, help='Uninstall scalarizr windows service')
+
         if ('cloud-location=' in sys.argv or 'region=' in sys.argv) and 'platform=ec2' in sys.argv:
             region = urllib2.urlopen('http://169.254.169.254/latest/meta-data/placement/availability-zone').read().strip()[:-1]
             try:
                 sys.argv[sys.argv.index('region=')] += region
             except ValueError:
-                sys.argv += ['-o', 'region=' + region]      
+                sys.argv += ['-o', 'region=' + region]        
         
         optparser.parse_args()
-
         
         # Daemonize process
-        if optparser.values.daemonize:
+        if linux.os['family'] != 'Windows' and optparser.values.daemonize:
             daemonize()
 
         if optparser.values.version:
@@ -774,194 +568,8 @@ def main():
             do_keygen()
             sys.exit()
 
-        logger.debug("Initialize scalarizr...")
-        _init()
-
-        # Starting scalarizr daemon initialization
-        globals()['_pid'] = pid = os.getpid()       
-        logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
-        
-        # Check for another running scalarzir 
-        if os.path.exists(PID_FILE):
-            try:
-                another_pid = None
-                with open(PID_FILE, 'r') as fp:
-                    another_pid = int(fp.read().strip())
-            except ValueError:
-                pass
-            else:
-                if pid != another_pid and os.path.exists('/proc/%s/status' % (another_pid,)):
-                    logger.error('Cannot start scalarizr: Another process (pid: %s) already running', another_pid)
-                    sys.exit(1)
-                    
-        # Write PID
-        with open(PID_FILE, 'w') as fp:
-            fp.write(str(pid))
-            
-        cnf = bus.cnf
-        cnf.on('apply_user_data', _apply_user_data)
-        
-        if optparser.values.configure:
-            do_configure()
-            sys.exit()
-            
-        elif optparser.values.import_server:
-            print "Starting import process..."
-            print "Don't terminate Scalarizr until Scalr will create the new role"
-            cnf.state = ScalarizrState.IMPORTING
-            # Load Command-line configuration options and auto-configure Scalarizr
-
-            values = CmdLineIni.to_kvals(optparser.values.cnf)
-            if not values.get('server_id'):
-                values['server_id'] = str(uuid.uuid4())
-            cnf.reconfigure(values=values, silent=True, yesall=True)
-        
-        # Load INI files configuration
-        cnf.bootstrap(force_reload=True)
-        ini = cnf.rawini
-
-        # Initialize platform module
-        _init_platform()
-        pl = bus.platform
-
-
-        # Check that service started after dirty bundle
-        if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
-        
-            # XXX: nimbula's user-data is uploaded by ssh
-            server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-            if pl.name in ('nimbula', 'rackspace', 'openstack') and cnf.state != ScalarizrState.IMPORTING:
-                if cnf.state == ScalarizrState.REBUNDLING:
-                    # XXX: temporary workaround
-                    # XXX: rackspace injects files and boots OS in a parallell. There were situations when
-                    # .user-data file was stale and new server started from rebundled image
-                    # toughts that he's an old server and continue rebundling  
-                    time.sleep(30)
-                    
-                udfile = cnf.private_path('.user-data')
-                wait_until(lambda: os.path.exists(udfile), 
-                        timeout=60, error_text="User-data file %s doesn't exist" % udfile)                  
-            try:
-                ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
-            except:
-                if cnf.state == ScalarizrState.IMPORTING:
-                    ud_server_id = None
-                else:
-                    raise
-                
-            if server_id and ud_server_id and server_id != ud_server_id:
-                logger.info('Server was started after rebundle. Performing some cleanups')
-                _cleanup_after_rebundle()
-                cnf.state = ScalarizrState.BOOTSTRAPPING
-
-        if cnf.state == ScalarizrState.UNKNOWN:
-            cnf.state = ScalarizrState.BOOTSTRAPPING
-        
-        '''
-        if cnf.state == ScalarizrState.REBUNDLING:
-            server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-            ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
-            if server_id and ud_server_id and server_id != ud_server_id:
-                logger.info('Server was started after rebundle. Performing some cleanups')
-                _cleanup_after_rebundle()
-                cnf.state = ScalarizrState.BOOTSTRAPPING
-        '''
-
-        # Initialize local database
-        _init_db()
-    
-    
-        STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__)) 
-        STATE['global.version'] = __version__
-        
-        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
-            logger.info('Scalarizr was updated to %s', __version__)
-        
-        if cnf.state == ScalarizrState.UNKNOWN:
-            cnf.state = ScalarizrState.BOOTSTRAPPING
-            
-        # At first startup platform user-data should be applied
-        if cnf.state == ScalarizrState.BOOTSTRAPPING:
-            cnf.fire('apply_user_data', cnf)
-
-            upd = ScalrUpdClientScript()
-            if not upd.running:
-                try:
-                    upd.start()
-                except:
-                    logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
-
-        
-        # Check Scalr version
-        if not bus.scalr_version:
-            version_file = cnf.private_path('.scalr-version')
-            if os.path.exists(version_file):
-                bus.scalr_version = None
-                with open(version_file, 'r') as fp:
-                    bus.scalr_version = tuple(fp.read().strip().split('.'))
-            else:
-                bus.scalr_version = _detect_scalr_version()
-                with open(version_file, 'w') as fp:
-                    fp.write('.'.join(map(str, bus.scalr_version)))
-                
-            
-        # Apply Command-line passed configuration options
-        cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))
-        
-        # Validate configuration
-        num_errors = do_validate_cnf()
-        if num_errors or optparser.values.validate_cnf:
-            sys.exit(int(not num_errors or 1))      
-        
-        # Initialize scalarizr services
-        _init_services()
-        if cnf.state == ScalarizrState.RUNNING:
-            # ReSync user-data
-            cnf.fire('apply_user_data', cnf)
-        try:
-            bus.fire('init')
-        except:
-            logger.warn('Caught exception in "init": %s', sys.exc_info()[1], 
-                        exc_info=sys.exc_info())
-        
-        # Install signal handlers
-        signal.signal(signal.SIGCHLD, onSIGCHILD)   
-        signal.signal(signal.SIGTERM, onSIGTERM)
-        signal.signal(signal.SIGHUP, onSIGHUP)
-
-        _start_services()
-
-        # Fire start
-        globals()["_running"] = True
-        try:
-            bus.fire("start")
-        except:
-            logger.warn('Caught exception in "start": %s', sys.exc_info()[1], 
-                        exc_info=sys.exc_info())
-
-        try:
-            while _running:
-                # Recover SNMP 
-                if _running and not _snmp_pid and time.time() >= _snmp_scheduled_start_time:
-                    _start_snmp_server()
-                
-                #_msg_thread.join(0.2)
-                try:
-                    select.select([], [], [], 30)
-                except select.error, e:
-                    if e.args[0] == 4:
-                        # Interrupted syscall
-                        continue
-                    raise
-                
-        except KeyboardInterrupt:
-            logger.debug('Mainloop: KeyboardInterrupt')
-            pass
-        finally:
-            logger.debug('Mainloop: finally')
-            if _running and os.getpid() == _pid:
-                _shutdown()
-        logger.debug('Mainloop: leave')
+        service = WindowsService() if 'Windows' == linux.os['family'] else Service()
+        service.start()
             
     except (BaseException, Exception), e:
         if isinstance(e, SystemExit):
@@ -976,3 +584,564 @@ def main():
             sys.exit(1)
 
 
+class Service(object):
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+        self._running  = False
+        self._snmp_process = None
+        self._snmp_pid = None
+        self._msg_thread = None
+
+
+    def start(self):
+        self._logger.debug("Initialize scalarizr...")
+        _init()
+
+        # Starting scalarizr daemon initialization
+        globals()['_pid'] = pid = os.getpid()
+        self._logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
+
+        if not 'Windows' == linux.os['family']:
+            # Check for another running scalarzir
+            if os.path.exists(PID_FILE):
+                try:
+                    another_pid = None
+                    with open(PID_FILE, 'r') as fp:
+                        another_pid = int(fp.read().strip())
+                except ValueError:
+                    pass
+                else:
+                    if pid != another_pid and os.path.exists('/proc/%s/status' % (another_pid,)):
+                        self._logger.error('Cannot start scalarizr: Another process (pid: %s) already running', another_pid)
+                        sys.exit(1)
+
+            # Write PID
+            with open(PID_FILE, 'w') as fp:
+                fp.write(str(pid))
+
+        cnf = bus.cnf
+        cnf.on('apply_user_data', _apply_user_data)
+
+        optparser = bus.optparser
+        if optparser and optparser.values.configure:
+            do_configure()
+            sys.exit()
+
+        elif optparser and optparser.values.import_server:
+            print "Starting import process..."
+            print "Don't terminate Scalarizr until Scalr will create the new role"
+            cnf.state = ScalarizrState.IMPORTING
+            # Load Command-line configuration options and auto-configure Scalarizr
+
+            values = CmdLineIni.to_kvals(optparser.values.cnf)
+            if not values.get('server_id'):
+                values['server_id'] = str(uuid.uuid4())
+            cnf.reconfigure(values=values, silent=True, yesall=True)
+
+        # Load INI files configuration
+        cnf.bootstrap(force_reload=True)
+        ini = cnf.rawini
+
+        # Initialize platform module
+        _init_platform()
+        pl = bus.platform
+
+        # Check that service started after dirty bundle
+        if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
+
+            # XXX: nimbula's user-data is uploaded by ssh
+            server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+            if pl.name in ('nimbula', 'rackspace', 'openstack') and cnf.state != ScalarizrState.IMPORTING:
+                if cnf.state == ScalarizrState.REBUNDLING:
+                    # XXX: temporary workaround
+                    # XXX: rackspace injects files and boots OS in a parallell. There were situations when
+                    # .user-data file was stale and new server started from rebundled image
+                    # toughts that he's an old server and continue rebundling
+                    time.sleep(30)
+
+                udfile = cnf.private_path('.user-data')
+                wait_until(lambda: os.path.exists(udfile),
+                        timeout=60, error_text="User-data file %s doesn't exist" % udfile)
+            try:
+                ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
+            except:
+                if cnf.state == ScalarizrState.IMPORTING:
+                    ud_server_id = None
+                else:
+                    raise
+
+            if server_id and ud_server_id and server_id != ud_server_id:
+                self._logger.info('Server was started after rebundle. Performing some cleanups')
+                _cleanup_after_rebundle()
+                cnf.state = ScalarizrState.BOOTSTRAPPING
+
+        if cnf.state == ScalarizrState.UNKNOWN:
+            cnf.state = ScalarizrState.BOOTSTRAPPING
+        '''
+        if cnf.state == ScalarizrState.REBUNDLING:
+            server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
+            ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
+            if server_id and ud_server_id and server_id != ud_server_id:
+                logger.info('Server was started after rebundle. Performing some cleanups')
+                _cleanup_after_rebundle()
+                cnf.state = ScalarizrState.BOOTSTRAPPING
+        '''
+
+        # Initialize local database
+        _init_db()
+
+        STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__))
+        STATE['global.version'] = __version__
+
+        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
+            self._logger.info('Scalarizr was updated to %s', __version__)
+
+        if cnf.state == ScalarizrState.UNKNOWN:
+            cnf.state = ScalarizrState.BOOTSTRAPPING
+
+        # At first startup platform user-data should be applied
+        if cnf.state == ScalarizrState.BOOTSTRAPPING:
+            cnf.fire('apply_user_data', cnf)
+            self._start_update_client()
+
+        # Check Scalr version
+        if not bus.scalr_version:
+            version_file = cnf.private_path('.scalr-version')
+            if os.path.exists(version_file):
+                bus.scalr_version = None
+                with open(version_file, 'r') as fp:
+                    bus.scalr_version = tuple(fp.read().strip().split('.'))
+            else:
+                bus.scalr_version = _detect_scalr_version()
+                with open(version_file, 'w') as fp:
+                    fp.write('.'.join(map(str, bus.scalr_version)))
+
+        # Apply Command-line passed configuration options
+        if optparser:
+            cnf.update(CmdLineIni.to_ini_sections(optparser.values.cnf))
+
+        # Validate configuration
+        num_errors = do_validate_cnf()
+        if num_errors or (optparser and optparser.values.validate_cnf):
+            sys.exit(int(not num_errors or 1))
+
+        # Initialize scalarizr services
+        self._init_services()
+
+        if cnf.state == ScalarizrState.RUNNING:
+            # ReSync user-data
+            cnf.fire('apply_user_data', cnf)
+        try:
+            bus.fire('init')
+        except:
+            self._logger.warn('Caught exception in "init": %s', sys.exc_info()[1],
+                        exc_info=sys.exc_info())
+
+        # Install signal handlers
+        if not 'Windows' == linux.os['family']:
+            signal.signal(signal.SIGCHLD, self.onSIGCHILD)
+            signal.signal(signal.SIGTERM, self.onSIGTERM)
+            signal.signal(signal.SIGHUP, self.onSIGHUP)
+
+        self._start_services()
+
+        # Fire start
+        self._running = True
+        try:
+            bus.fire("start")
+        except:
+            self._logger.warn('Caught exception in "start": %s', sys.exc_info()[1],
+                        exc_info=sys.exc_info())
+
+        try:
+            while self._running:
+                # Recover SNMP
+                if linux.os.windows_family:
+                    rc = win32event.WaitForSingleObject(self.hWaitStop, 30000)
+                    if rc == win32event.WAIT_OBJECT_0:
+                        # Service stopped, stop main loop
+                        break
+                else:
+                    self._check_snmp()
+                    try:
+                        select.select([], [], [], 30)
+                    except select.error, e:
+                        if e.args[0] == 4:
+                            # Interrupted syscall
+                            continue
+                        raise
+
+        except KeyboardInterrupt:
+            self._logger.debug('Mainloop: KeyboardInterrupt')
+        finally:
+            self._logger.debug('Mainloop: finally')
+            if self._running and os.getpid() == _pid:
+                self._shutdown()
+        self._logger.debug('Mainloop: leave')
+
+
+
+    def _init_services(self):
+        logger = logging.getLogger(__name__)
+        cnf = bus.cnf; ini = cnf.rawini
+        server_id = ini.get('general', 'server_id')
+        queryenv_url = ini.get('general', 'queryenv_url')
+        messaging_adp = ini.get('messaging', 'adapter')
+
+        # Set base URL
+        pr = urlparse(queryenv_url)
+        bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
+        logger.debug("Got scalr url: '%s'" % bus.scalr_url)
+
+        # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
+        bus.periodical_executor = PeriodicalExecutor()
+
+        logger.debug("Initialize QueryEnv client")
+        queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), '2008-12-16')
+        queryenv_latest = queryenv.get_latest_version()
+        queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY), queryenv_latest)
+
+        if tuple(map(int, queryenv_latest.split('-'))) >= (2012, 7, 1):
+            scalr_version = queryenv.get_global_config()['params'].get('scalr.version')
+            if scalr_version:
+                bus.scalr_version = tuple(map(int, scalr_version.split('.')))
+                version_file = cnf.private_path('.scalr-version')
+                with open(version_file, 'w') as fp:
+                    fp.write(scalr_version)
+
+        bus.queryenv_service = queryenv
+        bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
+
+        logger.debug("Initialize messaging")
+        factory = MessageServiceFactory()
+        try:
+            params = dict(ini.items("messaging_" + messaging_adp))
+            params[P2pConfigOptions.SERVER_ID] = server_id
+            params[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.key_path(cnf.DEFAULT_KEY)
+
+            msg_service = factory.new_service(messaging_adp, **params)
+            bus.messaging_service = msg_service
+        except (BaseException, Exception):
+            raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
+
+        logger.debug('Initialize message handlers')
+        consumer = msg_service.get_consumer()
+        consumer.listeners.append(MessageListener())
+
+        if linux.os.linux_family:
+            logger.debug('Schedule SNMP process')
+            self._snmp_scheduled_start_time = time.time()
+
+        Storage.maintain_volume_table = True
+
+        if not bus.api_server:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            api_port = 8010
+            try:
+                sock.connect(('0.0.0.0', api_port))
+                api_port = 8009
+                sock.close()
+            except socket.error:
+                pass
+            STATE['global.api_port'] = api_port
+            api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes),
+                                                cnf.key_path(cnf.DEFAULT_KEY))
+            class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
+                pass
+            bus.api_server = wsgiref.simple_server.make_server('0.0.0.0',
+                                                api_port, api_app, server_class=ThreadingWSGIServer)
+
+
+    def _check_snmp(self):
+        if self._running and linux.os['family'] != 'Windows' \
+                                    and not self._snmp_pid and time.time() >= _snmp_scheduled_start_time:
+            self._start_snmp_server()
+
+
+    def _stop_snmp_server(self):
+        # Shutdown SNMP
+        if self._snmp_pid:
+            self._logger.debug('Send SIGTERM to SNMP process (pid: %d)', self._snmp_pid)
+            try:
+                os.kill(self._snmp_pid, signal.SIGTERM)
+            except (Exception, BaseException), e:
+                self._logger.debug("Can't kill SNMP process: %s" % e)
+            self._snmp_pid = None
+
+
+    def _start_snmp_server(self):
+        remove_snmp_since = (4, 5, 0)
+        if bus.scalr_version >= remove_snmp_since:
+            self._logger.debug('Skip SNMP process starting cause condition matched: Scalr version %s >= %s',
+                bus.scalr_version, remove_snmp_since)
+            self._snmp_pid = -1
+            return
+
+        # Start SNMP server in a separate process
+        pid = os.fork()
+        if pid == 0:
+            globals()['_pid'] = 0
+            cnf = bus.cnf; ini = cnf.rawini
+            snmp_server = SnmpServer(
+                port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
+                security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
+                community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
+            )
+            bus.snmp_server = snmp_server
+
+            try:
+                snmp_server.start()
+                self._logger.info('[pid: %d] SNMP process terminated', os.getpid())
+                sys.exit(0)
+            except SystemExit:
+                raise
+            except (BaseException, Exception), e:
+                self._logger.warn('Caught SNMP error: %s', str(e))
+                sys.exit(1)
+        else:
+            self._snmp_pid = pid
+
+
+    def _start_services(self):
+        # Create message server thread
+        msg_service = bus.messaging_service
+        consumer = msg_service.get_consumer()
+        msg_thread = threading.Thread(target=consumer.start, name="Message server")
+
+        # Start SNMP
+        if linux.os['family'] != 'Windows':
+            self._start_snmp_server()
+
+        # Start message server
+        msg_thread.start()
+        self._msg_thread = msg_thread
+
+        # Start API server
+        api_server = bus.api_server
+        self._logger.info('Starting API server on http://0.0.0.0:8010')
+        api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
+        api_thread.start()
+
+        # Start periodical executor
+        ex = bus.periodical_executor
+        ex.start()
+
+
+    def _start_update_client(self):
+        if linux.os['family'] == 'Windows':
+            try:
+                win32serviceutil.StartService('ScalrUpdClient')
+            except:
+                e = sys.exc_info()[1]
+                self._logger.warn('Could not start scalr update client service: %s' % e)
+
+        else:
+            upd = ScalrUpdClientScript()
+            if not upd.running:
+                try:
+                    upd.start()
+                except:
+                    self._logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
+
+
+    def _shutdown(self):
+        self._running = False
+        try:
+            bus.fire("shutdown")
+        except:
+            self._logger.debug('Shutdown hooks exception', exc_info=sys.exc_info())
+
+        try:
+            self._logger.info("[pid: %d] Stopping scalarizr %s", os.getpid(), __version__)
+            self._shutdown_services()
+        except:
+            self._logger.debug('Shutdown services exception', exc_info=sys.exc_info())
+        finally:
+            if os.path.exists(PID_FILE):
+                os.remove(PID_FILE)
+
+        self._logger.info('[pid: %d] Scalarizr terminated', os.getpid())
+
+
+    def _shutdown_services(self, force=False):
+
+        # Shutdown messaging
+        self._logger.debug('Shutdowning external messaging')
+        msg_service = bus.messaging_service
+        msg_service.get_consumer().shutdown(force=True)
+        msg_service.get_producer().shutdown()
+        bus.messaging_service = None
+
+        # Shutdown API server
+        self._logger.debug('Shutdowning API server')
+        api_server = bus.api_server
+        api_server.shutdown()
+        bus.api_server = None
+
+        # Shutdown snmp
+        self._stop_snmp_server()
+
+        # Shutdown periodical executor
+        self._logger.debug('Shutdowning periodical executor')
+        ex = bus.periodical_executor
+        ex.shutdown()
+        bus.periodical_executor = None
+
+
+    def onSIGTERM(self, *args):
+        pid = os.getpid()
+        self._logger.debug('Received SIGTERM (pid: %d)', pid)
+
+        if pid == _pid:
+            # Main process
+            self._logger.debug('Shutdown main process (pid: %d)', pid)
+            self._shutdown()
+        else:
+            # SNMP process
+            self._logger.debug('Shutdown SNMP server process (pid: %d)', pid)
+            snmp = bus.snmp_server
+            snmp.stop()
+
+
+    def onSIGCHILD(self, *args):
+        if self._running and self._snmp_pid:
+            try:
+                # Restart SNMP process if it terminates unexpectedly
+                pid, sts = os.waitpid(self._snmp_pid, os.WNOHANG)
+                '''
+                logger.debug(
+                    'Child terminated (pid: %d, status: %s, WIFEXITED: %s, '
+                    'WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)',
+                    pid, sts, os.WIFEXITED(sts),
+                    os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts)
+                )
+                '''
+                if pid == self._snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
+                    self._logger.warning(
+                        'SNMP process [pid: %d] died unexpectedly. Restarting it',
+                        self._snmp_pid
+                    )
+                    self._snmp_scheduled_start_time = time.time() + SNMP_RESTART_DELAY
+                    self._snmp_pid = None
+            except OSError:
+                pass
+
+
+    def onSIGHUP(self, *args):
+        pid = os.getpid()
+        self._logger.debug('Received SIGHUP (pid: %d)', pid)
+        if pid != _pid:
+            return
+
+        self._logger.info('Reloading scalarizr')
+        signal.signal(signal.SIGCHLD, signal.SIG_IGN)
+        self._running = False
+        bus.fire('shutdown')
+        self._shutdown_services()
+
+        self._running = True
+        signal.signal(signal.SIGCHLD, self.onSIGCHILD)
+        cnf = bus.cnf
+        cnf.bootstrap(force_reload=True)
+        self._init_services()
+        self._start_services()
+        bus.fire('reload')
+
+
+if 'Windows' == linux.os['family']:
+    import win32serviceutil
+    import win32service
+    import win32event
+    import servicemanager
+    import win32api
+
+
+    class WindowsService(win32serviceutil.ServiceFramework, Service):
+        _svc_name_            = "Scalarizr"
+        _svc_display_name_    = "Scalarizr"
+        _stopping             = None
+
+        def __init__(self, args=None):
+            Service.__init__(self)
+            if args != None:
+                win32serviceutil.ServiceFramework.__init__(self, args)
+
+            self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+
+            def handler(*args):
+                return True
+            win32api.SetConsoleCtrlHandler(handler, True)
+
+
+        def start(self):
+            optparser = bus.optparser
+            if optparser and optparser.values.install_win_services:
+                # Install win services
+                sys.argv = [sys.argv[0], '--startup', 'manual', 'install']
+                win32serviceutil.HandleCommandLine(WindowsService)
+                # Make scalarizr service bullet-proof
+                """
+                hscm = win32service.OpenSCManager(None,None,win32service.SC_MANAGER_ALL_ACCESS)
+                try:
+                    hs = win32serviceutil.SmartOpenService(hscm,
+                                        WindowsService._svc_name_, win32service.SERVICE_ALL_ACCESS)
+                    try:
+                        service_failure_actions = {
+                                'ResetPeriod': 100,
+                                'RebootMsg': u'',
+                                'Command': u'',
+                                'Actions': [
+                                        (win32service.SC_ACTION_RESTART, 1000),
+                                        (win32service.SC_ACTION_RESTART, 1000),
+                                        (win32service.SC_ACTION_RESTART, 1000)
+                                    ]
+                            }
+                        win32service.ChangeServiceConfig2(hs,
+                                            win32service.SERVICE_CONFIG_FAILURE_ACTIONS,
+                                            service_failure_actions)
+                    finally:
+                        win32service.CloseServiceHandle(hs)
+                finally:
+                    win32service.CloseServiceHandle(hscm)
+                """
+                #win32serviceutil.StartService(WindowsService._svc_name_)
+                sys.exit()
+
+            elif optparser and optparser.values.uninstall_win_services:
+                # Uninstall win services
+                sys.argv = [sys.argv[0], 'remove']
+                win32serviceutil.HandleCommandLine(WindowsService)
+                sys.exit()
+
+            else:
+                # Normal start
+                super(WindowsService, self).start()
+
+
+        def SvcDoRun(self):
+            servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
+                                  servicemanager.PYS_SERVICE_STARTED,
+                                  (self._svc_name_,''))
+            self.start()
+
+
+        def SvcStop(self):
+            self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+            win32event.SetEvent(self.hWaitStop)
+            '''
+            if self._running:
+                self._running = False
+            else:
+                try:
+                    self._shutdown()
+                finally:
+                    self._stopping = True
+            '''
+
+
+        def SvcShutdown(self):
+            Flag.set(Flag.REBOOT)
+            srv = bus.messaging_service
+            message = srv.new_message(Messages.WIN_HOST_DOWN)
+            srv.get_producer().send(Queues.CONTROL, message)

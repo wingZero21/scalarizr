@@ -8,9 +8,14 @@ Created on Mar 1, 2010
 from scalarizr.handlers.block_device import BlockDeviceHandler
 from scalarizr.storage2.volumes import ebs
 
+from scalarizr import linux
+
 
 def get_handlers ():
-    return [EbsHandler()]
+    if linux.os.windows_family:
+        return []
+    else:
+        return [EbsHandler()]
 
 class EbsHandler(BlockDeviceHandler):
 

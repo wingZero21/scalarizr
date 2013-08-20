@@ -393,3 +393,9 @@ class Messages:
     """
 
     UPDATE_SSH_AUTHORIZED_KEYS = "UpdateSshAuthorizedKeys"
+
+    WIN_PREPARE_BUNDLE = "Win_PrepareBundle"
+
+    WIN_PREPARE_BUNDLE_RESULT = "Win_PrepareBundleResult"
+
+    WIN_HOST_DOWN = "Win_HostDown"
