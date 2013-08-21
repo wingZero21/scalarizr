@@ -289,8 +289,6 @@ class Script(object):
     stderr_path = None
     execution_id = None
 
-    execution_id = None
-
     def __init__(self, **kwds):
         '''
         Variant A:
@@ -347,7 +345,6 @@ class Script(object):
             self.exec_timeout = int(self.exec_timeout)
 
         if self.execution_id:
-            #"%(execution_id)s.%(name)s.%(event_name)s"
             args = (self.execution_id, self.name, self.event_name)
             self.stdout_path = os.path.join(logs_dir, '%s.%s.%s-out.log' % args)
             self.stderr_path = os.path.join(logs_dir, '%s.%s.%s-err.log' % args)

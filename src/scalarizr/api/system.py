@@ -519,7 +519,7 @@ def get_log(logfile, maxsize=None):
             return ret.encode('utf-8')
     except IOError:
         raise BaseException("Log file %s is not readable" % logfile)
-    
+
 
 if linux.os.windows_family:
 
