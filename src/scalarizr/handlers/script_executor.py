@@ -254,7 +254,7 @@ class ScriptExecutor(Handler):
                                 event_id=message.body.get('event_id'),
                                 event_name=event_name,
                                 environ=environ,
-                                execution_id=item.get('event_id', None))
+                                execution_id=item.get('execution_id', None))
                             for item in message.body['scripts']]
         else:
             LOG.debug("No scripts embed into message '%s'", message.name)
