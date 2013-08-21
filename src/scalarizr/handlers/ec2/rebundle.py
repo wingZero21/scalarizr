@@ -14,11 +14,14 @@ from scalarizr.util import system2, disttool, cryptotool,\
 from scalarizr.linux import mount
 
 from scalarizr.handlers import rebundle as rebundle_hdlr
+from scalarizr.handlers import Handler
+from scalarizr.messaging import Messages
 from scalarizr.linux import coreutils
 from scalarizr.linux.tar import Tar
 from scalarizr.storage2.volumes import ebs as ebsvolume
 from scalarizr.storage2.cloudfs import FileTransfer
 from scalarizr.storage2 import volume, filesystem
+from scalarizr.libs.metaconf import Configuration
 
 from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
