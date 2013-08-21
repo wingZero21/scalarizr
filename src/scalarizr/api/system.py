@@ -500,16 +500,26 @@ class SystemAPI(object):
         stdout_path = os.path.join(logs_dir, '%s-out.log' % exec_script_id)
         stderr_path = os.path.join(logs_dir, '%s-err.log' % exec_script_id)
 
-        if not os.path.exists(stdout_path):
-            raise BaseException('Scripting log %s not found' % stdout_path)
-        if not os.path.exists(stderr_path):
-            raise BaseException('Scripting error log %s not found' % stderr_path)
-
-        stdout=binascii.b2a_base64(get_truncated_log(stdout_path))
-        stderr=binascii.b2a_base64(get_truncated_log(stderr_path))
+        stdout=binascii.b2a_base64(get_log(stdout_path))
+        stderr=binascii.b2a_base64(get_log(stderr_path))
 
         return dict(stdout=stdout, stderr=stderr)
 
+
+def get_log(logfile, maxsize=None):
+    if not os.path.exists(logfile):
+        raise BaseException('Scripting log %s not found' % logfile)
+
+    if (os.path.getsize(logfile) > maxsize):
+        raise BaseException('Unable to fetch Log file: %s is larger than %s' % (logfile, maxsize))
+
+    try:
+        with open(logfile, "r") as fp:
+            ret = unicode(fp.read(int(maxsize)), 'utf-8')
+            return ret.encode('utf-8')
+    except IOError:
+        raise BaseException("Log file %s is not readable" % logfile)
+    
 
 if linux.os.windows_family:
 
@@ -655,14 +665,3 @@ if linux.os.windows_family:
 
     SystemAPI = WindowsSystemAPI
 
-
-def get_truncated_log(logfile, maxsize=None):
-    maxsize = maxsize or logs_truncate_over
-    f = open(logfile, "r")
-    try:
-        ret = unicode(f.read(int(maxsize)), 'utf-8')
-        if (os.path.getsize(logfile) > maxsize):
-            ret += u"... Truncated. See the full log in " + logfile.encode('utf-8')
-        return ret.encode('utf-8')
-    finally:
-        f.close()

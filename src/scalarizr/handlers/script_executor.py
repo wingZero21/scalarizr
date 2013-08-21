@@ -25,6 +25,7 @@ import stat
 import signal
 import logging
 import Queue
+import binascii
 
 
 def get_handlers():
@@ -244,15 +245,17 @@ class ScriptExecutor(Handler):
 
 
             LOG.debug('Fetching scripts from incoming message')
-            scripts = [Script(name=item['name'], body=item['body'],
-                                            asynchronous=int(item['asynchronous']),
-                                            exec_timeout=item['timeout'], 
-                                            role_name=role_name,
-                                            event_server_id=message.body.get('server_id'),
-                                            event_id=message.body.get('event_id'),
-                                            event_name=event_name,
-                                            environ=environ)
-                                    for item in message.body['scripts']]
+            scripts = [Script(name=item['name'],
+                                body=item['body'],
+                                asynchronous=int(item['asynchronous']),
+                                exec_timeout=item['timeout'],
+                                role_name=role_name,
+                                event_server_id=message.body.get('server_id'),
+                                event_id=message.body.get('event_id'),
+                                event_name=event_name,
+                                environ=environ,
+                                execution_id=message.body.get('event_id', None))
+                            for item in message.body['scripts']]
         else:
             LOG.debug("No scripts embed into message '%s'", message.name)
             return
@@ -284,6 +287,7 @@ class Script(object):
     proc = None
     stdout_path = None
     stderr_path = None
+    execution_id = None
 
     execution_id = None
 
@@ -341,9 +345,16 @@ class Script(object):
 
         if self.exec_timeout:
             self.exec_timeout = int(self.exec_timeout)
-        args = (self.name, self.event_name, self.role_name, self.id)
-        self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
-        self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
+
+        if self.execution_id:
+            #"%(execution_id)s.%(name)s.%(event_name)s"
+            args = (self.execution_id, self.name, self.event_name)
+            self.stdout_path = os.path.join(logs_dir, '%s.%s.%s-out.log' % args)
+            self.stderr_path = os.path.join(logs_dir, '%s.%s.%s-err.log' % args)
+        else:
+            args = (self.name, self.event_name, self.role_name, self.id)
+            self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
+            self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
 
     def start(self):
         # Check interpreter here, and not in __init__
@@ -427,10 +438,16 @@ class Script(object):
                             self.return_code,
                             elapsed_time)
 
+            if not self.execution_id:
+                stdout=None
+                stderr=None
+            else:
+                stdout=binascii.b2a_base64(get_truncated_log(self.stdout_path))
+                stderr=binascii.b2a_base64(get_truncated_log(self.stderr_path))
             ret = dict(
-                    stdout=None,
-                    stderr=None,
-                    exec_script_id=self.,
+                    stdout=stdout,
+                    stderr=stderr,
+                    exec_script_id=self.execution_id,
                     time_elapsed=elapsed_time,
                     script_name=self.name,
                     script_path=self.exec_path,
