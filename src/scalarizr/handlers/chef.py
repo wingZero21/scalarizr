@@ -19,10 +19,12 @@ from scalarizr.util import system2, initdv2, PopenError
 from scalarizr.util.software import which
 from scalarizr.handlers import Handler
 
-__import__('chef.api')
-ChefAPI = sys.modules['chef.api'].ChefAPI
+if linux.os.windows_family:
+    import win32service
+    import win32serviceutil
 
 
+WIN_SERVICE_NAME = 'chef-client'
 LOG = logging.getLogger(__name__)
 CLIENT_CONF_TPL = '''
 log_level        :info
@@ -55,7 +57,7 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
     # Uses only pid file, no init script involved
     def _start_stop_reload(self, action):
         chef_client_bin = which('chef-client')
-	if action == "start":
+        if action == "start":
             if not self.running:
                 # Stop default chef-client init script
                 if os.path.exists(self._default_init_script):
@@ -159,6 +161,23 @@ class ChefHandler(Handler):
             if self._run_list:
                 self._with_json_attributes['run_list'] = self._run_list
 
+            if linux.os.windows_family:
+                # Set startup type to 'manual' for chef-client service
+                hscm = win32service.OpenSCManager(None,None,win32service.SC_MANAGER_ALL_ACCESS)
+                try:
+                    hs = win32serviceutil.SmartOpenService(hscm,
+                                        WIN_SERVICE_NAME, win32service.SERVICE_ALL_ACCESS)
+                    try:
+                        snc = win32service.SERVICE_NO_CHANGE
+                        # change only startup type
+                        win32service.ChangeServiceConfig(hs, snc, 'manual',
+                                    snc, None, None, 0, None, None, None, None)
+                    finally:
+                        win32service.CloseServiceHandle(hs)
+                finally:
+                    win32service.CloseServiceHandle(hscm)
+
+
 
     def on_before_host_up(self, msg):
         if not self._chef_data:
@@ -210,7 +229,10 @@ class ChefHandler(Handler):
 
     def run_chef_client(self, with_json_attributes=False, daemonize=False):
         if daemonize:
-            self._init_script.start(env=self._environ_variables)
+            if linux.os.windows_family:
+                win32serviceutil.StartService(WIN_SERVICE_NAME)
+            else:
+                self._init_script.start(env=self._environ_variables)
             return
 
         cmd = [self._chef_client_bin]
