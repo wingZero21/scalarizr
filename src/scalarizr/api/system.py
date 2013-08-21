@@ -18,11 +18,9 @@ import time
 import signal
 import binascii
 import weakref
-import threading
 import functools
 import subprocess as subps
 
-from Queue import Queue, Empty
 from multiprocessing import pool
 
 from scalarizr import rpc, linux
@@ -31,7 +29,7 @@ from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
 from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
-from scalarizr.handlers.script_executor import logs_dir, logs_truncate_over
+from scalarizr.handlers.script_executor import logs_dir
 
 LOG = logging.getLogger(__name__)
 
