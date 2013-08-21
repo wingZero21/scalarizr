@@ -307,7 +307,7 @@ def _init_platform():
         logger.debug('Enable RedHat subscription')
         urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
 
-    if cnf.state != ScalarizrState.RUNNING:
+    if cnf.state != ScalarizrState.RUNNING and not node.__node__['devel']:
         try:
             pkgmgr.updatedb()
         except:
@@ -748,6 +748,8 @@ def main():
                 help='Answer "yes" to all questions')
         optparser.add_option('-o', dest='cnf', action='append',
                 help='Runtime .ini option key=value')
+        optparser.add_option('-d', '--devel', action='store_true', default=False,
+                help="Run in development mode (don't do it in production!)")
         
         if ('cloud-location=' in sys.argv or 'region=' in sys.argv) and 'platform=ec2' in sys.argv:
             region = urllib2.urlopen('http://169.254.169.254/latest/meta-data/placement/availability-zone').read().strip()[:-1]
@@ -757,7 +759,6 @@ def main():
                 sys.argv += ['-o', 'region=' + region]      
         
         optparser.parse_args()
-
         
         # Daemonize process
         if optparser.values.daemonize:
@@ -774,6 +775,7 @@ def main():
             sys.exit()
 
         logger.debug("Initialize scalarizr...")
+        node.__node__['devel'] = optparser.values.devel
         _init()
 
         # Starting scalarizr daemon initialization
