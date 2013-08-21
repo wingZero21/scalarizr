@@ -9,6 +9,7 @@ Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(ch
 
 
 import os
+import glob
 import logging
 import platform
 import threading
@@ -495,8 +496,14 @@ class SystemAPI(object):
         :return: out and err logs
         :rtype: dict(stdout: base64encoded, stderr: base64encoded)
         '''
-        stdout_path = os.path.join(logs_dir, '%s-out.log' % exec_script_id)
-        stderr_path = os.path.join(logs_dir, '%s-err.log' % exec_script_id)
+        stdout_match = glob.glob(os.path.join(logs_dir, '%s*-out.log' % exec_script_id))
+        stderr_match = glob.glob(os.path.join(logs_dir, '%s*-err.log' % exec_script_id))
+
+        if not stdout_match or not stderr_match:
+            raise BaseException('Corresponding log files not found')
+
+        stdout_path = stdout_match[0]
+        stderr_path = stderr_match[0]
 
         stdout=binascii.b2a_base64(get_log(stdout_path))
         stderr=binascii.b2a_base64(get_log(stderr_path))
@@ -505,12 +512,8 @@ class SystemAPI(object):
 
 
 def get_log(logfile, maxsize=None):
-    if not os.path.exists(logfile):
-        raise BaseException('Scripting log %s not found' % logfile)
-
     if (os.path.getsize(logfile) > maxsize):
         raise BaseException('Unable to fetch Log file: %s is larger than %s' % (logfile, maxsize))
-
     try:
         with open(logfile, "r") as fp:
             ret = unicode(fp.read(int(maxsize)), 'utf-8')
