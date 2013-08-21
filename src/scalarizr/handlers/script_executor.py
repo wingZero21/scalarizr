@@ -345,7 +345,7 @@ class Script(object):
             self.exec_timeout = int(self.exec_timeout)
 
         if self.execution_id:
-            args = (self.execution_id, self.name, self.event_name)
+            args = (self.name, self.event_name, self.execution_id)
             self.stdout_path = os.path.join(logs_dir, '%s.%s.%s-out.log' % args)
             self.stderr_path = os.path.join(logs_dir, '%s.%s.%s-err.log' % args)
         else:
@@ -444,7 +444,7 @@ class Script(object):
             ret = dict(
                     stdout=stdout,
                     stderr=stderr,
-                    exec_script_id=self.execution_id,
+                    execution_id=self.execution_id,
                     time_elapsed=elapsed_time,
                     script_name=self.name,
                     script_path=self.exec_path,
