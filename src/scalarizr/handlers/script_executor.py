@@ -31,6 +31,18 @@ def get_handlers():
     return [ScriptExecutor()]
 
 
+def get_truncated_log(logfile, maxsize=None):
+    maxsize = maxsize or logs_truncate_over
+    f = open(logfile, "r")
+    try:
+        ret = unicode(f.read(int(maxsize)), 'utf-8')
+        if (os.path.getsize(logfile) > maxsize):
+            ret += u"... Truncated. See the full log in " + logfile.encode('utf-8')
+        return ret.encode('utf-8')
+    finally:
+        f.close()
+
+
 LOG = logging.getLogger(__name__)
 
 skip_events = set()
@@ -273,6 +285,8 @@ class Script(object):
     stdout_path = None
     stderr_path = None
 
+    execution_id = None
+
     def __init__(self, **kwds):
         '''
         Variant A:
@@ -412,11 +426,11 @@ class Script(object):
                             format_size(os.path.getsize(self.stderr_path)),
                             self.return_code,
                             elapsed_time)
-            args = (self.name, self.event_name, self.role_name, self.id)
+
             ret = dict(
                     stdout=None,
                     stderr=None,
-                    exec_script_id='%s.%s.%s.%s' % args,
+                    exec_script_id=self.,
                     time_elapsed=elapsed_time,
                     script_name=self.name,
                     script_path=self.exec_path,
