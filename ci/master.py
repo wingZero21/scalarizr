@@ -36,7 +36,7 @@ def push_to_github(__opts__):
 
 c['builders'].append(dict(
     name='{0} source'.format(project),
-    slavenames=['ubuntu1004'],
+    slavenames=['ubuntu1204'],
     factory=BuildFactory(steps=
         #buildsteps.svn(__opts__) +
         #buildsteps.bump_version(__opts__, setter='cat > src/scalarizr/version') +
