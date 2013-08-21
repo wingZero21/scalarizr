@@ -34,6 +34,9 @@ from scalarizr.handlers.script_executor import logs_dir
 LOG = logging.getLogger(__name__)
 
 
+max_log_size = 5*1024*1024
+
+
 class _ScalingMetricStrategy(object):
     """Strategy class for custom scaling metric"""
 
@@ -510,7 +513,7 @@ class SystemAPI(object):
         return dict(stdout=stdout, stderr=stderr)
 
 
-def get_log(logfile, maxsize=None):
+def get_log(logfile, maxsize=max_log_size):
     if (os.path.getsize(logfile) > maxsize):
         raise BaseException('Unable to fetch Log file: %s is larger than %s' % (logfile, maxsize))
     try:
