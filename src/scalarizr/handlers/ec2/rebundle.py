@@ -11,6 +11,7 @@ from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError, build_tags
 from scalarizr.util import system2, disttool, cryptotool,\
         wait_until, firstmatched
+from scalarizr import linux
 from scalarizr.linux import mount
 
 from scalarizr.handlers import rebundle as rebundle_hdlr
@@ -42,7 +43,7 @@ mimetypes.init()
 
 
 def get_handlers ():
-    return [Ec2RebundleWindowsHandler()] if os_dist.windows_family else  [Ec2RebundleHandler()]
+    return [Ec2RebundleWindowsHandler()] if linux.os.windows_family else  [Ec2RebundleHandler()]
 
 LOG = rebundle_hdlr.LOG
 
