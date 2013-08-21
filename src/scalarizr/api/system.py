@@ -14,7 +14,6 @@ import logging
 import platform
 import threading
 import sys
-import glob
 import time
 import signal
 import binascii
@@ -496,8 +495,8 @@ class SystemAPI(object):
         :return: out and err logs
         :rtype: dict(stdout: base64encoded, stderr: base64encoded)
         '''
-        stdout_match = glob.glob(os.path.join(logs_dir, '%s*-out.log' % exec_script_id))
-        stderr_match = glob.glob(os.path.join(logs_dir, '%s*-err.log' % exec_script_id))
+        stdout_match = glob.glob(os.path.join(logs_dir, '*%s-out.log' % exec_script_id))
+        stderr_match = glob.glob(os.path.join(logs_dir, '*%s-err.log' % exec_script_id))
 
         if not stdout_match or not stderr_match:
             raise BaseException('Corresponding log files not found')
