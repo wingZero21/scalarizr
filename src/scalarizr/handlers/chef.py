@@ -160,6 +160,8 @@ class ChefHandler(Handler):
             self._run_list = self._chef_data.get('run_list')
             if self._run_list:
                 self._with_json_attributes['run_list'] = self._run_list
+            elif self._chef_data.get('role'):
+                self._with_json_attributes['run_list'] = [self._chef_data['role']]
 
             if linux.os.windows_family:
                 try:
@@ -182,8 +184,6 @@ class ChefHandler(Handler):
                 except:
                     e = sys.exc_info()[1]
                     self._logger.warning('Could not stop chef service: %s' % e)
-
-
 
 
     def on_before_host_up(self, msg):
