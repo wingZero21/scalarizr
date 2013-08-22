@@ -493,7 +493,7 @@ class SystemAPI(object):
 
 
     @rpc.service_method
-    def exec_script_logs(self, exec_script_id):
+    def get_script_logs(self, exec_script_id, maxsize=max_log_size):
         '''
         :return: out and err logs
         :rtype: dict(stdout: base64encoded, stderr: base64encoded)
@@ -501,27 +501,29 @@ class SystemAPI(object):
         stdout_match = glob.glob(os.path.join(logs_dir, '*%s-out.log' % exec_script_id))
         stderr_match = glob.glob(os.path.join(logs_dir, '*%s-err.log' % exec_script_id))
 
-        if not stdout_match or not stderr_match:
-            raise BaseException('Corresponding log files not found')
-
-        stdout_path = stdout_match[0]
-        stderr_path = stderr_match[0]
-
-        stdout=binascii.b2a_base64(get_log(stdout_path))
-        stderr=binascii.b2a_base64(get_log(stderr_path))
+        if not stdout_match:
+            stdout = u'log file not found'
+        else:
+            stdout_path = stdout_match[0]
+            stdout = binascii.b2a_base64(_get_log(stdout_path))
+        if not stderr_match:
+            stderr = u'errlog file not found'
+        else:
+            stderr_path = stderr_match[0]
+            stderr = binascii.b2a_base64(_get_log(stderr_path))
 
         return dict(stdout=stdout, stderr=stderr)
 
 
-def get_log(logfile, maxsize=max_log_size):
+def _get_log(logfile, maxsize=max_log_size):
     if (os.path.getsize(logfile) > maxsize):
-        raise BaseException('Unable to fetch Log file: %s is larger than %s' % (logfile, maxsize))
+        return u'Unable to fetch Log file %s: file is larger than %s' % (logfile, maxsize)
     try:
         with open(logfile, "r") as fp:
             ret = unicode(fp.read(int(maxsize)), 'utf-8')
             return ret.encode('utf-8')
     except IOError:
-        raise BaseException("Log file %s is not readable" % logfile)
+        return u'Log file %s is not readable' % logfile
 
 
 if linux.os.windows_family:
