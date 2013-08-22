@@ -217,19 +217,21 @@ class ChefHandler(Handler):
                         finally:
                             os.remove(self._validator_key_path)
 
-                    try:
-                        with op.step(self._step_execute_run_list):
-                            with open(self._json_attributes_path, 'w+') as fp:
-                                fp.write(self._chef_data['json_attributes'])
+                    if self._with_json_attributes:
+                        try:
+                            with op.step(self._step_execute_run_list):
+                                with open(self._json_attributes_path, 'w+') as fp:
+                                    json.dump(self._with_json_attributes, fp)
 
-                            LOG.debug('Applying run_list')
-                            self.run_chef_client(with_json_attributes=True)
-                            msg.chef = self._chef_data
-                    finally:
-                        os.remove(self._json_attributes_path)
-                        if self._daemonize:
-                            with op.step('Running chef-client in daemonized mode'):
-                                self.run_chef_client(daemonize=True)
+                                LOG.debug('Applying run_list')
+                                self.run_chef_client(with_json_attributes=True)
+                                msg.chef = self._chef_data
+                        finally:
+                            os.remove(self._json_attributes_path)
+
+                    if self._daemonize:
+                        with op.step('Running chef-client in daemonized mode'):
+                            self.run_chef_client(daemonize=True)
                 finally:
                     self._chef_data = None
 
