@@ -368,9 +368,7 @@ class EbsVolume(base.Volume, EbsMixin):
         LOG.debug('EBS volume %s available', ebs.id)
 
         if tags:
-            t = threading.Thread(target=self._create_tags, name="Applying tags", args=(ebs.id, tags))
-            t.setDaemon(True)
-            t.start()
+            self._create_tags_async(ebs.id, tags)
         return ebs
 
 
@@ -391,6 +389,16 @@ class EbsVolume(base.Volume, EbsMixin):
             LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
                                 obj_id, sys.exc_info()[1])
 
+    def _create_tags_async(self, obj_id, tags):
+        if not tags:
+            return
+        t = threading.Thread(
+                target=self._create_tags, 
+                name='Applying tags to {0}'.format(obj_id), 
+                args=(obj_id, tags))
+        t.setDaemon(True)
+        t.start()        
+
 
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
         LOG.debug('Creating snapshot of EBS volume %s', volume)
@@ -398,9 +406,7 @@ class EbsVolume(base.Volume, EbsMixin):
         snapshot = self._conn.create_snapshot(volume, description)
         LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
         if tags:
-            t = threading.Thread(target=self._create_tags, name="Applying tags", args=(snapshot.id, tags))
-            t.setDaemon(True)
-            t.start()
+            self._create_tags_async(snapshot.id, tags)
         if not nowait:
             self._wait_snapshot(snapshot)
         return snapshot
