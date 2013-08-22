@@ -215,7 +215,6 @@ class HAProxyAPI(object):
 
 
     @rpc.service_method
-    @validate.param('backend', optional=_rule_backend)
     def add_server(self, server=None, backend=None):
         '''Add server with ipaddr in backend section'''
         self.cfg.reload()
