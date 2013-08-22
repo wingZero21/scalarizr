@@ -162,20 +162,27 @@ class ChefHandler(Handler):
                 self._with_json_attributes['run_list'] = self._run_list
 
             if linux.os.windows_family:
-                # Set startup type to 'manual' for chef-client service
-                hscm = win32service.OpenSCManager(None,None,win32service.SC_MANAGER_ALL_ACCESS)
                 try:
-                    hs = win32serviceutil.SmartOpenService(hscm,
-                                        WIN_SERVICE_NAME, win32service.SERVICE_ALL_ACCESS)
+                    # Set startup type to 'manual' for chef-client service
+                    hscm = win32service.OpenSCManager(None,None,win32service.SC_MANAGER_ALL_ACCESS)
                     try:
-                        snc = win32service.SERVICE_NO_CHANGE
-                        # change only startup type
-                        win32service.ChangeServiceConfig(hs, snc, 'manual',
-                                    snc, None, None, 0, None, None, None, None)
+                        hs = win32serviceutil.SmartOpenService(hscm, WIN_SERVICE_NAME, win32service.SERVICE_ALL_ACCESS)
+                        try:
+                            snc = win32service.SERVICE_NO_CHANGE
+                            # change only startup type
+                            win32service.ChangeServiceConfig(hs, snc, win32service.SERVICE_DEMAND_START,
+                                                                snc, None, None, 0, None, None, None, None)
+                        finally:
+                            win32service.CloseServiceHandle(hs)
                     finally:
-                        win32service.CloseServiceHandle(hs)
-                finally:
-                    win32service.CloseServiceHandle(hscm)
+                        win32service.CloseServiceHandle(hscm)
+
+                    win32serviceutil.StopService(WIN_SERVICE_NAME)
+
+                except:
+                    e = sys.exc_info()[1]
+                    self._logger.warning('Could not stop chef service: %s' % e)
+
 
 
 
@@ -230,6 +237,7 @@ class ChefHandler(Handler):
     def run_chef_client(self, with_json_attributes=False, daemonize=False):
         if daemonize:
             if linux.os.windows_family:
+                self._logger.info('Starting chef-client service')
                 win32serviceutil.StartService(WIN_SERVICE_NAME)
             else:
                 self._init_script.start(env=self._environ_variables)
