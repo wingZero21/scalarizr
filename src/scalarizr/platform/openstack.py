@@ -88,7 +88,6 @@ class OpenstackPlatform(platform.Platform):
         # http://bugs.centos.org/view.php?id=4814
         os.chmod('/etc/resolv.conf', 0755)
 
-    '''
     def get_private_ip(self):
         if self._private_ip is None:
             for iface, ipv4 in platform.net_interfaces().items():
@@ -100,11 +99,7 @@ class OpenstackPlatform(platform.Platform):
 
 
     def get_public_ip(self):
-        if self._public_ip is None:
-            ifaces = platform.net_interfaces()
-            self._public_ip = ifaces['eth0'] if 'eth1' in ifaces and 'eth0' in ifaces else ''
-        return self._public_ip
-    '''
+        return self.get_private_ip()
 
     def _get_property(self, name):
         if not name in self._userdata:
