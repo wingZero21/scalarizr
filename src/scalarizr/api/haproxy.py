@@ -249,15 +249,19 @@ class HAProxyAPI(object):
 
     @rpc.service_method
     def remove_server(self, server, backend=None):
-        #? add possibility to remove all records associated with a single ip?
         '''Remove server from backend section with ipaddr'''
         if backend: 
             backend = backend.strip()
 
         srv_name = self._server_name(server)
         for bd in self.cfg.sections(haproxy.naming('backend', backend=backend)):
-            if srv_name in self.cfg.backends[bd]['server']:
-                del self.cfg.backends[bd]['server'][srv_name]
+            if ':' in srv_name:
+                if srv_name in self.cfg.backends[bd]['server']:
+                    del self.cfg.backends[bd]['server'][srv_name]
+            else:
+                for srv_name_ in list(self.cfg.backends[bd]['server']):
+                    if srv_name_.startswith(srv_name):
+                        del self.cfg.backends[bd]['server'][srv_name_]
 
         self.cfg.save()
         if self.svc.status() == 0:
