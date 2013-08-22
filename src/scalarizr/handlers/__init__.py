@@ -788,7 +788,8 @@ class FarmSecurityMixin(object):
                     "jump": "DROP"
                 })
             except:
-                self._logger.debug('caught from iptables', exc_info=sys.exc_info())
+                # silently ignore non existed rule error
+                pass
 
     def on_HostInit(self, message):
     	if not self._enabled:
