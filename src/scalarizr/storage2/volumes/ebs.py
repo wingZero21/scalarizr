@@ -134,11 +134,12 @@ class EbsMixin(object):
         return __node__['ec2']['instance_type']
 
 
-    def _create_tags(self, obj_id, tags):
+    def _create_tags(self, obj_id, tags, ec2_conn=None):
+        ec2_conn = ec2_conn or self._connect_ec2()
         for i in range(12):
             try:
                 LOG.debug('Applying tags to EBS volume %s (tags: %s)', obj_id, tags)
-                self._conn.create_tags([obj_id], tags)
+                ec2_conn.create_tags([obj_id], tags)
                 break
             except boto.exception.EC2ResponseError,e:
                 if e.errno == 400:
@@ -150,7 +151,6 @@ class EbsMixin(object):
         else:
             LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
                                 obj_id, sys.exc_info()[1])
-
 
     def _create_tags_async(self, obj_id, tags):
         if not tags:
@@ -371,7 +371,7 @@ class EbsVolume(base.Volume, EbsMixin):
 
     def _destroy(self, force, **kwds):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-status':'pending-delete'})
+        self._create_tags(self.id, {'scalr-status':'pending-delete'}, self._conn)
         self._conn.delete_volume(self.id)
 
 
@@ -516,7 +516,7 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 
     def _destroy(self):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-status':'pending-delete'})
+        self._create_tags(self.id, {'scalr-status':'pending-delete'}, self._conn)
         self._conn.delete_snapshot(self.id)
 
 
