@@ -1074,6 +1074,7 @@ class MysqlHandler(DBMSRHandler):
                     root_password=__mysql__['root_password'],
                     repl_password=__mysql__['repl_password'],
                     stat_password=__mysql__['stat_password'],
+                    master_password=__mysql__['master_password']
             )
             if __mysql__['compat_prior_backup_restore']:
                 if 'restore' in __mysql__:
@@ -1243,22 +1244,28 @@ class MysqlHandler(DBMSRHandler):
     def create_users(self, **creds):
         users = {}
         root_cli = mysql_svc.MySQLClient(__mysql__['root_user'], creds[__mysql__['root_user']])
+
         local_root = mysql_svc.MySQLUser(root_cli, __mysql__['root_user'],
                                         creds[__mysql__['root_user']], host='localhost')
+
+        local_master = mysql_svc.MySQLUser(root_cli, __mysql__['master_user'], 
+                                        creds[__mysql__['master_user']], host='localhost', 
+                                        privileges=PRIVILEGES.get(__mysql__['master_user'], None))
+        users['master@localhost'] = local_master
 
         if not self.mysql.service.running:
             self.mysql.service.start()
 
         try:
             if not local_root.exists() or not local_root.check_password():
-                users.update({'local_root': local_root})
+                users.update({'root@localhost': local_root})
                 self.mysql.service.stop('creating users')
                 self.mysql.service.start_skip_grant_tables()
             else:
                 LOG.debug('User %s exists and has correct password' % __mysql__['root_user'])
         except ServiceError, e:
             if 'Access denied for user' in str(e):
-                users.update({'local_root': local_root})
+                users.update({'root@localhost': local_root})
                 self.mysql.service.stop('creating users')
                 self.mysql.service.start_skip_grant_tables()
             else:
@@ -1268,10 +1275,6 @@ class MysqlHandler(DBMSRHandler):
             user = mysql_svc.MySQLUser(root_cli, login, password,
                                     host='%', privileges=PRIVILEGES.get(login, None))
             users[login] = user
-            if login == __mysql__['master_user']:
-                user2 = mysql_svc.MySQLUser(root_cli, login, password,
-                                    host='localhost', privileges=PRIVILEGES.get(login, None))
-                users[login + '_localhost'] = user2
 
         for login, user in users.items():
             if not user.exists():
