@@ -134,6 +134,35 @@ class EbsMixin(object):
         return __node__['ec2']['instance_type']
 
 
+    def _create_tags(self, obj_id, tags):
+        for i in range(12):
+            try:
+                LOG.debug('Applying tags to EBS volume %s (tags: %s)', obj_id, tags)
+                self._conn.create_tags([obj_id], tags)
+                break
+            except boto.exception.EC2ResponseError,e:
+                if e.errno == 400:
+                    LOG.debug('Failed to apply tags. Retrying in 10s.')
+                    time.sleep(10)
+                    continue
+            except (Exception, BaseException), e:
+                LOG.warn('Applying tags failed: %s' % e)
+        else:
+            LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
+                                obj_id, sys.exc_info()[1])
+
+
+    def _create_tags_async(self, obj_id, tags):
+        if not tags:
+            return
+        t = threading.Thread(
+                target=self._create_tags,
+                name='Applying tags to {0}'.format(obj_id),
+                args=(obj_id, tags))
+        t.setDaemon(True)
+        t.start()
+
+
 class EbsVolume(base.Volume, EbsMixin):
 
     _free_device_letter_mgr = FreeDeviceLetterMgr()
@@ -370,34 +399,6 @@ class EbsVolume(base.Volume, EbsMixin):
         if tags:
             self._create_tags_async(ebs.id, tags)
         return ebs
-
-
-    def _create_tags(self, obj_id, tags):
-        for i in range(12):
-            try:
-                LOG.debug('Applying tags to EBS volume %s (tags: %s)', obj_id, tags)
-                self._conn.create_tags([obj_id], tags)
-                break
-            except boto.exception.EC2ResponseError,e:
-                if e.errno == 400:
-                    LOG.debug('Failed to apply tags. Retrying in 10s.')
-                    time.sleep(10)
-                    continue
-            except (Exception, BaseException), e:
-                LOG.warn('Applying tags failed: %s' % e)
-        else:
-            LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
-                                obj_id, sys.exc_info()[1])
-
-    def _create_tags_async(self, obj_id, tags):
-        if not tags:
-            return
-        t = threading.Thread(
-                target=self._create_tags, 
-                name='Applying tags to {0}'.format(obj_id), 
-                args=(obj_id, tags))
-        t.setDaemon(True)
-        t.start()        
 
 
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
