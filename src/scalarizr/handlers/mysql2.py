@@ -328,8 +328,6 @@ class MysqlHandler(DBMSRHandler):
 
         if __node__['state'] == 'running':
             vol = storage2.volume(__mysql__['volume'])
-            if not vol.tags:
-                vol.tags = self.resource_tags()
             vol.ensure(mount=True)
             __mysql__['volume'] = vol
             if int(__mysql__['replication_master']):

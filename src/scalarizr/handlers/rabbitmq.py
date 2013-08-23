@@ -96,7 +96,6 @@ class RabbitMQHandler(ServiceCtlHandler):
 
         elif 'running' == __node__['state']:
             rabbitmq_vol = __rabbitmq__['volume']
-            rabbitmq_vol.tags = self.rabbitmq_tags
 
             if not __rabbitmq__['volume'].mounted_to():
                 self.service.stop()
@@ -269,6 +268,7 @@ class RabbitMQHandler(ServiceCtlHandler):
                     volume_config = rabbitmq_data.pop('volume_config')
                     volume_config['mpoint'] = DEFAULT_STORAGE_PATH
                     rabbitmq_data['volume'] = storage2.volume(volume_config)
+                    rabbitmq_data['volume'].tags = self.rabbitmq_tags
 
                     __rabbitmq__.update(rabbitmq_data)
 

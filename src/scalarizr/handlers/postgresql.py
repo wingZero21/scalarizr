@@ -201,8 +201,6 @@ class PostgreSqlHander(ServiceCtlHandler):
         if __node__['state'] == 'running':
 
             vol = storage2.volume(__postgresql__['volume'])
-            if not vol.tags:
-                vol.tags = self.resource_tags()
             vol.ensure(mount=True)
             
             self.postgresql.service.start()

@@ -200,8 +200,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
             #    self.security_off()
 
             vol = storage2.volume(__redis__['volume'])
-            if not vol.tags:
-                vol.tags = self.redis_tags
             vol.ensure(mount=True)
             __redis__['volume'] = vol
 
