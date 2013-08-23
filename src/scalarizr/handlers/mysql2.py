@@ -1230,7 +1230,9 @@ class MysqlHandler(DBMSRHandler):
                 __mysql__['root_user']: 'root_password',
                 __mysql__['repl_user']: 'repl_password',
                 __mysql__['stat_user']: 'stat_password',
-                __mysql__['master_user']: 'master_password'}
+                # __mysql__['master_user']: 'master_password'
+                # TODO: disabled scalr_master user until scalr will send/recv it in communication messages
+                }
         creds = {}
         for login, opt_pwd in options.items():
             password = __mysql__[opt_pwd]
