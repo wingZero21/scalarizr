@@ -16,7 +16,7 @@ import binascii
 import json
 import copy
 import cgi
-
+from collections import Hashable
 
 from lettuce import step
 import mock
@@ -64,14 +64,112 @@ class PrettyHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.LOG.debug(format, *args)
 
 
+def hashable(obj):
+    return isinstance(obj, Hashable)
+
+
+class Notification(object):
+
+    def __init__(self, name=None):
+        self._lock = threading.Condition()
+        self.name = name or ''
+        self._times_notified = 0
+        self._times_waited = 0
+        self._waiters_qty = 0
+
+    def wait(self, timeout=None):
+        try:
+            self._lock.acquire()
+            self._waiters_qty += 1
+            self._lock.wait(timeout)
+            self._waiters_qty -= 1
+            self._times_waited += 1
+        finally:
+            self._lock.release()
+
+    def notify(self):
+        self._lock.acquire()
+        self._lock.notify_all()
+        self._times_notified += 1
+        self._lock.release()
+
+    @property
+    def times_notified(self):
+        return self._times_notified
+
+    @property
+    def times_waited(self):
+        return self._times_waited
+
+    @property
+    def waiters_qty(self):
+        return self._waiters_qty
+
+
+class NotificationCenter(object):
+
+    def __init__(self):
+        self._notification_pool = {}
+
+    def _normalize_notification_name(self, name):
+        if hashable(name) and not isinstance(name, str):
+            return str(hash(name))
+        return name
+
+    def wait_notification(self, name, timeout=None):
+        name = self._normalize_notification_name(name)
+        if name not in self._notification_pool:
+            self._notification_pool[name] = Notification(name)
+        self._notification_pool[name].wait(timeout)
+
+    def notify(self, name):
+        name = self._normalize_notification_name(name)
+        if name in self._notification_pool:
+            self._notification_pool[name].notify()
+
+    def get_notification(self, name):
+        name = self._normalize_notification_name(name)
+        return self._notification_pool.get(name)
+
+
+class Server(object):
+
+    def __init__(self,
+                 behaviors,
+                 id_=None,
+                 index=0,
+                 crypto_key=None,
+                 farm_hash=None,
+                 public_ip=None,
+                 private_ip=None,
+                 status='pending',
+                 notification_center=None):
+        self.id_ = id_ or str(uuid.uuid4())
+        self.index = index
+        self.crypto_key = crypto_key or crypto.keygen()
+        self.farm_hash = farm_hash or crypto.keygen(10)
+        self.public_ip = public_ip
+        self.private_ip = private_ip
+        self._status = status
+        self.behaviors = behaviors
+        self.notification_center = notification_center
+
+    def set_status(self, new_status):
+        self._status = new_status
+        self.notification_center.notify((self, 'status'))
+
+    def get_status(self):
+        return self._status
+
+    status = property(get_status, set_status)
+
 class Habibi(object):
+
     def __init__(self, behavior, base_dir=None):
         #if 'chef' not in behaviors:
         #    behaviors.append('chef')
-        self.role = {
-            'behaviors': [behavior],
-            'name': 'habibi-lxc'
-        }
+        self.role = {'behaviors': [behavior],
+                     'name': 'habibi-lxc'}
         self.servers = []
         self.breakpoints = []
         self.router_ip = '10.0.3.1'
@@ -83,46 +181,37 @@ class Habibi(object):
         self.QueryEnvHTTPHandler.habibi = self
         self.queryenv_server = self.queryenv_thread = None
         self.messaging_server = self.messaging_thread = None
-
-
+        self.msg_center = NotificationCenter()
 
     def run_server(self):
-        server = {
-            'server_id': str(uuid.uuid4()),
-            'crypto_key': crypto.keygen(),
-            'farm_hash': crypto.keygen(10),
-            'public_ip': None,
-            'private_ip': None,
-            'status': 'pending',
-            'behaviors': self.role['behaviors'],
-            'index': self._next_server_index()
-        }
+        server = Server(behaviors=self.role['behaviors'],
+                        index=self._next_server_index(),
+                        notification_center=self.msg_center)
         self.servers.append(server)
 
-        server_dir = self.base_dir + '/' + server['server_id']
+        server_dir = self.base_dir + '/' + server.id_
         os.makedirs(server_dir)
         with open(server_dir + '/Vagrantfile', 'w+') as fp:
             tpl = string.Template(VAGRANT_FILE)
-            fp.write(tpl.substitute(
-                user_data=self._pack_user_data(self._user_data(server))))
+            fp.write(tpl.substitute(user_data=self._pack_user_data(self._user_data(server))))
 
         #subprocess.Popen('vagrant init ubuntu1210', shell=True, cwd=server_dir).communicate()
-        # TODO: init Vagrnatfile from VAGRANT_FILE template
         subprocess.Popen('vagrant up --provider lxc', shell=True, cwd=server_dir).communicate()
         # TODO: server['machine_id']
+        return server
 
     def start(self):
-        self.messaging_server = BaseHTTPServer.HTTPServer(('', self.messaging_port), self.MessagingHTTPHandler)
-        self.messaging_thread = threading.Thread(
-            name='Messaging', 
-            target=self.messaging_server.serve_forever)
+        self.messaging_server = BaseHTTPServer.HTTPServer(('', self.messaging_port),
+                                                          self.MessagingHTTPHandler)
+        self.messaging_thread = threading.Thread(name='Messaging', 
+                                                 target=self.messaging_server.serve_forever)
         self.messaging_thread.setDaemon(True)
         self.messaging_thread.start()
 
-        self.queryenv_server = BaseHTTPServer.HTTPServer(('', self.queryenv_port), self.QueryEnvHTTPHandler)
-        self.queryenv_thread = threading.Thread(
-            name='QueryEnv', 
-            target=self.queryenv_server.serve_forever)
+        self.queryenv_server = BaseHTTPServer.HTTPServer(('', self.queryenv_port),
+                                                         self.QueryEnvHTTPHandler)
+        self.queryenv_thread = threading.Thread(name='QueryEnv', 
+                                                target=self.queryenv_server.serve_forever)
         self.queryenv_thread.setDaemon(True)
         self.queryenv_thread.start()
 
@@ -147,32 +236,37 @@ class Habibi(object):
         for bp in self.breakpoints:
             if bp[1] == test_bp:
                 bp[0](**kwds)
+                LOG.debug('hash of running bg %s' % str(hash(bp[0])))
+                self.msg_center.notify(bp[0])
 
     def _next_server_index(self):
         # TODO: handle holes
         return str(len(self.servers) + 1)
 
     def _user_data(self, server):
-        return {'szr_key': server['crypto_key'],
-                'hash': server['farm_hash'],
-                'serverid': server['server_id'],
-                'p2p_producer_endpoint': 'http://{0}:{1}/messaging'.format(self.router_ip, self.messaging_port),
-                'queryenv_url': 'http://{0}:{1}/query-env'.format(self.router_ip, self.queryenv_port),
-                'behaviors': ','.join(server['behaviors']),
+        return {'szr_key': server.crypto_key,
+                'hash': server.farm_hash,
+                'serverid': server.id_,
+                'p2p_producer_endpoint': 'http://{0}:{1}/messaging'.format(self.router_ip,
+                                                                           self.messaging_port),
+                'queryenv_url': 'http://{0}:{1}/query-env'.format(self.router_ip,
+                                                                  self.queryenv_port),
+                'behaviors': ','.join(server.behaviors),
                 'farm_roleid': '1',
                 'roleid': '1',
                 'env_id': '1',
                 'platform': 'lxc',
-                'server_index': server['index']}
+                'server_index': server.index}
 
     def _pack_user_data(self, user_data):
         return ';'.join(['{0}={1}'.format(k, v) for k, v in user_data.items()])
 
     def find_servers(self, pattern):
+        # TODO: finish else clauses - find server if pattern is not uuid
         if pattern:
             if re.search(r'\w{8}-\w{4}-\w{4}-\w{4}-\w{12}', pattern):
                 for server in self.servers:
-                    if server['server_id'] == pattern:
+                    if server.id_ == pattern:
                         return [server]
             else:
                 LOG.warn('pattern %s doesnt match uuid4', pattern)
@@ -191,53 +285,47 @@ class Habibi(object):
             msg.name = msg_name
             msg.body = source_msg.body.copy()
             msg.body['scripts'] = []
+            msg.body['behaviour'] = list(server.behaviors)
 
-            self.apply_breakpoints(
-                cond={
-                    'msg_name': msg.name, 
-                    'target_index': server['index'],
-                    'target_behavior': server['behaviors'][0]}, 
-                kwds={
-                    'target_msg': msg,
-                    'target_server': server,
-                    'source_msg': source_msg})
+            self.apply_breakpoints(cond={'msg_name': msg.name, 
+                                         'target_index': server.index,
+                                         'target_behavior': server.behaviors[0]}, 
+                                   kwds={'target_msg': msg,
+                                         'target_server': server,
+                                         'source_msg': source_msg})
 
-            LOG.debug('<~ %s to %s', msg.name, server['server_id'])
+            LOG.debug('<~ %s to %s', msg.name, server.id_)
             xml_data = msg.toxml()
             LOG.debug(' * data: %s', xml_data)
-            LOG.debug(' * key: %s', server['crypto_key'])
-            crypto_key = binascii.a2b_base64(server['crypto_key'])
+            LOG.debug(' * key: %s', server.crypto_key)
+            crypto_key = binascii.a2b_base64(server.crypto_key)
             encrypted_data = crypto.encrypt(xml_data, crypto_key)
             signature, timestamp = crypto.sign(encrypted_data, crypto_key)
 
-            url = 'http://{0}:8013/control'.format(server['public_ip'])
+            url = 'http://{0}:8013/control'.format(server.public_ip)
             req = urllib2.Request(url, encrypted_data, {
                 'Content-type': 'application/xml',
                 'Date': timestamp,
                 'X-Signature': signature,
-                'X-Server-Id': server['server_id']})
+                'X-Server-Id': server.id_})
             opener = urllib2.build_opener(urllib2.HTTPRedirectHandler())
             opener.open(req)
-
         
     def on_message(self, msg):
         server_id = msg.meta['server_id']
         LOG.debug('~> %s from %s', msg.name, server_id)
         server = self.find_servers(server_id)[0]
 
-        self.apply_breakpoints(
-            cond={
-                'msg_name': msg.name, 
-                'source_index': server['index'],
-                'source_behavior': server['behaviors'][0]}, 
-            kwds={
-                'source_msg': msg})
+        self.apply_breakpoints(cond={'msg_name': msg.name, 
+                                     'source_index': server.index,
+                                     'source_behavior': server.behaviors[0]}, 
+                               kwds={'source_msg': msg})
 
         if msg.name == 'HostInit':
-            server['status'] = 'initializing'
-            server['public_ip'] = msg.body['remote_ip']
-            server['private_ip'] = msg.body['local_ip']
-            server['crypto_key'] = msg.body['crypto_key'].strip()
+            server.status = 'initializing'
+            server.public_ip = msg.body['remote_ip']
+            server.private_ip = msg.body['local_ip']
+            server.crypto_key = msg.body['crypto_key'].strip()
 
             time.sleep(1)  # It's important gap for Scalarizr
             self.send('HostInitResponse', server_pattern=server_id, source_msg=msg)
@@ -245,7 +333,7 @@ class Habibi(object):
         elif msg.name == 'BeforeHostUp':
             self.send('BeforeHostUp', source_msg=msg)
         elif msg.name == 'HostUp':
-            server['status'] = 'running'
+            server.status = 'running'
             self.send('HostUp', source_msg=msg)
         elif msg.name in ('OperationDefinition', 'OperationProgress', 'OperationResult'):
             pass
@@ -257,7 +345,6 @@ class Habibi(object):
         habibi = None
         LOG = logging.getLogger('habibi.messaging')
 
-
         def do_POST(self):
             if os.path.basename(self.path) != 'control':
                 self.render_html(201)
@@ -268,7 +355,7 @@ class Habibi(object):
                 server = self.habibi.find_servers(server_id)[0]
 
                 encrypted_data = self.rfile.read(int(self.headers['Content-length']))
-                xml_data = crypto.decrypt(encrypted_data, binascii.a2b_base64(server['crypto_key']))
+                xml_data = crypto.decrypt(encrypted_data, binascii.a2b_base64(server.crypto_key))
 
                 msg = Message()
                 msg.fromxml(xml_data)
@@ -315,10 +402,9 @@ class Habibi(object):
 
         def get_global_config(self):
             ret = etree.Element('settings')
-            settings = {
-                'dns.static.endpoint': 'scalr-dns.com',
-                'scalr.version': '4.5.0',
-                'scalr.id': '884c7c0'}
+            settings = {'dns.static.endpoint': 'scalr-dns.com',
+                        'scalr.version': '4.5.0',
+                        'scalr.id': '884c7c0'}
             for key, val in settings.items():
                 setting = etree.Element('setting', key=key)
                 setting.text = val
@@ -328,21 +414,19 @@ class Habibi(object):
         def list_roles(self):
             ret = etree.Element('roles')
             role = etree.Element('role')
-            role.attrib.update({
-                'id': '1',
-                'role-id': '1',
-                'behaviour': ','.join(self.habibi.role['behaviors']),
-                'name': self.habibi.role['name']})
+            role.attrib.update({'id': '1',
+                                'role-id': '1',
+                                'behaviour': ','.join(self.habibi.role['behaviors']),
+                                'name': self.habibi.role['name']})
             hosts = etree.Element('hosts')
             role.append(hosts)
             for server in self.habibi.servers:
                 host = etree.Element('host')
-                host.attrib.update({
-                    'internal-ip': server['private_ip'],
-                    'external-ip': server['public_ip'],
-                    'status': server['status'],
-                    'index': server['index'],
-                    'cloud-location': 'lxc'})
+                host.attrib.update({'internal-ip': server.private_ip,
+                                    'external-ip': server.public_ip,
+                                    'status': server.status,
+                                    'index': server.index,
+                                    'cloud-location': 'lxc'})
                 hosts.append(host)
             ret.append(role)
             return ret
@@ -364,7 +448,7 @@ class Message(object):
             assert attr in json_obj, 'Attribute required: %s' % attr
             setattr(self, attr, copy.copy(json_obj[attr]))
 
-    def fromxml (self, xml):
+    def fromxml(self, xml):
         if isinstance(xml, str):
             xml = xml.decode('utf-8')
         doc = dom.parseString(xml.encode('utf-8'))
@@ -379,20 +463,16 @@ class Message(object):
         for ch in root.childNodes[1].childNodes:
             self.body[ch.nodeName] = self._walk_decode(ch)
 
-
     def tojson(self):
-        result = dict(id=self.id, name=self.name,
-                                  body=self.body, meta=self.meta)
-
+        result = dict(id=self.id, name=self.name, body=self.body, meta=self.meta)
         return json.dumps(result, ensure_ascii=True)
-
 
     def _walk_decode(self, el):
         if el.firstChild and el.firstChild.nodeType == 1:
             if all((ch.nodeName == "item" for ch in el.childNodes)):
-                return list(self._walk_decode(ch) for ch in el.childNodes)
+                return [self._walk_decode(ch) for ch in el.childNodes]
             else:
-                return dict(tuple((ch.nodeName, self._walk_decode(ch)) for ch in el.childNodes))
+                return {ch.nodeName: self._walk_decode(ch) for ch in el.childNodes}
         else:
             return el.firstChild and el.firstChild.nodeValue or None
 
@@ -443,6 +523,7 @@ class Message(object):
 
 
 class Breakpoint(object):
+
     def __init__(self, cond):
         bp = cond.copy()
         for key in ('source', 'target'):
@@ -490,11 +571,9 @@ class SampleSpy(object):
 
     @breakpoint(msg_name='HostInitResponse')
     def hi_all(self, target_msg=None, target_server=None, **kwds):
-        target_msg.body['chef'] = {
-            'server_url': 'http://example.test',
-            'run_list': ['recipe[example]']
-        }
-        print 'send HIR to %s' % target_server['server_id']
+        target_msg.body['chef'] = {'server_url': 'http://example.test',
+                                   'run_list': ['recipe[example]']}
+        print 'send HIR to %s' % target_server.id_
 
     @breakpoint(msg_name='BeforeHostUp', target='base')
     def bhup(self, **kwds):
@@ -504,3 +583,23 @@ class SampleSpy(object):
     def hup(self, **kwds):
         print 'recv HostUp from server'
 
+
+# class PxcSpy(object):
+#     pass
+
+
+# def before_all():
+#     spy = PxcSpy()
+#     hab = habibi.Habibi('pxc')
+#     hab.spy(spy)
+#     hab.start()
+#     hab.msg_center.wait(spy.hi)
+
+
+# def when_i_start_first_node():
+#     hab.run_server()
+
+# def test_method():
+#     spy.host_init_response.wait()
+
+#     spy.notifications.wait((server, 'status'))
