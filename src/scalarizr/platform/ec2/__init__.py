@@ -5,7 +5,7 @@ from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
 from scalarizr.storage.transfer import Transfer
 from .storage import S3TransferProvider
 
-from boto import connect_s3
+import boto
 import boto.ec2
 import urllib2, re, os
 
@@ -81,8 +81,9 @@ class Ec2Platform(Ec2LikePlatform):
     def new_s3_conn(self):
         region = self.get_region()
         endpoint = self._s3_endpoint(region)
+        key_id, key = self.get_access_keys()
         self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
-        return connect_s3(host=endpoint)
+        return boto.connect_s3(host=endpoint, aws_access_key_id=key_id, aws_secret_access_key=key)
 
 
     @property
