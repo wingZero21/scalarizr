@@ -118,7 +118,7 @@ class EbsMixin(object):
             return __node__['ec2']['connect_ec2']()
         except:
             if sys.exc_type.__name__ not \
-                    in ('AttributeError', 'NoAuthHandlerFound'):
+                    in ('AttributeError', 'NoAuthHandlerFound', 'PlatformError'):
                 raise
 
     def _avail_zone(self):

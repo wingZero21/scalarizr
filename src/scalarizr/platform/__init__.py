@@ -73,6 +73,7 @@ class Platform():
 
     def __init__(self):
         self.scalrfs = self._scalrfs(self)
+        self._access_data = {} 
 
     def get_private_ip(self):
         return self.get_public_ip()
@@ -109,7 +110,7 @@ class Platform():
             return self._access_data
 
     def clear_access_data(self):
-        self._access_data = None
+        self._access_data = {}
 
     def get_architecture(self):
         """
