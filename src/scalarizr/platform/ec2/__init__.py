@@ -73,8 +73,9 @@ class Ec2Platform(Ec2LikePlatform):
     def new_ec2_conn(self):
         """ @rtype: boto.ec2.connection.EC2Connection """
         region = self.get_region()
-        self._logger.debug("Return ec2 connection (region: %s)", region)
-        return boto.ec2.connect_to_region(region)
+        self._logger.debug("Return ec2 connection (region: %s)", region)  
+        key_id, key = self.get_access_keys()
+        return boto.ec2.connect_to_region(region, aws_access_key_id=key_id, aws_secret_access_key=key)
 
 
     def new_s3_conn(self):
@@ -83,19 +84,6 @@ class Ec2Platform(Ec2LikePlatform):
         self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
         return connect_s3(host=endpoint)
 
-    def set_access_data(self, access_data):
-        Ec2LikePlatform.set_access_data(self, access_data)
-        key_id, key = self.get_access_keys()
-        os.environ['AWS_ACCESS_KEY_ID'] = key_id
-        os.environ['AWS_SECRET_ACCESS_KEY'] = key
-
-    def clear_access_data(self):
-        Ec2LikePlatform.clear_access_data(self)
-        try:
-            del os.environ['AWS_ACCESS_KEY_ID']
-            del os.environ['AWS_SECRET_ACCESS_KEY']
-        except KeyError:
-            pass
 
     @property
     def cloud_storage_path(self):
