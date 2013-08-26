@@ -1250,10 +1250,10 @@ class MysqlHandler(DBMSRHandler):
         local_root = mysql_svc.MySQLUser(root_cli, __mysql__['root_user'],
                                         creds[__mysql__['root_user']], host='localhost')
 
-        local_master = mysql_svc.MySQLUser(root_cli, __mysql__['master_user'], 
-                                        creds[__mysql__['master_user']], host='localhost', 
-                                        privileges=PRIVILEGES.get(__mysql__['master_user'], None))
-        users['master@localhost'] = local_master
+        #local_master = mysql_svc.MySQLUser(root_cli, __mysql__['master_user'], 
+        #                                creds[__mysql__['master_user']], host='localhost', 
+        #                                privileges=PRIVILEGES.get(__mysql__['master_user'], None))
+        #users['master@localhost'] = local_master
 
         if not self.mysql.service.running:
             self.mysql.service.start()
