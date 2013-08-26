@@ -106,11 +106,11 @@ class Message(object):
             self.body[ch.nodeName] = self._walk_decode(ch)
 
 
-    def tojson(self):
+    def tojson(self, indent=None):
         result = dict(id=self.id, name=self.name,
                                   body=self.body, meta=self.meta)
 
-        return json.dumps(result, ensure_ascii=True)
+        return json.dumps(result, ensure_ascii=True, indent=indent)
 
 
     def _walk_decode(self, el):
