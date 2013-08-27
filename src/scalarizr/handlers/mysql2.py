@@ -692,6 +692,7 @@ class MysqlHandler(DBMSRHandler):
                         # Set read_only option
                         self.mysql.my_cnf.read_only = False
                         self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
+                        self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
                         self.mysql.service.start()
                         # Update __mysql__['behavior'] configuration
                         __mysql__.update({
@@ -1020,6 +1021,7 @@ class MysqlHandler(DBMSRHandler):
                 self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
                 self.mysql.my_cnf.set('mysqld/log-bin-index', __mysql__['binlog_dir'] + '/binlog.index')  # MariaDB 
                 self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
+                self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
 
                 #if not os.listdir(__mysql__['data_dir']):
                 if not storage_valid:
