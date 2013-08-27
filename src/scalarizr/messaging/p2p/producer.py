@@ -109,15 +109,19 @@ class P2pMessageProducer(messaging.MessageProducer):
 
             for f in self.filters['protocol']:
                 data = f(self, queue, data, headers)
+            self._logger.debug('sending %s: message filters finished', message.id)
 
             url = self.endpoint + "/" + queue
             req = urllib2.Request(url, data, headers)
             opener = urllib2.build_opener(urltool.HTTPRedirectHandler())
+            self._logger.debug('sending %s: before opener.open', message.id)
             opener.open(req)
+            self._logger.debug('sending %s: after opender.open', message.id)
 
             self._message_delivered(queue, message, success_callback)
 
-        except (Exception, BaseException), e:
+        except:
+            e = sys.exc_info()[1]
             # Python < 2.6 raise exception on 2xx > 200 http codes except
             if isinstance(e, urllib2.HTTPError):
                 if e.code == 201:
@@ -147,11 +151,14 @@ class P2pMessageProducer(messaging.MessageProducer):
 
 
     def _message_delivered(self, queue, message, callback=None):
+        self._logger.debug('sending %s: entering _message_delivered', message.id)
         if message.name not in ('Log', 'OperationDefinition',
                                                 'OperationProgress', 'OperationResult'):
             self._logger.debug("Message '%s' delivered (message_id: %s)",
                                             message.name, message.id)
         self._store.mark_as_delivered(message.id)
+        self._logger.debug('sending %s: before firing "send"', message.id)
         self.fire("send", queue, message)
+        self._logger.debug('sending %s: after firing "send"', message.id)
         if callback:
             callback(queue, message)
