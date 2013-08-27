@@ -181,6 +181,8 @@ class OpenstackPlatform(platform.Platform):
         # if it's Rackspace NG, we need to set env var CINDER_RAX_AUTH
         # and NOVA_RAX_AUTH for proper nova and cinder authentication
         if 'rackspacecloud' in self._access_data["keystone_url"]:
+            # python-novaclient has only configuration with environ variables 
+            # to enable Rackspace specific authentification
             os.environ["CINDER_RAX_AUTH"] = "True"
             os.environ["NOVA_RAX_AUTH"] = "True"
 
