@@ -338,7 +338,7 @@ def _init_platform():
         logger.debug('Enable RedHat subscription')
         urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
 
-    if cnf.state != ScalarizrState.RUNNING and linux.os.linux_family:
+    if cnf.state != ScalarizrState.RUNNING and not linux.os.windows_family:
         try:
             pkgmgr.updatedb()
         except:
@@ -829,7 +829,7 @@ class Service(object):
         consumer = msg_service.get_consumer()
         consumer.listeners.append(MessageListener())
 
-        if linux.os.linux_family:
+        if not linux.os.windows_family:
             logger.debug('Schedule SNMP process')
             self._snmp_scheduled_start_time = time.time()
 

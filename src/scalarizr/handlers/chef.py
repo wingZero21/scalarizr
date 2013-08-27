@@ -248,11 +248,11 @@ class ChefHandler(Handler):
         cmd = [self._chef_client_bin]
         if with_json_attributes:
             cmd += ['--json-attributes', self._json_attributes_path]
-        system2(cmd, 
-            close_fds=linux.os.linux_family,
+        system2(cmd,
+            close_fds=not linux.os.windows_family,
             log_level=logging.INFO,
-            preexec_fn=linux.os.linux_family and os.setsid or None,
-            env=self._environ_variables
+            preexec_fn=not linux.os.windows_family and os.setsid or None,
+            env=environ
         )
 
     @property
