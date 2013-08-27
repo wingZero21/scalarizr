@@ -324,7 +324,7 @@ class MongoDBHandler(ServiceCtlHandler):
                         if not __mongodb__['volume'].tags:
                             __mongodb__['volume'].tags = self.mongo_tags
 
-                    if 'snapshot_config' in mongodb_data:
+                    if mongodb_data.get('snapshot_config'):
                         __mongodb__['snapshot'] = storage2.snapshot(mongodb_data.pop('snapshot_config'))
                         if not __mongodb__['snapshot'].tags:
                             __mongodb__['snapshot'].tags = self.mongo_tags
