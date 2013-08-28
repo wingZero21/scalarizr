@@ -1,6 +1,7 @@
 from __future__ import with_statement
 
 import os
+import sys
 import glob
 import string
 import threading
@@ -218,7 +219,7 @@ class CinderVolume(base.Volume):
         volume_id = self.id
         self._check_cinder_connection()
 
-        LOG.debug('Creating snapshot of Cinder volume', volume_id)
+        LOG.debug('Creating snapshot of Cinder volume %s', volume_id)
         coreutils.sync()
         snapshot = self._cinder.volume_snapshots.create(volume_id,
                                                         force=True,
@@ -251,23 +252,35 @@ class CinderVolume(base.Volume):
                   device_name,
                   server_id)
         self._check_nova_connection()
+        ops_delay = 10
         for _ in xrange(5):
-            try:
-                self._nova.volumes.create_server_volume(server_id,
-                                                        volume_id,
-                                                        device_name)
-            except ClientException, e:
-                LOG.warn('Exception caught while trying'
-                         'to attach volume %s: \n%s ', volume_id, e)
-                LOG.debug('Will try again after 10 seconds. ')
-                sleep(10)
-            else:
-                break
+            for _ in xrange(5):
+                try:
+                    self._nova.volumes.create_server_volume(
+                            server_id, volume_id, device_name)
+                except ClientException, e:
+                    LOG.warn('Exception caught while trying'
+                             'to attach volume %s: \n%s ', volume_id, e)
+                    LOG.debug('Will try again after %d seconds.', ops_delay)
+                    sleep(ops_delay)
+                else:
+                    break
 
-        #waiting for attaching transitional state
-        LOG.debug('Checking that Cinder volume %s is attached', volume_id)
-        self._wait_status_transition(volume_id)
-        LOG.debug('Cinder volume %s attached', volume_id)
+            #waiting for attaching transitional state
+            LOG.debug('Checking that Cinder volume %s is attached', volume_id)
+            new_status = self._wait_status_transition(volume_id)
+            if new_status == 'in-use':
+                LOG.debug('Cinder volume %s attached', volume_id)
+                break
+            elif new_status == 'available':
+                LOG.warn('Volume %s status changed to "available" instead of "in-use"')
+                LOG.debug('Will try attach volume again after %d seconds', ops_delay)
+                continue
+            else:
+                msg = 'Unexpected status transition "available" -> "%s".' \
+                        ' Cinder volume %s'.format(new_status, volume_id)
+                raise storage2.StorageError(msg)
+
 
         # Checking device availability in OS
         device = name2device(device_name)
@@ -301,7 +314,8 @@ class CinderVolume(base.Volume):
                 self._check_nova_connection()
                 server_id = volume.attachments[0]['server_id']
                 self._nova.volumes.delete_server_volume(server_id, volume_id)
-            except BaseException, e:
+            except:
+                e = sys.exc_info()[1]
                 LOG.error('Exception caught when detaching volume: %s', e)
 
             LOG.debug('Checking that Cinder volume %s is detached '
@@ -344,6 +358,7 @@ class CinderVolume(base.Volume):
         """
         Wait until volume enters stable state (not 'detaching' or 'attaching')
         :param volume_id:
+        :return: volume status
         """
         if not volume_id:
             volume_id = self.id
@@ -368,6 +383,7 @@ class CinderVolume(base.Volume):
                 msg = 'Cinder volume %s enters error state after %s.' % \
                     (volume_id, status)
                 raise storage2.StorageError(msg)
+            return vol[0].status
 
     def _wait_snapshot(self, snapshot_id):
         LOG.debug('Checking that Cinder snapshot %s is completed', snapshot_id)
