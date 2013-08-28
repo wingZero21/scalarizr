@@ -1158,16 +1158,16 @@ class MongoDBHandler(ServiceCtlHandler):
         wait_until(lambda: self.mongodb.is_replication_master, sleep=5, logger=self._logger,
                                                 timeout=120, start_text='Wait until node becomes replication primary')
         # Create snapshot
-        self.mongodb.cli.sync(lock=True)
-        try:
-            snap = self._create_snapshot()
-        finally:
-            self.mongodb.cli.unlock()
+        #self.mongodb.cli.sync(lock=True)
+        #try:
+        #    snap = self._create_snapshot()
+        #finally:
+        #    self.mongodb.cli.unlock()
 
-        __mongodb__['snapshot'] = snap
+        #__mongodb__['snapshot'] = snap
 
         # Update HostInitResponse message 
-        msg_data = self._compat_storage_data(__mongodb__['volume'], snap)
+        msg_data = self._compat_storage_data(__mongodb__['volume'])
         message.mongodb = msg_data.copy()
 
 
@@ -1276,13 +1276,12 @@ class MongoDBHandler(ServiceCtlHandler):
 
         self.plug_storage()
         storage_vol = __mongodb__['volume']
+        first_start = not self._storage_valid()
 
         self.mongodb.stop_default_init_script()
         self.mongodb.prepare(rs_name)
         self.mongodb.start_shardsvr()
 
-        
-        first_start = not self._storage_valid()
         self.mongodb.auth = True
 
         if not first_start:
