@@ -16,11 +16,11 @@ from scalarizr.handlers import operation
 from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
-from scalarizr.storage2 import volume as storage2_volume
+from scalarizr.util.flag import Flag
 
 # Libs
 from scalarizr.util import cryptotool, software
-from scalarizr.linux import iptables
+from scalarizr.linux import iptables, os as os_dist
 
 # Stdlibs
 import logging, os, sys, threading
@@ -34,6 +34,10 @@ def get_handlers():
         globals()["_lifecycle"] = LifeCycleHandler()
     return [_lifecycle]
 
+
+
+
+
 class LifeCycleHandler(scalarizr.handlers.Handler):
     _logger = None
     _bus = None
@@ -43,9 +47,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     _cnf = None
     
     _new_crypto_key = None
-    
-    FLAG_REBOOT = "reboot"
-    FLAG_HALT = "halt"
+
 
     def __init__(self):
         self._logger = logging.getLogger(__name__)
@@ -144,7 +146,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             pass
 
         # Mount all filesystems
-        system2(('mount', '-a'), raise_exc=False)
+        if os_dist['family'] != 'Windows':
+            system2(('mount', '-a'), raise_exc=False)
 
         # Add firewall rules
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
@@ -157,9 +160,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         glob_vars = queryenv.list_global_variables()
         os.environ.update(glob_vars)
 
-        with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
-            for kv in glob_vars.items():
-                fp.write('export %s="%s"\n' % kv)
+        if 'Windows' == os_dist['family']:
+            pass
+        else:
+            with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
+                for kv in glob_vars.items():
+                    fp.write('export %s="%s"\n' % kv)
 
 
     def on_start(self):
@@ -168,14 +174,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         optparser = bus.optparser
         
-        if self._flag_exists(self.FLAG_REBOOT) or self._flag_exists(self.FLAG_HALT):
+        if Flag.exists(Flag.REBOOT) or Flag.exists(Flag.HALT):
             self._logger.info("Scalarizr resumed after reboot")
-            self._clear_flag(self.FLAG_REBOOT)
-            self._clear_flag(self.FLAG_HALT)    
+            Flag.clear(Flag.REBOOT)
+            Flag.clear(Flag.HALT)
             self._check_control_ports() 
             self._start_after_reboot()
 
-        elif optparser.values.import_server:
+        elif optparser and optparser.values.import_server:
             self._logger.info('Server will be imported into Scalr')
             self._start_import()
 
@@ -301,8 +307,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             t.start()
 
     def _check_control_ports(self):
-		if STATE['global.api_port'] != 8010 or STATE['global.msg_port'] != 8013:
-			# API or Messaging on non-default port
+        if STATE['global.api_port'] != 8010 or STATE['global.msg_port'] != 8013:
+            # API or Messaging on non-default port
 			self.send_message(Messages.UPDATE_CONTROL_PORTS, {
 				'api': STATE['global.api_port'],
 				'messaging': STATE['global.msg_port'],
@@ -312,7 +318,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
     def on_IntServerReboot(self, message):
         # Scalarizr must detect that it was resumed after reboot
-        self._set_flag(self.FLAG_REBOOT)
+        Flag.set(Flag.REBOOT)
         # Send message 
         msg = self.new_message(Messages.REBOOT_START, broadcast=True)
         try:
@@ -323,7 +329,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         
     
     def on_IntServerHalt(self, message):
-        self._set_flag(self.FLAG_HALT)
+        Flag.set(Flag.HALT)
         msg = self.new_message(Messages.HOST_DOWN, broadcast=True)
         try:
             bus.fire("before_host_down", msg)
@@ -368,7 +374,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _update_package(self):
         up_script = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_SCRIPTS_PATH) + '/update'
         system2([sys.executable, up_script], close_fds=True)
-        self._set_flag('update')
+        Flag.set('update')
 
 
     def on_before_message_send(self, queue, message):
@@ -396,27 +402,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         
         STATE['lifecycle.initialization_id'] = op.id
 
-        
-    def _get_flag_filename(self, name):
-        return self._cnf.private_path('.%s' % name)
-
-
-    def _set_flag(self, name):
-        file = self._get_flag_filename(name)
-        try:
-            self._logger.debug("Touch file '%s'", file)
-            open(file, "w+").close()
-            
-        except IOError, e:
-            self._logger.error("Cannot touch file '%s'. IOError: %s", file, str(e))
-
-
-    def _flag_exists(self, name):
-        return os.path.exists(self._get_flag_filename(name))
-    
-    def _clear_flag(self, name):
-        if self._flag_exists(name):
-            os.remove(self._get_flag_filename(name))
     
 
 class IntMessagingService(object):

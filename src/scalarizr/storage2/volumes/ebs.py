@@ -119,7 +119,7 @@ class EbsMixin(object):
             return __node__['ec2']['connect_ec2']()
         except:
             if sys.exc_type.__name__ not \
-                    in ('AttributeError', 'NoAuthHandlerFound'):
+                    in ('AttributeError', 'NoAuthHandlerFound', 'PlatformError'):
                 raise
 
     def _avail_zone(self):
@@ -132,6 +132,35 @@ class EbsMixin(object):
 
     def _instance_type(self):
         return __node__['ec2']['instance_type']
+
+
+    def _create_tags(self, obj_id, tags, ec2_conn=None):
+        ec2_conn = ec2_conn or self._connect_ec2()
+        for i in range(12):
+            try:
+                LOG.debug('Applying tags to EBS volume %s (tags: %s)', obj_id, tags)
+                ec2_conn.create_tags([obj_id], tags)
+                break
+            except boto.exception.EC2ResponseError,e:
+                if e.errno == 400:
+                    LOG.debug('Failed to apply tags. Retrying in 10s.')
+                    time.sleep(10)
+                    continue
+            except (Exception, BaseException), e:
+                LOG.warn('Applying tags failed: %s' % e)
+        else:
+            LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
+                                obj_id, sys.exc_info()[1])
+
+    def _create_tags_async(self, obj_id, tags):
+        if not tags:
+            return
+        t = threading.Thread(
+                target=self._create_tags,
+                name='Applying tags to {0}'.format(obj_id),
+                args=(obj_id, tags))
+        t.setDaemon(True)
+        t.start()
 
 
 class EbsVolume(base.Volume, EbsMixin):
@@ -342,7 +371,7 @@ class EbsVolume(base.Volume, EbsMixin):
 
     def _destroy(self, force, **kwds):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-status':'pending-delete'})
+        self._create_tags(self.id, {'scalr-status':'pending-delete'}, self._conn)
         self._conn.delete_volume(self.id)
 
 
@@ -368,28 +397,8 @@ class EbsVolume(base.Volume, EbsMixin):
         LOG.debug('EBS volume %s available', ebs.id)
 
         if tags:
-            t = threading.Thread(target=self._create_tags, name="Applying tags", args=(ebs.id, tags))
-            t.setDaemon(True)
-            t.start()
+            self._create_tags_async(ebs.id, tags)
         return ebs
-
-
-    def _create_tags(self, obj_id, tags):
-        for i in range(12):
-            try:
-                LOG.debug('Applying tags to EBS volume %s (tags: %s)', obj_id, tags)
-                self._conn.create_tags([obj_id], tags)
-                break
-            except boto.exception.EC2ResponseError,e:
-                if e.errno == 400:
-                    LOG.debug('Failed to apply tags. Retrying in 10s.')
-                    time.sleep(10)
-                    continue
-            except (Exception, BaseException), e:
-                LOG.warn('Applying tags failed: %s' % e)
-        else:
-            LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
-                                obj_id, sys.exc_info()[1])
 
 
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
@@ -398,9 +407,7 @@ class EbsVolume(base.Volume, EbsMixin):
         snapshot = self._conn.create_snapshot(volume, description)
         LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
         if tags:
-            t = threading.Thread(target=self._create_tags, name="Applying tags", args=(snapshot.id, tags))
-            t.setDaemon(True)
-            t.start()
+            self._create_tags_async(snapshot.id, tags)
         if not nowait:
             self._wait_snapshot(snapshot)
         return snapshot
@@ -509,7 +516,7 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 
     def _destroy(self):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-status':'pending-delete'})
+        self._create_tags(self.id, {'scalr-status':'pending-delete'}, self._conn)
         self._conn.delete_snapshot(self.id)
 
 

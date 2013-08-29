@@ -201,8 +201,6 @@ class PostgreSqlHander(ServiceCtlHandler):
         if __node__['state'] == 'running':
 
             vol = storage2.volume(__postgresql__['volume'])
-            if not vol.tags:
-                vol.tags = self.resource_tags()
             vol.ensure(mount=True)
             
             self.postgresql.service.start()
@@ -534,6 +532,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
             slaves = [host.internal_ip for host in self._get_slave_hosts()]
             self.postgresql.init_master(STORAGE_PATH, self.root_password, slaves)
+            self.postgresql.start_replication()
             __postgresql__[OPT_REPLICATION_MASTER] = 1
 
             if not new_vol or new_vol.type in ('eph', 'lvm'):

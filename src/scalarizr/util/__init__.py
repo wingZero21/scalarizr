@@ -13,6 +13,7 @@ import signal
 import string
 import pkgutil
 import traceback
+import platform
 
 
 from scalarizr.bus import bus
@@ -710,3 +711,19 @@ class Singleton(type):
         if cls not in cls._instances:
             cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instances[cls]
+
+
+if platform.uname()[0] == 'Windows':
+    import _winreg as winreg
+    
+    REG_KEY = 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Scalarizr'
+
+    def reg_value(value_name):
+        # Yes I know that win32api includes Reg* functions, 
+        # but KEY_WOW64_64KEY flag to access 64bit registry from 32bit app doesn't works
+
+        hkey = winreg.OpenKeyEx(winreg.HKEY_LOCAL_MACHINE, REG_KEY, 0, winreg.KEY_READ)
+        try:
+            return winreg.QueryValueEx(hkey, value_name)[0]
+        finally:
+            winreg.CloseKey(hkey)

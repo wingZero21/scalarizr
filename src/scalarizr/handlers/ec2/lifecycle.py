@@ -9,13 +9,12 @@ import os
 import re
 import sys
 import logging
-import ConfigParser
 
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.handlers import Handler
 from scalarizr.util import system2, disttool
-from scalarizr.linux import mount, system
+from scalarizr.linux import mount, system, os as os_dist
 
 
 __ec2__ = __node__['ec2']
@@ -50,16 +49,17 @@ class Ec2LifeCycleHandler(Handler):
         producer = msg_service.get_producer()
         producer.on("before_send", self.on_before_message_send)
 
-        # Set the hostname to this instance's public hostname
-        try:
-            hostname_as_pubdns = int(__ec2__['hostname_as_pubdns'])
-        except:
-            hostname_as_pubdns = True
+        if not os_dist.windows_family:
+            # Set the hostname to this instance's public hostname
+            try:
+                hostname_as_pubdns = int(__ec2__['hostname_as_pubdns'])
+            except:
+                hostname_as_pubdns = True
 
-        if hostname_as_pubdns:
-            pub_hostname = self._platform.get_public_hostname()
-            self._logger.debug('Setting hostname to %s' % pub_hostname)
-            system2("hostname " + pub_hostname, shell=True)
+            if hostname_as_pubdns:
+                pub_hostname = self._platform.get_public_hostname()
+                self._logger.debug('Setting hostname to %s' % pub_hostname)
+                system2("hostname " + pub_hostname, shell=True)
 
         if disttool.is_ubuntu():
             # Ubuntu cloud-init scripts may disable root ssh login
@@ -105,7 +105,8 @@ class Ec2LifeCycleHandler(Handler):
                     except:
                         self._logger.warn(sys.exc_info()[1])
         else:
-            system2('mount -a', shell=True, raise_exc=False)
+            if not os_dist.windows_family:
+                system2('mount -a', shell=True, raise_exc=False)
 
 
     def on_reload(self):

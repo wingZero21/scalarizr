@@ -75,7 +75,8 @@ class RabbitMQHandler(ServiceCtlHandler):
         bus.on("host_init_response", self.on_host_init_response)
         bus.on("before_host_up", self.on_before_host_up)
         bus.on("before_hello", self.on_before_hello)
-        bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
+        if bus.event_defined('rebundle_cleanup_image'):
+            bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
         bus.on("before_host_down", self.on_before_host_down)
 
         if 'bootstrapping' == __node__['state']:
@@ -95,7 +96,6 @@ class RabbitMQHandler(ServiceCtlHandler):
 
         elif 'running' == __node__['state']:
             rabbitmq_vol = __rabbitmq__['volume']
-            rabbitmq_vol.tags = self.rabbitmq_tags
 
             if not __rabbitmq__['volume'].mounted_to():
                 self.service.stop()
@@ -268,6 +268,7 @@ class RabbitMQHandler(ServiceCtlHandler):
                     volume_config = rabbitmq_data.pop('volume_config')
                     volume_config['mpoint'] = DEFAULT_STORAGE_PATH
                     rabbitmq_data['volume'] = storage2.volume(volume_config)
+                    rabbitmq_data['volume'].tags = self.rabbitmq_tags
 
                     __rabbitmq__.update(rabbitmq_data)
 

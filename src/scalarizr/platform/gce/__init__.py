@@ -137,14 +137,14 @@ class GoogleServiceManager(object):
 
 
 class GcePlatform(Platform):
+    compute_api_version = 'v1beta15'
     metadata_url = 'http://metadata/computeMetadata/v1beta1/'
     _metadata = None
 
     def __init__(self):
         Platform.__init__(self)
         self.compute_svc_mgr = GoogleServiceManager(
-                self, 'compute', 'v1beta14', *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
-
+                self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
                 self, 'storage', 'v1beta1', *STORAGE_FULL_SCOPE)
 

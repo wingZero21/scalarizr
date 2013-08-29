@@ -271,7 +271,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
         if self._cnf.state in (ScalarizrState.INITIALIZING, ScalarizrState.BOOTSTRAPPING):
             self.mongodb.stop_default_init_script()
-    
+
         if self._cnf.state == ScalarizrState.RUNNING:
             storage_vol = __mongodb__['volume']
             storage_vol.ensure(mount=True)
@@ -321,9 +321,13 @@ class MongoDBHandler(ServiceCtlHandler):
 
                     if 'volume_config' in mongodb_data:
                         __mongodb__['volume'] = storage2.volume(mongodb_data.pop('volume_config'))
+                        if not __mongodb__['volume'].tags:
+                            __mongodb__['volume'].tags = self.mongo_tags
 
-                    if 'snapshot_config' in mongodb_data:
+                    if mongodb_data.get('snapshot_config'):
                         __mongodb__['snapshot'] = storage2.snapshot(mongodb_data.pop('snapshot_config'))
+                        if not __mongodb__['snapshot'].tags:
+                            __mongodb__['snapshot'].tags = self.mongo_tags
 
                     mongodb_key = mongodb_data.pop('keyfile', None)
                     mongodb_key = mongodb_key or cryptotool.pwgen(22)
@@ -1154,16 +1158,16 @@ class MongoDBHandler(ServiceCtlHandler):
         wait_until(lambda: self.mongodb.is_replication_master, sleep=5, logger=self._logger,
                                                 timeout=120, start_text='Wait until node becomes replication primary')
         # Create snapshot
-        self.mongodb.cli.sync(lock=True)
-        try:
-            snap = self._create_snapshot()
-        finally:
-            self.mongodb.cli.unlock()
+        #self.mongodb.cli.sync(lock=True)
+        #try:
+        #    snap = self._create_snapshot()
+        #finally:
+        #    self.mongodb.cli.unlock()
 
-        __mongodb__['snapshot'] = snap
+        #__mongodb__['snapshot'] = snap
 
         # Update HostInitResponse message 
-        msg_data = self._compat_storage_data(__mongodb__['volume'], snap)
+        msg_data = self._compat_storage_data(__mongodb__['volume'])
         message.mongodb = msg_data.copy()
 
 
@@ -1189,6 +1193,7 @@ class MongoDBHandler(ServiceCtlHandler):
             storage_volume = storage2.volume(type=storage_snap.type, snap=storage_snap)
 
         storage_volume.mpoint = self._storage_path
+        storage_volume.tags = self.mongo_tags
         storage_volume.ensure(mount=True, mkfs=True)
 
         if storage_snap is not None:
@@ -1271,13 +1276,12 @@ class MongoDBHandler(ServiceCtlHandler):
 
         self.plug_storage()
         storage_vol = __mongodb__['volume']
+        first_start = not self._storage_valid()
 
         self.mongodb.stop_default_init_script()
         self.mongodb.prepare(rs_name)
         self.mongodb.start_shardsvr()
 
-        
-        first_start = not self._storage_valid()
         self.mongodb.auth = True
 
         if not first_start:
@@ -1320,6 +1324,7 @@ class MongoDBHandler(ServiceCtlHandler):
                                 snap_cnf = msg.mongodb.snapshot_config.copy()
                                 new_volume = storage2.volume(type=snap_cnf['type'], mpoint=self._storage_path,
                                                                         snap=snap_cnf)
+                                new_volume.tags = self.mongo_tags
                                 new_volume.ensure(mount=True)
 
                                 self.mongodb.start_shardsvr()

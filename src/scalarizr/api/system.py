@@ -7,15 +7,18 @@ Created on Nov 25, 2011
 Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(chef)
 '''
 
-from __future__ import with_statement
 
 import os
-import logging
-import sys
 import glob
+import logging
+import platform
+import threading
+import sys
 import time
 import signal
 import binascii
+import weakref
+import functools
 import subprocess as subps
 
 from multiprocessing import pool
@@ -26,9 +29,12 @@ from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
 from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
-from scalarizr.handlers.script_executor import logs_dir, logs_truncate_over
+from scalarizr.handlers.script_executor import logs_dir
 
 LOG = logging.getLogger(__name__)
+
+
+max_log_size = 5*1024*1024
 
 
 class _ScalingMetricStrategy(object):
@@ -40,8 +46,8 @@ class _ScalingMetricStrategy(object):
             raise BaseException("File is not executable: '%s'" % metric.path)
   
         exec_timeout = 3
-  
-        proc = subps.Popen(metric.path, stdout=subps.PIPE, stderr=subps.PIPE, close_fds=True)
+        close_fds = not linux.os.windows_family
+        proc = subps.Popen(metric.path, stdout=subps.PIPE, stderr=subps.PIPE, close_fds=close_fds)
  
         timeout_time = time.time() + exec_timeout
         while time.time() < timeout_time:
@@ -63,7 +69,7 @@ class _ScalingMetricStrategy(object):
         if proc.returncode > 0:
             raise BaseException(stderr if stderr else 'exitcode: %d' % proc.returncode)
         
-        return stdout
+        return stdout.strip()
   
   
     @staticmethod
@@ -74,7 +80,7 @@ class _ScalingMetricStrategy(object):
         except IOError:
             raise BaseException("File is not readable: '%s'" % metric.path)
   
-        return value
+        return value.strip()
 
 
     @staticmethod
@@ -179,7 +185,7 @@ class SystemAPI(object):
         '''
         Block devices list
         @return: List of block devices including ramX and loopX
-        @rtype: list 
+        @rtype: list
         '''
 
         lines = self._readlines(self._DISKSTATS)
@@ -290,6 +296,7 @@ class SystemAPI(object):
 
     @rpc.service_method
     def cpu_stat(self):
+
         '''
         Return CPU stat from /proc/stat
         @rtype: dict
@@ -470,10 +477,14 @@ class SystemAPI(object):
 
         # Obtain scaling metrics from Scalr.
         scaling_metrics = bus.queryenv_service.get_scaling_metrics()
-        
-        max_threads = 10
-        wrk_pool = pool.ThreadPool(processes=max_threads)
+        if not scaling_metrics:
+            return []
 
+        if not hasattr(threading.current_thread(), '_children'):
+            threading.current_thread()._children = weakref.WeakKeyDictionary()
+
+        wrk_pool = pool.ThreadPool(processes=10)
+        
         try:
             return wrk_pool.map_async(_ScalingMetricStrategy.get, scaling_metrics).get()
         finally:
@@ -482,32 +493,180 @@ class SystemAPI(object):
 
 
     @rpc.service_method
-    def exec_script_logs(self, exec_script_id):
+    def get_script_logs(self, exec_script_id, maxsize=max_log_size):
         '''
         :return: out and err logs
         :rtype: dict(stdout: base64encoded, stderr: base64encoded)
         '''
-        stdout_path = os.path.join(logs_dir, '%s-out.log' % exec_script_id)
-        stderr_path = os.path.join(logs_dir, '%s-err.log' % exec_script_id)
+        stdout_match = glob.glob(os.path.join(logs_dir, '*%s-out.log' % exec_script_id))
+        stderr_match = glob.glob(os.path.join(logs_dir, '*%s-err.log' % exec_script_id))
 
-        if not os.path.exists(stdout_path):
-            raise BaseException('Scripting log %s not found' % stdout_path)
-        if not os.path.exists(stderr_path):
-            raise BaseException('Scripting error log %s not found' % stderr_path)
-
-        stdout=binascii.b2a_base64(get_truncated_log(stdout_path))
-        stderr=binascii.b2a_base64(get_truncated_log(stderr_path))
+        if not stdout_match:
+            stdout = binascii.b2a_base64(u'log file not found')
+        else:
+            stdout_path = stdout_match[0]
+            stdout = binascii.b2a_base64(_get_log(stdout_path))
+        if not stderr_match:
+            stderr = binascii.b2a_base64(u'errlog file not found')
+        else:
+            stderr_path = stderr_match[0]
+            stderr = binascii.b2a_base64(_get_log(stderr_path))
 
         return dict(stdout=stdout, stderr=stderr)
 
 
-def get_truncated_log(logfile, maxsize=None):
-    maxsize = maxsize or logs_truncate_over
-    f = open(logfile, "r")
+def _get_log(logfile, maxsize=max_log_size):
+    if (os.path.getsize(logfile) > maxsize):
+        return u'Unable to fetch Log file %s: file is larger than %s bytes' % (logfile, maxsize)
     try:
-        ret = unicode(f.read(int(maxsize)), 'utf-8')
-        if (os.path.getsize(logfile) > maxsize):
-            ret += u"... Truncated. See the full log in " + logfile.encode('utf-8')
-        return ret.encode('utf-8')
-    finally:
-        f.close()
+        with open(logfile, "r") as fp:
+            ret = unicode(fp.read(int(maxsize)), 'utf-8')
+            return ret.encode('utf-8')
+    except IOError:
+        return u'Log file %s is not readable' % logfile
+
+
+if linux.os.windows_family:
+
+    import pythoncom
+    from win32com import client
+
+    def coinitialized(fn):
+        @functools.wraps(fn)
+        def decorator(*args, **kwargs):
+            pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                pythoncom.CoUninitialize()
+        return decorator
+
+
+    class WindowsSystemAPI(SystemAPI):
+
+        @coinitialized
+        @rpc.service_method
+        def disk_stats(self):
+            wmi = client.GetObject('winmgmts:')
+
+            res = dict()
+            for disk in wmi.InstancesOf('Win32_PerfRawData_PerfDisk_LogicalDisk'):
+                # Skip Total
+                if disk.Name == '_Total':
+                    continue
+
+                res[disk.Name] = dict(
+                    read=dict(
+                        bytes=int(disk.AvgDiskBytesPerRead)
+                    ),
+                    write=dict(
+                        bytes=int(disk.AvgDiskBytesPerWrite)
+                    )
+                )
+            return res
+
+        @coinitialized
+        @rpc.service_method
+        def block_devices(self):
+            wmi = client.GetObject('winmgmts:')
+
+            res = list()
+            for disk in wmi.InstancesOf('Win32_PerfRawData_PerfDisk_LogicalDisk'):
+                if disk.Name == '_Total':
+                    continue
+                res.append(disk.Name)
+            return res
+
+        @coinitialized
+        @rpc.service_method
+        def dist(self):
+            uname = platform.uname()
+            return dict(system=uname[0], release=uname[2], version=uname[3])
+
+        @coinitialized
+        @rpc.service_method
+        def net_stats(self):
+            wmi = client.GetObject('winmgmts:')
+
+            res = dict()
+            for iface in wmi.InstancesOf('Win32_PerfRawData_Tcpip_NetworkInterface'):
+                if iface.Name == '_Total':
+                    continue
+
+                res[iface.Name] = dict(
+                    receive=dict(
+                        bytes=int(iface.Properties_['BytesReceivedPersec']),
+                        packets=int(iface.Properties_['PacketsReceivedPersec']),
+                        errors=int(iface.Properties_['PacketsReceivedErrors'])
+                    ),
+                    transmit=dict(
+                        bytes=int(iface.Properties_['BytesSentPersec']),
+                        packets=int(iface.Properties_['PacketsSentPersec']),
+                        errors=int(iface.Properties_['PacketsOutboundErrors'])
+                    )
+                )
+            return res
+
+        @rpc.service_method
+        def load_average(self):
+            raise Exception('Not available on windows platform')
+
+        @rpc.service_method
+        def uname(self):
+            uname = platform.uname()
+            return dict(zip(
+                ('system', 'node', 'release', 'version', 'machine', 'processor'), uname
+            ))
+
+        @coinitialized
+        @rpc.service_method
+        def cpu_stat(self):
+            wmi = client.GetObject('winmgmts:')
+
+            processors = wmi.InstancesOf('Win32_Processor')
+            avg_percentage = float(sum([cpu.LoadPercentage for cpu in processors])) / len(processors)
+
+            return {
+                'user': avg_percentage,
+                'system': 0,
+                'idle': 100 - avg_percentage,
+                'nice': 0
+            }
+
+        @coinitialized
+        @rpc.service_method
+        def mem_info(self):
+            wmi = client.GetObject('winmgmts:')
+
+            meminfo = wmi.InstancesOf('Win32_PerfFormattedData_PerfOS_Memory')[0]
+            sysinfo = wmi.InstancesOf('Win32_ComputerSystem')[0]
+            return {
+                'total_swap': int(meminfo.CommitLimit) / 1024,
+                'avail_swap': (int(meminfo.CommitLimit) - int(meminfo.CommittedBytes)) / 1024,
+                'total_real': int(sysinfo.Properties_('totalphysicalmemory')) / 1024,
+                'total_free': int(meminfo.Properties_('AvailableKBytes'))
+            }
+
+        @coinitialized
+        @rpc.service_method
+        def statvfs(self, mpoints=None):
+            wmi = client.GetObject('winmgmts:')
+
+            # mpoints == disks letters on Windows
+            mpoints = map(lambda s: s[0].lower(), mpoints)
+            if not isinstance(mpoints, list):
+                raise Exception('Argument "mpoints" should be a list of strings, '
+                            'not %s' % type(mpoints))
+
+            ret = dict()
+            for disk in wmi.InstancesOf('Win32_LogicalDisk'):
+                letter = disk.DeviceId[0].lower()
+                if letter in mpoints:
+                    ret[letter] = dict(
+                        total=int(disk.Size),
+                        free=int(disk.FreeSpace)
+                    )
+            return ret
+
+    SystemAPI = WindowsSystemAPI
+

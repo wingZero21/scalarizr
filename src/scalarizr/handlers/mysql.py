@@ -683,7 +683,6 @@ class MysqlHandler(ServiceCtlHandler):
         elif self._cnf.state == ScalarizrState.RUNNING:
             # Creating self.storage_vol object from configuration
             storage_conf = Storage.restore_config(self._volume_config_path)
-            storage_conf['tags'] = self.mysql_tags
             self.storage_vol = Storage.create(storage_conf)
             if not self.storage_vol.mounted():
                 if not os.path.exists(self.storage_vol.mpoint):
