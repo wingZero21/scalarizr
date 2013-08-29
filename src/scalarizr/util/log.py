@@ -6,6 +6,7 @@ Created on 22.01.2010
 '''
 
 import logging
+import logging.handlers
 import os
 
 from scalarizr import linux
