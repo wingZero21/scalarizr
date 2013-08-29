@@ -14,13 +14,13 @@ import platform
 import sys
 import struct
 import array
-
-
 import ConfigParser
 
 from scalarizr.bus import bus
-from scalarizr.linux import os as os_dist
-if os_dist['family'] != 'Windows':
+from scalarizr import linux
+if linux.os.windows_family:
+    import win32com.client
+else:
     import fcntl
 
 
@@ -119,7 +119,7 @@ class Platform():
         """
         if self._arch is None:
 
-            if os_dist['family'] == 'Windows':
+            if linux.os.windows_family:
                 if '32' in platform.architecture()[0]:
                     self._arch = Architectures.I386
                 else:
@@ -296,25 +296,40 @@ class Architectures:
     UNKNOWN = "unknown"
 
 
-def net_interfaces():
-    # http://code.activestate.com/recipes/439093-get-names-of-all-up-network-interfaces-linux-only/#c7
-    is_64bits = sys.maxsize > 2**32
-    struct_size = 40 if is_64bits else 32
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    max_possible = 8 # initial value
-    while True:
-        num_bytes = max_possible * struct_size
-        names = array.array('B', '\0' * num_bytes)
-        outbytes = struct.unpack('iL', fcntl.ioctl(
-            s.fileno(),
-            0x8912,  # SIOCGIFCONF
-            struct.pack('iL', num_bytes, names.buffer_info()[0])
-        ))[0]
-        if outbytes == num_bytes:
-            max_possible *= 2
-        else:
-            break
-    namestr = names.tostring()
-    return dict([(namestr[i:i+16].split('\0', 1)[0],
-            socket.inet_ntoa(namestr[i+20:i+24]))
-            for i in range(0, outbytes, struct_size)])
+if linux.os.windows_family:
+    def new_interfaces():
+        wmi = win32com.client.GetObject('winmgmts:')
+        wql = "SELECT IPAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = 'True'"
+        result = wmi.ExecQuery(wql)
+        return list({
+                'iface': None,
+                'ipv4': row[0],
+                'ipv6': row[1] if len(row) > 1 else None
+                } for row in result)
+ 
+else:
+    def net_interfaces():
+        # http://code.activestate.com/recipes/439093-get-names-of-all-up-network-interfaces-linux-only/#c7
+        is_64bits = sys.maxsize > 2**32
+        struct_size = 40 if is_64bits else 32
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        max_possible = 8 # initial value
+        while True:
+            num_bytes = max_possible * struct_size
+            names = array.array('B', '\0' * num_bytes)
+            outbytes = struct.unpack('iL', fcntl.ioctl(
+                s.fileno(),
+                0x8912,  # SIOCGIFCONF
+                struct.pack('iL', num_bytes, names.buffer_info()[0])
+            ))[0]
+            if outbytes == num_bytes:
+                max_possible *= 2
+            else:
+                break
+        namestr = names.tostring()
+        return list({
+                'iface': namestr[i:i+16].split('\0', 1)[0],
+                'ipv4': socket.inet_ntoa(namestr[i+20:i+24]),
+                'ipv6': None
+                } for i in range(0, outbytes, struct_size))
+
