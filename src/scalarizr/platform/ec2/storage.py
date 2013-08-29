@@ -8,6 +8,7 @@ Created on Nov 24, 2010
 from __future__ import with_statement
 
 from scalarizr.bus import bus
+from scalarizr.platform import PlatformError
 from scalarizr.storage import Storage, Volume, VolumeProvider, StorageError, devname_not_empty, \
         VolumeConfig, Snapshot
 from scalarizr.storage.transfer import TransferProvider, TransferError
@@ -47,7 +48,7 @@ class EbsSnapshot(Snapshot, EbsConfig):
         try:
             pl = bus.platform
             conn = pl.new_ec2_conn()
-        except AttributeError:
+        except:
             pass
         else:
             conn.delete_snapshot(self.id)
@@ -82,7 +83,7 @@ class EbsVolumeProvider(VolumeProvider):
             pl = bus.platform
             return pl.new_ec2_conn()
         except:
-            if sys.exc_type.__name__ not in ('AttributeError', 'NoAuthHandlerFound'):
+            if sys.exc_type.__name__ not in ('AttributeError', 'NoAuthHandlerFound', 'PlatformError'):
                 raise
         return None
 
