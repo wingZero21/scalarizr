@@ -513,6 +513,9 @@ class ApacheHandler(ServiceCtlHandler):
             if disttool.is_debian_based():
                 with open(logrotate_conf_path, 'w') as fp:
                     fp.write(LOGROTATE_CONF_DEB_RAW)
+            elif disttool.is_centos() and disttool.version_info()[0] == 5:
+                self._logger.debug('Centos 5.x already has sufficient logrotate config.')
+                pass
             else:
                 with open(logrotate_conf_path, 'w') as fp:
                     fp.write(LOGROTATE_CONF_REDHAT_RAW)
