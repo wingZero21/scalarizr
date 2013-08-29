@@ -435,12 +435,9 @@ class Script(object):
                             self.return_code,
                             elapsed_time)
 
-            if not self.execution_id:
-                stdout=None
-                stderr=None
-            else:
-                stdout=binascii.b2a_base64(get_truncated_log(self.stdout_path))
-                stderr=binascii.b2a_base64(get_truncated_log(self.stderr_path))
+            # always send stdout/stderr (by ent client request) 
+            stdout=binascii.b2a_base64(get_truncated_log(self.stdout_path))
+            stderr=binascii.b2a_base64(get_truncated_log(self.stderr_path))
             ret = dict(
                     stdout=stdout,
                     stderr=stderr,
