@@ -7,8 +7,10 @@ Created on Dec 5, 2009
 from __future__ import with_statement
 
 import logging
+import time
 import threading
 import copy
+import sys
 
 from scalarizr.bus import bus
 from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingError
@@ -179,7 +181,18 @@ class _P2pMessageStore:
             filter_fn = lambda x: x[1].id != message_id
             self._unhandled = filter(filter_fn, self._unhandled_messages)
 
-        msg = self.load(message_id, True)
+        for _ in xrange(0, 5):
+            try:
+                msg = self.load(message_id, True)
+                break
+            except:
+                self._logger.debug('Failed to load message %s', message_id, exc_info=sys.exc_info())
+                time.sleep(1)
+        else:
+            self._logger.debug("Cant load message in several attempts, assume it doesn't exists. Leaving")
+            return
+
+
         if 'platform_access_data' in msg.body:
             del msg.body['platform_access_data']
         msg_s = msg.tojson().decode('utf-8')
