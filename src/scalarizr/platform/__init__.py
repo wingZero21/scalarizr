@@ -297,14 +297,14 @@ class Architectures:
 
 
 if linux.os.windows_family:
-    def new_interfaces():
+    def net_interfaces():
         wmi = win32com.client.GetObject('winmgmts:')
         wql = "SELECT IPAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = 'True'"
         result = wmi.ExecQuery(wql)
         return list({
                 'iface': None,
-                'ipv4': row[0],
-                'ipv6': row[1] if len(row) > 1 else None
+                'ipv4': row.IPAddress[0],
+                'ipv6': row.IPAddress[1] if len(row.IPAddress) > 1 else None
                 } for row in result)
  
 else:
