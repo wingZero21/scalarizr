@@ -1,10 +1,6 @@
-from __future__ import with_statement
 
 import sys
 import urllib2
-if sys.version_info < (2, 6):
-    from scalarizr.util import compat
-    compat.patch()
 
 # Core
 from scalarizr import config, rpc, linux
@@ -81,19 +77,19 @@ LOGGING_CONFIG = r'''
 keys=root,scalarizr
 
 [handlers]
-keys=console,user_log,debug_log,scalr
+keys=console,user_log,debug_log
 
 [formatters]
 keys=debug,user
 
 [logger_root]
 level=DEBUG
-handlers=console,user_log,debug_log,scalr
+handlers=console,user_log,debug_log
 
 [logger_scalarizr]
 level=DEBUG
 qualname=scalarizr
-handlers=console,user_log,debug_log,scalr
+handlers=console,user_log,debug_log
 propagate=0
 
 [handler_console]
@@ -113,11 +109,6 @@ class=scalarizr.util.log.RotatingFileHandler
 level=DEBUG
 formatter=debug
 args=(r'LOG_DEBUG_PATH', 'a+', 5242880, 5, 0600)
-
-[handler_scalr]
-class=scalarizr.util.log.MessagingHandler
-level=INFO
-args=(20, "30s")
 
 [formatter_debug]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
@@ -307,12 +298,6 @@ def _create_db(db_file=None, script_file=None):
 
 def _init_logging():
     optparser = bus.optparser
-    
-    # Configure logging
-    if sys.version_info < (2,6):
-        # Fix logging handler resolve for python 2.5
-        from scalarizr.util.log import fix_py25_handler_resolving        
-        fix_py25_handler_resolving()
     
     #logging.config.dictConfig(LOGGING_CONFIG)
     logging.config.fileConfig(cStringIO.StringIO(LOGGING_CONFIG))
