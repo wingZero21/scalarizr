@@ -26,9 +26,11 @@ class OpenstackRebundleWindowsHandler(handlers.Handler):
 
     def on_Win_PrepareBundle(self, message):
         try:
-            shutil.copy(r'C:\Windows\System32\sysprep\RunSysprep_2.cmd', r'C:\windows\system32\sysprep\RunSysprep.cmd')
-            shutil.copy(r'C:\Windows\System32\sysprep\SetupComplete_2.cmd', r'C:\windows\setup\scripts\SetupComplete.cmd')
-            linux.system((r'C:\windows\system32\sysprep\RunSysprep.cmd', ))
+            # XXX: server is terminated during sysprep.
+            # we should better understand how it works
+            #shutil.copy(r'C:\Windows\System32\sysprep\RunSysprep_2.cmd', r'C:\windows\system32\sysprep\RunSysprep.cmd')
+            #shutil.copy(r'C:\Windows\System32\sysprep\SetupComplete_2.cmd', r'C:\windows\setup\scripts\SetupComplete.cmd')
+            #linux.system((r'C:\windows\system32\sysprep\RunSysprep.cmd', ))
 
             result = dict(
                 status = "ok",
