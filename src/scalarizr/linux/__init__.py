@@ -30,7 +30,7 @@ def which(exe):
 def system(*args, **kwds):
     args = list(args)
     kwds['exc_class'] = LinuxError
-    kwds['close_fds'] = True
+    kwds['close_fds'] = system.close_fds
     if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
         executable = which(args[0][0])
         if not executable:
@@ -39,6 +39,7 @@ def system(*args, **kwds):
         args[0] = list(args[0])
         args[0][0] = executable
     return util.system2(*args, **kwds)
+system.close_fds = platform.uname()[0].lower() != 'windows'
 
 
 class Version(distutils.version.LooseVersion):
