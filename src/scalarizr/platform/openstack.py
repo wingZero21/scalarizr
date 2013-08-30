@@ -274,33 +274,31 @@ class OpenStackCredentialsLoggerFilter(object):
     response_re = re.compile('(.*)({["\']access.+})(.*)')
 
     def filter(self, record):
-        if not any(map(lambda x: x in record.name),
-                                ):
+        message = record.getMessage()
+        record.args = ()
+
+        if "passwordCredentials" in message:
+            record.msg = 'Requested authentication, credentials are hidden'
             return True
 
-        if "passwordCredentials" in record.message:
-            record.message = 'Requested authentication, credentials are hidden'
-            return True
-
-        search_res = re.search(self.response_re, record.message)
+        search_res = re.search(self.response_re, message)
         if search_res:
-            try:                
+            try:
                 response_part_str = search_res.group(2)
                 response = json.loads(response_part_str)
                 response['access']['token'] = '<HIDDEN>'
                 response['access']['user'] = '<HIDDEN>'
                 altered_resp = json.dumps(response)
-                record.message = search_res.group(1) + altered_resp + search_res.group(3)
+                record.msg = search_res.group(1) + altered_resp + search_res.group(3)
                 return True
             except:
                 return False
 
-        if "X-Auth" in record.message:
-            record.message = re.sub(self.request_re, r'\1 <HIDDEN>', record.message)
+        if "X-Auth" in message:
+            record.msg = re.sub(self.request_re, r'\1 <HIDDEN>', message)
             return True
 
 openstack_filter = OpenStackCredentialsLoggerFilter()
 for logger_name in ('keystoneclient', 'novaclient', 'cinderclient'):
-    logger = logging.getLogger(logger_name)
+    logger = logging.getLogger('%s.client' % logger_name)
     logger.addFilter(openstack_filter)
-
