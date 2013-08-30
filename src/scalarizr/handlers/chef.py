@@ -252,7 +252,7 @@ class ChefHandler(Handler):
             close_fds=not linux.os.windows_family,
             log_level=logging.INFO,
             preexec_fn=not linux.os.windows_family and os.setsid or None,
-            env=environ
+            env=self._environ_variables
         )
 
     @property
