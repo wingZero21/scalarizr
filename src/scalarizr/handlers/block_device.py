@@ -82,6 +82,8 @@ class BlockDeviceHandler(handlers.Handler):
                 vol.ensure(mount=bool(vol.mpoint))
 
     def on_before_host_init(self, *args, **kwargs):
+        if linux.os.windows_family:
+            return
         LOG.debug("Adding udev rule for EBS devices")
         try:
             cnf = bus.cnf

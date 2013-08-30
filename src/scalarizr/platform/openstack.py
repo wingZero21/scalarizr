@@ -13,6 +13,7 @@ import swiftclient
 
 from scalarizr import platform
 from scalarizr.bus import bus
+from scalarizr import linux
 from scalarizr.storage.transfer import Transfer, TransferProvider
 from scalarizr.storage2.cloudfs import swift as swiftcloudfs
 
@@ -84,15 +85,16 @@ class OpenstackPlatform(platform.Platform):
 
     def __init__(self):
         platform.Platform.__init__(self)
-        # Work over [Errno -3] Temporary failure in name resolution
-        # http://bugs.centos.org/view.php?id=4814
-        os.chmod('/etc/resolv.conf', 0755)
+        if not linux.os.windows_family:
+            # Work over [Errno -3] Temporary failure in name resolution
+            # http://bugs.centos.org/view.php?id=4814
+            os.chmod('/etc/resolv.conf', 0755)
 
     def get_private_ip(self):
         if self._private_ip is None:
-            for iface, ipv4 in platform.net_interfaces().items():
-                if ipv4.startswith('10.') or ipv4.startswith('172.'):
-                    self._private_ip = ipv4
+            for iface in platform.net_interfaces():
+                if iface['ipv4'].startswith('10.') or iface['ipv4'].startswith('172.'):
+                    self._private_ip = iface['ipv4']
                     break
 
         return self._private_ip
