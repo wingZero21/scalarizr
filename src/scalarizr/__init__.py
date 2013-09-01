@@ -648,13 +648,11 @@ class Service(object):
                 udfile = cnf.private_path('.user-data')
                 wait_until(lambda: os.path.exists(udfile),
                         timeout=60, error_text="User-data file %s doesn't exist" % udfile)
-            try:
+            
+            if cnf.state != ScalarizrState.IMPORTING:
                 ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
-            except:
-                if cnf.state == ScalarizrState.IMPORTING:
-                    ud_server_id = None
-                else:
-                    raise
+            else:
+                ud_server_id = None
 
             if server_id and ud_server_id and server_id != ud_server_id:
                 self._logger.info('Server was started after rebundle. Performing some cleanups')

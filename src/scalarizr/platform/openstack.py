@@ -1,8 +1,9 @@
+import logging
 import urllib2
 import json
 import os
-import logging
 import re
+import sys
 from time import sleep
 
 
@@ -154,16 +155,15 @@ class OpenstackPlatform(platform.Platform):
             r = urllib2.urlopen(url)
             response = r.read().strip()
             return json.loads(response)
-        except IOError, e:
-            urllib_error = isinstance(e, urllib2.HTTPError) or \
-                isinstance(e, urllib2.URLError)
-            if urllib_error:
-                metadata = self._fetch_metadata_from_file()
-                # TODO: move some keys from metadata to parent dict,
-                # that should be there when fetching from url
-                return {'meta': metadata}
-            raise platform.PlatformError("Cannot fetch %s metadata url '%s'. "
-                                         "Error: %s" % (self.name, url, e))
+        except urllib2.URLError:
+            # TODO: move some keys from metadata to parent dict,
+            # that should be there when fetching from url
+            metadata = self._fetch_metadata_from_file()
+            return {'meta': metadata}
+        except:
+            msg = "Can't fetch %s metadata URL %s. Error: %s".format(
+                    self.name, url, sys.exc_info()[1])
+            raise platform.PlatformError(msg)
 
     def _fetch_metadata_from_file(self):
         cnf = bus.cnf
