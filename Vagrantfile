@@ -2,7 +2,7 @@
 # vi: set ft=ruby :
 
 boxes = {
-  "ubuntu" => "ubuntu1204",
+  "ubuntu" => "ubuntu-12.04",
   "centos" => "centos63",
   "centos5" => "centos59",
   "debian" => "debian6",
