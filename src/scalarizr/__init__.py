@@ -649,6 +649,8 @@ class Service(object):
                 wait_until(lambda: os.path.exists(udfile),
                         timeout=60, error_text="User-data file %s doesn't exist" % udfile)
             
+            # When server bundled by Scalr, often new server are spawned in "importing" state
+            # and its important to query user-data first, to override server-id that was bundled.
             try:
                 ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
             except:
@@ -656,7 +658,7 @@ class Service(object):
                     ud_server_id = None
                 else:
                     raise
-                    
+
             if server_id and ud_server_id and server_id != ud_server_id:
                 self._logger.info('Server was started after rebundle. Performing some cleanups')
                 _cleanup_after_rebundle()
