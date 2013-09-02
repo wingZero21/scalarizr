@@ -405,18 +405,22 @@ class PresetProvider(object):
 
 
     def get_manifest(self, behaviour):
+        result = {}
+        raw = None
         #download manifest
         manifest_url = self.get_manifest_url(behaviour)
-        response = urllib2.urlopen(manifest_url)
-        raw = response.read()
-
-        #parse manifest
-        json_obj = json.loads(raw)
-
-        #return black and white lists of variables for each config
-        result = {}
-        for conf_name, data in json_obj.items():
-            result[conf_name] = dict(include=data['include'], exclude=data['exclude'])
+        try:
+            response = urllib2.urlopen(manifest_url)
+            raw = response.read()
+        except (Exception, BaseException), e:
+            LOG.warning('Unable to fetch manifest: %s' % e)
+        else:
+            if raw:
+                #parse manifest
+                json_obj = json.loads(raw)
+                #return black and white lists of variables for each config
+                for conf_name, data in json_obj.items():
+                    result[conf_name] = dict(include=data['include'], exclude=data['exclude'])
         return result
 
 

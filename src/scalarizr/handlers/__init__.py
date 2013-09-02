@@ -615,9 +615,12 @@ class ServiceCtlHandler(Handler):
                 LOG.debug('list_farm_role_params returned settings: %s' % settings)
             if settings:
                 manifest = self.preset_provider.get_manifest(service_name)
-                LOG.debug('Applying configuration preset')
-                self.preset_provider.set_preset(settings, manifest)
-                LOG.debug('Configuration preset has been successfully applied.')
+                if manifest:
+                    LOG.debug('Applying configuration preset')
+                    self.preset_provider.set_preset(settings, manifest)
+                    LOG.debug('Configuration preset has been successfully applied.')
+                else:
+                    LOG.WARNING('Cannot apply preset: Manifest not found.')
 
         else:
 
