@@ -3,10 +3,12 @@
 
 boxes = {
   "ubuntu" => "ubuntu-12.04",
-  "centos" => "centos63",
-  "centos5" => "centos59",
-  "debian" => "debian6",
-  "amzn" => "amzn1303"
+  "ubuntu1004" => "ubuntu-10.04",
+  "centos" => "centos-6.4",
+  "centos5" => "centos-5.9",
+  "debian" => "debian-6",
+  "amzn" => "amzn-13.03",
+  "windows" => "windows-2008r2"
 }
 
 Vagrant.configure("2") do |config|
