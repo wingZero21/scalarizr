@@ -139,6 +139,7 @@ class CSVolume(base.Volume):
             if self._native_vol.virtualmachineid == __cloudstack__['instance_id']:
                 LOG.debug('Volume %s is attached to this instance', self.id)
                 return
+            self.device = None  # Volume will have a new device name
 
             LOG.warning('Volume %s is not available. '
                         'It is attached to different instance %s. '
@@ -161,8 +162,9 @@ class CSVolume(base.Volume):
         with self._free_device_letter_mgr:
             letter = self._free_device_letter_mgr.get()
             devname = get_system_devname(letter)
-            self._attach(__cloudstack__['instance_id'],
-                         devname_to_deviceid(devname))
+            return self._attach(__cloudstack__['instance_id'],
+                         devname_to_deviceid(devname))[1]
+
 
     def _ensure(self):
         self._native_vol = None
@@ -179,11 +181,26 @@ class CSVolume(base.Volume):
 
                 if self.id:
                     LOG.debug('Volume %s has been already created', self.id)
-                    vol_list = self._conn.listVolumes(id=self.id)
-                    if len(vol_list) == 0:
-                        raise storage2.VolumeNotExistsError(self.id)
+                    try:
+                        LOG.debug('XXX: Volumes attached to terminated instances ' \
+                                'are not visible in listVolumes view. ' \
+                                'Calling detachVolume to force volume be visibile')
+                        self._conn.detachVolume(id=self.id)
+                    except Exception, e:
+                        if 'does not exist' in str(e):
+                            raise storage2.VolumeNotExistsError(self.id)
+                        # pass other errors
+
+                    try:
+                        vol_list = self._conn.listVolumes(id=self.id)
+                    except:
+                        if 'Expected list, got null' in str(sys.exc_info()[1]):
+                            raise storage2.VolumeNotExistsError(self.id)
+                    else:
+                        if len(vol_list) == 0:
+                            raise storage2.VolumeNotExistsError(self.id)
                     self._native_vol = vol_list[0]
-                    self._check_attachement()                    
+                    devname = self._check_attachement()                    
 
                 if not self.id:
                     LOG.debug('Creating new volume')
@@ -207,6 +224,8 @@ class CSVolume(base.Volume):
                         devname = self._attach(__cloudstack__['instance_id'],
                                      devname_to_deviceid(devname))[1]
                         self._native_vol = self._conn.listVolumes(id=self.id)[0]
+            except storage2.StorageError:
+                raise
             except:
                 exc_type, exc_value, exc_trace = sys.exc_info()
                 if self._native_vol:
@@ -370,12 +389,16 @@ class CSVolume(base.Volume):
         volume_id = self.id or self._native_vol.id
 
         # Remove volume from SCSI host
-        if self.device:
-            LOG.debug('Removing device from SCSI host')
-            scsi = coreutils.lsscsi()[self.device]
-            name = '/sys/class/scsi_host/host{host}/device/target{host}:{bus}:{target}/{host}:{bus}:{target}:{lun}/delete'.format(**scsi)
-            with open(name, 'w') as fp:
-                fp.write('1')
+        if self.device and \
+            ((self._native_vol and self._native_vol.virtualmachineid == __cloudstack__['instance_id']) or \
+                not self._native_vol):
+            if linux.which('lsscsi'):
+                scsi = coreutils.lsscsi().get(self.device)
+                if scsi:
+                    LOG.debug('Removing device from SCSI host')
+                    name = '/sys/class/scsi_host/host{host}/device/target{host}:{bus}:{target}/{host}:{bus}:{target}:{lun}/delete'.format(**scsi)
+                    with open(name, 'w') as fp:
+                        fp.write('1')
 
         LOG.debug('Detaching volume %s', volume_id)
         try:

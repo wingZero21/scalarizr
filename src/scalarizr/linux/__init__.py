@@ -54,7 +54,8 @@ class __os(dict):
     def __init__(self, *args, **kwds):
         dict.__init__(self, *args, **kwds)
         self._detect_dist()
-        self._detect_kernel()
+        if not self['family'] == 'Windows':
+            self._detect_kernel()
 
 
     def __getattr__(self, name):
@@ -65,7 +66,16 @@ class __os(dict):
             return self['name'].lower() == name
 
     def _detect_dist(self):
-        if osmod.path.isfile('/etc/lsb-release'):
+        # Detect windows
+        _uname = platform.uname()
+        if _uname[0].lower() == 'windows':
+            win32_ver = platform.win32_ver()
+            self['family'] = 'Windows'
+            self['name'] = 'Windows'
+            self['release'] = win32_ver[1]
+            self['codename'] = win32_ver[0]
+
+        elif osmod.path.isfile('/etc/lsb-release'):
             for line in open('/etc/lsb-release').readlines():
                 # Matches any possible format:
                 #     DISTRIB_ID="Ubuntu"
@@ -217,7 +227,8 @@ ubuntu_release_to_codename = {
         '11.10': 'oneiric',
         '12.04': 'precise',
         '12.10': 'quantal',
-        '13.04': 'raring'
+        '13.04': 'raring',
+        '13.10': 'saucy'
 }
 
 def build_cmd_args(executable=None,

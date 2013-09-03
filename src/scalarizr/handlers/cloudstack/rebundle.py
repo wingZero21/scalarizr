@@ -26,17 +26,11 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
     IMAGE_NAME_MAXLEN = 32
 
     def get_os_type_id(self, conn):
-        default_desc = 'Other Ubuntu (%d-bit)' % disttool.arch_bits()
-        desc = '%s %s (%d-bit)' % (disttool.linux_dist()[0],
-                                                        disttool.linux_dist()[1],
-                                                        disttool.arch_bits())
-        default = 0
-        for ostype in conn.listOsTypes():
-            if ostype.description == default_desc:
-                default = ostype.id
-            elif ostype.description == desc:
-                return ostype.id
-        return default
+        pl = bus.platform
+        vm = conn.listVirtualMachines(id=pl.get_instance_id())[0]
+        tpl = conn.listTemplates('self', id=vm.templateid)[0]
+        return tpl.ostypeid
+
 
     def rebundle(self):
         now = time.strftime('%Y%m%d%H%M%S')

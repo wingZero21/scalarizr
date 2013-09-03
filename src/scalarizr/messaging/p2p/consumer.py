@@ -112,7 +112,7 @@ class P2pMessageConsumer(MessageConsumer):
                     return
 
                 try:
-                    logger.debug("Decoding message: %s", rawmsg)
+                    #logger.debug("Decoding message: %s", rawmsg)
                     message = P2pMessage()
 
                     mime_type = self.headers.get('Content-Type', 'application/xml')
@@ -121,6 +121,14 @@ class P2pMessageConsumer(MessageConsumer):
                         message.fromjson(rawmsg)
                     else:
                         message.fromxml(rawmsg)
+
+                    # Create a message copy to log it without platform_access_data and with pretty identation  
+                    msg_copy = P2pMessage(message.name, message.meta.copy(), message.body.copy())
+                    msg_copy.id = message.id
+                    if 'platform_access_data' in msg_copy.body:
+                        del msg_copy.body['platform_access_data']
+                    logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
+
 
                 except (BaseException, Exception), e:
                     err = "Cannot decode message. error: %s; raw message: %s" % (str(e), rawmsg)

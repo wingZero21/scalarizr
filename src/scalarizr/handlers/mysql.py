@@ -15,7 +15,7 @@ from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.messaging import Messages
-from scalarizr.handlers import HandlerError, ServiceCtlHandler, prepare_tags
+from scalarizr.handlers import HandlerError, ServiceCtlHandler, build_tags
 from scalarizr.platform import UserDataOptions
 
 # Libs
@@ -683,7 +683,6 @@ class MysqlHandler(ServiceCtlHandler):
         elif self._cnf.state == ScalarizrState.RUNNING:
             # Creating self.storage_vol object from configuration
             storage_conf = Storage.restore_config(self._volume_config_path)
-            storage_conf['tags'] = self.mysql_tags
             self.storage_vol = Storage.create(storage_conf)
             if not self.storage_vol.mounted():
                 if not os.path.exists(self.storage_vol.mpoint):
@@ -1533,7 +1532,8 @@ class MysqlHandler(ServiceCtlHandler):
     @property
     def mysql_tags(self):
         is_master = bool(int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]))
-        return prepare_tags(BEHAVIOUR, db_replication_role=is_master)
+        purpose = '%s-'%BEHAVIOUR + ('master' if is_master else 'slave')
+        return build_tags(purpose, 'active')
 
 
     def _insert_iptables_rules(self):
