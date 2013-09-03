@@ -243,7 +243,8 @@ class Habibi(object):
             else:
                 LOG.warn('pattern %s doesnt match uuid4', pattern)
         else:
-            return self.servers
+            return [server for server in self.servers 
+                        if server.status != 'pending']
         msg = 'Empty results for search servers by pattern: {0}'.format(pattern)
         raise LookupError(msg)
 
@@ -357,7 +358,11 @@ class Habibi(object):
             msg = Message()
             msg.fromxml(xml_data)
             self.render_html(201)
-            self.habibi.on_message(msg)
+
+            hdlr_thread = threading.Thread(target=self.habibi.on_message, args=(msg, ))
+            hdlr_thread.setDaemon(True)
+            hdlr_thread.start()
+
 
         def do_queryenv(self):
             operation = self.path.rsplit('/', 1)[-1]
@@ -414,6 +419,7 @@ class QueryEnv(object):
         self.fields = fields
         try:
             method_name = operation.replace('-', '_')
+            self.LOG.debug('run %s', operation)
             response = etree.Element('response')
             response.append(getattr(self, method_name)())
             return etree.tostring(response)
