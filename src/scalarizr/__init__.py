@@ -18,8 +18,6 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.api.binding import jsonrpc_http
 
 from scalarizr.linux import pkgmgr
-if not linux.os.windows_family:
-    from scalarizr.snmp.agent import SnmpServer
 
 # Utils
 from scalarizr.util import initdv2, log, PeriodicalExecutor
@@ -215,26 +213,6 @@ def _init():
     
     # Registering in init.d
     initdv2.explore("scalarizr", ScalarizrInitScript)
-
-
-def prepare_snmp():
-    _init()
-    cnf = bus.cnf; ini = cnf.rawini
-    cnf.on('apply_user_data', _apply_user_data)
-    cnf.bootstrap()
-
-    server_id = ini.get('general', 'server_id')
-    queryenv_url = ini.get('general', 'queryenv_url')
-    queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY))
-
-    bus.queryenv_service = queryenv
-
-    snmp_server = SnmpServer(
-        port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
-        security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
-        community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
-    )
-    return snmp_server
     
 
 DB_NAME = 'db.sqlite'
@@ -867,6 +845,8 @@ class Service(object):
                 bus.scalr_version, remove_snmp_since)
             self._snmp_pid = -1
             return
+
+        from scalarizr.snmp.agent import SnmpServer
 
         # Start SNMP server in a separate process
         pid = os.fork()
