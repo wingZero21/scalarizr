@@ -42,8 +42,9 @@ c['builders'].append(dict(
 		#buildsteps.svn(__opts__) +
 		#buildsteps.bump_version(__opts__, setter='cat > src/scalarizr/version') +
 		buildsteps.git(__opts__) +
-                buildsteps.bump_version_for_git(__opts__, setter='cat > src/scalarizr/version') +
+		buildsteps.bump_version_for_git(__opts__, setter='cat > src/scalarizr/version') +
 		buildsteps.source_dist(__opts__) +
+		buildsteps.trigger_tests(__opts__) +
 		buildsteps.trigger_packaging(__opts__) + 
 		buildsteps.to_repo(__opts__, types=["deb", "rpm", "win"]) +
 		push_to_github(__opts__)
