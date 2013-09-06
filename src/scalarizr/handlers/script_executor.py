@@ -238,7 +238,7 @@ class ScriptExecutor(Handler):
             environ = os.environ.copy()
 
             global_variables = message.body.get('global_variables') or []
-            global_variables = dict((kv['name'], kv['value'] or '') for kv in global_variables)
+            global_variables = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables)
             if linux.os.windows_family:
                 global_variables = dict((k.encode('ascii'), v.encode('ascii')) for k, v in global_variables.items())
             environ.update(global_variables)

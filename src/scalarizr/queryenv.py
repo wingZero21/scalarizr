@@ -11,6 +11,7 @@ import sys
 import urllib
 import urllib2
 import time
+import HTMLParser
 
 from scalarizr.util import cryptotool
 from scalarizr.util import urltool
@@ -38,6 +39,7 @@ class QueryEnvService(object):
         self.server_id = server_id
         self.key_path = key_path
         self.api_version = api_version
+        self.htmlparser = HTMLParser.HTMLParser()
 
     def fetch(self, command, **params):
         """
@@ -92,6 +94,9 @@ class QueryEnvService(object):
                 time.sleep(wait_seconds)
 
         resp_body = response.read()
+        resp_body = self.htmlparser.unescape(resp_body)
+        resp_body = resp_body.encode('utf-8')
+
         self._logger.debug("QueryEnv response: %s", resp_body)
         return resp_body
 
@@ -234,7 +239,7 @@ class QueryEnvService(object):
         '''
         data = xml2dict(ET.XML(xml)) or {}
         glob_vars = data['variables']['values'] if 'variables' in data and data['variables'] else {}
-        glob_vars = dict((k, v or '') for k, v in glob_vars.items() if k.startswith('SCALR'))
+        glob_vars = dict((k, v.encode(utf-8) if v else '') for k, v in glob_vars.items() if k.startswith('SCALR'))
         return glob_vars
 
     def _read_get_global_config_response(self, xml):
