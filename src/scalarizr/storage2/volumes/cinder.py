@@ -278,7 +278,7 @@ class CinderVolume(base.Volume):
                 continue
             else:
                 msg = 'Unexpected status transition "available" -> "%s".' \
-                        ' Cinder volume %s'.format(new_status, volume_id)
+                        ' Cinder volume %s' % (new_status, volume_id)
                 raise storage2.StorageError(msg)
 
 
