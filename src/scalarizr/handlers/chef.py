@@ -142,7 +142,7 @@ class ChefHandler(Handler):
     def on_host_init_response(self, message):
         global_variables = message.body.get('global_variables') or []
         for kv in global_variables:
-            self._global_variables[kv['name']] = kv['value'] or ''
+            self._global_variables[kv['name']] = kv['value'].encode('utf-8') if kv['value'] else ''
 
         if 'chef' in message.body and message.body['chef']:
             if linux.os.windows_family:
