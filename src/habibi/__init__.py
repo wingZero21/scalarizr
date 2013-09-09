@@ -154,6 +154,20 @@ class Server(object):
         self.behaviors = behaviors
         self.notification_center = notification_center
 
+    def get_rootfs_path(self):
+        rootfs_path = ''
+        lxc_containers_path = '/var/lib/lxc'
+
+        for d in os.listdir(lxc_containers_path):
+            if self.id in d:
+                rootfs_path = os.path.join(lxc_containers_path, d+'/rootfs')
+                break
+
+        if not rootfs_path:
+            raise BaseException("Can't find server with id: %s" % self.id)
+
+        return rootfs_path
+
     def set_status(self, new_status):
         self._status = new_status
         self.notification_center.notify((self, 'status'))
@@ -199,6 +213,19 @@ class Habibi(object):
         subprocess.Popen('vagrant up --provider lxc', shell=True, cwd=server_dir).communicate()
         # TODO: server['machine_id']
         return server
+
+    def stop_server(self, server):
+        if isinstance(server, str):
+            server = self.find_servers(server)[0]
+        p = subprocess.Popen('vagrant halt --provider lxc', shell=True, cwd=server.base_dir)
+        p.communicate()
+
+    def destroy_server(self, server):
+        if isinstance(server, str):
+            server = self.find_servers(server)[0]
+        p = subprocess.Popen('vagrant destroy --provider lxc', shell=True, cwd=server.base_dir)
+        p.communicate()
+
 
     def start(self):
         self.messaging_server = BaseHTTPServer.HTTPServer(('', self.messaging_port),
