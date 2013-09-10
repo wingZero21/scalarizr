@@ -123,6 +123,7 @@ class Server(object):
                  public_ip=None,
                  private_ip=None,
                  status='pending',
+                 zone=None,
                  notification_center=None):
         self.id = sid or str(uuid.uuid4())
         self.index = index
@@ -132,6 +133,7 @@ class Server(object):
         self.private_ip = private_ip
         self._status = status
         self.behaviors = behaviors
+        self.zone = zone
         self.notification_center = notification_center
 
     def get_rootfs_path(self):
@@ -175,10 +177,11 @@ class Habibi(object):
         self.web_server = self.web_server_thread = None
         self.msg_center = NotificationCenter()
 
-    def run_server(self):
+    def run_server(self, zone=None):
         server = Server(behaviors=self.role['behaviors'],
                         index=self._next_server_index(),
-                        notification_center=self.msg_center)
+                        notification_center=self.msg_center,
+                        zone=zone)
         self.servers.append(server)
 
         server_dir = self.base_dir + '/' + server.id
