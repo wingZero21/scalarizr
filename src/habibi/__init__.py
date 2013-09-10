@@ -218,14 +218,14 @@ class Habibi(object):
         if isinstance(server, str):
             server = self.find_servers(server)[0]
         server_dir = self.base_dir + '/' + server.id
-        p = subprocess.Popen('vagrant halt --provider lxc', shell=True, cwd=server_dir)
+        p = subprocess.Popen('vagrant halt', shell=True, cwd=server_dir)
         p.communicate()
 
     def destroy_server(self, server):
         if isinstance(server, str):
             server = self.find_servers(server)[0]
         server_dir = self.base_dir + '/' + server.id
-        p = subprocess.Popen('vagrant destroy -f --provider lxc', shell=True, cwd=server_dir)
+        p = subprocess.Popen('vagrant destroy -f', shell=True, cwd=server_dir)
         p.communicate()
 
 
