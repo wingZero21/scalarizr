@@ -1,4 +1,3 @@
-from __future__ import with_statement
 '''
 Created on Dec 24, 2009
 
@@ -6,15 +5,17 @@ Created on Dec 24, 2009
 '''
 
 from scalarizr.bus import bus
-#from scalarizr.config import STATE
 from scalarizr import config as szrconfig
+from scalarizr import linux
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
-from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
+from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until, system2
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
 
+
 import time
+import random
 import ConfigParser
 import subprocess
 import threading
@@ -23,24 +24,12 @@ import shutil
 import stat
 import signal
 import logging
-import binascii
 import Queue
+import binascii
 
 
 def get_handlers():
     return [ScriptExecutor()]
-
-
-LOG = logging.getLogger(__name__)
-
-skip_events = set()
-"""
-@var ScriptExecutor will doesn't request scripts on passed events
-"""
-
-exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
-logs_dir = '/var/log/scalarizr/scripting'
-logs_truncate_over = 20 * 1000
 
 
 def get_truncated_log(logfile, maxsize=None):
@@ -55,6 +44,23 @@ def get_truncated_log(logfile, maxsize=None):
         f.close()
 
 
+LOG = logging.getLogger(__name__)
+
+skip_events = set()
+"""
+@var ScriptExecutor will doesn't request scripts on passed events
+"""
+    
+
+logs_truncate_over = 20 * 1000
+if linux.os.windows_family:
+    exec_dir_prefix = r'%Temp%\scalr-scripting.'
+    logs_dir = r'%ProgramFiles%\Scalarizr\var\log\scripting'
+else:
+    exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
+    logs_dir = '/var/log/scalarizr/scripting'
+
+
 class ScriptExecutor(Handler):
     name = 'script_executor'
     _data = None
@@ -62,6 +68,7 @@ class ScriptExecutor(Handler):
     def __init__(self):
         self.queue = Queue.Queue()
         self.in_progress = []
+        self.global_variables = None
         bus.on(
                 init=self.on_init,
                 start=self.on_start,
@@ -92,18 +99,22 @@ class ScriptExecutor(Handler):
         # read exec_dir_prefix
         try:
             exec_dir_prefix = ini.get(self.name, 'exec_dir_prefix')
-            if not os.path.isabs(exec_dir_prefix):
-                os.path.join(bus.base_path, exec_dir_prefix)
         except ConfigParser.Error:
             pass
+        if linux.os['family'] == 'Windows':
+            exec_dir_prefix = os.path.expandvars(exec_dir_prefix)
+        if not os.path.isabs(exec_dir_prefix):
+            os.path.join(bus.base_path, exec_dir_prefix)
 
-        # read logs_dir_prefix
+        # read logs_dir
         try:
             logs_dir = ini.get(self.name, 'logs_dir')
-            if not os.path.exists(logs_dir):
-                os.makedirs(logs_dir)
         except ConfigParser.Error:
             pass
+        if linux.os['family'] == 'Windows':
+            logs_dir = os.path.expandvars(logs_dir)    
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
 
         # logs_truncate_over
         try:
@@ -119,6 +130,10 @@ class ScriptExecutor(Handler):
     def on_start(self):
         # Start log rotation
         self.log_rotate_thread.start()
+
+        #if linux.os.windows_family:
+        #    system2(['C:\\Windows\\sysnative\\WindowsPowerShell\\v1.0\\powershell.exe', 
+        #           '-Command', 'Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force'])
 
         # Restore in-progress scripts
         LOG.debug('STATE[script_executor.in_progress]: %s', szrconfig.STATE['script_executor.in_progress'])
@@ -220,30 +235,30 @@ class ScriptExecutor(Handler):
                 self._logger.debug('Empty scripts list. Breaking')
                 return
 
+            environ = os.environ.copy()
+
+            global_variables = message.body.get('global_variables') or []
+            global_variables = dict((kv['name'], kv['value'] or '') for kv in global_variables)
+            if linux.os.windows_family:
+                global_variables = dict((k.encode('ascii'), v.encode('ascii')) for k, v in global_variables.items())
+            environ.update(global_variables)
+
+
             LOG.debug('Fetching scripts from incoming message')
-            scripts = [Script(name=item['name'], body=item['body'],
-                                            asynchronous=int(item['asynchronous']),
-                                            exec_timeout=item['timeout'], event_name=event_name,
-                                            role_name=role_name,
-                                            event_server_id=message.body.get('server_id'),
-                                            event_id=message.body.get('event_id'))
-                                    for item in message.body['scripts']]
+            scripts = [Script(name=item['name'],
+                                body=item['body'],
+                                asynchronous=int(item['asynchronous']),
+                                exec_timeout=item['timeout'],
+                                role_name=role_name,
+                                event_server_id=message.body.get('server_id'),
+                                event_id=message.body.get('event_id'),
+                                event_name=event_name,
+                                environ=environ,
+                                execution_id=item.get('execution_id', None))
+                            for item in message.body['scripts']]
         else:
-            # TODO: remove obsolete code
-            LOG.debug("Fetching scripts for event %s", event_name)
-            event_id = message.meta['event_id'] if message.name == Messages.EXEC_SCRIPT else None
-            target_ip = message.body.get('local_ip')
-            local_ip = self._platform.get_private_ip()
-
-            queryenv_scripts = self._queryenv.list_scripts(event_name, event_id,
-                                                                    target_ip=target_ip, local_ip=local_ip)
-            scripts = [Script(name=s.name, body=s.body, path=s.path, asynchronous=s.asynchronous,
-                                    exec_timeout=s.exec_timeout, event_name=event_name, role_name=role_name) \
-                                    for s in queryenv_scripts]
-
-        global_variables = message.body.get('global_variables') or []
-        for kv in global_variables:
-            os.environ[kv['name']] = kv['value'] or ''
+            LOG.debug("No scripts embed into message '%s'", message.name)
+            return
 
         LOG.debug('Fetched %d scripts', len(scripts))
         self.execute_scripts(scripts)
@@ -266,11 +281,13 @@ class Script(object):
     interpreter = None
     start_time = None
     exec_path = None
+    environ = None
 
     logger = None
     proc = None
     stdout_path = None
     stderr_path = None
+    execution_id = None
 
     def __init__(self, **kwds):
         '''
@@ -284,44 +301,63 @@ class Script(object):
         for key, value in kwds.items():
             setattr(self, key, value)
 
+
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
 
-        if self.name and (self.body or self.path):
-            self.id = str(time.time())
-            if self.path:
-                if not os.path.exists(self.path):
-                    raise Exception('Script %s does not exist (path: %s)' % (self.name, self.path))
-                with open(self.path) as f:
-                    body = f.read()
+        if self.name and self.body:
+            random.seed()
+            # time.time() can produce the same microseconds fraction in different async script execution threads, 
+            # and therefore produce the same id. solution is to seed random millisecods number
+            self.id = '%d.%d' % (time.time(), random.randint(0, 100))
+            LOG.debug('script: %s', self.body)
+            interpreter = read_shebang(script=self.body)
 
-            interpreter = read_shebang(script=self.body or body)
             if not interpreter:
                 raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
                                                 "First line of the script should have the form of a shebang "
                                                 "interpreter directive is as follows:\n"
                                                 "#!interpreter [optional-arg]" % (self.name, ))
             self.interpreter = interpreter
+            if linux.os['family'] == 'Windows':
+                # Erase first line with #!
+                self.body = '\n'.join(self.body.splitlines()[1:])
+
         else:
             assert self.id, '`id` required'
             assert self.pid, '`pid` required'
             assert self.start_time, '`start_time` required'
             if self.interpreter:
                 self.interpreter = split_strip(self.interpreter)[0]
+                
 
         self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
         self.exec_path = self.path or os.path.join(exec_dir_prefix + self.id, self.name)
+
+        if  self.interpreter == 'powershell' \
+                and os.path.splitext(self.exec_path)[1] not in ('ps1', 'psm1'):
+            self.exec_path += '.ps1'
+        elif self.interpreter == 'cmd' \
+                and os.path.splitext(self.exec_path)[1] not in ('cmd', 'bat'):
+            self.exec_path += '.bat'
+
         if self.exec_timeout:
             self.exec_timeout = int(self.exec_timeout)
-        args = (self.name, self.event_name, self.role_name, self.id)
-        self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
-        self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
+
+        if self.execution_id:
+            args = (self.name, self.event_name, self.execution_id)
+            self.stdout_path = os.path.join(logs_dir, '%s.%s.%s-out.log' % args)
+            self.stderr_path = os.path.join(logs_dir, '%s.%s.%s-err.log' % args)
+        else:
+            args = (self.name, self.event_name, self.role_name, self.id)
+            self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
+            self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
 
     def start(self):
         # Check interpreter here, and not in __init__
         # cause scripts can create sequences when previous script
         # installs interpreter for the next one
-        if not os.path.exists(self.interpreter):
+        if not os.path.exists(self.interpreter) and linux.os['family'] != 'Windows':
             raise HandlerError("Can't execute script '%s' cause "
                                             "interpreter '%s' not found" % (self.name, self.interpreter))
 
@@ -333,10 +369,20 @@ class Script(object):
 
             with open(self.exec_path, 'w') as fp:
                 fp.write(self.body.encode('utf-8'))
-            os.chmod(self.exec_path, stat.S_IREAD | stat.S_IEXEC)
+            if not linux.os.windows_family:
+                os.chmod(self.exec_path, stat.S_IREAD | stat.S_IEXEC)
 
         stdout = open(self.stdout_path, 'w+')
         stderr = open(self.stderr_path, 'w+')
+        if self.interpreter == 'powershell':
+            command = ['powershell.exe', 
+                    '-NoProfile', '-NonInteractive', 
+                    '-ExecutionPolicy', 'RemoteSigned', 
+                    '-File', self.exec_path]
+        elif self.interpreter == 'cmd':
+            command = ['cmd.exe', '/C', self.exec_path]
+        else:
+            command = self.exec_path
 
         # Start process
         self.logger.debug('Executing %s'
@@ -346,8 +392,10 @@ class Script(object):
                         '\n  timeout: %s seconds',
                         self.interpreter, self.exec_path, self.stdout_path,
                         self.stderr_path, self.exec_timeout)
-        self.proc = subprocess.Popen(self.exec_path, stdout=stdout,
-                                                stderr=stderr, close_fds=True)
+        self.proc = subprocess.Popen(command, 
+                        stdout=stdout, stderr=stderr, 
+                        close_fds=linux.os['family'] != 'Windows',
+                        env=self.environ)
         self.pid = self.proc.pid
         self.start_time = time.time()
 
@@ -387,9 +435,16 @@ class Script(object):
                             self.return_code,
                             elapsed_time)
 
+            if not self.execution_id:
+                stdout=None
+                stderr=None
+            else:
+                stdout=binascii.b2a_base64(get_truncated_log(self.stdout_path))
+                stderr=binascii.b2a_base64(get_truncated_log(self.stderr_path))
             ret = dict(
-                    stdout=binascii.b2a_base64(get_truncated_log(self.stdout_path)),
-                    stderr=binascii.b2a_base64(get_truncated_log(self.stderr_path)),
+                    stdout=stdout,
+                    stderr=stderr,
+                    execution_id=self.execution_id,
                     time_elapsed=elapsed_time,
                     script_name=self.name,
                     script_path=self.exec_path,

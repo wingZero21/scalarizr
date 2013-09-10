@@ -89,8 +89,8 @@ class HAProxyHandler(Handler):
         accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
             Messages.HOST_INIT_RESPONSE,
             # Messages.BEFORE_HOST_UP,
-            # Messages.HOST_UP, 
-            # Messages.HOST_DOWN, 
+            Messages.HOST_UP, 
+            Messages.HOST_DOWN, 
             # Messages.BEFORE_HOST_TERMINATE,
             # 'HAProxy_AddServer',
             # 'HAProxy_ConfigureHealthcheck',
@@ -115,14 +115,35 @@ class HAProxyHandler(Handler):
         self.svs = haproxy_svs.HAProxyInitScript()
 
     def on_start(self):
+        healthcheck_names = {
+            "healthcheck.fallthreshold": "fall_threshold",
+            "healthcheck.interval": "check_interval",
+            "healthcheck.risethreshold": "rise_threshold",
+        }
+
         LOG.debug("HAProxyHandler on_start")
         queryenv = bus.queryenv_service
         role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])
         haproxy_params = role_params["params"]["haproxy"]
-        if haproxy_params["proxies"] is None:
-            haproxy_params["proxies"] = []
         LOG.debug("Haproxy params from queryenv: %s", pformat(haproxy_params))
 
+        # convert haproxy params to more suitable form for the api
+        if haproxy_params["proxies"] is None:
+            haproxy_params["proxies"] = []
+        for proxy in haproxy_params["proxies"]:
+            for backend in proxy["backends"]:
+                for name in ("backup", "down"):
+                    if name in backend:
+                        backend[name] = bool(int(backend[name]))
+            proxy["healthcheck_params"] = {}
+            for name in healthcheck_names:
+                if name in proxy:
+                    proxy["healthcheck_params"][healthcheck_names[name]] = proxy[name]
+
+        # useful for on_hostup
+        self.haproxy_params = haproxy_params
+
+        # if we have a sample conf, recreate
         with open(self.api.cfg.cnf_path) as f:
             conf_md5 = hashlib.md5(f.read()).hexdigest()
         LOG.debug("%s md5 sum: %s", self.api.cfg.cnf_path, conf_md5)
@@ -132,27 +153,15 @@ class HAProxyHandler(Handler):
 
         self.api.reset_conf()
 
-        healthcheck_names = {
-            "healthcheck.fallthreshold": "fall_threshold",
-            "healthcheck.interval": "check_interval",
-            "healthcheck.risethreshold": "rise_threshold",
-        }
-        for proxy in haproxy_params["proxies"]:
-            for backend in proxy["backends"]:
-                for name in ("backup", "down"):
-                    if name in backend:
-                        backend[name] = bool(int(backend[name]))
-            healthcheck_params = {}
-            for name in healthcheck_names:
-                if name in proxy:
-                    healthcheck_params[healthcheck_names[name]] = proxy[name]
-                    
+        # add the proxies
+        for proxy in haproxy_params["proxies"]:       
             LOG.debug("make_proxy args: port=%s, backends=%s, %s", proxy["port"],
-                    pformat(proxy["backends"]), pformat(healthcheck_params))
+                    pformat(proxy["backends"]), pformat(proxy["healthcheck_params"]))
             self.api.make_proxy(port=proxy["port"],
                                 backends=proxy["backends"],
-                                **healthcheck_params)
+                                **proxy["healthcheck_params"])
 
+        # start
         if self.svs.status() != 0:
             try:
                 self.svs.start()
@@ -235,25 +244,46 @@ class HAProxyHandler(Handler):
 
     def on_HostUp(self, msg):
         LOG.debug('HAProxyHandler on_HostUp')
-        self._farm_role_id = msg.body.get('farm_role_id')
-        self._local_ip = msg.body.get('local_ip')
-        try:
-            self.api.add_server(ipaddr=self._local_ip,
-                    backend=('role:%s' % self._farm_role_id) if self._farm_role_id else None)
-        except:
-            LOG.error('HAProxyHandler.on_HostUp. Failed add_server `%s`, details:'
-                    ' %s' % (self._local_ip, sys.exc_info()[1]), exc_info=sys.exc_info())
+        local_ip = msg.body.get('local_ip')
+        if local_ip == __node__["private_ip"]:
+            LOG.debug("My HostUp, doing nothing")
+            return
+
+        farm_role_id = msg.body.get('farm_role_id')
+
+        calls = []
+        for proxy in self.haproxy_params["proxies"]:
+            for backend in proxy["backends"]:
+                if backend["farm_role_id"] == farm_role_id:
+                    kwargs = {}
+                    calls.append(kwargs)
+                    kwargs["backend"] = "tcp:%s" % proxy["port"]
+                    kwargs["server"] = {
+                        "host": local_ip,
+                        "port": proxy.get("backend_port", proxy["port"]),
+                    }
+                    for name in ("backup", "down"):
+                        if name in backend:
+                            kwargs["server"][name] = backend[name]
+                    break
+
+        for kwargs in calls:
+            try:
+                LOG.debug("adding server: %s", pformat(kwargs))
+                self.api.add_server(**kwargs)
+            except:
+                LOG.error('HAProxyHandler.on_HostUp. Failed to add_server `%s`, details:'
+                        ' %s' % (local_ip, sys.exc_info()[1]), exc_info=sys.exc_info())
 
 
     def on_HostDown(self, msg):
-        self._farm_role_id = msg.body.get('farm_role_id')
-        self._local_ip = msg.body.get('local_ip')
+        LOG.debug('HAProxyHandler on_HostDown')
+        local_ip = msg.body.get('local_ip')
         try:
-            self.api.remove_server(ipaddr=self._local_ip,
-                                                    backend='role:%s' % self._farm_role_id)
+            self.api.remove_server(local_ip)
         except:
-            LOG.error('HAProxyHandler.on_HostDown. Failed remove server `%s`, '
-                    'details: %s' % (self._local_ip, sys.exc_info()[1]), exc_info=sys.exc_info())
+            LOG.error('HAProxyHandler.on_HostDown. Failed to remove server `%s`, '
+                    'details: %s' % (local_ip, sys.exc_info()[1]), exc_info=sys.exc_info())
 
     on_BeforeHostTerminate = on_HostDown
 

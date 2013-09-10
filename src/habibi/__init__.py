@@ -1,3 +1,6 @@
+
+# pylint: disable=R0902, W0613, R0913, R0914, R0201, R0904
+
 import BaseHTTPServer
 import uuid
 import os
@@ -18,9 +21,6 @@ import copy
 import cgi
 from collections import Hashable
 
-from lettuce import step
-import mock
-
 from habibi import crypto
 
 
@@ -35,33 +35,13 @@ Vagrant.configure("2") do |config|
   config.vm.box_url = "http://scalr-labs.s3.amazonaws.com/ubuntu1204-lxc_devel_20130814.box"
   config.vm.synced_folder "../..", "/vagrant0"
   config.vm.provision :chef_solo do |chef|
-     chef.cookbooks_path = "../../cookbooks/cookbooks"
+     chef.cookbooks_path = ["../../cookbooks/cookbooks", "../../public_cookbooks/cookbooks"]
+     chef.add_recipe "$behavior"
      chef.add_recipe "vagrant_boxes::scalarizr_lxc"
      chef.json = { :user_data => "$user_data" }
   end
 end
 '''
-
-
-class PrettyHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-    LOG = globals()['LOG']
-
-    def render_html(self, http_code, http_body=None):
-        if http_code >= 400:
-            if not http_body:
-                exc_info = sys.exc_info()
-                http_body = '{0}: {1}'.format(exc_info[0].__class__.__name__, exc_info[1])
-            self.send_error(http_code)
-        else:
-            self.send_response(http_code)
-
-        http_body = http_body or ''
-        self.send_header('Content-length', len(http_body))
-        self.end_headers()
-        self.wfile.write(http_body) 
-
-    def log_message(self, format, *args):
-        self.LOG.debug(format, *args)
 
 
 def hashable(obj):
@@ -136,7 +116,7 @@ class Server(object):
 
     def __init__(self,
                  behaviors,
-                 id_=None,
+                 sid=None,
                  index=0,
                  crypto_key=None,
                  farm_hash=None,
@@ -144,7 +124,7 @@ class Server(object):
                  private_ip=None,
                  status='pending',
                  notification_center=None):
-        self.id_ = id_ or str(uuid.uuid4())
+        self.id = sid or str(uuid.uuid4())
         self.index = index
         self.crypto_key = crypto_key or crypto.keygen()
         self.farm_hash = farm_hash or crypto.keygen(10)
@@ -187,14 +167,12 @@ class Habibi(object):
         self.servers = []
         self.breakpoints = []
         self.router_ip = '10.0.3.1'
-        self.messaging_port = 10001
-        self.queryenv_port = 10002
+        self.port = 10001
         self.queryenv_version = '2012-07-01'
         self.base_dir = base_dir or '.habibi'
-        self.MessagingHTTPHandler.habibi = self
-        self.QueryEnvHTTPHandler.habibi = self
-        self.queryenv_server = self.queryenv_thread = None
-        self.messaging_server = self.messaging_thread = None
+        self.RequestHandler.habibi = self
+        self.queryenv = QueryEnv(self)
+        self.web_server = self.web_server_thread = None
         self.msg_center = NotificationCenter()
 
     def run_server(self):
@@ -203,11 +181,14 @@ class Habibi(object):
                         notification_center=self.msg_center)
         self.servers.append(server)
 
-        server_dir = self.base_dir + '/' + server.id_
+        server_dir = self.base_dir + '/' + server.id
         os.makedirs(server_dir)
         with open(server_dir + '/Vagrantfile', 'w+') as fp:
             tpl = string.Template(VAGRANT_FILE)
-            fp.write(tpl.substitute(user_data=self._pack_user_data(self._user_data(server))))
+            fp.write(tpl.substitute(
+                user_data=self._pack_user_data(self._user_data(server)),
+                behavior=self.role['behaviors'][0]
+                ))
 
         #subprocess.Popen('vagrant init ubuntu1210', shell=True, cwd=server_dir).communicate()
         subprocess.Popen('vagrant up --provider lxc', shell=True, cwd=server_dir).communicate()
@@ -230,27 +211,18 @@ class Habibi(object):
 
 
     def start(self):
-        self.messaging_server = BaseHTTPServer.HTTPServer(('', self.messaging_port),
-                                                          self.MessagingHTTPHandler)
-        self.messaging_thread = threading.Thread(name='Messaging', 
-                                                 target=self.messaging_server.serve_forever)
-        self.messaging_thread.setDaemon(True)
-        self.messaging_thread.start()
-
-        self.queryenv_server = BaseHTTPServer.HTTPServer(('', self.queryenv_port),
-                                                         self.QueryEnvHTTPHandler)
-        self.queryenv_thread = threading.Thread(name='QueryEnv', 
-                                                target=self.queryenv_server.serve_forever)
-        self.queryenv_thread.setDaemon(True)
-        self.queryenv_thread.start()
+        self.web_server = BaseHTTPServer.HTTPServer(('', self.port), self.RequestHandler)
+        self.web_server_thread = threading.Thread(name='WebServer', 
+                                                 target=self.web_server.serve_forever)
+        self.web_server_thread.setDaemon(True)
+        self.web_server_thread.start()
 
         if os.path.exists(self.base_dir):
             shutil.rmtree(self.base_dir)
         os.makedirs(self.base_dir)
 
     def stop(self):
-        self.messaging_server.shutdown()
-        self.queryenv_server.shutdown()
+        self.web_server.shutdown()
 
     def spy(self, spy):
         self.breakpoints = []
@@ -265,7 +237,7 @@ class Habibi(object):
         for bp in self.breakpoints:
             if bp[1] == test_bp:
                 bp[0](**kwds)
-                LOG.debug('hash of running bg %s' % str(hash(bp[0])))
+                LOG.debug('hash of running bg %s', hash(bp[0]))
                 self.msg_center.notify(bp[0])
 
     def _next_server_index(self):
@@ -275,11 +247,11 @@ class Habibi(object):
     def _user_data(self, server):
         return {'szr_key': server.crypto_key,
                 'hash': server.farm_hash,
-                'serverid': server.id_,
+                'serverid': server.id,
                 'p2p_producer_endpoint': 'http://{0}:{1}/messaging'.format(self.router_ip,
-                                                                           self.messaging_port),
+                                                                           self.port),
                 'queryenv_url': 'http://{0}:{1}/query-env'.format(self.router_ip,
-                                                                  self.queryenv_port),
+                                                                  self.port),
                 'behaviors': ','.join(server.behaviors),
                 'farm_roleid': '1',
                 'roleid': '1',
@@ -295,18 +267,19 @@ class Habibi(object):
         if pattern:
             if re.search(r'\w{8}-\w{4}-\w{4}-\w{4}-\w{12}', pattern):
                 for server in self.servers:
-                    if server.id_ == pattern:
+                    if server.id == pattern:
                         return [server]
             else:
                 LOG.warn('pattern %s doesnt match uuid4', pattern)
         else:
-            return self.servers
+            return [server for server in self.servers 
+                        if server.status != 'pending']
         msg = 'Empty results for search servers by pattern: {0}'.format(pattern)
         raise LookupError(msg)
 
     def send(self, msg_name, server_pattern=None, source_msg=None):
         servers = self.find_servers(server_pattern)
-        source_server = self.find_servers(source_msg.meta['server_id'])[0]
+        #source_server = self.find_servers(source_msg.meta['server_id'])[0]
 
         for server in servers:
             msg = Message()
@@ -323,7 +296,7 @@ class Habibi(object):
                                          'target_server': server,
                                          'source_msg': source_msg})
 
-            LOG.debug('<~ %s to %s', msg.name, server.id_)
+            LOG.debug('<~ %s to %s', msg.name, server.id)
             xml_data = msg.toxml()
             LOG.debug(' * data: %s', xml_data)
             LOG.debug(' * key: %s', server.crypto_key)
@@ -336,7 +309,7 @@ class Habibi(object):
                 'Content-type': 'application/xml',
                 'Date': timestamp,
                 'X-Signature': signature,
-                'X-Server-Id': server.id_})
+                'X-Server-Id': server.id})
             opener = urllib2.build_opener(urllib2.HTTPRedirectHandler())
             opener.open(req)
         
@@ -369,96 +342,160 @@ class Habibi(object):
         else:
             raise Exception('Unprocessed message: %s' % msg)
 
- 
-    class MessagingHTTPHandler(PrettyHTTPRequestHandler):
-        habibi = None
-        LOG = logging.getLogger('habibi.messaging')
+
+    class RequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+        LOG = logging.getLogger('habibi.web')
 
         def do_POST(self):
+            try:
+                if self.path.startswith('/messaging'):
+                    self.do_messaging()
+                elif self.path.startswith('/query-env'):
+                    self.do_queryenv()
+                else:
+                    msg = 'Unknown route: {0}'.format(self.path)
+                    raise Exception(msg)
+            except:
+                LOG.exception('POST exception')
+                self.render_html(500)
+
+        def do_HEAD(self):
+            try:
+                self.do_static()
+            except:
+                LOG.exception('GET exception')
+                self.render_html(500)
+
+        def do_GET(self):
+            try:
+                self.do_static()
+            except:
+                LOG.exception('HEAD exception')
+                self.render_html(500)
+
+        def do_messaging(self):
             if os.path.basename(self.path) != 'control':
                 self.render_html(201)
                 return
 
-            try:
-                server_id = self.headers['X-Server-Id']
-                server = self.habibi.find_servers(server_id)[0]
+            server_id = self.headers['X-Server-Id']
+            server = self.habibi.find_servers(server_id)[0]
 
-                encrypted_data = self.rfile.read(int(self.headers['Content-length']))
-                xml_data = crypto.decrypt(encrypted_data, binascii.a2b_base64(server.crypto_key))
+            encrypted_data = self.rfile.read(int(self.headers['Content-length']))
+            xml_data = crypto.decrypt(encrypted_data, binascii.a2b_base64(server.crypto_key))
 
-                msg = Message()
-                msg.fromxml(xml_data)
-                self.render_html(201)
-            except:
-                LOG.exception('Caught exception')
-                self.render_html(400)
+            msg = Message()
+            msg.fromxml(xml_data)
+            self.render_html(201)
+
+            hdlr_thread = threading.Thread(target=self.habibi.on_message, args=(msg, ))
+            hdlr_thread.setDaemon(True)
+            hdlr_thread.start()
+
+
+        def do_queryenv(self):
+            operation = self.path.rsplit('/', 1)[-1]
+            fields = cgi.FieldStorage(
+                fp=self.rfile,
+                keep_blank_values=True
+            )
+            response = self.habibi.queryenv.run(operation, fields)
+            self.render_html(200, response)
+
+
+        def do_static(self, head=False):
+            base = os.path.dirname(__file__)
+            static_dir = base + '/static'
+            filename = static_dir + self.path
+            if os.path.exists(filename):
+                with open(filename) as fp:
+                    self.render_html(200, fp.read())
             else:
-                self.habibi.on_message(msg)
+                self.render_html(404)
 
 
-    class QueryEnvHTTPHandler(PrettyHTTPRequestHandler):
-        habibi = None
-        operation = None
-        fields = None
-        LOG = logging.getLogger('habibi.queryenv')
+        def render_html(self, http_code, http_body=None, http_headers=None):
+            if http_code >= 400:
+                if not http_body:
+                    exc_info = sys.exc_info()
+                    http_body = '{0}: {1}'.format(exc_info[0].__class__.__name__, exc_info[1])
+                self.send_error(http_code)
+            else:
+                self.send_response(http_code)
 
-        def do_POST(self):
-            try:
-                self.operation = self.path.rsplit('/', 1)[-1]
-                self.fields = cgi.FieldStorage(
-                    fp=self.rfile,
-                    keep_blank_values=True
-                )
-                response = self.queryenv()
-                self.render_html(200, response)
-            except:
-                LOG.exception('Caught exception')
-                self.render_html(500)
+            http_body = http_body or ''
+            if http_headers:
+                for header, value in http_headers:
+                    self.send_header(header, value)
+            if not http_headers or (http_headers and not 'Content-length' in http_headers):
+                self.send_header('Content-length', len(http_body))
+            self.end_headers()
+            self.wfile.write(http_body) 
 
-        def queryenv(self):
-            method_name = self.operation.replace('-', '_')
+        def log_message(self, format_, *args):
+            self.LOG.debug(format_, *args)
+
+
+class QueryEnv(object):
+    habibi = None
+    LOG = logging.getLogger('habibi.queryenv')
+
+    def __init__(self, habibi):
+        self.habibi = habibi
+        self.fields = None
+
+    def run(self, operation, fields):
+        self.fields = fields
+        try:
+            method_name = operation.replace('-', '_')
+            self.LOG.debug('run %s', operation)
             response = etree.Element('response')
             response.append(getattr(self, method_name)())
             return etree.tostring(response)
+        finally:
+            self.fields = None
 
-        def get_latest_version(self):
-            ret = etree.Element('version')
-            ret.text = self.habibi.queryenv_version
-            return ret
+    def get_latest_version(self):
+        ret = etree.Element('version')
+        ret.text = self.habibi.queryenv_version
+        return ret
 
-        def list_global_variables(self):
-            return etree.Element('variables')
+    def list_global_variables(self):
+        return etree.Element('variables')
 
-        def get_global_config(self):
-            ret = etree.Element('settings')
-            settings = {'dns.static.endpoint': 'scalr-dns.com',
-                        'scalr.version': '4.5.0',
-                        'scalr.id': '884c7c0'}
-            for key, val in settings.items():
-                setting = etree.Element('setting', key=key)
-                setting.text = val
-                ret.append(setting)
-            return ret
+    def get_global_config(self):
+        ret = etree.Element('settings')
+        settings = {'dns.static.endpoint': 'scalr-dns.com',
+                    'scalr.version': '4.5.0',
+                    'scalr.id': '884c7c0'}
+        for key, val in settings.items():
+            setting = etree.Element('setting', key=key)
+            setting.text = val
+            ret.append(setting)
+        return ret
 
-        def list_roles(self):
-            ret = etree.Element('roles')
-            role = etree.Element('role')
-            role.attrib.update({'id': '1',
-                                'role-id': '1',
-                                'behaviour': ','.join(self.habibi.role['behaviors']),
-                                'name': self.habibi.role['name']})
-            hosts = etree.Element('hosts')
-            role.append(hosts)
-            for server in self.habibi.servers:
-                host = etree.Element('host')
-                host.attrib.update({'internal-ip': server.private_ip,
-                                    'external-ip': server.public_ip,
-                                    'status': server.status,
-                                    'index': server.index,
-                                    'cloud-location': 'lxc'})
-                hosts.append(host)
-            ret.append(role)
-            return ret
+    def list_roles(self):
+        ret = etree.Element('roles')
+        role = etree.Element('role')
+        role.attrib.update({'id': '1',
+                            'role-id': '1',
+                            'behaviour': ','.join(self.habibi.role['behaviors']),
+                            'name': self.habibi.role['name']})
+        hosts = etree.Element('hosts')
+        role.append(hosts)
+        for server in self.habibi.servers:
+            host = etree.Element('host')
+            host.attrib.update({'internal-ip': server.private_ip,
+                                'external-ip': server.public_ip,
+                                'status': server.status,
+                                'index': server.index,
+                                'cloud-location': 'lxc'})
+            hosts.append(host)
+        ret.append(role)
+        return ret
+
+    def get_service_configuration(self):
+        return etree.Element('settings')
 
 
 class Message(object):
@@ -538,14 +575,6 @@ class Message(object):
                     el.appendChild(itemEl)
                     self._walk_encode(v, itemEl, doc)
         else:
-            '''
-            if not isinstance(value, unicode):
-                    if value is not None:
-                            value = str(value)
-                    else:
-                            value = ''
-            el.appendChild(doc.createTextNode(value))
-            '''
             if value is not None and not isinstance(value, unicode):
                 value = str(value).decode('utf-8')
             el.appendChild(doc.createTextNode(value or ''))
@@ -602,7 +631,7 @@ class SampleSpy(object):
     def hi_all(self, target_msg=None, target_server=None, **kwds):
         target_msg.body['chef'] = {'server_url': 'http://example.test',
                                    'run_list': ['recipe[example]']}
-        print 'send HIR to %s' % target_server.id_
+        print 'send HIR to %s' % target_server.id
 
     @breakpoint(msg_name='BeforeHostUp', target='base')
     def bhup(self, **kwds):

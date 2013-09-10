@@ -90,15 +90,16 @@ class OpenstackPlatform(platform.Platform):
 
     def get_private_ip(self):
         if self._private_ip is None:
-            ifaces = platform.net_interfaces()
-            self._private_ip = ifaces['eth1' if 'eth1' in ifaces else 'eth0']
+            for iface, ipv4 in platform.net_interfaces().items():
+                if ipv4.startswith('10.') or ipv4.startswith('172.'):
+                    self._private_ip = ipv4
+                    break
+
         return self._private_ip
 
+
     def get_public_ip(self):
-        if self._public_ip is None:
-            ifaces = platform.net_interfaces()
-            self._public_ip = ifaces['eth0'] if 'eth1' in ifaces and 'eth0' in ifaces else ''
-        return self._public_ip
+        return self.get_private_ip()
 
     def _get_property(self, name):
         if not name in self._userdata:
@@ -109,22 +110,19 @@ class OpenstackPlatform(platform.Platform):
         nova = self.new_nova_connection()
         nova.connect()
         servers = nova.servers.list()
-        for srv in servers:
-            srv_private_addrs = []
-            for _ in xrange(20):
-                # if for some reason nova returns server without private ip
-                # waiting for 1 sec than try again.
-                # If after 20 tries still no ip, give up and try another srv
-                try:
-                    srv_private_addrs = [addr_info['addr'] for addr_info in
-                                         srv.addresses['private']]
-                    break
-                except KeyError:
-                    sleep(1)
-                    srv.update()
+        my_private_ip = self.get_private_ip()
+        for server in servers:
+            private_ip = 'private' in server.addresses and server.addresses['private'][0]['addr']
+            if not private_ip:
+                ips = [address['addr'] 
+                        for network in server.addresses.values()
+                        for address in network
+                        if address['addr'].startswith('10.')]
+                if ips:
+                    private_ip = ips[0]
 
-            if self.get_private_ip() in srv_private_addrs:
-                return srv.id
+            if my_private_ip == private_ip:
+                return server.id
 
         raise BaseException("Can't get server_id because we can't get "
                             "server private ip")
@@ -183,6 +181,8 @@ class OpenstackPlatform(platform.Platform):
         # if it's Rackspace NG, we need to set env var CINDER_RAX_AUTH
         # and NOVA_RAX_AUTH for proper nova and cinder authentication
         if 'rackspacecloud' in self._access_data["keystone_url"]:
+            # python-novaclient has only configuration with environ variables 
+            # to enable Rackspace specific authentification
             os.environ["CINDER_RAX_AUTH"] = "True"
             os.environ["NOVA_RAX_AUTH"] = "True"
 

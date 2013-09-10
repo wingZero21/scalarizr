@@ -263,7 +263,7 @@ class YumPackageMgr(PackageMgr):
     def info(self, name):
         installed, candidates = self.yum_list(name)
         return {'installed': installed,
-                        'candidate': candidates[-1] if candidates else None}
+                'candidate': candidates[-1] if candidates else None}
 
     def repos(self):
         ret = []
@@ -311,7 +311,7 @@ class RpmPackageMgr(PackageMgr):
         installed_version = self._version_from_name(out)
 
         return {'installed': installed_version if installed else None,
-                        'candidate': None}
+                'candidate': None}
 
     def updatedb(self):
         pass

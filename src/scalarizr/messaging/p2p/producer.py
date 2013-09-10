@@ -117,7 +117,9 @@ class P2pMessageProducer(messaging.MessageProducer):
 
             self._message_delivered(queue, message, success_callback)
 
-        except (Exception, BaseException), e:
+        except:
+            self._logger.debug('!tmp! caught exception', exc_info=sys.exc_info())
+            e = sys.exc_info()[1]
             # Python < 2.6 raise exception on 2xx > 200 http codes except
             if isinstance(e, urllib2.HTTPError):
                 if e.code == 201:
