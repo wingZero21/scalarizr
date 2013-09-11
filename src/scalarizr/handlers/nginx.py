@@ -231,9 +231,11 @@ class NginxHandler(ServiceCtlHandler):
 
                 https_inc_path = os.path.join(os.path.dirname(self.api.app_inc_path),
                                               'https.include')
-                if os.path.exists(https_inc_path):
-                    self._logger.debug('Removing https.include')
-                    os.remove(https_inc_path)
+                nginx_dir = os.path.dirname(https_inc_path)
+                for file_path in os.listdir(nginx_dir):
+                    if file_path.startswith('https.include'):
+                        self._logger.debug('Removing %s' % file_path)
+                        os.remove(file_path)
 
 
     def on_before_host_up(self, message):
