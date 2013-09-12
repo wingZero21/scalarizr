@@ -651,8 +651,6 @@ class NginxAPI(object):
                 config.add('%s/error_page' % location_xpath, '500 501 = /500.html')
                 config.add('%s/error_page' % location_xpath, '502 503 504 = /502.html')
 
-        
-
         return config
 
     def _add_nginx_server(self,
