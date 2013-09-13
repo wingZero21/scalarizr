@@ -590,7 +590,15 @@ class NginxAPI(object):
         config.add('server/if/return', '302')
 
     def _add_ssl_params(self, config, server_xpath, ssl_port, ssl_certificate_id):
-        config.add('%s/listen' % server_xpath, '%s ssl' % (ssl_port or '443'))
+        out = system2(['nginx -v'], shell=True)[0]
+        nginx_version_str = out.split('/')[1]
+        nginx_version = nginx_version_str.split('.')
+        default_needed = nginx_version < ['0', '8', '21']
+        _logger.debug('nginx version is: %s' % nginx_version_str)
+        _logger.debug('default param for listen is%s needed' % 
+            (' not' if not default_needed else ''))
+        config.add('%s/listen' % server_xpath, '%s%s ssl' % ((ssl_port or '443'), 
+                                                             ' default' if default_needed else ''))
         config.add('%s/ssl' % server_xpath, 'on')
         ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
