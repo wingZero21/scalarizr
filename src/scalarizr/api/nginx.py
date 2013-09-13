@@ -593,6 +593,7 @@ class NginxAPI(object):
         out = system2(['nginx -v'], shell=True)[1]
         nginx_version_str = out.split('/')[1]
         nginx_version = nginx_version_str.split('.')
+        # 0.8.21 version of nginx where default param for https listen is not needed
         default_needed = nginx_version < ['0', '8', '21']
         _logger.debug('nginx version is: %s' % nginx_version_str)
         _logger.debug('default param for listen is%s needed' % 
