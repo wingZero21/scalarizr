@@ -134,6 +134,12 @@ def _close_port(port):
             pass
 
 
+def _bool_from_scalr_str(bool_str):
+    if not bool_str:
+        return False
+    return int(bool_str) == 1
+
+
 class NginxAPI(object):
 
     _instance = None
@@ -143,6 +149,7 @@ class NginxAPI(object):
         return cls._instance
 
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
+        _logger.debug('Initializing nginx API.')
         self.service = NginxInitScript()
         self.error_pages_inc = None
         self.backend_table = {}
@@ -206,6 +213,7 @@ class NginxAPI(object):
             open(self.app_inc_path, 'w').close()
 
     def _fix_app_servers_inc(self):
+        _logger.debug('Fixing app servers include')
         https_inc_xpath = self.app_servers_inc.xpath_of('include',
                                                         '/etc/nginx/https.include')
         if https_inc_xpath:
@@ -221,6 +229,8 @@ class NginxAPI(object):
         self._save_app_servers_inc()
 
     def _clear_nginx_includes(self):
+        _logger.debug('Clearing app-servers.include and proxies.include. '
+                      'Old configs copied to .bak files.')
         shutil.copyfile(self.app_inc_path, self.app_inc_path + '.bak')
         shutil.copyfile(self.proxies_inc_path, self.proxies_inc_path + '.bak')
 
@@ -236,6 +246,7 @@ class NginxAPI(object):
             self.service.start()
         else:
             self.service.reload()
+
     @rpc.service_method
     def start_service(self):
         self.service.start()
@@ -254,8 +265,8 @@ class NginxAPI(object):
 
     @rpc.service_method
     def recreate_proxying(self, proxy_list):
-        if proxy_list == [None]:
-            return
+        if not proxy_list:
+            proxy_list = []
 
         _logger.debug('Recreating proxying with %s' % proxy_list)
         self._clear_nginx_includes()
@@ -293,6 +304,8 @@ class NginxAPI(object):
         if not cert or not key:
             return (None, None)
 
+        _logger.debug('Updating ssl certificate with id: %s' % ssl_certificate_id)
+
         if cacert:
             cert = cert + '\n' + cacert
         if ssl_certificate_id:
@@ -326,14 +339,25 @@ class NginxAPI(object):
                                            key,
                                            cacert)
 
-    def _normalize_roles_arg(self, roles):
+    def _normalize_destinations(self, destinations):
         """
-        Parses list of roles. Role can be either int (role id)
-        or dictionary. Dictionary example:
+        Parses list of destinations. They are dictionaries. Dictionary example:
 
         .. code-block:: python
             {
-            'id': 123,
+            'farm_role_id': 123,
+            'port': '80',
+            'backup': True,
+            # ...
+            # other backend params
+            # ...
+            }
+
+        or
+
+        .. code-block:: python
+            {
+            'host': '12.234.45.67',
             'port': '80',
             'backup': True,
             # ...
@@ -344,59 +368,28 @@ class NginxAPI(object):
         Returns destination dictionaries with format like above
         plus servers list in 'servers' key.
         """
-        if not roles:
+        if not destinations:
             return []
 
-        destinations = []
-        for r in roles:
-            role = {}
-            if type(r) is str:
-                role['id'] = role
-            elif type(r) is int:
-                role['id'] = str(r)
-            else:
-                # assuming that r is dict by default
-                role.update(r)
-                if type(role['id']) is int:
-                    role['id'] = str(role['id'])
-            role['servers'] = self.get_role_servers(role['id'])
-            destinations.append(role)
+        normalized_dests = []
+        for d in destinations:
+            dest = d.copy()
 
-        return destinations
+            if 'backup' in dest:
+                dest['backup'] = _bool_from_scalr_str(dest['backup'])
+            if 'down' in dest:
+                dest['down'] = _bool_from_scalr_str(dest['down'])
 
-    def _normalize_servers_arg(self, servers):
-        """
-        Parses list of servers. Servers can be either str (server ip)
-        or dictionary. Dictionary example:
+            dest['servers'] = []
+            if 'farm_role_id' in dest:
+                dest['id'] = str(dest['farm_role_id'])
+                dest['servers'].extend(self.get_role_servers(dest['id']))
+            if 'host' in dest:
+                dest['servers'].append(dest['host'])
 
-        .. code-block:: python
-            {
-            'host': '10.20.30.40',
-            'port': '80',
-            'backup': True,
-            # ...
-            # other backend params
-            # ...
-            }
+            normalized_dests.append(dest)
 
-        Returns destination dictionaries with format like above
-        plus servers list in 'servers' key (will contain only one ip).
-        """
-        if not servers:
-            return []
-
-        destinations = []
-        for s in servers:
-            server = {}
-            if type(s) is str:
-                server['servers'] = [s]
-            else:
-                # assuming that s is dict by default
-                server.update(s)
-                server['servers'] = [server['host']]
-            destinations.append(server)
-
-        return destinations
+        return normalized_dests
 
     def _group_destinations(self, destinations):
         """
@@ -504,7 +497,7 @@ class NginxAPI(object):
         return name, location, roles
 
     def _make_backend_name(self, name, location, roles, hash_name=True):
-        role_namepart = '_'.join(roles)
+        role_namepart = '_'.join(map(str, roles))
         if hash_name:
             name = sha1(name).hexdigest()
         name = '%s%s__%s' % (name, 
@@ -566,6 +559,14 @@ class NginxAPI(object):
 
         return locations_and_backends
 
+    def _is_redirector(self, conf, server_xpath):
+        try:
+            _ = conf.get('%s/rewrite' % server_xpath)
+        except metaconf.NoPathError:
+            return False
+        else:
+            return True
+
     def _make_redirector_conf(self, hostname, port, ssl_port):
         """
         Makes config (metaconf.Configuration object) for server section of
@@ -575,9 +576,9 @@ class NginxAPI(object):
         config.add('server', '')
 
         config.add('server/listen', str(port))
-        config.add('server/server_name', hostname + '_redirector')
+        config.add('server/server_name', hostname)
 
-        redirect_regex = '^(.*)$ https://localhost:%s$1 permanent' % (ssl_port)
+        redirect_regex = '^(.*)$ https://%s:%s$request_uri? permanent' % (hostname, ssl_port)
         config.add('server/rewrite', redirect_regex)
 
         return config
@@ -589,7 +590,16 @@ class NginxAPI(object):
         config.add('server/if/return', '302')
 
     def _add_ssl_params(self, config, server_xpath, ssl_port, ssl_certificate_id):
-        config.add('%s/listen' % server_xpath, '%s default ssl' % (ssl_port or '443'))
+        out = system2(['nginx -v'], shell=True)[1]
+        nginx_version_str = out.split('/')[1]
+        nginx_version = nginx_version_str.split('.')
+        # 0.8.21 version of nginx where default param for https listen is not needed
+        default_needed = nginx_version < ['0', '8', '21']
+        _logger.debug('nginx version is: %s' % nginx_version_str)
+        _logger.debug('default param for listen is%s needed' % 
+            (' not' if not default_needed else ''))
+        config.add('%s/listen' % server_xpath, '%s%s ssl' % ((ssl_port or '443'), 
+                                                             ' default' if default_needed else ''))
         config.add('%s/ssl' % server_xpath, 'on')
         ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
@@ -619,12 +629,11 @@ class NginxAPI(object):
 
         if port:
             config.add('server/listen', str(port))
+        config.add('server/server_name', hostname)
 
         # Configuring ssl
         if ssl:
             self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id)
-
-        config.add('server/server_name', hostname)
 
         self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
@@ -683,8 +692,7 @@ class NginxAPI(object):
 
     def add_proxy(self,
                   name,
-                  roles=[],
-                  servers=[],
+                  backends=[],
                   port='80',
                   http=True,
                   ssl=False,
@@ -699,15 +707,30 @@ class NginxAPI(object):
                   hash_backend_name=True,
                   write_proxies=True):
         """
-        Adds proxy
+        Adds proxy.
+
+        ``backends`` param is list of dictionaries which contains servers
+        and/or roles with params and inner naming in this module for such dicts
+        is ``destinations``. So keep in mind that ``backend`` word in all other
+        places of this module means nginx upstream config.
         """
-        _logger.debug('adding proxy name: %s' % name)
-        destinations = self._normalize_roles_arg(roles)
-        destinations.extend(self._normalize_servers_arg(servers))
+        # typecast is needed because scalr sends bool params as strings: '1' for True, '0' for False 
+        ssl = _bool_from_scalr_str(ssl)
+        http = _bool_from_scalr_str(http) if ssl else True
+        backend_ip_hash = _bool_from_scalr_str(backend_ip_hash)
+        reread_conf = _bool_from_scalr_str(reread_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+        hash_backend_name = _bool_from_scalr_str(hash_backend_name)
+        write_proxies = _bool_from_scalr_str(write_proxies)
+
+        _logger.debug('Adding proxy with name: %s' % name)
+        destinations = self._normalize_destinations(backends)
 
         grouped_destinations = self._group_destinations(destinations)
         if not grouped_destinations:
-            raise BaseException('No servers or roles given', servers, roles)
+            raise BaseException('No destinations given given')
+        if ssl_port == port and ssl_port != None:
+            raise BaseException("HTTP and HTTPS ports can't be the same")
 
         if reread_conf:
             self._load_app_servers_inc()
@@ -765,7 +788,7 @@ class NginxAPI(object):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
 
-            if name == server_name or name == server_name + '_redirector':
+            if name == server_name:
                 location_xpath = '%s/location' % server_xpath
                 location_qty = len(self.proxies_inc.get_list(location_xpath))
                 
@@ -785,18 +808,21 @@ class NginxAPI(object):
             self.proxies_inc.remove(xpath)
 
     @rpc.service_method
-    def remove_proxy(self, name, reload_service=True):
+    def remove_proxy(self, hostname, reload_service=True):
         """
-        Removes proxy with given name. Removes created server and its backends.
+        Removes proxy with given hostname. Removes created server and its backends.
         """
+        reload_service = _bool_from_scalr_str(reload_service)
+
+        _logger.debug('Removing proxy with hostname: %s' % hostname)
         self._load_proxies_inc()
         self._load_app_servers_inc()
 
-        self._remove_nginx_server(name)
+        self._remove_nginx_server(hostname)
 
         # remove each backend that were in use by this proxy from backend_table
         for backend_name in self.backend_table.keys():
-            if name == self._backend_nameparts(backend_name)[0]:
+            if hostname == self._backend_nameparts(backend_name)[0]:
                 self.backend_table.pop(backend_name)
 
         self._save_proxies_inc()
@@ -848,7 +874,7 @@ class NginxAPI(object):
         if 'port' in server:
             result = '%s:%s' % (result, server['port'])
 
-        if 'backup' in server and server['backup']:
+        if 'backup' in server and _bool_from_scalr_str(server['backup']):
             result = '%s %s' % (result, 'backup')
 
         _max_fails = server.get('max_fails')
@@ -859,7 +885,7 @@ class NginxAPI(object):
         if _fail_timeout:
             result = '%s %s' % (result, 'fail_timeout=%is' % _fail_timeout)
 
-        if 'down' in server:
+        if 'down' in server and _bool_from_scalr_str(server['down']):
             result = '%s %s' % (result, 'down')
 
         return result
@@ -875,11 +901,17 @@ class NginxAPI(object):
         Adds server to backend with given name pattern.
         Parameter server can be dict or string (ip addr)
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+        update_backend_table = _bool_from_scalr_str(update_backend_table)
+
         if update_conf:
             self._load_app_servers_inc()
 
         if not server:
             return
+
+        _logger.debug('Adding server %s to backend %s' % (server, backend))
 
         xpath = self.app_servers_inc.xpath_of('upstream', backend + '*')
 
@@ -915,6 +947,10 @@ class NginxAPI(object):
         Removes server from backend with given name pattern.
         Parameter server can be dict or string (ip addr)
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+        update_backend_table = _bool_from_scalr_str(update_backend_table)
+
         if update_conf:
             self._load_app_servers_inc()
 
@@ -955,6 +991,9 @@ class NginxAPI(object):
         Adds server to each backend that uses given role. If role isn't used in
         any backend, does nothing
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_app_servers_inc()
 
@@ -995,10 +1034,12 @@ class NginxAPI(object):
         Removes server from each backend that uses given role. If role isn't
         used in any backend, does nothing
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_app_servers_inc()
 
-        # TODO: ensure that this is fine behaviour
         if not server:
             return
         if not role_id:
@@ -1030,6 +1071,9 @@ class NginxAPI(object):
         Method is used to remove stand-alone servers, that aren't belong
         to any role. If role isn't used in any backend, does nothing
         """
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_app_servers_inc()
 
@@ -1058,6 +1102,9 @@ class NginxAPI(object):
                    ssl_certificate_id=None,
                    update_conf=True,
                    reload_service=True):
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_proxies_inc()
 
@@ -1068,8 +1115,9 @@ class NginxAPI(object):
         for i, _ in enumerate(self.proxies_inc.get_list('server')):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
+            redirector = self._is_redirector(self.proxies_inc, server_xpath)
 
-            if hostname == server_name:
+            if hostname == server_name and not redirector:
                 try:
                     # trying get ssl param from config
                     # if it raises exception, then we need to set up ssl
@@ -1091,6 +1139,9 @@ class NginxAPI(object):
 
     @rpc.service_method
     def disable_ssl(self, hostname, update_conf=True, reload_service=True):
+        update_conf = _bool_from_scalr_str(update_conf)
+        reload_service = _bool_from_scalr_str(reload_service)
+
         if update_conf:
             self._load_proxies_inc()
 
@@ -1101,8 +1152,9 @@ class NginxAPI(object):
         for i, _ in enumerate(self.proxies_inc.get_list('server')):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
+            redirector = self._is_redirector(self.proxies_inc, server_xpath)
 
-            if hostname == server_name:
+            if hostname == server_name and not redirector:
                 try:
                     if self.proxies_inc.get('%s/ssl' % server_xpath) is 'on':
                         self.proxies_inc.set('%s/ssl' % server_xpath, 'off')

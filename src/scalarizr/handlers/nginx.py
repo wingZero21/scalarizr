@@ -121,6 +121,8 @@ class NginxCnfController(CnfController):
 
 class NginxHandler(ServiceCtlHandler):
 
+    _nginx_v2_flag_filepath = os.path.join(bus.etc_path, "private.d/nginx_v2")
+
     def __init__(self):
         self._cnf = bus.cnf
         ServiceCtlHandler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
@@ -157,23 +159,30 @@ class NginxHandler(ServiceCtlHandler):
             self._upstream_app_role = None
 
     def on_host_init_response(self, message):
+        self._logger.debug('Handling on_host_init_response message')
         if hasattr(message, BEHAVIOUR):
             data = getattr(message, BEHAVIOUR)
+            if not data and hasattr(message, 'nginx'):
+                data = getattr(message, 'nginx')
+
+            self._logger.debug('message data: %s' % data)
             if data and 'preset' in data:
                 self.initial_preset = data['preset'].copy()
             if data and data.get('proxies'):
-                self._proxies = list(data['proxies'])
+                self._set_nginx_v2_mode_flag(True)
+                self._proxies = list(data.get('proxies', []))
             else:
                 self._proxies = None
+            self._logger.debug('proxies: %s' % self._proxies)
 
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-        return BEHAVIOUR in behaviour and \
-                (message.name == Messages.HOST_UP or \
-                message.name == Messages.HOST_DOWN or \
-                message.name == Messages.BEFORE_HOST_TERMINATE or \
-                message.name == Messages.VHOST_RECONFIGURE or \
-                message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
+        return (BEHAVIOUR in behaviour or 'nginx' in behaviour) and \
+            message.name in (Messages.HOST_UP,
+                             Messages.HOST_DOWN,
+                             Messages.BEFORE_HOST_TERMINATE,
+                             Messages.VHOST_RECONFIGURE,
+                             Messages.UPDATE_SERVICE_CONFIGURATION)
 
     def get_initialization_phases(self, hir_message):
         self._phase = 'Configure Nginx'
@@ -186,13 +195,31 @@ class NginxHandler(ServiceCtlHandler):
                               self._step_copy_error_pages,
                               self._step_setup_proxying]}]}
 
+    def _set_nginx_v2_mode_flag(self, on):
+        if on and not self._get_nginx_v2_mode_flag():
+            open(self._nginx_v2_flag_filepath, 'w').close()
+        elif not on and self._get_nginx_v2_mode_flag():
+            os.remove(self._nginx_v2_flag_filepath)
+
+    def _get_nginx_v2_mode_flag(self):
+        return os.path.exists(self._nginx_v2_flag_filepath)
+
     def on_start(self):
         self._logger.debug('Handling on_start message')
         if __node__['state'] == 'running':
-            role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])
-            if role_params and role_params.get('proxies'):
-                self._logger.debug('Recreating proxying with proxies:\n%s' % role_params['proxies'])
-                self.api.recreate_proxying(role_params['proxies'])
+            role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
+            nginx_params = role_params.get(BEHAVIOUR)
+            v2_mode = (nginx_params and nginx_params.get('proxies')) \
+                or self._get_nginx_v2_mode_flag()
+
+            self._logger.debug('Updating main config')
+            self._update_main_config(remove_server_section=v2_mode, reload_service=False)
+
+            if v2_mode:
+                self._set_nginx_v2_mode_flag(True)
+                proxies = nginx_params.get('proxies', []) if nginx_params else []
+                self._logger.debug('Recreating proxying with proxies:\n%s' % proxies)
+                self.api.recreate_proxying(proxies)
             else:
                 self._logger.debug('Compatibility mode proxying recreation')
                 roles_for_proxy = []
@@ -208,8 +235,6 @@ class NginxHandler(ServiceCtlHandler):
                     self._logger.debug('Removing https.include')
                     os.remove(https_inc_path)
 
-            self._logger.debug('Updating main config')
-            self._update_main_config(remove_server_section=False)
 
     def on_before_host_up(self, message):
         self._logger.debug('Handling on_before_host_up message')
@@ -220,7 +245,12 @@ class NginxHandler(ServiceCtlHandler):
                     self._copy_error_pages()
 
                 with op.step(self._step_setup_proxying):
-                    if self._proxies:
+                    self._logger.debug('Updating main config')
+                    v2_mode = bool(self._proxies) or self._get_nginx_v2_mode_flag()
+                    self._update_main_config(remove_server_section=v2_mode,
+                                             reload_service=False)
+
+                    if v2_mode:
                         self._logger.debug('Recreating proxying with proxies:\n%s' % self._proxies)
                         self.api.recreate_proxying(self._proxies)
                     else:
@@ -231,9 +261,6 @@ class NginxHandler(ServiceCtlHandler):
                         else:
                             roles_for_proxy = self.get_all_app_roles()
                         self.make_default_proxy(roles_for_proxy)
-
-                    self._logger.debug('Updating main config')
-                    self._update_main_config(remove_server_section=bool(self._proxies))
 
         bus.fire('service_configured',
                  service_name=SERVICE_NAME,
@@ -251,7 +278,7 @@ class NginxHandler(ServiceCtlHandler):
 
         self._logger.debug('on host up backend table is %s' % self.api.backend_table)
         # Assuming backend `backend` can be only in default behaviour mode
-        if self._in_default_mode():
+        if not self._get_nginx_v2_mode_flag():
             upstream_role = __nginx__['upstream_app_role']
             self._logger.debug('upstream app role is %s and server is up in role %s',
                 __nginx__['upstream_app_role'],
@@ -280,7 +307,7 @@ class NginxHandler(ServiceCtlHandler):
         else:
             self._logger.info('adding new app server %s to role %s backend(s)', server, role_id)
             self.api.add_server_to_role(server, role_id)
-        self._logger.debug('after host up backend table is %s' % self.api.backend_table)
+        self._logger.info('After %s host up backend table is %s' % (server, self.api.backend_table))
 
 
     def _remove_shut_down_server(self,
@@ -296,7 +323,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('on host down backend table is %s' % self.api.backend_table)
         self._logger.debug('removing server %s from backends' % server)
         # Assuming backend `backend` can be only in default behaviour mode
-        if self._in_default_mode():
+        if not self._get_nginx_v2_mode_flag():
             upstream_role = __nginx__['upstream_app_role']
             if (upstream_role and upstream_role == role_name) or \
                 (not upstream_role and BuiltinBehaviours.APP in behaviours):
@@ -318,13 +345,15 @@ class NginxHandler(ServiceCtlHandler):
                         self.api.add_server(default_backend, '127.0.0.1',
                                             reload_service=False,
                                             update_backend_table=True)
+                    self._logger.info('Removing %s server from backend' % server)
                     self.api.remove_server(default_backend, server, 
                                            update_backend_table=True)
 
         else:
             self._logger.info('removing server %s from role %s backend(s)', server, role_id)
             self.api.remove_server_from_role(server, role_id)
-        self._logger.debug('after host down backend table is %s' % self.api.backend_table)
+        self._logger.debug('After %s host down backend table is %s' %
+                           (server, self.api.backend_table))
 
         if cache_remove:
             self._terminating_servers.append(server)
@@ -354,7 +383,7 @@ class NginxHandler(ServiceCtlHandler):
         self._remove_shut_down_server(server, role_id, role_name, behaviours, True)
 
     def on_VhostReconfigure(self, message):
-        if self._in_default_mode():
+        if not self._get_nginx_v2_mode_flag():
             self._logger.debug('updating certificates')
             cert, key, cacert = self._queryenv.get_https_certificate()
             self.api.update_ssl_certificate('', cert, key, cacert)
@@ -378,10 +407,6 @@ class NginxHandler(ServiceCtlHandler):
                                         private_key,
                                         cacertificate)
         self.api._reload_service()
-
-    def _in_default_mode(self):
-        return 'backend' in self.api.backend_table or \
-            'backend.ssl' in self.api.backend_table
 
     def _copy_error_pages(self):
         pages_source = '/usr/share/scalr/nginx/html/'
@@ -426,16 +451,16 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.info('Making default proxy with roles: %s' % roles)
         servers = []
         for role in roles:
+            servers_ips = []
             if type(role) is str:
-                s = self.api.get_role_servers(role) or \
+                servers_ips = self.api.get_role_servers(role) or \
                     self.api.get_role_servers(role_name=role)
-                servers.extend(s)
             else:
                 cl = __node__['cloud_location']
                 servers_ips = [h.internal_ip if cl == h.cloud_location else
                                h.external_ip
                                for h in role.hosts]
-                servers.extend(servers_ips)
+            servers.extend({'host': srv} for srv in servers_ips)
 
         if not servers:
             self._logger.debug('No app roles in farm, making mock backend')
@@ -448,7 +473,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('backend table is %s' % self.api.backend_table)
         write_proxies = not self._main_config_contains_server()
         self.api.make_proxy('backend',
-                            servers=servers,
+                            backends=servers,
                             ssl=False,
                             backend_ip_hash=True,
                             hash_backend_name=False,
@@ -475,7 +500,7 @@ class NginxHandler(ServiceCtlHandler):
         #     self._logger.debug('adding default ssl nginx server')
         #     write_proxies = not self._https_config_exists()
         #     self.api.make_proxy('backend.ssl',
-        #                         servers=servers,
+        #                         backends=servers,
         #                         port=None,
         #                         ssl=True,
         #                         backend_ip_hash=True,
@@ -531,7 +556,7 @@ class NginxHandler(ServiceCtlHandler):
 
         return result
 
-    def _update_main_config(self, remove_server_section=True):
+    def _update_main_config(self, remove_server_section=True, reload_service=True):
         config_dir = os.path.dirname(self.api.app_inc_path)
         nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
 
@@ -589,7 +614,8 @@ class NginxHandler(ServiceCtlHandler):
             # Write new nginx.conf
             shutil.copy(nginx_conf_path, nginx_conf_path + '.bak')
             config.write(nginx_conf_path)
-            self.api._reload_service()
+            if reload_service:
+                self.api._reload_service()
 
     def _insert_iptables_rules(self, *args, **kwargs):
         if iptables.enabled():
