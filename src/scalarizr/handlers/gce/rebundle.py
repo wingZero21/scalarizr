@@ -15,8 +15,8 @@ import pexpect
 import tempfile
 
 from scalarizr.bus import bus
-from scalarizr.storage import transfer
 from scalarizr import storage2
+from scalarizr.storage2.cloudfs import FileTransfer
 from scalarizr.util import wait_until, capture_exception
 from scalarizr.linux import mount, system
 from scalarizr.handlers import HandlerError, rebundle as rebundle_hndlr
@@ -143,18 +143,18 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
             try:
                 LOG.info('Uploading compressed image to cloud storage')
-                uploader = transfer.Transfer(logger=LOG)
-                tmp_bucket_name = 'scalr-images-%s-%s' % (
-                                                        random.randint(1,1000000), int(time.time()))
+                tmp_bucket_name = 'scalr-images-%s-%s' % (random.randint(1,1000000), int(time.time()))
+                remote_path = 'gcs://%s/' % tmp_bucket_name
 
+                uploader = FileTransfer(src=arch_path, dst=remote_path)
+                #uploader = transfer.Transfer(logger=LOG)
                 try:
-                    remote_path = 'gcs://%s/' % tmp_bucket_name
-                    uploader.upload((arch_path,), remote_path)
+                    uploader.run()
                 except:
                     with capture_exception(LOG):
                         objs = cloudstorage.objects()
                         objs.delete(bucket=tmp_bucket_name, object=arch_name).execute()
-                        cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
+                    cloudstorage.buckets().delete(bucket=tmp_bucket_name).execute()
             finally:
                 os.unlink(arch_path)
 
