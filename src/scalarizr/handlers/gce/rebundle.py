@@ -16,7 +16,7 @@ import tempfile
 
 from scalarizr.bus import bus
 from scalarizr import storage2
-from scalarizr.storage2.cloudfs import FileTransfer
+from scalarizr.storage import transfer
 from scalarizr.util import wait_until, capture_exception
 from scalarizr.linux import mount, system
 from scalarizr.handlers import HandlerError, rebundle as rebundle_hndlr
@@ -146,10 +146,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                 tmp_bucket_name = 'scalr-images-%s-%s' % (random.randint(1,1000000), int(time.time()))
                 remote_path = 'gcs://%s/' % tmp_bucket_name
 
-                uploader = FileTransfer(src=arch_path, dst=remote_path)
-                #uploader = transfer.Transfer(logger=LOG)
+                #uploader = FileTransfer(src=arch_path, dst=remote_path)
+                uploader = transfer.Transfer(logger=LOG)
                 try:
-                    uploader.run()
+                    uploader.upload((arch_path,), remote_path)
+                    #uploader.run()
                 except:
                     with capture_exception(LOG):
                         objs = cloudstorage.objects()
@@ -167,21 +168,25 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
             # TODO: check duplicate names
             compute = pl.new_compute_client()
 
-            current_image_fq = pl.get_image().split('/')
-            current_img_project = current_image_fq[1]
-            current_img_name = current_image_fq[3]
-            current_img_obj = compute.images().get(project=current_img_project,
-                                                            image=current_img_name).execute()
-            kernel = current_img_obj['preferredKernel']
-
-            # Getting this instance's kernel
-            #instance_id = pl.get_instance_id()
-            #zone = os.path.basename(pl.get_zone())
-            #try:
-            #    kernel = compute.instances().list(project=proj_id, zone=zone, filter='id eq %s' % instance_id,
-            #                         fields="items(kernel)").execute()['items'][0]['kernel']
-            #except KeyError:
-            #    raise HandlerError('Could not get kernel url from instance resource')
+            current_image = pl.get_image()
+            if current_image:
+                current_image_fq = current_image.split('/')
+                current_img_project = current_image_fq[1]
+                current_img_name = current_image_fq[3]
+                current_img_obj = compute.images().get(project=current_img_project,
+                                                                image=current_img_name).execute()
+                kernel = current_img_obj['preferredKernel']
+            else:
+                raise HandlerError('Could not get image name from metadata server')
+            #else:
+                # Getting this instance's kernel
+            #    instance_id = pl.get_instance_id()
+            #    zone = os.path.basename(pl.get_zone())
+            #    try:
+            #        kernel = compute.instances().list(project=proj_id, zone=zone, filter='id eq %s' % instance_id,
+            #                             fields="items(kernel)").execute()['items'][0]['kernel']
+            #    except KeyError:
+            #        raise HandlerError('Could not get kernel url from instance resource')
 
             image_url = 'http://storage.googleapis.com/%s/%s' % (tmp_bucket_name, arch_name)
 
