@@ -245,7 +245,7 @@ class Habibi(object):
 
     def _next_server_index(self):
         # TODO: handle holes
-        return str(len(self.servers) + 1)
+        return len(self.servers) + 1
 
     def _user_data(self, server):
         return {'szr_key': server.crypto_key,
@@ -261,7 +261,7 @@ class Habibi(object):
                 'env_id': '1',
                 'platform': 'lxc',
                 'cloud-location': server.zone,
-                'server_index': server.index}
+                'server_index': str(server.index)}
 
     def _pack_user_data(self, user_data):
         return ';'.join(['{0}={1}'.format(k, v) for k, v in user_data.items()])
@@ -294,7 +294,7 @@ class Habibi(object):
             msg.body['behaviour'] = list(server.behaviors)
 
             self.apply_breakpoints(cond={'msg_name': msg.name, 
-                                         'target_index': server.index,
+                                         'target_index': str(server.index),
                                          'target_behavior': server.behaviors[0]}, 
                                    kwds={'target_msg': msg,
                                          'target_server': server,
@@ -323,7 +323,7 @@ class Habibi(object):
         server = self.find_servers(server_id)[0]
 
         self.apply_breakpoints(cond={'msg_name': msg.name, 
-                                     'source_index': server.index,
+                                     'source_index': str(server.index),
                                      'source_behavior': server.behaviors[0]}, 
                                kwds={'source_msg': msg})
 
@@ -492,7 +492,7 @@ class QueryEnv(object):
             host.attrib.update({'internal-ip': server.private_ip,
                                 'external-ip': server.public_ip,
                                 'status': server.status,
-                                'index': server.index,
+                                'index': str(server.index),
                                 'cloud-location': server.zone})
             hosts.append(host)
         ret.append(role)
