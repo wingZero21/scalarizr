@@ -218,7 +218,9 @@ class QueryEnvService(object):
         """
         @return dict
         """
-        return {'params':self._request("get-global-config", {}, self._read_get_global_config_response)}
+        ret = {'params': self._request("get-global-config", {}, self._read_get_global_config_response)}
+        ret['params']['scalr.version'] = '4.5.0'
+        return ret
 
     def list_global_variables(self):
         '''
