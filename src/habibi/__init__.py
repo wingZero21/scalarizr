@@ -212,6 +212,20 @@ class Habibi(object):
         p = subprocess.Popen('vagrant destroy -f', shell=True, cwd=server_dir)
         p.communicate()
 
+    def _perform_server_command(self, server, command):
+        if isinstance(server, str):
+            server = self.find_servers(server)[0]
+        server_dir = self.base_dir + '/' + server.id
+        p = subprocess.Popen('vagrant ssh -c "%s"' % command, shell=True, cwd=server_dir)
+        return p.communicate()
+
+    def cut_off_server(self, server):
+        """ breaks connection to and from server """
+        self._perform_server_command(server, 'iptables -A INPUT -p tcp --dport 22 -j ACCEPT')
+        self._perform_server_command(server, 'iptables -A OUTPUT -p tcp --sport 22 -j ACCEPT')
+        self._perform_server_command(server, 'iptables -P INPUT DROP')
+        self._perform_server_command(server, 'iptables -P OUTPUT DROP')
+        self._perform_server_command(server, 'iptables -P FORWARD DROP')
 
     def start(self):
         self.web_server = BaseHTTPServer.HTTPServer(('', self.port), self.RequestHandler)
