@@ -246,7 +246,8 @@ class ScriptExecutor(Handler):
 
             LOG.debug('Fetching scripts from incoming message')
             scripts = [Script(name=item['name'],
-                                body=item['body'],
+                                body=item.get('body'),
+                                path=item.get('path'),
                                 asynchronous=int(item['asynchronous']),
                                 exec_timeout=item['timeout'],
                                 role_name=role_name,
@@ -436,8 +437,8 @@ class Script(object):
                             elapsed_time)
 
             # always send stdout/stderr (by ent client request) 
-            stdout=binascii.b2a_base64(get_truncated_log(self.stdout_path))
-            stderr=binascii.b2a_base64(get_truncated_log(self.stderr_path))
+            stdout = binascii.b2a_base64(get_truncated_log(self.stdout_path))
+            stderr = binascii.b2a_base64(get_truncated_log(self.stderr_path))
             ret = dict(
                     stdout=stdout,
                     stderr=stderr,
