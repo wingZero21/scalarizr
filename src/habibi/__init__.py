@@ -216,7 +216,7 @@ class Habibi(object):
         if isinstance(server, str):
             server = self.find_servers(server)[0]
         server_dir = self.base_dir + '/' + server.id
-        p = subprocess.Popen('vagrant ssh -c "%s"' % command, shell=True, cwd=server_dir)
+        p = subprocess.Popen('vagrant ssh -c "sudo %s"' % command, shell=True, cwd=server_dir)
         return p.communicate()
 
     def cut_off_server(self, server):
