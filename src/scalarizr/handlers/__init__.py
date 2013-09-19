@@ -355,7 +355,6 @@ class MessageListener:
                 pl.set_access_data(message.platform_access_data)
             if 'scalr_version' in message.meta:
                 try:
-                    message.meta['scalr_version'] = '4.5.0'
                     ver = tuple(map(int, message.meta['scalr_version'].strip().split('.')))
                     if ver != bus.scalr_version:
                         # Refresh QueryEnv version
