@@ -274,7 +274,7 @@ class Habibi(object):
                 'roleid': '1',
                 'env_id': '1',
                 'platform': 'lxc',
-                'cloud-location': server.zone,
+                'region': server.zone,
                 'server_index': str(server.index)}
 
     def _pack_user_data(self, user_data):
@@ -507,7 +507,7 @@ class QueryEnv(object):
                                 'external-ip': server.public_ip,
                                 'status': server.status,
                                 'index': str(server.index),
-                                'cloud-location': server.zone})
+                                'region': server.zone})
             hosts.append(host)
         ret.append(role)
         return ret
