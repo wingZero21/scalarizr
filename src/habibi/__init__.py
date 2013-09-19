@@ -507,7 +507,7 @@ class QueryEnv(object):
                                 'external-ip': server.public_ip,
                                 'status': server.status,
                                 'index': str(server.index),
-                                'region': server.zone})
+                                'cloud-location': server.zone})
             hosts.append(host)
         ret.append(role)
         return ret
