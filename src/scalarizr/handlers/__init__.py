@@ -321,7 +321,9 @@ class MessageListener:
 
             def cls_weight(obj):
                 cls = obj.__class__.__name__
-                if cls in ('EbsHandler', 'BlockDeviceHandler'):
+                if cls == 'IpListBuilder':
+                    return 20
+                elif cls in ('EbsHandler', 'BlockDeviceHandler'):
                     return 10
                 elif cls == 'DeploymentHandler':
                     return 1

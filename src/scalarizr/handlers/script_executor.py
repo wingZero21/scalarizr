@@ -246,7 +246,8 @@ class ScriptExecutor(Handler):
 
             LOG.debug('Fetching scripts from incoming message')
             scripts = [Script(name=item['name'],
-                                body=item['body'],
+                                body=item.get('body'),
+                                path=item.get('path'),
                                 asynchronous=int(item['asynchronous']),
                                 exec_timeout=item['timeout'],
                                 role_name=role_name,
@@ -305,21 +306,21 @@ class Script(object):
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
 
-        if self.name and self.body:
+        if self.name and (self.body or self.path):
             random.seed()
             # time.time() can produce the same microseconds fraction in different async script execution threads, 
             # and therefore produce the same id. solution is to seed random millisecods number
             self.id = '%d.%d' % (time.time(), random.randint(0, 100))
-            LOG.debug('script: %s', self.body)
-            interpreter = read_shebang(script=self.body)
 
+            interpreter = read_shebang(path=self.path, script=self.body)
             if not interpreter:
                 raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
                                                 "First line of the script should have the form of a shebang "
                                                 "interpreter directive is as follows:\n"
                                                 "#!interpreter [optional-arg]" % (self.name, ))
             self.interpreter = interpreter
-            if linux.os['family'] == 'Windows':
+            
+            if linux.os['family'] == 'Windows' and self.body:
                 # Erase first line with #!
                 self.body = '\n'.join(self.body.splitlines()[1:])
 
@@ -436,8 +437,8 @@ class Script(object):
                             elapsed_time)
 
             # always send stdout/stderr (by ent client request) 
-            stdout=binascii.b2a_base64(get_truncated_log(self.stdout_path))
-            stderr=binascii.b2a_base64(get_truncated_log(self.stderr_path))
+            stdout = binascii.b2a_base64(get_truncated_log(self.stdout_path))
+            stderr = binascii.b2a_base64(get_truncated_log(self.stderr_path))
             ret = dict(
                     stdout=stdout,
                     stderr=stderr,

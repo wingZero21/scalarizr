@@ -218,7 +218,7 @@ class QueryEnvService(object):
         """
         @return dict
         """
-        return {'params':self._request("get-global-config", {}, self._read_get_global_config_response)}
+        return {'params': self._request("get-global-config", {}, self._read_get_global_config_response)}
 
     def list_global_variables(self):
         '''

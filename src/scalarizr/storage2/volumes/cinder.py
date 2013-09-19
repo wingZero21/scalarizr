@@ -108,6 +108,13 @@ class CinderVolume(base.Volume):
             'to perform this operation'})
         self._cinder = __openstack__['new_cinder_connection']
         self._nova = __openstack__['new_nova_connection']
+        # http://www.linux-kvm.org/page/Hotadd_pci_devices
+        for mod in ('acpiphp', 'pci_hotplug'):
+            try:
+                coreutils.modprobe(mod)
+            except:
+                # Ignore errors like FATAL: Module acpiphp not found
+                pass
 
     def mount(self):
         # Workaround : cindervolume remounts ro sometimes, fsck it first

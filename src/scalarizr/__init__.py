@@ -849,7 +849,7 @@ class Service(object):
 
     def _stop_snmp_server(self):
         # Shutdown SNMP
-        if self._snmp_pid:
+        if self._snmp_pid > 0:
             self._logger.debug('Send SIGTERM to SNMP process (pid: %d)', self._snmp_pid)
             try:
                 os.kill(self._snmp_pid, signal.SIGTERM)
