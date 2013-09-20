@@ -455,7 +455,12 @@ class NginxAPI(object):
             config.add('upstream/ip_hash', '')
 
         for dest in destinations:
-            for server in dest['servers']:
+            servers = dest['servers']
+            if len(servers) == 0:
+                # if role destination has no running servers yet, 
+                # adding mock server 127.0.0.1
+                servers = ['127.0.0.1']
+            for server in servers:
                 if 'port' in dest or port:
                     server = '%s:%s' % (server, dest.get('port', port))
 
@@ -1013,6 +1018,8 @@ class NginxAPI(object):
                     srv.pop('id')
                     
                     self.add_server(backend_name, srv, False, False)
+                    if len(dest['servers']) == 0:
+                        self.remove_server(backend_name, '127.0.0.1', False, False)
                     dest['servers'].append(server)
                     config_updated = True
 
@@ -1049,6 +1056,8 @@ class NginxAPI(object):
         for backend_name, backend_destinations in self.backend_table.items():
             for dest in backend_destinations:
                 if dest.get('id') == role_id and server in dest['servers']:
+                    if len(dest['servers']) == 1:
+                        self.add_server(backend_name, '127.0.0.1', False, False)
                     self.remove_server(backend_name, server, False, False)
                     dest['servers'].remove(server)
                     config_updated = True
