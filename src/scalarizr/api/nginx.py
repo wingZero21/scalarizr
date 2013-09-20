@@ -1086,7 +1086,6 @@ class NginxAPI(object):
         if update_conf:
             self._load_app_servers_inc()
 
-        # TODO: ensure that this is fine behaviour
         if not server:
             return
 
