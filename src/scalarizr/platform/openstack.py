@@ -1,8 +1,9 @@
+import logging
 import urllib2
 import json
 import os
-import logging
 import re
+import sys
 from time import sleep
 
 
@@ -13,6 +14,7 @@ import swiftclient
 
 from scalarizr import platform
 from scalarizr.bus import bus
+from scalarizr import linux
 from scalarizr.storage.transfer import Transfer, TransferProvider
 from scalarizr.storage2.cloudfs import swift as swiftcloudfs
 
@@ -84,15 +86,17 @@ class OpenstackPlatform(platform.Platform):
 
     def __init__(self):
         platform.Platform.__init__(self)
-        # Work over [Errno -3] Temporary failure in name resolution
-        # http://bugs.centos.org/view.php?id=4814
-        os.chmod('/etc/resolv.conf', 0755)
+        if not linux.os.windows_family:
+            # Work over [Errno -3] Temporary failure in name resolution
+            # http://bugs.centos.org/view.php?id=4814
+            os.chmod('/etc/resolv.conf', 0755)
 
     def get_private_ip(self):
         if self._private_ip is None:
-            for iface, ipv4 in platform.net_interfaces().items():
-                if ipv4.startswith('10.') or ipv4.startswith('172.'):
-                    self._private_ip = ipv4
+            for iface in platform.net_interfaces():
+                #if iface['ipv4'].startswith('10.') or iface['ipv4'].startswith('172.'):
+                if any(map(lambda x: iface['ipv4'].startswith(x), ('10.', '172.', '192.168.'))):
+                    self._private_ip = iface['ipv4']
                     break
 
         return self._private_ip
@@ -152,16 +156,15 @@ class OpenstackPlatform(platform.Platform):
             r = urllib2.urlopen(url)
             response = r.read().strip()
             return json.loads(response)
-        except IOError, e:
-            urllib_error = isinstance(e, urllib2.HTTPError) or \
-                isinstance(e, urllib2.URLError)
-            if urllib_error:
-                metadata = self._fetch_metadata_from_file()
-                # TODO: move some keys from metadata to parent dict,
-                # that should be there when fetching from url
-                return {'meta': metadata}
-            raise platform.PlatformError("Cannot fetch %s metadata url '%s'. "
-                                         "Error: %s" % (self.name, url, e))
+        except urllib2.URLError:
+            # TODO: move some keys from metadata to parent dict,
+            # that should be there when fetching from url
+            metadata = self._fetch_metadata_from_file()
+            return {'meta': metadata}
+        except:
+            msg = "Can't fetch %s metadata URL %s. Error: %s".format(
+                    self.name, url, sys.exc_info()[1])
+            raise platform.PlatformError(msg)
 
     def _fetch_metadata_from_file(self):
         cnf = bus.cnf
@@ -265,3 +268,40 @@ class SwiftTransferProvider(TransferProvider):
 
 
 Transfer.explore_provider(SwiftTransferProvider)
+
+# Logging 
+
+class OpenStackCredentialsLoggerFilter(object):
+
+    request_re = re.compile('(X-Auth[^:]+:)([^\'"])+')
+    response_re = re.compile('(.*)({["\']access.+})(.*)')
+
+    def filter(self, record):
+        message = record.getMessage()
+        record.args = ()
+
+        if "passwordCredentials" in message:
+            record.msg = 'Requested authentication, credentials are hidden'
+            return True
+
+        search_res = re.search(self.response_re, message)
+        if search_res:
+            try:
+                response_part_str = search_res.group(2)
+                response = json.loads(response_part_str)
+                response['access']['token'] = '<HIDDEN>'
+                response['access']['user'] = '<HIDDEN>'
+                altered_resp = json.dumps(response)
+                record.msg = search_res.group(1) + altered_resp + search_res.group(3)
+                return True
+            except:
+                return False
+
+        if "X-Auth" in message:
+            record.msg = re.sub(self.request_re, r'\1 <HIDDEN>', message)
+            return True
+
+openstack_filter = OpenStackCredentialsLoggerFilter()
+for logger_name in ('keystoneclient', 'novaclient', 'cinderclient'):
+    logger = logging.getLogger('%s.client' % logger_name)
+    logger.addFilter(openstack_filter)

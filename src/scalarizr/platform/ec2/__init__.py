@@ -1,5 +1,10 @@
 from __future__ import with_statement
 
+import os
+import re
+import urllib2
+import logging
+
 from scalarizr.bus import bus
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
 from scalarizr.storage.transfer import Transfer
@@ -7,7 +12,6 @@ from .storage import S3TransferProvider
 
 import boto
 import boto.ec2
-import urllib2, re, os
 
 
 Transfer.explore_provider(S3TransferProvider)
@@ -99,3 +103,17 @@ class Ec2Platform(Ec2LikePlatform):
             return 's3-external-1.amazonaws.com'
         else:
             return 's3-%s.amazonaws.com' % region
+
+
+class BotoLoggingFilter(logging.Filter):
+    # removes all ERROR boto messages - we will log it on upper levels
+
+    def filter(self, record):
+        if record.name.startswith('boto') and record.levelno == logging.ERROR:
+            return False
+        return True
+
+root_logger = logging.getLogger()
+root_logger.addFilter(BotoLoggingFilter('boto'))
+
+

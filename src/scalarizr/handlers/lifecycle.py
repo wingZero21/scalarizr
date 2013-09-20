@@ -239,7 +239,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             broadcast=True # It's not really broadcast but need to contain broadcast message data 
         )
         behs = self.get_ready_behaviours()
-        if 'mysql2' in behs:
+        if 'mysql2' in behs or 'percona' in behs:
             # only mysql2 should be returned to Scalr
             try:
                 behs.remove('mysql')

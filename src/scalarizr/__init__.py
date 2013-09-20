@@ -648,6 +648,9 @@ class Service(object):
                 udfile = cnf.private_path('.user-data')
                 wait_until(lambda: os.path.exists(udfile),
                         timeout=60, error_text="User-data file %s doesn't exist" % udfile)
+            
+            # When server bundled by Scalr, often new server are spawned in "importing" state
+            # and its important to query user-data first, to override server-id that was bundled.
             try:
                 ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
             except:
@@ -846,7 +849,7 @@ class Service(object):
 
     def _stop_snmp_server(self):
         # Shutdown SNMP
-        if self._snmp_pid:
+        if self._snmp_pid > 0:
             self._logger.debug('Send SIGTERM to SNMP process (pid: %d)', self._snmp_pid)
             try:
                 os.kill(self._snmp_pid, signal.SIGTERM)

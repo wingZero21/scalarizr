@@ -1,9 +1,12 @@
 __author__ = 'vladimir'
 
-import logging
+
 import os
 import sys
 import json
+import time
+import logging
+import random
 
 from apiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from apiclient.errors import HttpError
@@ -100,14 +103,26 @@ class GCSFileSystem(CloudFileSystem):
             )
             last_progress = 0
             response = None
-            while response is None:
-                status, response = req.next_chunk()
-                if status:
-                    percentage = int(status.progress() * 100)
-                    if percentage - last_progress >= self.report_interval:
-                        if report_to:
-                            report_to(status.resumable_progress, status.total_size)
-                        last_progress = percentage
+            exponent_backoff = [1, 2, 4, 8, 16, 32]
+            while response is None: 
+                try:
+                    status, response = req.next_chunk()
+                    if status:
+                        percentage = int(status.progress() * 100)
+                        if percentage - last_progress >= self.report_interval:
+                            if report_to:
+                                report_to(status.resumable_progress, status.total_size)
+                            last_progress = percentage
+                    exponent_backoff = [1, 2, 4, 8, 16, 32]
+                except HttpError, e:
+                    if not exponent_backoff or not int(e.resp.status) in (500, 502, 503, 504):
+                        raise
+
+                    sec_to_wait = exponent_backoff.pop(0)
+                    LOG.warning('Error while uploading chunk: %s. Retry in %s sec' % (e, sec_to_wait))
+                    # add random milliseconds
+                    sec_to_wait += random.random()
+                    time.sleep(sec_to_wait)
         finally:
             fd.close()
         LOG.debug("Finished uploading %s", os.path.basename(local_path))

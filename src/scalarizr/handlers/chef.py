@@ -142,7 +142,7 @@ class ChefHandler(Handler):
     def on_host_init_response(self, message):
         global_variables = message.body.get('global_variables') or []
         for kv in global_variables:
-            self._global_variables[kv['name']] = kv['value'] or ''
+            self._global_variables[kv['name']] = kv['value'].encode('utf-8') if kv['value'] else ''
 
         if 'chef' in message.body and message.body['chef']:
             if linux.os.windows_family:
@@ -151,7 +151,8 @@ class ChefHandler(Handler):
                 self._chef_client_bin = which('chef-client')   # Workaround for 'chef' behavior enabled, but chef not installed
 
             self._chef_data = message.chef.copy()
-            self._chef_data['node_name'] = self.get_node_name()
+            if not self._chef_data.get('node_name'):
+                self._chef_data['node_name'] = self.get_node_name()
             self._daemonize = self._chef_data.get('daemonize')
 
             self._with_json_attributes = self._chef_data.get('json_attributes')
@@ -166,7 +167,7 @@ class ChefHandler(Handler):
             if linux.os.windows_family:
                 try:
                     # Set startup type to 'manual' for chef-client service
-                    hscm = win32service.OpenSCManager(None,None,win32service.SC_MANAGER_ALL_ACCESS)
+                    hscm = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
                     try:
                         hs = win32serviceutil.SmartOpenService(hscm, WIN_SERVICE_NAME, win32service.SERVICE_ALL_ACCESS)
                         try:
@@ -252,7 +253,7 @@ class ChefHandler(Handler):
             close_fds=not linux.os.windows_family,
             log_level=logging.INFO,
             preexec_fn=not linux.os.windows_family and os.setsid or None,
-            env=environ
+            env=self._environ_variables
         )
 
     @property
