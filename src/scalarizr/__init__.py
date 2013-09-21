@@ -51,7 +51,8 @@ class NotConfiguredError(BaseException):
     pass
 
 
-__version__ = open(os.path.join(os.path.dirname(__file__), 'version')).read().strip()
+#__version__ = open(os.path.join(os.path.dirname(__file__), 'version')).read().strip()
+__version__ = '0.21.16'
 
 
 EMBED_SNMPD = True
