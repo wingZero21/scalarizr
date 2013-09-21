@@ -231,9 +231,21 @@ if [ ! -f "$pub_cnf_dir/gce.ini" ]; then
 [handlers]
 
 rebundle = scalarizr.handlers.gce.rebundle
+
+gce_lifecycle = scalarizr.handlers.gce.lifecycle
+
+gce_vol = scalarizr.handlers.gce.vol
 EOF
 fi
 
+if [ ! -f "$pub_cnf_dir/haproxy.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/haproxy.ini"
+[haproxy]
+
+[handlers]
+haproxy = scalarizr.handlers.haproxy
+EOF
+fi
 
 if [ ! -f "$pub_cnf_dir/hooks.ini" ]; then
 	cat <<EOF > "$pub_cnf_dir/hooks.ini"
@@ -363,6 +375,15 @@ nimbula_rebundle = scalarizr.handlers.nimbula.rebundle
 EOF
 fi
 
+if [ ! -f "$pub_cnf_dir/openstack.ini" ]; then
+        cat <<EOF > "$pub_cnf_dir/openstack.ini"
+[openstack]
+
+[handlers]
+
+openstack_vol = scalarizr.handlers.openstack.vol
+EOF
+fi
 
 if [ ! -f "$pub_cnf_dir/postgresql.ini" ]; then
         cat <<EOF > "$pub_cnf_dir/postgresql.ini"
@@ -425,6 +446,16 @@ logs_truncate_over=20K
 EOF
 fi
 
+if [ ! -f "$pub_cnf_dir/tomcat.ini" ]; then
+	cat <<EOF > "$pub_cnf_dir/tomcat.ini"
+[tomcat]
+
+[handlers]
+
+tomcat = scalarizr.handlers.tomcat
+EOF
+fi
+
 if [ ! -f "$pub_cnf_dir/www.ini" ]; then
 	cat <<EOF > "$pub_cnf_dir/www.ini"
 [www]
@@ -463,6 +494,7 @@ if [ -f cloudfoundry.ini ]; then
 	done
 fi
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
+[ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini 
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini 
 popd

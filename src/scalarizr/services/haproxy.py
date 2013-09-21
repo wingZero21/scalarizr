@@ -491,9 +491,9 @@ class ServerSerializer(OptionSerializer):
             list_par = OptionSerializer.unserialize(self, s)
             temp = {}
             #name = list_par.pop(0)
-            temp['address'] = list_par.pop(0)
-            if ':' in temp['address']:
-                temp['address'], temp['port'] = temp['address'].split(':')
+            temp['host'] = list_par.pop(0)
+            if ':' in temp['host']:
+                temp['host'], temp['port'] = temp['host'].split(':')
             temp.update(self._parse(list_par))
             return temp if isinstance(temp, dict) else s
         except:
@@ -504,15 +504,16 @@ class ServerSerializer(OptionSerializer):
         LOG.debug('ServerSerializer.serialize: input `%s`', d)
         res = []
         if isinstance(d, dict):
-            if d.get('address'):
-                res.append('%s%s' % (str(d['address']), ':' + str(d.get('port')) if d.get('port') else ''))
-                del d['address']
+            if d.get('host'):
+                res.append('%s%s' % (str(d['host']), ':' + str(d.get('port')) if d.get('port') else ''))
+                del d['host']
                 if d.get('port'):
                     del d['port']
 
             for key in d.keys():
-                if isinstance(d[key], bool):
-                    res.append(key)
+                if isinstance(d[key], bool): 
+                    if d[key]:
+                        res.append(key)
                 else:
                     LOG.debug('d[key]: `%s`', d[key])
                     res.append(' '.join([key, d[key]]))

@@ -1,15 +1,14 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 __author__ = 'Nick Demyanchuk'
 
 import os
-import sys
 import base64
 import logging
 import urllib2
 import httplib2
 import threading
+from httplib import BadStatusLine
 
 try:
     import json
@@ -22,13 +21,15 @@ from apiclient.discovery import build
 from scalarizr.platform import Platform
 from scalarizr.storage.transfer import Transfer
 from scalarizr.platform.gce.storage import GoogleCSTransferProvider
-from scalarizr import util
 
 
 Transfer.explore_provider(GoogleCSTransferProvider)
 
-COMPUTE_RW_SCOPE = 'https://www.googleapis.com/auth/compute'
-STORAGE_FULL_SCOPE = 'https://www.googleapis.com/auth/devstorage.full_control'
+COMPUTE_RW_SCOPE = ('https://www.googleapis.com/auth/compute', "https://www.googleapis.com/auth/compute.readonly")
+STORAGE_FULL_SCOPE = ("https://www.googleapis.com/auth/devstorage.full_control",
+                      "https://www.googleapis.com/auth/devstorage.read_only",
+                      "https://www.googleapis.com/auth/devstorage.read_write",
+                      "https://www.googleapis.com/auth/devstorage.write_only")
 
 
 LOG = logging.getLogger(__name__)
@@ -47,6 +48,45 @@ api_logger.addFilter(GoogleApiClientLoggerFilter())
 def get_platform():
     return GcePlatform()
 
+class BadStatusLineHandler(object):
+    def __init__(self, obj):
+        self._obj = obj
+
+    def _wrap(self, fn):
+        def wrapper(*args, **kwargs):
+            tries = 3
+            while True:
+                try:
+                    return fn(*args, **kwargs)
+                except BadStatusLine:
+                    tries -= 1
+                    if not tries:
+                        raise
+                    LOG.warning('Caught "BadStatusLine" exception from google API, retrying')
+        return wrapper
+
+    def __getattribute__(self, item):
+        try:
+            return object.__getattribute__(self, item)
+        except AttributeError:
+            item = getattr(self._obj, item)
+            if callable(item) or item.__class__.__name__ in ("HttpRequest", "Resource"):
+                return BadStatusLineHandler(item)
+            else:
+                return item
+
+    def __call__(self, *args, **kwargs):
+        if self._obj.__name__ in ('execute', 'next_chunk', 'positional_wrapper'):
+            return self._wrap(self._obj.__call__)(*args, **kwargs)
+        else:
+            item = self._obj(*args, **kwargs)
+            if item.__class__.__name__ in ("HttpRequest", "Resource"):
+                return BadStatusLineHandler(item)
+            else:
+                return item
+
+
+
 
 class GoogleServiceManager(object):
     """
@@ -62,6 +102,7 @@ class GoogleServiceManager(object):
         self.map = {}
         self.lock = threading.Lock()
         self.pool = []
+
 
     def get_service(self):
         current_thread = threading.current_thread()
@@ -80,7 +121,8 @@ class GoogleServiceManager(object):
 
                 http = self._get_auth()
                 s = build(self.s_name, self.s_ver, http=http)
-                self.map[current_thread] = s
+                wrapped = BadStatusLineHandler(s)
+                self.map[current_thread] = wrapped
 
             return self.map[current_thread]
 
@@ -95,22 +137,22 @@ class GoogleServiceManager(object):
 
 
 class GcePlatform(Platform):
-    metadata_url = 'http://metadata.google.internal/0.1/meta-data/'
+    compute_api_version = 'v1beta15'
+    metadata_url = 'http://metadata/computeMetadata/v1beta1/'
     _metadata = None
 
     def __init__(self):
         Platform.__init__(self)
         self.compute_svc_mgr = GoogleServiceManager(
-                self, 'compute', 'v1beta14', COMPUTE_RW_SCOPE, STORAGE_FULL_SCOPE)
-
+                self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
-                self, 'storage', 'v1beta1', STORAGE_FULL_SCOPE)
+                self, 'storage', 'v1beta1', *STORAGE_FULL_SCOPE)
 
 
     def get_user_data(self, key=None):
         if self._userdata is None:
             try:
-                raw_userdata = self._get_metadata('attributes/scalr').strip()
+                raw_userdata = self._get_metadata('instance/attributes/scalr').strip()
                 self._userdata = self._parse_user_data(raw_userdata)
             except urllib2.HTTPError, e:
                 if 404 == e.code:
@@ -121,12 +163,15 @@ class GcePlatform(Platform):
         return self._userdata.get(key) if key else self._userdata
 
 
-    def _get_metadata(self, key):
+    def _get_metadata(self, key, url=None):
+        if url is None:
+            url = key
+
         if self._metadata is None:
             self._metadata = dict()
 
-        if not key in self._metadata:
-            key_url = os.path.join(self.metadata_url, key)
+        if not url in self._metadata:
+            key_url = os.path.join(self.metadata_url, url)
             resp = urllib2.urlopen(key_url)
             self._metadata[key] = resp.read()
 
@@ -134,43 +179,43 @@ class GcePlatform(Platform):
 
 
     def get_public_ip(self):
-        network = self._get_metadata('network')
+        network = self._get_metadata('network', 'instance/network-interfaces/?recursive=true')
         network = json.loads(network)
-        return network['networkInterface'][0]['accessConfiguration'][0]['externalIp']
+        return network[0]['accessConfigs'][0]['externalIp']
 
 
     def get_private_ip(self):
-        network = self._get_metadata('network')
+        network = self._get_metadata('network', 'instance/network-interfaces/?recursive=true')
         network = json.loads(network)
-        return network['networkInterface'][0]['ip']
+        return network[0]['ip']
 
 
     def get_project_id(self):
-        return self._get_metadata('project-id')
+        return self._get_metadata('project/project-id')
 
 
     def get_zone(self):
-        return self._get_metadata('zone')
+        return self._get_metadata('instance/zone')
 
 
     def get_numeric_project_id(self):
-        return self._get_metadata('numeric-project-id')
+        return self._get_metadata('project/numeric-project-id')
 
 
     def get_machine_type(self):
-        return self._get_metadata('machine-type')
+        return self._get_metadata('instance/machine-type')
 
 
     def get_instance_id(self):
-        return self._get_metadata('instance-id')
+        return self._get_metadata('instance/id')
 
 
     def get_hostname(self):
-        return self._get_metadata('hostname')
+        return self._get_metadata('instance/hostname')
 
 
     def get_image(self):
-        return self._get_metadata('image')
+        return self._get_metadata('instance/image')
 
 
     def new_compute_client(self):

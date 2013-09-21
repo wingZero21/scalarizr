@@ -28,7 +28,8 @@ class EphVolume(base.Volume):
     """
 
 
-    def __init__(self, vg=None, disk=None, size=None, cloudfs_dir=None, **kwds):
+    def __init__(self, vg=None, disk=None, disks=None, 
+            size=None, cloudfs_dir=None, **kwds):
         # Compatibility with 1.0
         snap_backend = kwds.pop('snap_backend', None)
         if snap_backend:
@@ -39,7 +40,13 @@ class EphVolume(base.Volume):
                 cloudfs_dir += '/'
         kwds.pop('lvm_group_cfg', None)
 
-        super(EphVolume, self).__init__(vg=vg, disk=disk, size=size or '80%', cloudfs_dir=cloudfs_dir, **kwds)
+        super(EphVolume, self).__init__(
+                vg=vg, 
+                disk=disk, 
+                disks=disks, 
+                size=size or '80%', 
+                cloudfs_dir=cloudfs_dir, 
+                **kwds)
 
         self._lvm_volume = None
 
@@ -53,23 +60,26 @@ class EphVolume(base.Volume):
             # First of all, merge self config and snapshot config
             self.snap = storage2.snapshot(self.snap) if self.snap else None
 
-            for attr in ('disk', 'fstype', 'size', 'vg', 'mpoint'):
+            for attr in ('fstype', 'size', 'vg', 'mpoint'):
                 if not getattr(self, attr, None):
                     if not self.snap or not getattr(self.snap, attr, None):
                         raise storage2.StorageError('Missing ephemeral volume attribute "%s"' % attr)
                     setattr(self, attr, getattr(self.snap, attr))
+            if not (self.disk or self.disks):
+                raise storage2.StorageError('Missing "disk" or "disks" attribute')
 
-            self.disk = storage2.volume(self.disk)
-            # Compatibility with storage v1
-            if self.disk.device and self.disk.type == 'base':
-                if self.disk.device.startswith('/dev/sd'):
-                    self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
-                elif 'google' in self.disk.device:
-                    self.disk = storage2.volume(type='gce_ephemeral', name='ephemeral-disk-0')
+            if self.disk:
+                self.disk = storage2.volume(self.disk)
+                # Compatibility with storage v1
+                if self.disk.device and self.disk.type == 'base':
+                    if self.disk.device.startswith('/dev/sd'):
+                        self.disk = storage2.volume(type='ec2_ephemeral', name='ephemeral0')
+                    elif 'google' in self.disk.device:
+                        self.disk = storage2.volume(type='gce_ephemeral', name='ephemeral-disk-0')
 
             self._lvm_volume = storage2.volume(
                             type='lvm',
-                            pvs=[self.disk],
+                            pvs=[self.disk] if self.disk else self.disks,
                             size=self.size + 'VG',
                             vg=self.vg,
                             name='data')

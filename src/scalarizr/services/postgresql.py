@@ -17,11 +17,12 @@ from M2Crypto import RSA
 
 from scalarizr.util import disttool, firstmatched, wait_until
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.util import initdv2, system2, PopenError
+from scalarizr.util import initdv2, system2, PopenError, software
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services import BaseService, BaseConfig, lazy, PresetProvider, backup
 from scalarizr.node import __node__, private_dir
 from scalarizr import storage2
+from scalarizr import linux
 
 SERVICE_NAME = BuiltinBehaviours.POSTGRESQL
 
@@ -38,6 +39,7 @@ CREATEDB = '/usr/bin/createdb'
 PG_DUMP = '/usr/bin/pg_dump'
 
 ROOT_USER = "scalr"
+MASTER_USER = "scalr_master"
 DEFAULT_USER = "postgres"
 
 STORAGE_DATA_DIR = "data"
@@ -48,6 +50,11 @@ OPT_REPLICATION_MASTER = "replication_master"
 
 LOG = logging.getLogger(__name__)
 __postgresql__ = __node__[SERVICE_NAME]
+
+if 'Amazon' == linux.os['name'] and software.postgresql_software_info().version[:2] == (9,2):
+    pg_pathname_pattern = '/var/lib/pgsql9/'
+else:
+    pg_pathname_pattern = '/var/lib/p*sql/9.*/'
 
 
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
@@ -61,13 +68,16 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
             
     def __init__(self):
         initd_script = None
-        if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        # if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if linux.os.debian_family:
             initd_script = ('/usr/sbin/service', 'postgresql')
         else:
             initd_script = firstmatched(os.path.exists, (
                         '/etc/init.d/postgresql-9.0', 
-                        '/etc/init.d/postgresql-9.1', 
+                        '/etc/init.d/postgresql-9.1',
+                        '/etc/init.d/postgresql-9.2',
                         '/etc/init.d/postgresql'))
+        assert initd_script is not None
         initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
                 initd_script=initd_script)
         
@@ -119,18 +129,9 @@ class PostgreSql(BaseService):
         try:
             ver = __postgresql__[OPT_PG_VERSION]
         except KeyError:
-            ver = None
-        if not ver:
-            try:
-                path_list = glob.glob('/var/lib/p*sql/9.*')
-                path_list.sort()
-                path = path_list[-1]
-                ver = os.path.basename(path)
-            except IndexError:
-                LOG.warning('Postgresql default directory not found. Assuming that PostgreSQL 9.0 is installed.')
-                ver = '9.0'
-            finally:
-                __postgresql__[OPT_PG_VERSION] = ver
+            pg_info = software.postgresql_software_info()
+            ver = '%s.%s' % (pg_info.version[0], pg_info.version[1]) or '9.0'
+            __postgresql__[OPT_PG_VERSION] = ver
         return ver
 
 
@@ -144,6 +145,7 @@ class PostgreSql(BaseService):
         self.postgresql_conf.hot_standby = 'off'
 
         self.create_pg_role(ROOT_USER, password, super=True)
+        self.create_pg_role(MASTER_USER, password, super=True, force=False)
                     
         if slaves:
             LOG.debug('Registering slave hosts: %s' % ' '.join(slaves))
@@ -155,12 +157,17 @@ class PostgreSql(BaseService):
     def init_slave(self, mpoint, primary_ip, primary_port, password):
         self._init_service(mpoint, password)
         
-        self.root_user.apply_public_ssh_key() 
+        self.root_user.apply_public_ssh_key()
         self.root_user.apply_private_ssh_key()
         
         self.postgresql_conf.hot_standby = 'on'
-        self.recovery_conf.trigger_file = os.path.join(self.config_dir.path, TRIGGER_NAME)
         self.recovery_conf.standby_mode = 'on'
+
+        trigger_path = os.path.join(self.config_dir.path, TRIGGER_NAME)
+        if os.path.exists(trigger_path):
+            #in case master was rebundled with trigger enabled
+            os.remove(trigger_path)
+        self.recovery_conf.trigger_file = trigger_path
         
         self.change_primary(primary_ip, primary_port, self.root_user.name)
         self.service.start()
@@ -206,14 +213,18 @@ class PostgreSql(BaseService):
         return user 
     
     
-    def create_pg_role(self, name, password=None, super=True):
-        self.set_trusted_mode()
-        user = PgUser(name, self.pg_keys_dir)   
-        self.service.start()
+    def create_pg_role(self, name, password=None, super=True, force=True):
+        if force:
+            self.service.stop()
+            self.set_trusted_mode()
+        user = PgUser(name, self.pg_keys_dir)  
+        if force: 
+            self.service.start()
         user._create_pg_database()
         user._create_pg_role(password, super)
-        self.set_password_mode()
-        return user         
+        if force:
+            self.set_password_mode()
+        return user
 
 
     def set_trusted_mode(self):
@@ -234,6 +245,7 @@ class PostgreSql(BaseService):
         self.service.stop()
         
         self.root_user = self.create_linux_user(ROOT_USER, password)
+        self.master_user = self.create_linux_user(MASTER_USER, password)
         
         move_files = not self.cluster_dir.is_initialized(mpoint)
         self.postgresql_conf.data_directory = self.cluster_dir.move_to(mpoint, move_files)
@@ -241,6 +253,10 @@ class PostgreSql(BaseService):
         self.postgresql_conf.wal_level = 'hot_standby'
         self.postgresql_conf.max_wal_senders = 5
         self.postgresql_conf.wal_keep_segments = 32
+
+        if disttool.is_ubuntu() and disttool.version_info() == (12, 4) and '9.1' == self.version:
+            #SEE: https://bugs.launchpad.net/ubuntu/+source/postgresql-9.1/+bug/1018307
+            self.postgresql_conf.ssl_renegotiation_limit = 0
         
         self.cluster_dir.clean()
         
@@ -303,8 +319,18 @@ class PostgreSql(BaseService):
     
     def _set_root_user(self, user):
         self._set('root_user', user)
+
+    def _get_master_user(self):
+        key = 'master'
+        if not self._objects.has_key(key):
+            self._objects[key] = PgUser(MASTER_USER, self.pg_keys_dir)
+        return self._objects[key]
     
+    def _set_master_user(self, user):
+        self._set('master', user)
+
     root_user = property(_get_root_user, _set_root_user)
+    master_user = property(_get_master_user, _set_master_user)
     config_dir = property(_get_config_dir, _set_config_dir)
     cluster_dir = property(_get_cluster_dir, _set_cluster_dir)
     postgresql_conf = property(_get_postgresql_conf, _set_postgresql_conf)
@@ -334,14 +360,14 @@ class PgUser(object):
 
     def change_system_password(self, new_pass):
         LOG.debug('Changing password of system user %s to %s' % (self.name, new_pass))
-        out, err, retcode = system2([OPENSSL, 'passwd', '-1', new_pass])
+        out, err, retcode = system2([OPENSSL, 'passwd', '-1', '"%s"' % new_pass])
         shadow_password = out.strip()
         if retcode != 0:
             LOG.error('Error creating hash for ' + self.name)
         if err:
             LOG.error(err)
         
-        r = system2([USERMOD, '-p', '-1', shadow_password, self.name])[2]
+        r = system2([USERMOD, '-p', '"%s"' % shadow_password, self.name])[2]
         if r != 0:
             LOG.error('Error changing password for ' + self.name)
         
@@ -509,7 +535,7 @@ class PgUser(object):
             #TODO: check password
         else:
             try:
-                out = system2([USERADD, '-m', '-g', self.group, '-p', password, self.name])[0]
+                out = system2([USERADD, '-m', '-g', self.group, '-p', '"%s"' % password, self.name])[0]
                 if out:
                     LOG.debug(out)
                 LOG.debug('Creating system user %s' % self.name)
@@ -593,9 +619,8 @@ class PSQL(object):
                     
     
 class ClusterDir(object):
-    
-    base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
-    default_path = os.path.join(base_path, 'main' if disttool.is_ubuntu() else 'data')
+    base_path = glob.glob(pg_pathname_pattern)[0]
+    default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
     
     def __init__(self, path=None):
         self.path = path
@@ -607,7 +632,7 @@ class ClusterDir(object):
 
     def move_to(self, dst, move_files=True):
         new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
-        
+
         if not os.path.exists(dst):
             LOG.debug('Creating directory structure for postgresql cluster: %s' % dst)
             os.makedirs(dst)
@@ -619,7 +644,7 @@ class ClusterDir(object):
                 LOG.debug('data_directory in postgresql.conf points to non-existing location, using %s instead' % source)
             if source != new_cluster_dir:
                 LOG.debug("copying cluster files from %s into %s" % (source, new_cluster_dir))
-                shutil.copytree(source, new_cluster_dir)    
+                shutil.copytree(source, new_cluster_dir)
         LOG.debug("changing directory owner to %s" % self.user)
         chown_r(dst, self.user)
         
@@ -653,7 +678,12 @@ class ConfigDir(object):
     
     @classmethod
     def get_sysconf_path(cls):
-        return '/etc/sysconfig/pgsql/postgresql-%s' % cls.version or '9.0'
+        if 'Amazon' == linux.os['name'] and "9.2" == cls.version:
+            path = '/etc/sysconfig/pgsql/postgresql'
+        else:
+            path = '/etc/sysconfig/pgsql/postgresql-%s' % cls.version or '9.0'
+        return path
+
     
     
     def __init__(self, path, version=None):
@@ -666,7 +696,10 @@ class ConfigDir(object):
         cls.version = version or '9.0'
         path = cls.get_sysconfig_pgdata()
         if not path:
-            path = '/etc/postgresql/%s/main' % version if disttool.is_ubuntu() else '/var/lib/pgsql/%s/data/' % version
+            if linux.os.debian_family:
+                path = '/etc/postgresql/%s/main' % version
+            else:
+                path = os.path.join(glob.glob(pg_pathname_pattern)[0],'data')
         return cls(path, version)
         
     
@@ -817,6 +850,15 @@ class PostgresqlConf(BasePGConfig):
     def _set_hot_standby(self, mode):
         #must bee boolean and default is 'off'
         self.set('hot_standby', mode)
+
+    def _get_ssl_renegotiation_limit(self):
+        return self.get('ssl_renegotiation_limit')
+
+    def _set_ssl_renegotiation_limit(self, limit):
+        self.set('ssl_renegotiation_limit', limit)
+
+
+
         
     pid_file = property(_get_pid_file_path, _set_pid_file_path)
     data_directory = property(_get_data_directory, _set_data_directory)
@@ -825,7 +867,8 @@ class PostgresqlConf(BasePGConfig):
     wal_keep_segments = property(_get_wal_keep_segments, _set_wal_keep_segments)
     listen_addresses = property(_get_listen_addresses, _set_listen_addresses)
     hot_standby = property(_get_hot_standby, _set_hot_standby)
-    
+    ssl_renegotiation_limit = property(_get_ssl_renegotiation_limit, _set_ssl_renegotiation_limit)
+
     max_wal_senders_default = 5
     wal_keep_segments_default = 32
 

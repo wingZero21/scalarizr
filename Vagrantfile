@@ -3,22 +3,34 @@
 
 boxes = {
   "ubuntu" => "ubuntu1204",
+  "ubuntu1004" => "ubuntu1004",
   "centos" => "centos63",
   "centos5" => "centos59",
-  "debian" => "debian6",
-  "amzn" => "amzn1303"
+  "debian" => "debian7",
+  "amzn" => "amzn1303",
+  "windows" => "windows2008r2"
 }
 
 Vagrant.configure("2") do |config|
   boxes.each do |name, box|
     config.vm.define name do |machine|
       machine.vm.box = box
-      machine.vm.provision :chef_client do |chef|
-        chef.chef_server_url = "http://sl5.scalr.net:4000"
-        chef.node_name = "#{ENV['USER']}.scalarizr-#{machine.vm.box}-vagrant"
-        chef.validation_client_name = "chef-validator"
-        chef.run_list = ["recipe[vagrant_boxes]"]
-        chef.validation_key_path = "validation.pem"
+
+      if name == "windows"
+        machine.vm.guest = :windows
+        machine.vm.network :forwarded_port, guest: 5985, host: 5985, name: "winrm"
+        machine.vm.network :forwarded_port, guest: 3389, host: 3390, name: "rdp"
+        machine.winrm.username = "vagrant"
+        machine.winrm.password = "vagrant"
+        machine.vm.network :private_network, ip: "192.168.33.10" 
+      else
+        machine.vm.provision :chef_client do |chef|
+          chef.chef_server_url = "http://sl5.scalr.net:4000"
+          chef.node_name = "#{ENV['USER']}.scalarizr-#{machine.vm.box}-vagrant"
+          chef.validation_client_name = "chef-validator"
+          chef.run_list = ["recipe[vagrant_boxes]"]
+          chef.validation_key_path = "validation.pem"
+        end      
       end
 
       if name == "amzn"

@@ -13,8 +13,7 @@ from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import PresetProvider, BaseConfig
 from scalarizr.api import service as preset_service
-from scalarizr.service import CnfController, CnfPreset, Options
-from scalarizr.handlers import ServiceCtlHandler, HandlerError, FarmSecurityMixin
+from scalarizr.handlers import Handler, HandlerError, FarmSecurityMixin
 from scalarizr.messaging import Messages
 
 # Libs
@@ -58,7 +57,7 @@ def get_cache_size():
         if result:
             return result.group('memory')
         else:
-            return MemcachedCnfController.options.cache_size.default_value
+            return '400'
 
 
 class MemcachedInitScript(initdv2.ParametrizedInitScript):
@@ -74,64 +73,15 @@ class MemcachedInitScript(initdv2.ParametrizedInitScript):
         if not os.path.exists(initd_script):
             raise HandlerError("Cannot find Memcached init script at %s. Make sure that memcached is installed" % initd_script)
 
-        initdv2.ParametrizedInitScript.__init__(self, 'cassandra', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
+        initdv2.ParametrizedInitScript.__init__(self, 'memcached', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
 
 initdv2.explore('memcached', MemcachedInitScript)
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MEMCACHED
 
-# FIXME: use manifest
-class MemcachedCnfController(CnfController):
-
-    class OptionSpec:
-        name = None
-        get_func = None
-        default_value = None
-        set_func = None
-
-        def __init__(self, name, get_func, set_func, default_value = None):
-            self.name = name
-            self.get_func = get_func
-            self.set_func = set_func
-            self.default_value = default_value
-
-    options = Options(
-            OptionSpec('cache_size', get_cache_size, set_cache_size,'64')
-            )
-
-    def __init__(self):
-        self._logger = logging.getLogger(__name__)
-        CnfController.__init__(self, BEHAVIOUR, mcd_conf_path, 'memcached')
-
-    def current_preset(self):
-        self._logger.debug('Getting current Memcached preset')
-        preset = CnfPreset(name='System')
-
-        vars = {}
-
-        for option_spec in self.options:
-            current_value = option_spec.get_func()
-            vars[option_spec.name] = current_value if current_value else option_spec.default_value
-
-        preset.settings = vars
-        return preset
-
-    def apply_preset(self, preset):
-        self._logger.debug('Applying %s preset' % (preset.name if preset.name else 'undefined'))
-
-        for option_spec in self.options:
-            if preset.settings.has_key(option_spec.name):
-                current_value = option_spec.get_func()
-
-                if preset.settings[option_spec.name] == current_value:
-                    self._logger.debug('%s wasn`t changed.' % option_spec.name)
-                else:
-                    option_spec.set_func(template.replace('AMOUNT', preset.settings[option_spec.name]))
-
-
 def get_handlers():
     return [MemcachedHandler()]
 
-class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
+class MemcachedHandler(Handler, FarmSecurityMixin):
 
     _logger = None
     _queryenv = None
@@ -141,7 +91,6 @@ class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
     def __init__(self):
         self.preset_provider = MemcachedPresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
-        ServiceCtlHandler.__init__(self, SERVICE_NAME, initdv2.lookup('memcached'), MemcachedCnfController())
         FarmSecurityMixin.__init__(self, [11211])
         self._logger = logging.getLogger(__name__)
         self._queryenv = bus.queryenv_service

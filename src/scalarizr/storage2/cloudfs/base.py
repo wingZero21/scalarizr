@@ -14,11 +14,11 @@ def raises(exc_class):
 
     .. code-block:: python
 
-            @raises(MyError)
-            def func():
-                    raise Exception(message)
+        @raises(MyError)
+        def func():
+            raise Exception(message)
 
-            func()  # raises MyError(message)
+        func()  # raises MyError(message)
     """
 
     def decorator(f):
@@ -39,33 +39,33 @@ def decorate_public_methods(decorator):
 
     .. code-block:: python
 
-            class Foo(object):
+        class Foo(object):
 
-                    __metaclass__ = decorate_public_methods(decorator)
+            __metaclass__ = decorate_public_methods(decorator)
 
-                    def foo(self):
-                            pass
+            def foo(self):
+                pass
 
 
-            class Bar(Foo):
+        class Bar(Foo):
 
-                    def bar(self):
-                            pass
+            def bar(self):
+                pass
 
     .. code-block:: python
 
-            class Foo(object):
+        class Foo(object):
 
-                    @decorator
-                    def foo(self):
-                            pass
+            @decorator
+            def foo(self):
+                pass
 
 
-            class Bar(Foo):
+        class Bar(Foo):
 
-                    @decorator
-                    def bar(self):
-                            pass
+            @decorator
+            def bar(self):
+                pass
     """
 
     class DecoratePublicMethods(type):

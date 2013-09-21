@@ -1,13 +1,17 @@
 from __future__ import with_statement
 
+import os
+import re
+import urllib2
+import logging
+
 from scalarizr.bus import bus
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
 from scalarizr.storage.transfer import Transfer
 from .storage import S3TransferProvider
 
-from boto import connect_s3
+import boto
 import boto.ec2
-import urllib2, re, os
 
 
 Transfer.explore_provider(S3TransferProvider)
@@ -73,29 +77,18 @@ class Ec2Platform(Ec2LikePlatform):
     def new_ec2_conn(self):
         """ @rtype: boto.ec2.connection.EC2Connection """
         region = self.get_region()
-        self._logger.debug("Return ec2 connection (region: %s)", region)
-        return boto.ec2.connect_to_region(region)
+        self._logger.debug("Return ec2 connection (region: %s)", region)  
+        key_id, key = self.get_access_keys()
+        return boto.ec2.connect_to_region(region, aws_access_key_id=key_id, aws_secret_access_key=key)
 
 
     def new_s3_conn(self):
         region = self.get_region()
         endpoint = self._s3_endpoint(region)
-        self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
-        return connect_s3(host=endpoint)
-
-    def set_access_data(self, access_data):
-        Ec2LikePlatform.set_access_data(self, access_data)
         key_id, key = self.get_access_keys()
-        os.environ['AWS_ACCESS_KEY_ID'] = key_id
-        os.environ['AWS_SECRET_ACCESS_KEY'] = key
+        self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
+        return boto.connect_s3(host=endpoint, aws_access_key_id=key_id, aws_secret_access_key=key)
 
-    def clear_access_data(self):
-        Ec2LikePlatform.clear_access_data(self)
-        try:
-            del os.environ['AWS_ACCESS_KEY_ID']
-            del os.environ['AWS_SECRET_ACCESS_KEY']
-        except KeyError:
-            pass
 
     @property
     def cloud_storage_path(self):
@@ -110,3 +103,17 @@ class Ec2Platform(Ec2LikePlatform):
             return 's3-external-1.amazonaws.com'
         else:
             return 's3-%s.amazonaws.com' % region
+
+
+class BotoLoggingFilter(logging.Filter):
+    # removes all ERROR boto messages - we will log it on upper levels
+
+    def filter(self, record):
+        if record.name.startswith('boto') and record.levelno == logging.ERROR:
+            return False
+        return True
+
+root_logger = logging.getLogger()
+root_logger.addFilter(BotoLoggingFilter('boto'))
+
+

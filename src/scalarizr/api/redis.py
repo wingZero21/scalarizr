@@ -23,12 +23,8 @@ from scalarizr.util.cryptotool import pwgen
 
 
 BEHAVIOUR = CNF_SECTION = redis_handler.CNF_SECTION
-OPT_REPLICATION_MASTER = redis_handler.OPT_REPLICATION_MASTER
 OPT_PERSISTENCE_TYPE = redis_handler.OPT_PERSISTENCE_TYPE
 STORAGE_PATH = redis_handler.STORAGE_PATH
-DEFAULT_PORT = redis_service.DEFAULT_PORT
-BIN_PATH = redis_service.BIN_PATH
-DEFAULT_CONF_PATH = redis_service.DEFAULT_CONF_PATH
 
 
 LOG = logging.getLogger(__name__)
@@ -206,15 +202,15 @@ class RedisAPI(object):
         for port in self.busy_ports:
             conf_path = redis_service.get_redis_conf_path(port)
 
-            if port == redis_service.DEFAULT_PORT:
+            if port == redis_service.__redis__['defaults']['port']:
                 args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
                 out = system2(args, silent=True)[0].split('\n')
                 try:
-                    p = [x for x in out if x and BIN_PATH in x and redis_service.DEFAULT_CONF_PATH in x]
+                    p = [x for x in out if x and __redis__['redis-server'] in x and __redis__['defaults']['redis.conf'] in x]
                 except PopenError:
                     p = []
                 if p:
-                    conf_path = redis_service.DEFAULT_CONF_PATH
+                    conf_path = __redis__['defaults']['redis.conf']
 
             LOG.debug('Got config path %s for port %s' % (conf_path, port))
             redis_conf = redis_service.RedisConf(conf_path)
@@ -229,8 +225,8 @@ class RedisAPI(object):
     @property
     def is_replication_master(self):
         value = 0
-        if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, OPT_REPLICATION_MASTER):
-            value = self._cnf.rawini.get(CNF_SECTION, OPT_REPLICATION_MASTER)
+        if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, 'replication_master'):
+            value = self._cnf.rawini.get(CNF_SECTION, 'replication_master')
         res = True if int(value) else False
         LOG.debug('is_replication_master: %s' % res)
         return res
@@ -263,7 +259,7 @@ class RedisAPI(object):
 
 
     @rpc.service_method
-    def reset_password(self, port=DEFAULT_PORT, new_password=None):
+    def reset_password(self, port=__redis__['defaults']['port'], new_password=None):
         """ Reset auth for Redis process on port `port`. Return new password """
         if not new_password:
             new_password = pwgen(20)
@@ -277,7 +273,7 @@ class RedisAPI(object):
         redis_wrapper = redis_service.Redis(port=port)
         redis_wrapper.service.reload()
 
-        if int(port) == DEFAULT_PORT:
+        if int(port) == __redis__['defaults']['port']:
             __redis__['master_password'] = new_password
 
         return new_password

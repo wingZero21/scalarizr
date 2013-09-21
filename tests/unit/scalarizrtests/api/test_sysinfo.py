@@ -180,9 +180,8 @@ class TestSysInfoAPI(unittest.TestCase):
 
 
     def test_dist(self):
-        with mock.patch('scalarizr.util.disttool.linux_dist') as linux_dist_mock:
-            linux_dist_mock.return_value = ('Ubuntu', '12.10', 'precise')
-            self.assertEqual(self.info.dist(), {'codename': 'precise', 'description': 'Ubuntu 12.10 (precise)', 'id': 'Ubuntu', 'release': '12.10'})
+        with mock.patch.dict('scalarizr.linux.os', {'name':'Ubuntu', 'release':'12.10', 'codename':'precise'}):
+            self.assertEqual(self.info.dist(), {'distributor': 'ubuntu', 'release': '12.10', 'codename': 'precise'})
 
 
     def test_pythons(self):

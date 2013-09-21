@@ -16,18 +16,18 @@ License:        GPLv3
 URL:            http://scalr.net
 
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-#BuildRequires: python26-distribute
 Requires:       python26 python26-m2crypto >= 0.20 python26-pexpect >= 2.3
-Requires:       python26-pysnmp >= 4.1 python26-pysnmp-mibs >= 0.0.8a 
+Requires:       python26-pysnmp >= 4.1 python26-pyasn1 >= 0.1.7 python26-pysnmp-mibs >= 0.0.8a 
 Requires:       python26-prettytable python26-PyYAML
 #Requires:		python26-pymongo
 Requires:		python26-pymysql
 Requires:		python26-pychef
 %else
-BuildRequires:  python-setuptools
+# setuptools from pip used instead of rpm
+# BuildRequires:  python-setuptools
 Requires:       python >= 2.5 m2crypto >= 0.20 pexpect >= 2.3
 # snmp
-Requires:       pysnmp >= 4.1 python-pyasn1 >= 0.0.8a python-pysnmp-mibs >= 0.0.8a 
+Requires:       pysnmp >= 4.2.4 python-pyasn1 >= 0.1.7 python-pysnmp-mibs >= 0.0.8a 
 # szradm
 Requires:       python-prettytable PyYAML
 # mongodb behavior
@@ -146,6 +146,7 @@ Group:          Applications/Internet
 Requires:       python26-cloudstack >= 0.1.r16
 %else
 Requires:       python-cloudstack >= 0.1.r16
+Requires:       lsscsi
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
@@ -223,6 +224,7 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr Google Compute Engine edition
 Group:          Applications/Internet
 Requires:       scalarizr-base = %{version}-%{release}
+Requires:       pyOpenSSL >= 0.13
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
 Conflicts:      scalarizr-rackspace
@@ -563,6 +565,7 @@ if [ -f cloudfoundry.ini ]; then
 fi
 rm -f percona.ini  # Measly config in several builds 
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
+[ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini
 popd

@@ -10,7 +10,7 @@ from scalarizr.messaging import Queues
 from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.bus import bus
-from scalarizr.util.software import system_info, whereis
+from scalarizr.util.software import system_info, which
 from scalarizr import init_script
 from scalarizr.util import system2
 import smtplib
@@ -567,7 +567,7 @@ def help_misc():
 #-------------------------------------------------------------------------------------------------
 
 def get_mx_records(email):
-    out = system2('%s -t mx %s' % (whereis('host')[0], email.split('@')[-1]), shell=True)[0]
+    out = system2('%s -t mx %s' % (which('host'), email.split('@')[-1]), shell=True)[0]
     mxs = [mx.split()[-1][:-1] if mx.endswith('.') else mx for mx in out.split('\n')]
     if '' in mxs: mxs.remove('')
     #from sets import Set
@@ -684,7 +684,7 @@ def main():
 
             qe = new_queryenv()
             xml = qe.fetch(*args, **kv)
-            print minidom.parseString(xml).toprettyxml()
+            print minidom.parseString(xml).toprettyxml(encoding='utf-8')
 
         if options.msgsnd:
 
@@ -759,7 +759,7 @@ def main():
 
 
         if options.report:                      #collecting
-            hostname = system2(whereis('hostname'), shell=True)[0]
+            hostname = system2((which('hostname'),), shell=True)[0]
             tar_file = os.path.join(os.getcwd(), 'report-%s.tar.gz' % hostname)
             json_file = os.path.join(os.getcwd(), 'sysinfo-%s.json' % hostname)
 

@@ -3,11 +3,14 @@ __author__ = 'Nick Demyanchuk'
 
 import os
 import sys
+import time
+import random
 import logging
 import datetime
 import urlparse
 
 from apiclient.http import MediaFileUpload, MediaIoBaseDownload
+from apiclient.errors import HttpError
 
 from scalarizr.bus import bus
 from scalarizr import storage, util
@@ -76,13 +79,28 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
                 bucket=bucket, name=name, media_body=media
         )
         last_progress = 0
+        exponent_backoff = [1, 2, 4, 8, 16, 32]                        
         while response is None:
-            status, response = req.next_chunk()
-            if status:
-                percentage = int(status.progress() * 100)
-                if percentage - last_progress >= 10:
-                    LOG.debug("Uploaded %d%%." % percentage)
-                    last_progress = percentage
+            try:
+                status, response = req.next_chunk()
+                if status:
+                    percentage = int(status.progress() * 100)
+                    if percentage - last_progress >= 10:
+                        LOG.debug("Uploaded %d%%." % percentage)
+                        last_progress = percentage
+                exponent_backoff = [1, 2, 4, 8, 16, 32]                        
+            except HttpError, e:
+                LOG.debug('Caught %s' % e)
+                if not exponent_backoff or not int(e.resp.status) in (500, 502, 503, 504):
+                    raise
+
+
+                sec_to_wait = exponent_backoff.pop(0)
+                # add random milliseconds
+                sec_to_wait += random.random()
+                LOG.debug('retry in %s' % sec_to_wait)
+                time.sleep(sec_to_wait)
+
         LOG.debug('Upload completed.')
         return 'gcs://%s' % os.path.join(bucket, name)
 
@@ -216,11 +234,8 @@ class GcePersistentVolumeProvider(GceEphemeralVolumeProvider):
             connection = __node__['gce']['compute_connection']
             project_id = __node__['gce']['project_id']
 
-            op = connection.snapshots().delete(project=project_id,
-                                                                               snapshot=snap.name).execute()
-
-            wait_for_operation_to_complete(connection, project_id,
-                                                                               op['name'])
+            op = connection.snapshots().delete(project=project_id, snapshot=snap.name).execute()
+            wait_for_operation_to_complete(connection, project_id, op['name'])
         except:
             e = sys.exc_info()[1]
             raise storage.StorageError('Failed to delete google disk snapshot.'

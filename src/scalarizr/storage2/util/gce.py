@@ -25,13 +25,14 @@ def get_op_status(conn, proj_id, op_name, zone=None, fields=None):
 
 
 def wait_for_operation(connection, project_id, operation_name,
-                                                                   zone=None, status_to_wait=("DONE",), timeout=3600):
+                            zone=None, status_to_wait=("DONE",), timeout=3600):
+
     def op_reached_status():
         status = get_op_status(connection,
-                                                   project_id,
-                                                   operation_name,
-                                                   zone,
-                                                   ('status', 'error'))
+                               project_id,
+                               operation_name,
+                               zone,
+                               ('status', 'error'))
         if status['status'] in status_to_wait:
             error = status.get('error')
             if error:
@@ -45,8 +46,8 @@ def wait_for_operation(connection, project_id, operation_name,
 
 def attachment_info(connection, project_id, zone, instance_name, disk_link):
     instance = connection.instances().get(zone=zone,
-                                                                            project=project_id,
-                                                                            instance=instance_name).execute()
+                                          project=project_id,
+                                          instance=instance_name).execute()
     attached = filter(lambda x: x.get('source') == disk_link, instance['disks'])
     if attached:
         return attached[0]

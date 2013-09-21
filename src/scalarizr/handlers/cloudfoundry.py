@@ -297,7 +297,7 @@ class CloudControllerHandler(handlers.Handler):
 
     @property
     def cf_tags(self):
-        return handlers.prepare_tags(SERVICE_NAME)
+        return handlers.build_tags(SERVICE_NAME, 'active')
 
 
     def _plug_storage(self, vol=None, mpoint=None):

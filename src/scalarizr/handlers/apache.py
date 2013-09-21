@@ -9,6 +9,7 @@ Created on Dec 25, 2009
 from __future__ import with_statement
 
 # Core
+from scalarizr import node, linux
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
@@ -73,6 +74,9 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     _apachectl = None
 
     def __init__(self):
+        if 'gce' == node.__node__['platform']:
+            self.ensure_pid_directory()
+
         if disttool.is_redhat_based():
             self._apachectl = '/usr/sbin/apachectl'
             initd_script    = '/etc/init.d/httpd'
@@ -166,6 +170,16 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         except:
             pass
         return res
+
+
+    def ensure_pid_directory(self):
+        if 'CentOS' == linux.os['name']:
+            '''
+            Due to rebundle algorythm complications on GCE we must ensure that pid dir actually exists
+            '''
+            pid_dir = '/var/run/httpd'
+            if not os.path.exists(pid_dir):
+                os.makedirs(pid_dir)
 
 initdv2.explore('apache', ApacheInitScript)
 
@@ -499,6 +513,9 @@ class ApacheHandler(ServiceCtlHandler):
             if disttool.is_debian_based():
                 with open(logrotate_conf_path, 'w') as fp:
                     fp.write(LOGROTATE_CONF_DEB_RAW)
+            elif disttool.is_centos() and disttool.version_info()[0] == 5:
+                self._logger.debug('Centos 5.x already has sufficient logrotate config.')
+                pass
             else:
                 with open(logrotate_conf_path, 'w') as fp:
                     fp.write(LOGROTATE_CONF_REDHAT_RAW)

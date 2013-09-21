@@ -5,6 +5,7 @@ Created on Feb 25, 2013
 '''
 
 import re
+from scalarizr.util import PopenError
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.services import postgresql as postgresql_svc
 from scalarizr import rpc
@@ -25,15 +26,20 @@ class PostgreSQLAPI(object):
 
     @rpc.service_method
     def reset_password(self, new_password=None):
-        """ Reset password for PostgreSQL user 'scalr'. Return new password """
+        """ Reset password for PostgreSQL user 'scalr_master'. Return new password """
         if not new_password:
-            new_pass = pwgen(10)
+            new_password = pwgen(10)
         pg = postgresql_svc.PostgreSql()
-        pg.root_user.change_role_password(new_pass)
-        pg.root_user.change_system_password(new_pass)
-        pg.reload()
-
-        return new_pass
+        if pg.master_user.exists():
+            pg.master_user.change_role_password(new_password)
+            pg.master_user.change_system_password(new_password)
+        else:
+            pg.create_linux_user(pg.master_user.name, new_password)
+            pg.create_pg_role(pg.master_user.name,
+                                new_password,
+                                super=True,
+                                force=False)
+        return new_password
 
     def _parse_query_out(self, out):
         '''
@@ -67,7 +73,13 @@ class PostgreSQLAPI(object):
     @rpc.service_method
     def replication_status(self):
         psql = postgresql_svc.PSQL()
-        query_out = psql.execute(self.replication_status_query)
+        try:
+            query_out = psql.execute(self.replication_status_query)
+        except PopenError, e:
+            if 'function pg_last_xact_replay_timestamp() does not exist' in str(e):
+                raise BaseException('This version of PostgreSQL server does not support replication status')
+            else:
+                raise e
         query_result = self._parse_query_out(query_out)
 
         is_master = int(__postgresql__[OPT_REPLICATION_MASTER])

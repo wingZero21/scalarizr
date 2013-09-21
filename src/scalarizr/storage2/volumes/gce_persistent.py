@@ -1,18 +1,29 @@
 __author__ = 'Nick Demyanchuk'
 
 import os
+import re
 import time
 import sys
 import uuid
 import logging
 import datetime
 
+from apiclient.errors import HttpError
+
 from scalarizr import storage2
+from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.storage2.util import gce as gce_util
 
 LOG = logging.getLogger(__name__)
+compute_api_version = bus.platform.compute_api_version
+
+
+def to_current_api_version(link):
+    if link:
+        return re.sub('compute/[^/]+/projects', 'compute/%s/projects' % compute_api_version, link, 1)
+
 
 class GcePersistentVolume(base.Volume):
     '''
@@ -25,9 +36,15 @@ class GcePersistentVolume(base.Volume):
                                             last_attached_to=None, **kwargs):
         name = name or 'scalr-disk-%s' % uuid.uuid4().hex[:8]
         super(GcePersistentVolume, self).__init__(name=name, link=link,
-                                                                                          size=size, zone=zone,
-                                                                                          last_attached_to=last_attached_to,
-                                                                                          **kwargs)
+                                                  size=size, zone=zone,
+                                                  last_attached_to=last_attached_to,
+                                                  **kwargs)
+        self.features.update({'grow': True})
+
+
+    def _clone(self, config):
+        config.pop('name')
+        config.pop('link')
 
 
     def _ensure(self):
@@ -40,12 +57,13 @@ class GcePersistentVolume(base.Volume):
         try:
             connection = __node__['gce']['compute_connection']
         except:
+            e = sys.exc_info()[1]
+            LOG.debug('Can not get GCE connection: %s' % e)
             """ No connection, implicit check """
             try:
                 self._check_attr('name')
             except:
-                raise storage2.StorageError('Disk is not created yet, and GCE connection'
-                                            ' is unavailable')
+                raise storage2.StorageError('Disk is not created yet, and GCE connection is unavailable')
             device = gce_util.devicename_to_device(self.name)
             if not device:
                 raise storage2.StorageError("Disk is not attached and GCE connection is unavailable")
@@ -61,9 +79,10 @@ class GcePersistentVolume(base.Volume):
                     create_request_body = dict(name=self.name, sizeGb=self.size)
                     if self.snap:
                         self.snap = storage2.snapshot(self.snap)
-                        create_request_body['sourceSnapshot'] = self.snap.link
+                        create_request_body['sourceSnapshot'] = to_current_api_version(self.snap.link)
                     create = True
                 else:
+                    self.link = to_current_api_version(self.link)
                     self._check_attr('zone')
                     if self.zone != zone:
                         # Volume is in different zone, snapshot it,
@@ -73,7 +92,7 @@ class GcePersistentVolume(base.Volume):
                         new_name = self.name + zone
                         create_request_body = dict(name=new_name,
                                                    sizeGb=self.size,
-                                                   sourceSnapshot=temp_snap.link)
+                                                   sourceSnapshot=to_current_api_version(temp_snap.link))
                         create = True
 
                 attach = False
@@ -96,7 +115,11 @@ class GcePersistentVolume(base.Volume):
                 else:
                     if self.last_attached_to and self.last_attached_to != server_name:
                         LOG.debug("Making sure that disk %s detached from previous attachment place." % self.name)
-                        gce_util.ensure_disk_detached(connection, project_id, zone, self.last_attached_to, self.link)
+                        gce_util.ensure_disk_detached(connection,
+                                                      project_id,
+                                                      zone,
+                                                      self.last_attached_to,
+                                                      self.link)
 
                     attachment_inf = self._attachment_info(connection)
                     if attachment_inf:
@@ -106,23 +129,23 @@ class GcePersistentVolume(base.Volume):
 
                 if attach:
                     LOG.debug('Attaching disk %s to current instance' % self.name)
-                    op = connection.instances().attachDisk(
-                                            instance=server_name,
-                                            project=project_id,
-                                            zone=zone,
-                                            body=dict(
-                                                            deviceName=self.name,
-                                                            source=self.link,
-                                                            mode="READ_WRITE",
-                                                            type="PERSISTENT"
-                                            )).execute()
+                    op = connection.instances().attachDisk(instance=server_name, project=project_id,
+                                            zone=zone, body=dict(deviceName=self.name,
+                                                                    source=self.link,
+                                                                    mode="READ_WRITE",
+                                                                    type="PERSISTENT")).execute()
                     gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
                     disk_devicename = self.name
 
-                device = gce_util.devicename_to_device(disk_devicename)
-                if not device:
-                    raise storage2.StorageError("Disk should be attached, but corresponding"
-                                                                            " device not found in system")
+                for i in range(10):
+                    device = gce_util.devicename_to_device(disk_devicename)
+                    if device:
+                        break
+                    LOG.debug('Device not found in system. Retrying in 1s.')
+                    time.sleep(1)
+                else:
+                    raise storage2.StorageError("Disk should be attached, but corresponding device not found in system")
+
                 self.device = device
                 self.last_attached_to = server_name
                 self.snap = None
@@ -137,6 +160,7 @@ class GcePersistentVolume(base.Volume):
 
 
     def _attachment_info(self, con):
+        self.link = to_current_api_version(self.link)
         zone = os.path.basename(__node__['gce']['zone'])
         project_id = __node__['gce']['project_id']
         server_name = __node__['server_id']
@@ -153,16 +177,15 @@ class GcePersistentVolume(base.Volume):
             server_name = __node__['server_id']
 
             def try_detach():
-                op = connection.instances().detachDisk(instance=server_name,
-                                                                    project=project_id,
-                                                                    zone=zone,
-                                                                    deviceName=attachment_inf['deviceName']).execute()
+                op = connection.instances().detachDisk(instance=server_name, project=project_id, zone=zone,
+                                                            deviceName=attachment_inf['deviceName']).execute()
 
                 gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
 
             for _time in range(3):
                 try:
                     try_detach()
+                    return
                 except:
                     e = sys.exc_info()[1]
                     LOG.debug('Detach disk attempt failed: %s' % e)
@@ -170,6 +193,22 @@ class GcePersistentVolume(base.Volume):
                         raise storage2.StorageError('Can not detach disk: %s' % e)
                     time.sleep(1)
                     LOG.debug('Trying to detach disk again.')
+
+
+    def _grow(self, new_vol, **growth_cfg):
+        size = int(growth_cfg.get('size'))
+        snap = self.snapshot('Temporary snapshot for volume growth', {'temp': 1}, nowait=False)
+        try:
+            new_vol.snap = snap
+            new_vol.size = size
+            new_vol.ensure()
+        finally:
+            try:
+                snap.destroy()
+            except:
+                e = sys.exc_info()[1]
+                LOG.error('Temporary snapshot desctruction failed: %s' % e)
+
 
 
     def _destroy(self, force, **kwds):
@@ -180,19 +219,32 @@ class GcePersistentVolume(base.Volume):
         project_id = __node__['gce']['project_id']
         zone = os.path.basename(__node__['gce']['zone'])
         try:
-            op = connection.disks().delete(project=project_id,
-                                                                       zone=zone,
-                                                                       disk=self.name).execute()
+            op = connection.disks().delete(project=project_id, zone=zone, disk=self.name).execute()
             gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
         except:
             e = sys.exc_info()[1]
             raise storage2.StorageError("Disk destruction failed: %s" % e)
+
+    @property
+    def resource(self):
+        connection = __node__['gce']['compute_connection']
+        project_id = __node__['gce']['project_id']
+
+        try:
+            return connection.disks().get(disk=self.name, project=project_id, zone=self.zone).execute()
+        except HttpError, e:
+            code = int(e.resp['status'])
+            if code == 404:
+                raise storage2.VolumeNotExistsError('Volume %s not found in %s zone' % (self.name, self.zone))
+            else:
+                raise
 
 
     def _snapshot(self, description, tags, **kwds):
         """
         :param nowait: if True - do not wait for snapshot to complete, just create and return
         """
+        self._check_attr('name')
         connection = __node__['gce']['compute_connection']
         project_id = __node__['gce']['project_id']
         nowait = kwds.get('nowait', True)
@@ -201,27 +253,21 @@ class GcePersistentVolume(base.Volume):
         now_str = now_raw.strftime('%d-%b-%Y-%H-%M-%S-%f')
         snap_name = ('%s-snap-%s' % (self.name, now_str)).lower()
 
-        operation = connection.snapshots().insert(project=project_id,
-                                        body=dict(
-                                                name=snap_name,
-                                                # Doesnt work without kind (3.14.2013)
-                                                kind="compute#snapshot",
-                                                description=description,
-                                                sourceDisk=self.link,
-                                        )).execute()
+        # We could put it to separate method, like _get_self_resource
+
+        operation = connection.disks().createSnapshot(disk=self.name, project=project_id, zone=self.zone,
+                                                    body=dict(name=snap_name, description=description)).execute()
+        #operation = connection.snapshots().insert(project=project_id, body=dict(name=snap_name,
+        #                           kind="compute#snapshot", description=description, sourceDisk=self.link)).execute()
         try:
             # Wait until operation at least started
-            gce_util.wait_for_operation(connection, project_id, operation['name'],
+            gce_util.wait_for_operation(connection, project_id, operation['name'], self.zone,
                                                             status_to_wait=("DONE", "RUNNING"))
             # If nowait=false, wait until operation is totally complete
-            snapshot_info = connection.snapshots().get(project=project_id,
-                                                                            snapshot=snap_name,
-                                                                            fields='id,name,diskSizeGb,selfLink').execute()
-
-            snapshot = GcePersistentSnapshot(id=snapshot_info['id'],
-                                                                             name=snapshot_info['name'],
-                                                                             size=snapshot_info['diskSizeGb'],
-                                                                             link=snapshot_info['selfLink'])
+            snapshot_info = connection.snapshots().get(project=project_id, snapshot=snap_name,
+                                                    fields='id,name,diskSizeGb,selfLink').execute()
+            snapshot = GcePersistentSnapshot(id=snapshot_info['id'], name=snapshot_info['name'],
+                                             size=snapshot_info['diskSizeGb'], link=snapshot_info['selfLink'])
             if not nowait:
                 while True:
                     status = snapshot.status()
@@ -242,35 +288,28 @@ class GcePersistentSnapshot(base.Snapshot):
 
     def __init__(self, name, **kwds):
         super(GcePersistentSnapshot, self).__init__(name=name, **kwds)
+        self._status_map = dict(CREATING=self.IN_PROGRESS, UPLOADING=self.IN_PROGRESS, READY=self.COMPLETED,
+                                ERROR=self.FAILED, FAILED=self.FAILED)
 
 
     def _destroy(self):
         try:
             connection = __node__['gce']['compute_connection']
             project_id = __node__['gce']['project_id']
-
-            op = connection.snapshots().delete(project=project_id,
-                                                                            snapshot=self.name).execute()
-
-            gce_util.wait_for_operation(connection, project_id,
-                                                                       op['name'])
+            op = connection.snapshots().delete(project=project_id, snapshot=self.name).execute()
+            gce_util.wait_for_operation(connection, project_id, op['name'])
         except:
             e = sys.exc_info()[1]
-            raise storage2.StorageError('Failed to delete google disk snapshot.'
-                                                                    ' Error: %s' % e)
+            raise storage2.StorageError('Failed to delete google disk snapshot. Error: %s' % e)
 
     def _status(self):
         self._check_attr("name")
         connection = __node__['gce']['compute_connection']
         project_id = __node__['gce']['project_id']
-        snapshot = connection.snapshots().get(project=project_id, snapshot=self.name,
-                                                                                  fields='status').execute()
+        snapshot = connection.snapshots().get(project=project_id, snapshot=self.name, fields='status').execute()
         status = snapshot['status']
-        status_map = dict(CREATING=self.IN_PROGRESS, UPLOADING=self.IN_PROGRESS,
-                                           READY=self.COMPLETED, ERROR=self.FAILED, FAILED=self.FAILED)
-        return status_map.get(status, self.UNKNOWN)
 
-
+        return self._status_map.get(status, self.UNKNOWN)
 
 
 storage2.volume_types['gce_persistent'] = GcePersistentVolume

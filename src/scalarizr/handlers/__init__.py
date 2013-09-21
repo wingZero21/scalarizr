@@ -2,6 +2,7 @@ from __future__ import with_statement
 
 from scalarizr import config
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
@@ -232,7 +233,7 @@ class Handler(object):
         if hasattr(self, fn) and callable(getattr(self, fn)):
             getattr(self, fn)(message)
         else:
-            raise HandlerError("Handler has no method %s" % (fn))
+            raise HandlerError("Handler %s has no method %s", self.__class__.__name__, fn)
 
 
     def get_ready_behaviours(self):
@@ -255,11 +256,11 @@ class Handler(object):
                 elif name == 'memcached':
                     handlers.append(config.BuiltinBehaviours.MEMCACHED)
 
-                elif name == 'postgresql' and Version('9.0') <= version < Version('9.2'):
+                elif name == 'postgresql' and Version('9.0') <= version < Version('9.3'):
                     handlers.append(config.BuiltinBehaviours.POSTGRESQL)
                 elif name == 'redis' and Version('2.2') <= version < Version('2.7'):
                     handlers.append(config.BuiltinBehaviours.REDIS)
-                elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.0'):
+                elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.2'):
                     handlers.append(config.BuiltinBehaviours.RABBITMQ)
                 elif name == 'mongodb' and Version('2.0') <= version < Version('2.5'):
                     handlers.append(config.BuiltinBehaviours.MONGODB)
@@ -269,8 +270,13 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.MYSQL)
                     if 'Percona' in str_ver:
                         handlers.append(config.BuiltinBehaviours.PERCONA)
+                    elif 'Maria' in str_ver:
+                        handlers.append(config.BuiltinBehaviours.MARIADB)
                     else:
                         handlers.append(config.BuiltinBehaviours.MYSQL2)
+                elif name == 'tomcat':
+                    handlers.append(config.BuiltinBehaviours.TOMCAT)
+
         return handlers
 
 
@@ -315,7 +321,9 @@ class MessageListener:
 
             def cls_weight(obj):
                 cls = obj.__class__.__name__
-                if cls in ('EbsHandler', 'BlockDeviceHandler'):
+                if cls == 'IpListBuilder':
+                    return 20
+                elif cls in ('EbsHandler', 'BlockDeviceHandler'):
                     return 10
                 elif cls == 'DeploymentHandler':
                     return 1
@@ -782,7 +790,8 @@ class FarmSecurityMixin(object):
                     "jump": "DROP"
                 })
             except:
-                self._logger.debug('caught from iptables', exc_info=sys.exc_info())
+                # silently ignore non existed rule error
+                pass
 
     def on_HostInit(self, message):
     	if not self._enabled:
@@ -872,36 +881,35 @@ class FarmSecurityMixin(object):
         self._iptables.FIREWALL.ensure(drop_rules, append=True)
 
 
-def prepare_tags(handler=None, **kwargs):
-    '''
-    @return dict(tags for volumes and snapshots)
-    '''
+def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
+    tags = dict()
 
-    def get_cfg_option(option):
-        id = None
-        cnf = bus.cnf
-        if cnf.rawini.has_option(config.SECT_GENERAL, option):
-            id = cnf.rawini.get(config.SECT_GENERAL, option)
-        return id
+    if purpose:
+        tags['scalr-purpose'] = purpose
 
-    tags = dict(creator = 'scalarizr')
-    farmid = get_cfg_option(config.OPT_FARM_ID)
-    roleid = get_cfg_option(config.OPT_ROLE_ID)
-    farmroleid = get_cfg_option(config.OPT_FARMROLE_ID)
-    tags.update(farm_id = farmid, role_id = roleid, farm_role_id = farmroleid)
+    if state:
+        tags['scalr-status'] = state
 
-    if handler:
-        tags['service'] = handler
+    if set_owner:
+        for opt in ('farm_id', 'farm_role_id', 'env_id'):
+            try:
+                tags[opt] = __node__[opt]
+            except KeyError:
+                tags[opt] = None
+
+        try:
+            tags['scalr-owner'] = __node__['owner_email']
+        except KeyError:
+                tags['scalr-owner'] = None
+
     if kwargs:
         # example: tmp = 1
-        if 'db_replication_role' in kwargs and type(kwargs['db_replication_role']) == bool:
-            kwargs['db_replication_role'] = 'master' if kwargs['db_replication_role'] else 'slave'
         tags.update(kwargs)
 
     excludes = []
     for k,v in tags.items():
         if not v:
-            excludes.append(v)
+            excludes.append(k)
             del tags[k]
         else:
             try:
@@ -919,3 +927,21 @@ def transfer_result_to_backup_result(mnf):
                                     for file_ in mnf['files']
                                     for chunk in file_['chunks'])
     return list(dict(path=path, size=size) for path, size in files_sizes)
+
+
+def get_role_servers(role_id=None, role_name=None):
+    """ Method is used to get role servers from scalr """
+    if type(role_id) is int:
+        role_id = str(role_id)
+
+    server_location = __node__['cloud_location']
+    queryenv = bus.queryenv_service
+    roles = queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
+    servers = []
+    for role in roles:
+        ips = [h.internal_ip if server_location == h.cloud_location else
+               h.external_ip
+               for h in role.hosts]
+        servers.extend(ips)
+
+    return servers

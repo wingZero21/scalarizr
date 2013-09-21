@@ -12,8 +12,8 @@ from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Messages, Queues
-from scalarizr.storage import Storage
-from scalarizr.storage.util import loop
+from scalarizr.storage2 import filesystem
+from scalarizr.storage2.util import loop
 from scalarizr.util import system2, software
 from scalarizr import linux
 from scalarizr.linux import mount, coreutils, rsync
@@ -323,13 +323,13 @@ class LinuxImage:
         if vol_entry.device == '/dev/root' and not os.path.exists(vol_entry.device):
             vol_entry = [v for v in mount.mounts('/etc/mtab')
                             if v.device.startswith('/dev')][0]
-        fs = Storage.lookup_filesystem(vol_entry.fstype)
+        fs = filesystem(vol_entry.fstype)
 
         # create filesystem
         fs.mkfs(self.devname)
 
         # set EXT3/4 options
-        if fs.name.startswith('ext'):
+        if fs.type.startswith('ext'):
             # max mounts before check (-1 = disable)
             system2(('/sbin/tune2fs', '-c', '1', self.devname))
             # time based (3m = 3 month)

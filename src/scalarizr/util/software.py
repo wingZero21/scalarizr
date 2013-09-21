@@ -5,12 +5,12 @@ Created on Sep 10, 2010
 @author: marat
 """
 
-from scalarizr.util import disttool, system2
+from scalarizr.util import system2
 from scalarizr import linux
 from scalarizr.linux import coreutils, pkgmgr
-import os, re, zipfile, glob
+import os, re, zipfile, glob, platform
 
-__all__ = ('all_installed', 'software_info', 'explore', 'whereis')
+__all__ = ('all_installed', 'software_info', 'explore', 'which')
 
 def all_installed():
     ret = []
@@ -33,20 +33,20 @@ def explore(name, lookup_fn):
         raise Exception("'%s' software has been already explored" % name)
     software_list[name] = lookup_fn
 
-def which(name):
-    try:
-        return whereis(name)[0]
-    except IndexError:
-        raise LookupError("Command '%s' not found" % (name, ))
 
-def whereis(name):
+def which(name, *extra_dirs):
     '''
     Search executable in /bin /sbin /usr/bin /usr/sbin /usr/libexec /usr/local/bin /usr/local/sbin
     @rtype: tuple
     '''
-    places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
-    places += ['/usr/local/nginx/sbin']  # XXX: hack for samsung
-    return tuple([os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))])
+    try:
+        places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
+        places.extend(extra_dirs)
+        return [os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))][0]
+    except IndexError:
+        return False
+        #raise LookupError("Command '%s' not found" % name)
+
 
 def system_info(verbose=False):
 
@@ -71,8 +71,8 @@ def system_info(verbose=False):
 
 
     ret['os'] = {}
-    ret['os']['version']            = ' '.join(disttool.linux_dist())
-    ret['os']['string_version'] = ' '.join(disttool.uname()).strip()
+    ret['os']['version'] = '{0} {1} {2}'.format(linux.os['name'], linux.os['release'], linux.os['codename']).strip()
+    ret['os']['string_version'] = ' '.join(platform.uname()).strip()
 
     ret['dist'] = {
             'distributor': linux.os['name'].lower(),
@@ -88,17 +88,17 @@ def system_info(verbose=False):
             retcode = coreutils.modprobe(fstype, dry_run=True)[1]
         except:
             retcode = 1
-        exe = whereis('mkfs.%s' % fstype)
+        exe = which('mkfs.%s' % fstype)
         if not retcode and exe:
             ret['storage']['fstypes'].append(fstype)
 
     # Raid levels support detection
-    if whereis('mdadm'):
+    if which('mdadm'):
         for module in  ('raid0', 'raid1', 'raid456'):
             ret['storage'][module] = 1 if check_module(module) else 0
 
     # Lvm2 support detection
-    if whereis('dmsetup') and all(map(check_module, ('dm_mod', 'dm_snapshot'))):
+    if which('dmsetup') and all(map(check_module, ('dm_mod', 'dm_snapshot'))):
         ret['storage']['lvm'] = 1
     else:
         ret['storage']['lvm'] = 0
@@ -130,11 +130,11 @@ software_list = dict()
 
 def mysql_software_info():
 
-    binaries = whereis('mysqld')
-    if not binaries:
+    binary = which('mysqld')
+    if not binary:
         raise SoftwareError("Can't find executable for MySQL server")
 
-    version_string = system2((binaries[0], '-V'))[0].strip()
+    version_string = system2((binary, '-V'))[0].strip()
     if not version_string:
         raise SoftwareError
 
@@ -148,11 +148,11 @@ def mysql_software_info():
 explore('mysql', mysql_software_info)
 
 def nginx_software_info():
-    binaries = whereis('nginx')
-    if not binaries:
+    binary = which('nginx', '/usr/local/nginx/sbin')
+    if not binary:
         raise SoftwareError("Can't find executable for Nginx server")
 
-    out = system2((binaries[0], '-V'))[1]
+    out = system2((binary, '-V'))[1]
     if not out:
         raise SoftwareError
 
@@ -167,11 +167,11 @@ def nginx_software_info():
 explore('nginx', nginx_software_info)
 
 def memcached_software_info():
-    binaries = whereis('memcached')
-    if not binaries:
+    binary = which('memcached')
+    if not binary:
         raise SoftwareError("Can't find executable for Memcached")
 
-    out = system2((binaries[0], '-h'))[0]
+    out = system2((binary, '-h'))[0]
     if not out:
         raise SoftwareError
 
@@ -186,11 +186,11 @@ def memcached_software_info():
 explore('memcached', memcached_software_info)
 
 def php_software_info():
-    binaries = whereis('php')
-    if not binaries:
+    binary = which('php')
+    if not binary:
         raise SoftwareError("Can't find executable for php interpreter")
 
-    out = system2((binaries[0], '-v'))[0]
+    out = system2((binary, '-v'))[0]
     if not out:
         raise SoftwareError
 
@@ -206,11 +206,11 @@ def php_software_info():
 explore('php', php_software_info)
 
 def python_software_info():
-    binaries = whereis('python')
-    if not binaries:
+    binary = which('python')
+    if not binary:
         raise SoftwareError("Can't find executable for python interpreter")
 
-    version_string = system2((binaries[0], '-V'))[1].strip()
+    version_string = system2((binary, '-V'))[1].strip()
     if not version_string:
         raise SoftwareError
 
@@ -227,11 +227,11 @@ def python_software_info():
 explore('python', python_software_info)
 
 def mysqlproxy_software_info():
-    binaries = whereis('mysql-proxy')
-    if not binaries:
+    binary = which('mysql-proxy')
+    if not binary:
         raise SoftwareError("Can't find executable for mysql-proxy")
 
-    version_string = system2((binaries[0], '-V'))[0].strip()
+    version_string = system2((binary, '-V'))[0].strip()
     if not version_string:
         raise SoftwareError
 
@@ -249,12 +249,12 @@ explore('mysql-proxy', mysqlproxy_software_info)
 
 def apache_software_info():
 
-    binary_name = "httpd" if disttool.is_redhat_based() else "apache2"
-    binaries = whereis(binary_name)
-    if not binaries:
+    binary_name = "httpd" if linux.os.redhat_family else "apache2"
+    binary = which(binary_name)
+    if not binary:
         raise SoftwareError("Can't find executable for apache http server")
 
-    out = system2((binaries[0], '-V'))[0]
+    out = system2((binary, '-V'))[0]
     if not out:
         raise SoftwareError
 
@@ -302,11 +302,11 @@ def tomcat_software_info():
 explore('tomcat', tomcat_software_info)
 
 def varnish_software_info():
-    binaries = whereis('varnishd')
-    if not binaries:
+    binary = which('varnishd')
+    if not binary:
         raise SoftwareError("Can't find executable for varnish HTTP accelerator")
 
-    out = system2((binaries[0], '-V'))[1].strip()
+    out = system2((binary, '-V'))[1].strip()
     if not out:
         raise SoftwareError
 
@@ -323,12 +323,12 @@ def varnish_software_info():
 explore('varnish', varnish_software_info)
 
 def rails_software_info():
-    binaries = whereis('gem')
+    binary = which('gem')
 
-    if not binaries:
+    if not binary:
         raise SoftwareError("Can't find executable for ruby gem packet manager")
 
-    out = system2((binaries[0], 'list', 'rails'))[0].strip()
+    out = system2((binary, 'list', 'rails'))[0].strip()
 
     if not out:
         raise SoftwareError
@@ -382,12 +382,12 @@ explore('rabbitmq', rabbitmq_software_info)
 
 def redis_software_info():
 
-    binary_name = "redis-server" # if disttool.is_redhat_based() else "redis-cli"
-    binaries = whereis(binary_name)
-    if not binaries:
+    binary_name = "redis-server" 
+    binary = which(binary_name)
+    if not binary:
         raise SoftwareError("Can't find executable for redis server")
 
-    out = system2((binaries[0], '-v'))[0]
+    out = system2((binary, '-v'))[0]
     if not out:
         raise SoftwareError()
 
@@ -417,11 +417,11 @@ explore('mongodb', mongodb_software_info)
 
 
 def chef_software_info():
-    binaries = whereis('chef-client')
-    if not binaries:
+    binary = which('chef-client')
+    if not binary:
         raise SoftwareError("Can't find executable for chef client")
 
-    version_string = system2((binaries[0], '-v'))[0].strip()
+    version_string = system2((binary, '-v'))[0].strip()
     if not version_string:
         raise SoftwareError
 
@@ -436,6 +436,8 @@ explore('chef', chef_software_info)
 
 
 def postgresql_software_info():
+    binaries = []
+    amazon_linux_binpath = '/usr/bin/postgres'
     versions_dirs = glob.glob('/usr/lib/p*sql/*')
     versions_dirs.extend(glob.glob('/usr/p*sql*/'))
     versions_dirs.sort()
@@ -443,9 +445,15 @@ def postgresql_software_info():
     for version in versions_dirs:
         bin_path = os.path.join(version, 'bin/postgres')
         if os.path.isfile(bin_path):
-            version_string = system2((bin_path, '--version'))[0].strip()
-            version = version_string.split()[-1]
-            return SoftwareInfo('postgresql', version, version_string)
+            binaries.append(bin_path)
+
+    if os.path.isfile(amazon_linux_binpath):
+        binaries.append(amazon_linux_binpath) #Amazon Linux support
+
+    for bin_path in binaries:
+        version_string = system2((bin_path, '--version'))[0].strip()
+        version = version_string.split()[-1]
+        return SoftwareInfo('postgresql', version, version_string)
     else:
         raise SoftwareError
 

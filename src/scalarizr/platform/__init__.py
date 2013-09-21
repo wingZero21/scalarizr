@@ -10,15 +10,18 @@ import re
 import socket
 import urllib2
 import logging
+import platform
 import sys
-import socket
 import struct
 import array
-import fcntl
-
 import ConfigParser
 
 from scalarizr.bus import bus
+from scalarizr import linux
+if linux.os.windows_family:
+    import win32com.client
+else:
+    import fcntl
 
 
 class PlatformError(BaseException):
@@ -41,6 +44,8 @@ class UserDataOptions:
     FARMROLE_ID = 'farm_roleid'
     ROLE_ID = 'roleid'
     REGION = 'region'
+    MESSAGE_FORMAT = 'message_format'
+    OWNER_EMAIL = 'owner_email'
 
 class PlatformFactory(object):
     _platforms = {}
@@ -69,6 +74,7 @@ class Platform():
 
     def __init__(self):
         self.scalrfs = self._scalrfs(self)
+        self._access_data = {} 
 
     def get_private_ip(self):
         return self.get_public_ip()
@@ -105,20 +111,27 @@ class Platform():
             return self._access_data
 
     def clear_access_data(self):
-        self._access_data = None
+        self._access_data = {}
 
     def get_architecture(self):
         """
         @return Architectures
         """
         if self._arch is None:
-            uname = os.uname()
-            if re.search("^i\\d86$", uname[4]):
-                self._arch = Architectures.I386
-            elif re.search("^x86_64$", uname[4]):
-                self._arch = Architectures.X86_64
+
+            if linux.os.windows_family:
+                if '32' in platform.architecture()[0]:
+                    self._arch = Architectures.I386
+                else:
+                    self._arch = Architectures.X86_64
             else:
-                self._arch = Architectures.UNKNOWN
+                uname = os.uname()
+                if re.search("^i\\d86$", uname[4]):
+                    self._arch = Architectures.I386
+                elif re.search("^x86_64$", uname[4]):
+                    self._arch = Architectures.X86_64
+                else:
+                    self._arch = Architectures.UNKNOWN
         return self._arch
 
     @property
@@ -203,7 +216,7 @@ class Ec2LikePlatform(Platform):
 
     def _get_property(self, name):
         if not self._metadata.has_key(name):
-            full_name = os.path.join(self._metadata_key, name)
+            full_name = self._metadata_key + "/" + name
             self._metadata[name] = self._fetch_metadata(full_name)
         return self._metadata[name]
 
@@ -283,25 +296,40 @@ class Architectures:
     UNKNOWN = "unknown"
 
 
-def net_interfaces():
-    # http://code.activestate.com/recipes/439093-get-names-of-all-up-network-interfaces-linux-only/#c7
-    is_64bits = sys.maxsize > 2**32
-    struct_size = 40 if is_64bits else 32
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    max_possible = 8 # initial value
-    while True:
-        num_bytes = max_possible * struct_size
-        names = array.array('B', '\0' * num_bytes)
-        outbytes = struct.unpack('iL', fcntl.ioctl(
-            s.fileno(),
-            0x8912,  # SIOCGIFCONF
-            struct.pack('iL', num_bytes, names.buffer_info()[0])
-        ))[0]
-        if outbytes == num_bytes:
-            max_possible *= 2
-        else:
-            break
-    namestr = names.tostring()
-    return dict([(namestr[i:i+16].split('\0', 1)[0],
-            socket.inet_ntoa(namestr[i+20:i+24]))
-            for i in range(0, outbytes, struct_size)])
+if linux.os.windows_family:
+    def net_interfaces():
+        wmi = win32com.client.GetObject('winmgmts:')
+        wql = "SELECT IPAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = 'True'"
+        result = wmi.ExecQuery(wql)
+        return list({
+                'iface': None,
+                'ipv4': row.IPAddress[0],
+                'ipv6': row.IPAddress[1] if len(row.IPAddress) > 1 else None
+                } for row in result)
+ 
+else:
+    def net_interfaces():
+        # http://code.activestate.com/recipes/439093-get-names-of-all-up-network-interfaces-linux-only/#c7
+        is_64bits = sys.maxsize > 2**32
+        struct_size = 40 if is_64bits else 32
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        max_possible = 8 # initial value
+        while True:
+            num_bytes = max_possible * struct_size
+            names = array.array('B', '\0' * num_bytes)
+            outbytes = struct.unpack('iL', fcntl.ioctl(
+                s.fileno(),
+                0x8912,  # SIOCGIFCONF
+                struct.pack('iL', num_bytes, names.buffer_info()[0])
+            ))[0]
+            if outbytes == num_bytes:
+                max_possible *= 2
+            else:
+                break
+        namestr = names.tostring()
+        return list({
+                'iface': namestr[i:i+16].split('\0', 1)[0],
+                'ipv4': socket.inet_ntoa(namestr[i+20:i+24]),
+                'ipv6': None
+                } for i in range(0, outbytes, struct_size))
+

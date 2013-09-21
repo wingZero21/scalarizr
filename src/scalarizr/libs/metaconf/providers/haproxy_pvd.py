@@ -74,7 +74,8 @@ class HaproxyFormatProvider(IniFormatProvider):
         if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'section':
             fp.write(unquote(node.tag))
             value = node.text
-            fp.write(' ' + value)
+            if value.strip():
+                fp.write(' ' + value)
             fp.write('\n')
             self._indent = '\t'
             self.write(fp, node, False)

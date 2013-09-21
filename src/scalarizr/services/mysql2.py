@@ -6,11 +6,9 @@ import re
 import logging
 import subprocess
 import threading
-import time
-import signal
-import errno
 
 from scalarizr import linux, storage2
+from scalarizr.linux.execute import eradicate
 from scalarizr.storage2 import cloudfs
 from scalarizr.linux import coreutils, pkgmgr
 from scalarizr.node import __node__
@@ -27,9 +25,12 @@ class Error(Exception):
     pass
 
 
-__behavior__ = 'percona' \
-            if 'percona' in __node__['behavior'] \
-            else 'mysql2'
+if 'percona' in __node__['behavior']:
+    __behavior__ = 'percona'
+elif 'mariadb' in __node__['behavior']:
+    __behavior__ = 'mariadb'
+else:
+    __behavior__ = 'mysql2'
 
 
 __mysql__ = __node__[__behavior__]
@@ -44,6 +45,8 @@ __mysql__.update({
     'repl_user': 'scalr_repl',
     'stat_user': 'scalr_stat',
     'pma_user': 'pma',
+    'master_user': 'scalr_master',
+    'master_password': '',
     'debian.cnf': '/etc/mysql/debian.cnf',
     'my.cnf': '/etc/my.cnf' if linux.os['family'] in ('RedHat', 'Oracle') else '/etc/mysql/my.cnf',
     'mysqldump_chunk_size': 200,
@@ -54,67 +57,6 @@ __mysql__.update({
         'log_bin': 'mysql_bin'
     }
 })
-
-
-# TODO: move
-def eradicate(process):
-    """
-    Kill process tree.
-
-    :param process: pid (int) or subprocess.Popen instance
-
-    """
-
-    class Victim(object):
-
-        def __init__(self, process):
-            self._obj = process
-
-        @property
-        def pid(self):
-            return self._obj if isinstance(self._obj, int) else \
-                   self._obj.pid
-
-        def get_children(self):
-            try:
-                pgrep = linux.system(linux.build_cmd_args(
-                    executable="pgrep",
-                    short=["-P"],
-                    params=[str(self.pid)]))
-            except linux.LinuxError:
-                children = []
-            else:
-                children = map(int, pgrep[0].splitlines())
-            return children
-
-        def die(self, grace=2):
-            if isinstance(self._obj, subprocess.Popen):
-                try:
-                    self._obj.terminate()
-                    time.sleep(grace)
-                    self._obj.kill()
-                except OSError, e:
-                    if e.errno == errno.ESRCH:
-                        pass  # no such process
-                    else:
-                        LOG.debug("Failed to stop pid %s" % self.pid)
-                time.sleep(0.1)
-                self._obj.poll()  # avoid leaving defunct processes
-            else:
-                try:
-                    os.kill(self.pid, signal.SIGTERM)
-                    time.sleep(grace)
-                    os.kill(self.pid, signal.SIGKILL)
-                except OSError, e:
-                    if e.errno == errno.ESRCH:
-                        pass  # no such process
-                    else:
-                        LOG.debug("Failed to stop pid %s" % self.pid)
-
-    victim = Victim(process)
-    children = victim.get_children()
-    victim.die()
-    map(eradicate, children)
 
 
 class MySQLSnapBackup(backup.SnapBackup):
@@ -225,6 +167,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
             # Compression is broken
             #'compress': True,
             #'compress_threads': os.sysconf('SC_NPROCESSORS_ONLN'),
+            'ibbackup': 'xtrabackup',
             'user': __mysql__['root_user'],
             'password': __mysql__['root_password']
         }
@@ -275,10 +218,15 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
                         [self._xbak.stdout],
                         self.cloudfs_target,
                         compressor=self.compressor)
+
+        stderr_thread, stderr = cloudfs.readfp_thread(self._xbak.stderr)
+
         manifesto = self._transfer.run()
         if self._killed:
             raise Error("Canceled")
-        stderr = self._xbak.communicate()[1]
+        stderr_thread.join()
+        self._xbak.wait()
+        stderr = stderr[0] if stderr else ''
         if self._xbak.returncode:
             raise Error(stderr)
 
@@ -394,6 +342,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
         innobackupex(__mysql__['data_dir'],
                 apply_log=True,
                 redo_only=True,
+                ibbackup='xtrabackup',
                 user=__mysql__['root_user'],
                 password=__mysql__['root_password'])
 
@@ -419,6 +368,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
                             apply_log=True,
                             redo_only=True,
                             incremental_dir=inc_dir,
+                            ibbackup='xtrabackup',
                             user=__mysql__['root_user'],
                             password=__mysql__['root_password'])
                     i += 1
@@ -508,7 +458,10 @@ class MySQLDumpBackup(backup.Backup):
         if self.file_per_database:
             for db_name in self._databases:
                 self._current_db = db_name
-                params = __mysql__['mysqldump_options'].split() + [db_name]
+                params = __mysql__['mysqldump_options'].split()
+                params.extend(['--user', __mysql__['root_user'], 
+                        '--password={0}'.format(__mysql__['root_password']), 
+                        db_name])
                 _mysqldump.args(*params)
                 with self._popen_creation_lock:
                     if self._killed:
@@ -613,7 +566,7 @@ _mysqldump = Exec("/usr/bin/mysqldump")
 class PerconaExec(Exec):
 
     def check(self):
-        if linux.os['family'] in ('RedHat', 'Oracle'):
+        if linux.os['family'] in ('RedHat', 'Oracle') and linux.os['version'] >= (6, 0):
             # Avoid "Can't locate Time/HiRes.pm in @INC"
             # with InnoDB Backup Utility v1.5.1-xtrabackup
             pkgmgr.installed('perl-Time-HiRes')         
@@ -622,9 +575,12 @@ class PerconaExec(Exec):
         if not 'percona' in mgr.repos():
             if linux.os['family'] in ('RedHat', 'Oracle'):
                 url = 'http://www.percona.com/downloads/percona-release/percona-release-0.0-1.%s.rpm' % linux.os['arch']
-                pkgmgr.RpmPackageMgr().install(url)
+                pkgmgr.YumPackageMgr().localinstall(url)
             else:
-                codename = linux.ubuntu_release_to_codename[linux.os['lsb_release']]
+                try:
+                    codename = linux.os['lsb_codename']
+                except KeyError:
+                    codename = linux.ubuntu_release_to_codename[linux.os['lsb_release']]
                 pkgmgr.apt_source(
                         'percona.list', 
                         ['deb http://repo.percona.com/apt %s main' % codename],
