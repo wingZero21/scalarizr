@@ -334,10 +334,18 @@ class NginxAPI(object):
         """
         queryenv = bus.queryenv_service
         cert, key, cacert = queryenv.get_ssl_certificate(ssl_certificate_id)
-        return self.update_ssl_certificate(ssl_certificate_id,
-                                           cert,
-                                           key,
-                                           cacert)
+        return self.update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
+
+    def _get_default_templates(self):
+        """ 
+        Returns dict of templates SCALR_NGINX_HTTP_CONF, SCALR_NGINX_SSL_CONF
+        and SCALR_NGINX_BACKEND_CONF
+        """
+        queryenv = bus.queryenv_service
+        glob_vars = queryenv.list_global_variables()
+        return {'nginx_server': glob_vars.get('SCALR_NGINX_HTTP_CONF'),
+                'ssl': glob_vars.get('SCALR_NGINX_SSL_CONF'),
+                'backend': glob_vars.get('SCALR_NGINX_BACKEND_CONF')}
 
     def _normalize_destinations(self, destinations):
         """
@@ -731,6 +739,8 @@ class NginxAPI(object):
         reload_service = _bool_from_scalr_str(reload_service)
         hash_backend_name = _bool_from_scalr_str(hash_backend_name)
         write_proxies = _bool_from_scalr_str(write_proxies)
+
+        templates = self._get_default_templates() 
 
         _logger.debug('Adding proxy with name: %s' % name)
         destinations = self._normalize_destinations(backends)
