@@ -594,7 +594,7 @@ class NginxAPI(object):
         config.add('server/if/rewrite', '^(.*)$ /noapp.html last')
         config.add('server/if/return', '302')
 
-    def _add_ssl_params(self, config, server_xpath, ssl_port, ssl_certificate_id):
+    def _ssl_only_on_default(self):
         out = system2(['nginx -v'], shell=True)[1]
         nginx_version_str = out.split('/')[1]
         nginx_version = nginx_version_str.split('.')
@@ -603,9 +603,15 @@ class NginxAPI(object):
         _logger.debug('nginx version is: %s' % nginx_version_str)
         _logger.debug('default param for listen is%s needed' % 
             (' not' if not default_needed else ''))
+        return default_needed
+
+    def _add_ssl_params(self, config, server_xpath, ssl_port, ssl_certificate_id, http):
+        default_needed = self._ssl_only_on_default()
+
         config.add('%s/listen' % server_xpath, '%s%s ssl' % ((ssl_port or '443'), 
                                                              ' default' if default_needed else ''))
-        config.add('%s/ssl' % server_xpath, 'on')
+        if not http:
+            config.add('%s/ssl' % server_xpath, 'on')
         ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
@@ -638,7 +644,7 @@ class NginxAPI(object):
 
         # Configuring ssl
         if ssl:
-            self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id)
+            self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id, port!=None)
 
         self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
@@ -731,7 +737,7 @@ class NginxAPI(object):
 
         grouped_destinations = self._group_destinations(destinations)
         if not grouped_destinations:
-            raise BaseException('No destinations given given')
+            raise BaseException('add_proxy() called with no destination list')
         if ssl_port == port and ssl_port != None:
             raise BaseException("HTTP and HTTPS ports can't be the same")
 
@@ -1118,23 +1124,34 @@ class NginxAPI(object):
             return
 
         config_updated = False
+        ssl_port = ssl_port or '443'
         for i, _ in enumerate(self.proxies_inc.get_list('server')):
             server_xpath = 'server[%i]' % (i + 1)
             server_name = self.proxies_inc.get('%s/server_name' % server_xpath)
             redirector = self._is_redirector(self.proxies_inc, server_xpath)
 
             if hostname == server_name and not redirector:
+                listen_list = self.proxies_inc.get_list('%s/listen' % server_xpath)
+                http = any(ssl_port not in listen for listen in listen_list)
                 try:
                     # trying get ssl param from config
                     # if it raises exception, then we need to set up ssl
                     # like in first time
-                    self.proxies_inc.get('%s/ssl' % server_xpath)
-                    self.proxies_inc.set('%s/ssl' % server_xpath, 'on')
+                    default_needed = self._ssl_only_on_default()
+                    ssl_listen_xpath = self.proxies_inc.xpath_of('%s/listen' % server_xpath,
+                                                                 '*ssl*')
+                    if http and not ssl_listen_xpath:
+                        val = '%s%s ssl' % (ssl_port, ' default' if default_needed else '')
+                        self.proxies_inc.add('%s/listen' % server_xpath, val)
+                    elif not http:
+                        self.proxies_inc.get('%s/ssl' % server_xpath)
+                        self.proxies_inc.set('%s/ssl' % server_xpath, 'on')
                 except metaconf.NoPathError:
                     self._add_ssl_params(self.proxies_inc,
                                          server_xpath,
                                          ssl_port,
-                                         ssl_certificate_id)
+                                         ssl_certificate_id,
+                                         http)
                 break
 
         if config_updated:
@@ -1165,7 +1182,11 @@ class NginxAPI(object):
                     if self.proxies_inc.get('%s/ssl' % server_xpath) is 'on':
                         self.proxies_inc.set('%s/ssl' % server_xpath, 'off')
                 except metaconf.NoPathError:
-                    pass
+                    # if there were no ssl option mentioned
+                    ssl_listen_xpath = self.proxies_inc.xpath_of('%s/listen' % server_xpath,
+                                                                 '*ssl*')
+                    if ssl_listen_xpath:
+                        self.proxies_inc.remove(ssl_listen_xpath)
                 break
 
         if config_updated:
