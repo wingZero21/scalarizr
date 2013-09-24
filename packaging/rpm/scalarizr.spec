@@ -16,7 +16,6 @@ License:        GPLv3
 URL:            http://scalr.net
 
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-#BuildRequires: python26-distribute
 Requires:       python26 python26-m2crypto >= 0.20 python26-pexpect >= 2.3
 Requires:       python26-pysnmp >= 4.1 python26-pyasn1 >= 0.1.7 python26-pysnmp-mibs >= 0.0.8a 
 Requires:       python26-prettytable python26-PyYAML
@@ -24,7 +23,8 @@ Requires:       python26-prettytable python26-PyYAML
 Requires:		python26-pymysql
 Requires:		python26-pychef
 %else
-BuildRequires:  python-setuptools
+# setuptools from pip used instead of rpm
+# BuildRequires:  python-setuptools
 Requires:       python >= 2.5 m2crypto >= 0.20 pexpect >= 2.3
 # snmp
 Requires:       pysnmp >= 4.2.4 python-pyasn1 >= 0.1.7 python-pysnmp-mibs >= 0.0.8a 
