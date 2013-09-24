@@ -45,22 +45,24 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             init=self.on_init, 
             start=self.on_start
         )
-        self.tomcat_version = None
-        self.config_dir = None
-        self.init_script_path = None
 
-        if linux.os.debian_family:
-            if (linux.os['name'] == 'Ubuntu' and linux.os['version'] >= (12, 4)) or \
-                (linux.os['name'] == 'Debian' and linux.os['version']  >= (7, 0)):
-                self.tomcat_version = 7
-            else:
-                self.tomcat_version = 6
+        catalina_home_dir = linux.system2('echo $CATALINA_HOME', shell=True)[0].strip()
+        if catalina_home_dir:
+            self.install_type = 'binary'
+            self.config_dir = '{0}/conf'.format(self.catalina_home_dir)
         else:
-            self.tomcat_version = 6
-        self.config_dir = '/etc/tomcat{0}'.format(self.tomcat_version)
-        self.init_script_path = '/etc/init.d/tomcat{0}'.format(self.tomcat_version)  
-
-        self.service = initdv2.ParametrizedInitScript('tomcat', self.init_script_path)
+            self.install_type = 'package'
+            if linux.os.debian_family:
+                if (linux.os['name'] == 'Ubuntu' and linux.os['version'] >= (12, 4)) or \
+                    (linux.os['name'] == 'Debian' and linux.os['version'] >= (7, 0)):
+                    tomcat_version = 7
+                else:
+                    tomcat_version = 6
+            else:
+                tomcat_version = 6
+            self.config_dir = '/etc/tomcat{0}'.format(tomcat_version)
+            init_script_path = '/etc/init.d/tomcat{0}'.format(tomcat_version)  
+            self.service = initdv2.ParametrizedInitScript('tomcat', init_script_path)
 
     def on_init(self):
         bus.on(
@@ -78,6 +80,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 Messages.HOST_DOWN) and 'tomcat' in behaviour
 
     def on_host_init_response(self, hir_message):
+        '''
         if not os.path.exists(self.service.initd_script):
             tomcat = 'tomcat{0}'.format(self.tomcat_version)
             pkgs = [tomcat]
@@ -87,6 +90,8 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 pkgs.append('{0}-admin-webapps'.format(tomcat))
             for pkg in pkgs:
                 pkgmgr.installed(pkg)
+        '''
+
         pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
         #pkgmgr.installed('python-augeas')
         #__import__('augeas')
