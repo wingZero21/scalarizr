@@ -279,6 +279,12 @@ class NginxAPI(object):
 
         self._reload_service()
 
+    @rpc.service_method
+    def reconfigure(self, proxy_list):
+        # TODO: much like recreate_proxying() but with specs described in
+        # https://scalr-labs.atlassian.net/browse/SCALARIZR-481?focusedCommentId=17428&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-17428
+        pass
+
     def get_role_servers(self, role_id=None, role_name=None):
         """ Method is used to get role servers from scalr """
         if type(role_id) is int:
@@ -344,8 +350,7 @@ class NginxAPI(object):
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
         return {'nginx_server': glob_vars.get('SCALR_NGINX_HTTP_CONF'),
-                'ssl': glob_vars.get('SCALR_NGINX_SSL_CONF'),
-                'backend': glob_vars.get('SCALR_NGINX_BACKEND_CONF')}
+                'ssl': glob_vars.get('SCALR_NGINX_SSL_CONF')}
 
     def _normalize_destinations(self, destinations):
         """
@@ -613,24 +618,46 @@ class NginxAPI(object):
             (' not' if not default_needed else ''))
         return default_needed
 
-    def _add_ssl_params(self, config, server_xpath, ssl_port, ssl_certificate_id, http):
+    def _add_ssl_params(self,
+                        config,
+                        server_xpath,
+                        ssl_port,
+                        ssl_certificate_id,
+                        http,
+                        ssl_template=None):
+        # TODO: use global variable SCALR_NGINX_SSL_CONF as config template.
+        # template values overrides defaults. function params override template values.
+        templated_directives = {}
+        if ssl_template:
+            for line in ssl_template.splitlines():
+                line = line.lstrip().rstrip(';')
+                directive, val = line.split(None, 1)
+                templated_directives[directive] = val
+
         default_needed = self._ssl_only_on_default()
 
-        config.add('%s/listen' % server_xpath, '%s%s ssl' % ((ssl_port or '443'), 
-                                                             ' default' if default_needed else ''))
+        listen_val = '%s%s ssl' % ((ssl_port or '443'), ' default' if default_needed else '')
+        if 'listen' in templated_directives:
+            listen_val += ' ' + templated_directives['listen']
+        config.add('%s/listen' % server_xpath, listen_val)
+
         if not http:
             config.add('%s/ssl' % server_xpath, 'on')
         ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 
+        for directive, val in templated_directives.items():
+            if directive is not 'listen':
+                config.add('%s/%s' % (server_xpath, directive), val)
         # TODO: move next hardcoded strings to some constants
-        config.add('%s/ssl_session_timeout' % server_xpath, '10m')
-        config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
-        config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
-        config.add('%s/ssl_ciphers' % server_xpath, 
-                   'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-        config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
+        # config.add('%s/ssl_session_timeout' % server_xpath, '10m')
+        # config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
+        # config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
+        # config.add('%s/ssl_ciphers' % server_xpath, 
+        #            'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
+        # config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
+
 
     def _make_server_conf(self,
                           hostname,
@@ -638,11 +665,15 @@ class NginxAPI(object):
                           port='80',
                           ssl=False,
                           ssl_port=None,
-                          ssl_certificate_id=None):
+                          ssl_certificate_id=None,
+                          server_template=None,
+                          ssl_template=None):
         """
         Makes config (metaconf.Configuration object) for server section of
         nginx config
         """
+        # TODO: use global variable SCALR_NGINX_HTTP_CONF as config template
+        # template values overrides defaults. function params override template values.
         config = metaconf.Configuration('nginx')
         config.add('server', '')
 
@@ -652,28 +683,29 @@ class NginxAPI(object):
 
         # Configuring ssl
         if ssl:
-            self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id, port!=None)
+            self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id, port!=None, ssl_template)
 
         self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
 
         # Adding locations leading to defined backends
+        # TODO: move options from location to server context.
+        # template values overrides defaults. function params override template values.
+        config.add('%s/proxy_set_header' % location_xpath, 'Host $host')
+        config.add('%s/proxy_set_header' % location_xpath, 'X-Real-IP $remote_addr')
+        config.add('%s/proxy_set_header' % location_xpath,
+                   'X-Forwarded-For $proxy_add_x_forwarded_for')
+        config.add('%s/client_max_body_size' % location_xpath, '10m')
+        config.add('%s/client_body_buffer_size' % location_xpath, '128k')
+        config.add('%s/proxy_buffering' % location_xpath, 'on')
+        config.add('%s/proxy_connect_timeout' % location_xpath, '15')
+        config.add('%s/proxy_intercept_errors' % location_xpath, 'on')
         for i, (location, backend_name) in enumerate(locations_and_backends):
             location_xpath = 'server/location'
             config.add(location_xpath, location)
 
             location_xpath = '%s[%i]' % (location_xpath, i + 1)
             config.add('%s/proxy_pass' % location_xpath, 'http://%s' % backend_name)
-            # TODO: move next hardcoded strings to some constants
-            config.add('%s/proxy_set_header' % location_xpath, 'Host $host')
-            config.add('%s/proxy_set_header' % location_xpath, 'X-Real-IP $remote_addr')
-            config.add('%s/proxy_set_header' % location_xpath,
-                       'X-Forwarded-For $proxy_add_x_forwarded_for')
-            config.add('%s/client_max_body_size' % location_xpath, '10m')
-            config.add('%s/client_body_buffer_size' % location_xpath, '128k')
-            config.add('%s/proxy_buffering' % location_xpath, 'on')
-            config.add('%s/proxy_connect_timeout' % location_xpath, '15')
-            config.add('%s/proxy_intercept_errors' % location_xpath, 'on')
 
             if location is '/':
                 config.add('%s/error_page' % location_xpath, '500 501 = /500.html')
@@ -688,7 +720,9 @@ class NginxAPI(object):
                           http=True,
                           ssl=False,
                           ssl_port=None,
-                          ssl_certificate_id=None):
+                          ssl_certificate_id=None,
+                          server_template=None,
+                          ssl_template=None):
         """
         Adds server to https config, but without writing it to file.
         """
@@ -703,7 +737,9 @@ class NginxAPI(object):
                                                port if http else None,
                                                ssl,
                                                ssl_port,
-                                               ssl_certificate_id)
+                                               ssl_certificate_id,
+                                               server_template,
+                                               ssl_template)
 
         self.proxies_inc.append_conf(server_config)
 
@@ -717,8 +753,11 @@ class NginxAPI(object):
                   ssl_certificate_id=None,
                   backend_port=None,
                   backend_ip_hash=False,
+                  backend_least_conn=False,
                   backend_max_fails=None,
                   backend_fail_timeout=None,
+                  server_template=None,
+                  ssl_template=None,
                   reread_conf=True,
                   reload_service=True,
                   hash_backend_name=True,
@@ -730,17 +769,19 @@ class NginxAPI(object):
         and/or roles with params and inner naming in this module for such dicts
         is ``destinations``. So keep in mind that ``backend`` word in all other
         places of this module means nginx upstream config.
+
+        ``server_template`` is param for templating nginx server section,
+        not server directive in upstriam section
         """
         # typecast is needed because scalr sends bool params as strings: '1' for True, '0' for False 
         ssl = _bool_from_scalr_str(ssl)
         http = _bool_from_scalr_str(http) if ssl else True
         backend_ip_hash = _bool_from_scalr_str(backend_ip_hash)
+        backend_least_conn = _bool_from_scalr_str(backend_least_conn)
         reread_conf = _bool_from_scalr_str(reread_conf)
         reload_service = _bool_from_scalr_str(reload_service)
         hash_backend_name = _bool_from_scalr_str(hash_backend_name)
         write_proxies = _bool_from_scalr_str(write_proxies)
-
-        templates = self._get_default_templates() 
 
         _logger.debug('Adding proxy with name: %s' % name)
         destinations = self._normalize_destinations(backends)
@@ -773,7 +814,9 @@ class NginxAPI(object):
                                http=http,
                                ssl=ssl,
                                ssl_port=ssl_port,
-                               ssl_certificate_id=ssl_certificate_id)
+                               ssl_certificate_id=ssl_certificate_id,
+                               server_template=server_template,
+                               ssl_template=ssl_template)
 
         if port:
             _open_port(port)
