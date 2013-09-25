@@ -9,7 +9,7 @@ from scalarizr import handlers, linux
 from scalarizr.bus import bus
 from scalarizr.linux import pkgmgr, execute
 from scalarizr.messaging import Messages
-from scalarizr.util import initdv2
+from scalarizr.util import initdv2, firstmatched
 from scalarizr.node import __node__
 
 
@@ -18,6 +18,10 @@ LOG = logging.getLogger(__name__)
 __tomcat__ = __node__['tomcat']
 __tomcat__.update({
     'catalina_home_dir': None,
+    'java_home': firstmatched(lambda path: os.access(path, os.X_OK), [
+            linux.system('echo $JAVA_HOME', shell=True)[0].strip(),
+            '/usr/java/default'], 
+            '/usr'),
     'config_dir': None,
     'install_type': None
 })
@@ -27,7 +31,7 @@ def get_handlers():
 
 
 class KeytoolExec(execute.BaseExec):
-    executable = '/usr/bin/keytool'
+    executable = '{0}/bin/keytool'.format(__tomcat__['java_home'])
 
     # keytool uses long args with a short prefix
     def _default_handler(self, key, value, cmd_args):
@@ -76,7 +80,7 @@ def augtool(script_lines):
     augscript = augload() + script_lines
     augscript = '\n'.join(augscript)
     LOG.debug('augscript: %s', augscript)
-    return linux.system(('augtool'), stdin=augscript)[0].strip()
+    return linux.system(('augtool', ), stdin=augscript)[0].strip()
 
 
 class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
@@ -187,7 +191,12 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
         # Enable SSL
         if not '8443' in augtool(['print $service/Connector/*/port']):
-            self.service.stop()
+            if __tomcat__['install_type'] == 'binary':
+                # catalina.sh shows error when tomcat is not running
+                if self.service.runnig:
+                    self.service.stop()
+            else:
+                self.service.stop()
 
             keystore_path = config_dir + '/keystore'
             if not os.path.exists(keystore_path):
