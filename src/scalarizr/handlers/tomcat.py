@@ -3,6 +3,7 @@ import re
 import shutil
 import logging
 import socket
+import glob
 
 from scalarizr import handlers, linux
 from scalarizr.bus import bus
@@ -88,7 +89,15 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             start=self.on_start
         )
 
+        # try to read CATALINA_HOME from environment
         __tomcat__['catalina_home_dir'] = linux.system('echo $CATALINA_HOME', shell=True)[0].strip()
+        if not __tomcat__['catalina_home_dir']:
+            # try to locate CATALINA_HOME in /opt/apache-tomcat*
+            try:
+                __tomcat__['catalina_home_dir'] = glob.glob('/opt/apache-tomcat*')[0]
+            except IndexError:
+                pass
+
         if __tomcat__['catalina_home_dir']:
             __tomcat__['install_type'] = 'binary'
             __tomcat__['config_dir'] = '{0}/conf'.format(__tomcat__['catalina_home_dir'])
