@@ -193,7 +193,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
         if not '8443' in augtool(['print $service/Connector/*/port']):
             if __tomcat__['install_type'] == 'binary':
                 # catalina.sh shows error when tomcat is not running
-                if self.service.runnig:
+                if self.service.running:
                     self.service.stop()
             else:
                 self.service.stop()
