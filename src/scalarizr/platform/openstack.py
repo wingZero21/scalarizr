@@ -227,6 +227,7 @@ class OpenstackPlatform(platform.Platform):
         return swiftclient.Connection(keystone_url, 
                     self._access_data["username"],
                     password or api_key,
+                    insecure=True,  # FIXME: SCALARIZR-1139
                     **kwds)
 
 
