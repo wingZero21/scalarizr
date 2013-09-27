@@ -58,7 +58,9 @@ class CinderWrapper(OpenstackServiceWrapper):
                                     self.tenant,
                                     auth_url=self.auth_url,
                                     region_name=self.region_name,
+                                    insecure=True,  # FIXME: SCALARIZR-1139
                                     **kwargs)
+
 
 
 class NovaWrapper(OpenstackServiceWrapper):
@@ -70,6 +72,7 @@ class NovaWrapper(OpenstackServiceWrapper):
                                   auth_url=self.auth_url,
                                   region_name=self.region_name,
                                   service_type=service_type,
+                                  insecure=True,  # FIXME: SCALARIZR-1139
                                   **kwargs)
 
 
