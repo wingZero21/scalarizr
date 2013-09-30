@@ -177,7 +177,7 @@ class Habibi(object):
         self.web_server = self.web_server_thread = None
         self.msg_center = NotificationCenter()
 
-    def run_server(self, zone=None):
+    def run_server(self, zone='lxc-zone'):
         server = Server(behaviors=self.role['behaviors'],
                         index=self._next_server_index(),
                         notification_center=self.msg_center,
@@ -461,6 +461,13 @@ class QueryEnv(object):
     def __init__(self, habibi):
         self.habibi = habibi
         self.fields = None
+        self._handlers = dict()
+
+
+    def subscribe(self, method, function):
+        if not method in self._handlers:
+            self._handlers[method] = list()
+        self._handlers[method].append(function)
 
     def run(self, operation, fields):
         self.fields = fields
@@ -468,8 +475,16 @@ class QueryEnv(object):
             method_name = operation.replace('-', '_')
             self.LOG.debug('run %s', operation)
             response = etree.Element('response')
-            response.append(getattr(self, method_name)())
+            if hasattr(self, method_name):
+                response.append(getattr(self, method_name)())
+            if method_name in self._handlers:
+                for hndlr in self._handlers[method_name]:
+                    hndlr(method_name, response, fields)
             return etree.tostring(response)
+        except:
+            exc_info = sys.exc_info()
+            LOG.error('Queryenv error', exc_info=exc_info)
+            raise
         finally:
             self.fields = None
 
