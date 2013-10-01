@@ -689,7 +689,7 @@ class PostgreSqlHander(ServiceCtlHandler):
                     cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
                     LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 
-                    lt_tags = {'created_on': 'Master' if int(__postgresql__[OPT_REPLICATION_MASTER]) else 'slave'}
+                    lt_tags = {'created_on': 'master' if int(__postgresql__[OPT_REPLICATION_MASTER]) else 'slave'}
                     trn = LargeTransfer(backup_path, cloud_storage_path, tags=lt_tags)
                     manifest = trn.run()
                     LOG.info("Postgresql backup uploaded to cloud storage under %s/%s",
