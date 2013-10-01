@@ -607,7 +607,7 @@ class NginxAPI(object):
         config.add('server/if/rewrite', '^(.*)$ /noapp.html last')
         config.add('server/if/return', '302')
 
-    def _ssl_only_on_default(self):
+    def _is_ssl_on_default_only(self):
         out = system2(['nginx -v'], shell=True)[1]
         nginx_version_str = out.split('/')[1]
         nginx_version = nginx_version_str.split('.')
@@ -634,7 +634,7 @@ class NginxAPI(object):
                 directive, val = line.split(None, 1)
                 templated_directives[directive] = val
 
-        default_needed = self._ssl_only_on_default()
+        default_needed = self._is_ssl_on_default_only()
 
         listen_val = '%s%s ssl' % ((ssl_port or '443'), ' default' if default_needed else '')
         if 'listen' in templated_directives:
@@ -1190,7 +1190,7 @@ class NginxAPI(object):
                     # trying get ssl param from config
                     # if it raises exception, then we need to set up ssl
                     # like in first time
-                    default_needed = self._ssl_only_on_default()
+                    default_needed = self._is_ssl_on_default_only()
                     ssl_listen_xpath = self.proxies_inc.xpath_of('%s/listen' % server_xpath,
                                                                  '*ssl*')
                     if http and not ssl_listen_xpath:
