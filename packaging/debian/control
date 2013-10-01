@@ -60,9 +60,9 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}), 
-         python-rackspace-cloudfiles (>= 1.5.1),
-         python-rackspace-cloudservers (>= 1.0~a5),
-         python-swiftclient (>= 1.2.0)
+         python-rackspace-cloudfiles (= 1.7.10),
+         python-rackspace-cloudservers (= 1.2),
+         python-swiftclient (= 1.6.0)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Rackspace cloud
@@ -73,11 +73,11 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-         python-novaclient (>= 2.15.0),
-         python-rackspace-novaclient (>= 1.0),
-         python-cinderclient (>= 1.0.5),
-         python-swiftclient (>= 1.6.0),
-         python-keystoneclient (>= 0.3.2)
+         python-novaclient (= 2.15.0),
+         python-rackspace-novaclient (= 1.0),
+         python-cinderclient (= 1.0.5),
+         python-swiftclient (= 1.6.0),
+         python-keystoneclient (= 0.3.2)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Openstack cloud
