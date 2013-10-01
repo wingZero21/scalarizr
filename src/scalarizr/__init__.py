@@ -18,8 +18,6 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.api.binding import jsonrpc_http
 
 from scalarizr.linux import pkgmgr
-if not linux.os.windows_family:
-    from scalarizr.snmp.agent import SnmpServer
 
 # Utils
 from scalarizr.util import initdv2, log, PeriodicalExecutor
@@ -215,26 +213,6 @@ def _init():
     
     # Registering in init.d
     initdv2.explore("scalarizr", ScalarizrInitScript)
-
-
-def prepare_snmp():
-    _init()
-    cnf = bus.cnf; ini = cnf.rawini
-    cnf.on('apply_user_data', _apply_user_data)
-    cnf.bootstrap()
-
-    server_id = ini.get('general', 'server_id')
-    queryenv_url = ini.get('general', 'queryenv_url')
-    queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY))
-
-    bus.queryenv_service = queryenv
-
-    snmp_server = SnmpServer(
-        port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
-        security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
-        community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
-    )
-    return snmp_server
     
 
 DB_NAME = 'db.sqlite'
@@ -323,7 +301,7 @@ def _init_platform():
         logger.debug('Enable RedHat subscription')
         urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
 
-    if cnf.state != ScalarizrState.RUNNING and not linux.os.windows_family:
+    if cnf.state != ScalarizrState.RUNNING and not (node.__node__['devel'] or linux.os.windows_family):
         try:
             pkgmgr.updatedb()
         except:
@@ -520,7 +498,9 @@ def main():
                 help='Answer "yes" to all questions')
         optparser.add_option('-o', dest='cnf', action='append',
                 help='Runtime .ini option key=value')
-
+        optparser.add_option('-d', '--devel', action='store_true', default=False,
+                help="Run in development mode (don't do it in production!)")
+        
         if linux.os['family'] != 'Windows':
             optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
                                                help='Daemonize process')
@@ -538,6 +518,8 @@ def main():
                 sys.argv += ['-o', 'region=' + region]        
         
         optparser.parse_args()
+
+        node.__node__['devel'] = optparser.values.devel
         
         # Daemonize process
         if linux.os['family'] != 'Windows' and optparser.values.daemonize:
@@ -770,6 +752,7 @@ class Service(object):
 
 
 
+
     def _init_services(self):
         logger = logging.getLogger(__name__)
         cnf = bus.cnf; ini = cnf.rawini
@@ -865,6 +848,8 @@ class Service(object):
                 bus.scalr_version, remove_snmp_since)
             self._snmp_pid = -1
             return
+
+        from scalarizr.snmp.agent import SnmpServer
 
         # Start SNMP server in a separate process
         pid = os.fork()
