@@ -28,10 +28,12 @@ from scalarizr.libs.metaconf import Configuration, NoPathError, strip_quotes
 
 LOG = logging.getLogger(__name__)
 
+etc_path = bus.etc_path or '/etc/scalr'
+
 apache = {
-    'vhosts_dir'         : os.path.join(bus.etc_path, 'private.d/vhosts'),
-    'cert_path'          : os.path.join(bus.etc_path, 'private.d/keys'),
-    'keys_dir'           : os.path.join(bus.etc_path, "private.d/keys"),
+    'vhosts_dir'         : os.path.join(etc_path, 'private.d/vhosts'),
+    'cert_path'          : os.path.join(etc_path, 'private.d/keys'),
+    'keys_dir'           : os.path.join(etc_path, "private.d/keys"),
     'vhost_extension'    : '.vhost.conf',
     'logrotate_conf_path': '/etc/logrotate.d/scalarizr_app'}
 
