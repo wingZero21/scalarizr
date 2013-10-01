@@ -56,7 +56,6 @@ class CinderWrapper(OpenstackServiceWrapper):
                                     self.tenant,
                                     auth_url=self.auth_url,
                                     region_name=self.region_name,
-                                    insecure=True,  # FIXME: SCALARIZR-1139
                                     **kwargs)
 
 
@@ -70,7 +69,6 @@ class NovaWrapper(OpenstackServiceWrapper):
                                   auth_url=self.auth_url,
                                   region_name=self.region_name,
                                   service_type=service_type,
-                                  insecure=True,  # FIXME: SCALARIZR-1139
                                   **kwargs)
 
 
@@ -227,7 +225,6 @@ class OpenstackPlatform(platform.Platform):
         return swiftclient.Connection(keystone_url, 
                     self._access_data["username"],
                     password or api_key,
-                    insecure=True,  # FIXME: SCALARIZR-1139
                     **kwds)
 
 
