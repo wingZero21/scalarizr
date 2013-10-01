@@ -30,7 +30,7 @@ def which(exe):
 def system(*args, **kwds):
     args = list(args)
     kwds['exc_class'] = LinuxError
-    kwds['close_fds'] = True
+    kwds['close_fds'] = system.close_fds
     if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
         executable = which(args[0][0])
         if not executable:
@@ -39,6 +39,7 @@ def system(*args, **kwds):
         args[0] = list(args[0])
         args[0][0] = executable
     return util.system2(*args, **kwds)
+system.close_fds = platform.uname()[0].lower() != 'windows'
 
 
 class Version(distutils.version.LooseVersion):
@@ -54,7 +55,8 @@ class __os(dict):
     def __init__(self, *args, **kwds):
         dict.__init__(self, *args, **kwds)
         self._detect_dist()
-        self._detect_kernel()
+        if not self['family'] == 'Windows':
+            self._detect_kernel()
 
 
     def __getattr__(self, name):
@@ -65,7 +67,16 @@ class __os(dict):
             return self['name'].lower() == name
 
     def _detect_dist(self):
-        if osmod.path.isfile('/etc/lsb-release'):
+        # Detect windows
+        _uname = platform.uname()
+        if _uname[0].lower() == 'windows':
+            win32_ver = platform.win32_ver()
+            self['family'] = 'Windows'
+            self['name'] = 'Windows'
+            self['release'] = win32_ver[1]
+            self['codename'] = win32_ver[0]
+
+        elif osmod.path.isfile('/etc/lsb-release'):
             for line in open('/etc/lsb-release').readlines():
                 # Matches any possible format:
                 #     DISTRIB_ID="Ubuntu"
@@ -178,6 +189,7 @@ class __os(dict):
             self['name'] = name
         if not 'release' in self:
             self['release'] = Version(release)
+        self['version'] = self['release']
         if not 'codename' in self:
             self['codename'] = codename
 
@@ -216,7 +228,8 @@ ubuntu_release_to_codename = {
         '11.10': 'oneiric',
         '12.04': 'precise',
         '12.10': 'quantal',
-        '13.04': 'raring'
+        '13.04': 'raring',
+        '13.10': 'saucy'
 }
 
 def build_cmd_args(executable=None,

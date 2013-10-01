@@ -44,7 +44,7 @@ class MySQLAPI(object):
                 self._mysql_init.start()
 
         if async:
-            txt = 'Grow MySQL/Percona data volume'
+            txt = 'Grow MySQL/Percona/MariaDB data volume'
             op = handlers.operation(name=txt)
 
             def block():

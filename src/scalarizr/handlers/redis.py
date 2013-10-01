@@ -13,19 +13,19 @@ import logging
 from scalarizr import handlers
 from scalarizr.api import service as preset_service
 
-from scalarizr import config, storage2, handlers
+from scalarizr import config, storage2
+from scalarizr.node import __node__
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
-from scalarizr.util import system2, wait_until, cryptotool, software, initdv2
-from scalarizr.linux.coreutils import split
 from scalarizr.util import system2, cryptotool, software, initdv2
+from scalarizr.linux import iptables
 from scalarizr.services import redis, backup
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
-from scalarizr.handlers import operation, prepare_tags
-from scalarizr import storage2, node
+from scalarizr.handlers import operation, build_tags
+from scalarizr import node
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
@@ -92,7 +92,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
     @property
     def redis_tags(self):
-        return prepare_tags(BEHAVIOUR, db_replication_role=self.is_replication_master)
+        purpose = '%s-'%BEHAVIOUR + ('master' if self.is_replication_master else 'slave')
+        return build_tags(purpose, 'active')
 
 
     @property
@@ -178,6 +179,11 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         self.on_reload()
 
+        if self._cnf.state == ScalarizrState.RUNNING:
+            # Fix to enable access outside farm when use_passwords=True
+            if self.use_passwords:
+                self.security_off()
+
 
     def on_init(self):
 
@@ -186,14 +192,14 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
-        if self._cnf.state == ScalarizrState.RUNNING:
+        self._insert_iptables_rules()
+
+        if __node__['state'] == 'running':
             # Fix to enable access outside farm when use_passwords=True
-            if self.use_passwords:
-                self.security_off()
+            # if self.use_passwords:
+            #    self.security_off()
 
             vol = storage2.volume(__redis__['volume'])
-            if not vol.tags:
-                vol.tags = self.redis_tags
             vol.ensure(mount=True)
             __redis__['volume'] = vol
 
@@ -234,6 +240,16 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         self._snapshot_config_path = self._cnf.private_path(os.path.join('storage', STORAGE_SNAPSHOT_CNF))
 
         self.default_service = initdv2.lookup(SERVICE_NAME)
+
+
+    def _insert_iptables_rules(self):
+        if self.use_passwords and iptables.enabled():
+            ports = "{0}:{1}".format(
+                        __redis__['ports_range'][0], 
+                        __redis__['ports_range'][-1])
+            iptables.FIREWALL.ensure([
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": ports}
+            ])
 
 
     def on_host_init_response(self, message):
@@ -301,7 +317,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     # Update configs
                     __redis__.update(redis_data)
                     __redis__['volume'].mpoint = __redis__['storage_dir']
-
+                    __redis__['volume'].tags = self.redis_tags
                     if self.default_service.running:
                         self.default_service.stop('Terminating default redis instance')
 

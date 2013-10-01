@@ -7,8 +7,10 @@ Created on Dec 5, 2009
 from __future__ import with_statement
 
 import logging
+import time
 import threading
 import copy
+import sys
 
 from scalarizr.bus import bus
 from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingError
@@ -120,11 +122,9 @@ class _P2pMessageStore:
         conn = self._conn()
         cur = conn.cursor()
         try:
-            sql = """INSERT INTO p2p_message (id, message, message_id,
-                                    message_name, queue, is_ingoing, in_is_handled, in_consumer_id, format)
-                            VALUES
-                                    (NULL, ?, ?, ?, ?, ?, ?, ?, ?)"""
-
+            sql = 'INSERT INTO p2p_message (id, message, message_id, ' \
+                    'message_name, queue, is_ingoing, in_is_handled, in_consumer_id, format) ' \
+                    'VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)'
 
             #self._logger.debug('Representation mes: %s', repr(str(message)))
             cur.execute(sql, [message.tojson().decode('utf-8'), message.id, message.name, queue, 1, 0, consumer_id, 'json'])
@@ -163,15 +163,9 @@ class _P2pMessageStore:
         """
         cur = self._conn().cursor()
         try:
-            '''
-            sql = """SELECT queue, message_id FROM p2p_message
-                            WHERE is_ingoing = ? AND in_is_handled = ? AND in_consumer_id = ?
-                            ORDER BY id"""
-            cur.execute(sql, [1, 0, consumer_id])
-            '''
-            sql = """SELECT queue, message_id FROM p2p_message
-                            WHERE is_ingoing = ? AND in_is_handled = ?
-                            ORDER BY id"""
+            sql = 'SELECT queue, message_id FROM p2p_message ' \
+                'WHERE is_ingoing = ? AND in_is_handled = ? ' \
+                'ORDER BY id'
             cur.execute(sql, [1, 0])
 
             ret = []
@@ -187,12 +181,28 @@ class _P2pMessageStore:
             filter_fn = lambda x: x[1].id != message_id
             self._unhandled = filter(filter_fn, self._unhandled_messages)
 
+        for _ in xrange(0, 5):
+            try:
+                msg = self.load(message_id, True)
+                break
+            except:
+                self._logger.debug('Failed to load message %s', message_id, exc_info=sys.exc_info())
+                time.sleep(1)
+        else:
+            self._logger.debug("Cant load message in several attempts, assume it doesn't exists. Leaving")
+            return
+
+
+        if 'platform_access_data' in msg.body:
+            del msg.body['platform_access_data']
+        msg_s = msg.tojson().decode('utf-8')
+
         conn = self._conn()
         cur = conn.cursor()
         try:
-            sql = """UPDATE p2p_message SET in_is_handled = ?
-                            WHERE message_id = ? AND is_ingoing = ?"""
-            cur.execute(sql, [1, message_id, 1])
+            sql = 'UPDATE p2p_message SET in_is_handled = ?, message = ?, out_last_attempt_time = datetime("now")' \
+                'WHERE message_id = ? AND is_ingoing = ?'
+            cur.execute(sql, [1, msg_s, message_id, 1])
             conn.commit()
         finally:
             cur.close()
@@ -202,10 +212,10 @@ class _P2pMessageStore:
         conn = self._conn()
         cur = conn.cursor()
         try:
-            sql = """INSERT INTO p2p_message (id, message, message_id, message_name, queue,
-                                    is_ingoing, out_is_delivered, out_delivery_attempts, out_sender, format)
-                            VALUES
-                                    (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            sql = 'INSERT INTO p2p_message (id, message, message_id, message_name, queue, ' \
+                        'is_ingoing, out_is_delivered, out_delivery_attempts, out_sender, format) ' \
+                    'VALUES ' \
+                    '(NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 
             cur.execute(sql, [message.tojson().decode('utf-8'), message.id,
                                               message.name, queue, 0, 0, 0, sender, 'json'])
@@ -220,8 +230,8 @@ class _P2pMessageStore:
         """
         cur = self._conn().cursor()
         try:
-            sql = """SELECT queue, message_id FROM p2p_message
-                            WHERE is_ingoing = ? AND out_is_delivered = ? AND out_sender = ? ORDER BY id"""
+            sql = 'SELECT queue, message_id FROM p2p_message ' \
+                    'WHERE is_ingoing = ? AND out_is_delivered = ? AND out_sender = ? ORDER BY id'
             cur.execute(sql, [0, 0, sender])
             ret = []
             for r in cur.fetchall():
@@ -241,10 +251,9 @@ class _P2pMessageStore:
         conn = self._conn()
         cur = conn.cursor()
         try:
-            sql = """UPDATE p2p_message SET out_delivery_attempts = out_delivery_attempts + 1,
-                                    out_last_attempt_time = datetime('now'), out_is_delivered = ?
-                            WHERE
-                                    message_id = ? AND is_ingoing = ?"""
+            sql = 'UPDATE p2p_message SET out_delivery_attempts = out_delivery_attempts + 1, ' \
+                        'out_last_attempt_time = datetime("now"), out_is_delivered = ? ' \
+                    'WHERE message_id = ? AND is_ingoing = ?'
             cur.execute(sql, [int(bool(delivered)), message_id, 0])
             conn.commit()
         finally:
@@ -253,8 +262,8 @@ class _P2pMessageStore:
     def load(self, message_id, is_ingoing):
         cur = self._conn().cursor()
         try:
-            cur.execute("""SELECT * FROM p2p_message
-                            WHERE message_id = ? AND is_ingoing = ?""",
+            cur.execute('SELECT * FROM p2p_message ' \
+                        'WHERE message_id = ? AND is_ingoing = ?',
                     [message_id, int(bool(is_ingoing))])
             row = cur.fetchone()
             if not row is None:
@@ -272,22 +281,12 @@ class _P2pMessageStore:
             filtered = filter(filter_fn, self._unhandled_messages)
             return not filtered
 
-        '''
-        cur = self._conn().cursor()
-        try:
-                cur.execute("""SELECT in_is_handled FROM p2p_message
-                                WHERE message_id = ? AND is_ingoing = 1""",
-                                [message_id])
-                return cur.fetchone()["in_is_handled"] == 1
-        finally:
-                cur.close()
-        '''
 
     def is_delivered(self, message_id):
         cur = self._conn().cursor()
         try:
-            cur.execute("""SELECT is_delivered FROM p2p_message
-                            "WHERE message_id = ? AND is_ingoing = ?""",
+            cur.execute('SELECT is_delivered FROM p2p_message ' \
+                        'WHERE message_id = ? AND is_ingoing = ?',
                     [message_id, 0])
             return cur.fetchone()["out_is_delivered"] == 1
         finally:
@@ -296,8 +295,8 @@ class _P2pMessageStore:
     def is_response_received(self, message_id):
         cur = self._conn().cursor()
         try:
-            sql = """SELECT response_id FROM p2p_message
-                            WHERE message_id = ? AND is_ingoing = ?"""
+            sql = 'SELECT response_id FROM p2p_message ' \
+                    'WHERE message_id = ? AND is_ingoing = ?'
             cur.execute(sql, [message_id, 0])
             return cur.fetchone()["response_id"] != ""
         finally:
@@ -306,8 +305,8 @@ class _P2pMessageStore:
     def get_response(self, message_id):
         cur = self._conn().cursor()
         try:
-            cur.execute("""SELECT response_id FROM p2p_message
-                            WHERE message_id = ? AND is_ingoing = ?""",
+            cur.execute('SELECT response_id FROM p2p_message ' \
+                        'WHERE message_id = ? AND is_ingoing = ?',
                     [message_id, 0])
             response_id = cur.fetchone()["response_id"]
             if not response_id is None:
@@ -323,14 +322,6 @@ class _P2pMessageStore:
             message.fromjson(row["message"])
         else:
             message.fromxml(row["message"])
-
-    """
-    def _marshall(self, message, row={}):
-            row["message_id"] = message.id
-            row["message_name"] = message.name
-            row["message"] = message.toxml()
-            return row
-    """
 
 _message_store = None
 def P2pMessageStore():

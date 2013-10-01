@@ -4,20 +4,25 @@ Created on Mar 11, 2010
 @author: marat
 '''
 
+import logging
+
 import scalarizr
 from scalarizr.bus import bus
-from scalarizr.handlers import HandlerError, prepare_tags
+from scalarizr.handlers import HandlerError, build_tags
 from scalarizr.util import system2, disttool, cryptotool,\
         wait_until, firstmatched
+from scalarizr import linux
 from scalarizr.linux import mount
-from scalarizr.platform.ec2 import ebstool
-from scalarizr import storage
-from scalarizr.storage.transfer import Transfer
+
 from scalarizr.handlers import rebundle as rebundle_hdlr
-from scalarizr import storage
+from scalarizr.handlers import Handler
+from scalarizr.messaging import Messages
 from scalarizr.linux import coreutils
 from scalarizr.linux.tar import Tar
 from scalarizr.storage2.volumes import ebs as ebsvolume
+from scalarizr.storage2.cloudfs import FileTransfer
+from scalarizr.storage2 import volume, filesystem
+from scalarizr.libs.metaconf import Configuration
 
 from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
@@ -25,10 +30,8 @@ from xml.dom.minidom import Document
 from datetime import datetime
 import time, os, re, shutil, glob
 import string
-import ConfigParser
 
 from boto.exception import BotoServerError
-from boto.ec2.volume import Volume
 from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
 
 
@@ -40,7 +43,7 @@ mimetypes.init()
 
 
 def get_handlers ():
-    return [Ec2RebundleHandler()]
+    return [Ec2RebundleWindowsHandler()] if linux.os.windows_family else  [Ec2RebundleHandler()]
 
 LOG = rebundle_hdlr.LOG
 
@@ -501,8 +504,10 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             for part in manifest.parts:
                 upload_files.append(os.path.join(manifest_dir, part[0]))
 
-            trn = Transfer(pool=4, max_attempts=5, logger=LOG)
-            trn.upload(upload_files, self._platform.scalrfs.images())
+            trn = FileTransfer(src=upload_files, dst=self._platform.scalrfs.images())
+            trn.run()
+            #trn = Transfer(pool=4, max_attempts=5, logger=LOG)
+            #trn.upload(upload_files, self._platform.scalrfs.images())
 
             manifest_path = os.path.join(self._platform.scalrfs.images(), os.path.basename(manifest_path))
             return manifest_path.split('s3://')[1]
@@ -585,14 +590,13 @@ class RebundleEbsStrategy(RebundleStratery):
         LOG.info('Creating snapshot of root device image %s', vol.id)
         description = "Root device snapshot created from role: %s instance: %s" \
                                 % (self._role_name, self._platform.get_instance_id())
-        self._snap = vol.snapshot(description, tags=prepare_tags(tmp=1))
+        self._snap = vol.snapshot(description, tags=build_tags(state='temporary'), nowait=False)
 
-        LOG.debug('Checking that snapshot %s is completed', self._snap.id)
-        wait_until(lambda: self._snap.state in (storage.Snapshot.COMPLETED,
-                                                                                        storage.Snapshot.FAILED), logger=LOG)
+        #LOG.debug('Checking that snapshot %s is completed', self._snap.id)
+        #wait_until(lambda: self._snap.state in (storage.Snapshot.COMPLETED, storage.Snapshot.FAILED), logger=LOG)
 
-        if self._snap.state == storage.Snapshot.FAILED:
-            raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))
+        #if self._snap.state == storage.Snapshot.FAILED:
+        #    raise Exception('Snapshot %s status changed to failed on EC2' % (self._snap.id, ))
         LOG.debug('Snapshot %s completed', self._snap.id)
         LOG.info('Snapshot %s of root device image %s created', self._snap.id, vol.id)
         return self._snap
@@ -700,9 +704,10 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
 
     def _create_image(self):
-        self._ebs_config['tags'] = prepare_tags(tmp=1)
-        self.ebs_volume = storage.Storage.create(self._ebs_config)
-        return self.ebs_volume.devname
+        self._ebs_config['tags'] = build_tags(state='temporary')
+        self.ebs_volume = volume(self._ebs_config)
+        self.ebs_volume.ensure()
+        return self.ebs_volume.device
 
 
     def _read_pt(self, dev_name):
@@ -782,7 +787,8 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
             """ check partition Id(Hex) and create fs """
             if part_id != 0 and part_id != 82:
-                storage.Storage.lookup_filesystem(type_fs or 'ext3').mkfs(to_dev)
+                filesystem(type_fs or 'ext3').mkfs(to_dev)
+                #storage.Storage.lookup_filesystem(type_fs or 'ext3').mkfs(to_dev)
             elif part_id == 82:
                 """ swap partition """
                 out, err, ret_code = system2(('mkswap', '-L', 'swap', to_dev),)
@@ -1193,3 +1199,58 @@ class AmiManifest:
 
     def endElement(self, name):
         pass
+
+
+class Ec2RebundleWindowsHandler(Handler):
+    logger = None
+
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+
+    def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+        return message.name == Messages.WIN_PREPARE_BUNDLE
+
+    def on_Win_PrepareBundle(self, message):
+        try:
+            """
+            cmd = ('ec2config.exe -sysprep')
+            sysprep = Popen(cmd)
+            ret = sysprep.wait()
+            if ret:
+                raise HandlerError('Ec2config finished with return code %s' % ret)
+            """
+            ec2config_cnf_path = 'C:\\Program Files\\Amazon\\Ec2ConfigService\\Settings\\config.xml'
+            if os.path.exists(ec2config_cnf_path):
+                ec2_conf = Configuration('xml')
+                ec2_conf.read(ec2config_cnf_path)
+                i = 1
+                while True:
+                    try:
+                        opt_name = ec2_conf.get('./Ec2ConfigurationSettings/Plugins/Plugin[%s]/Name' % i)
+                        if opt_name in ('Ec2SetPassword', 'Ec2SetComputerName'):
+                            ec2_conf.set('./Ec2ConfigurationSettings/Plugins/Plugin[%s]/State' % i, 'Enabled')
+                        i += 1
+                    except:
+                        break
+
+                ec2_conf.write(ec2config_cnf_path)
+
+            os_info = {}
+            uname = disttool.uname()
+            os_info['version'] = uname[2]
+            os_info['string_version'] = ' '.join(uname).strip()
+
+            self.send_message(Messages.WIN_PREPARE_BUNDLE_RESULT, dict(
+                status = "ok",
+                bundle_task_id = message.bundle_task_id,
+                os = os_info
+            ))
+
+        except (Exception, BaseException), e:
+            self._logger.exception(e)
+            last_error = hasattr(e, "error_message") and e.error_message or str(e)
+            self.send_message(Messages.WIN_PREPARE_BUNDLE_RESULT, dict(
+                status = "error",
+                last_error = last_error,
+                bundle_task_id = message.bundle_task_id
+            ))

@@ -5,10 +5,10 @@ Created on Sep 10, 2010
 @author: marat
 """
 
-from scalarizr.util import disttool, system2
+from scalarizr.util import system2
 from scalarizr import linux
 from scalarizr.linux import coreutils, pkgmgr
-import os, re, zipfile, glob
+import os, re, zipfile, glob, platform
 
 __all__ = ('all_installed', 'software_info', 'explore', 'which')
 
@@ -71,8 +71,8 @@ def system_info(verbose=False):
 
 
     ret['os'] = {}
-    ret['os']['version']            = ' '.join(disttool.linux_dist())
-    ret['os']['string_version'] = ' '.join(disttool.uname()).strip()
+    ret['os']['version'] = '{0} {1} {2}'.format(linux.os['name'], linux.os['release'], linux.os['codename']).strip()
+    ret['os']['string_version'] = ' '.join(platform.uname()).strip()
 
     ret['dist'] = {
             'distributor': linux.os['name'].lower(),
@@ -249,7 +249,7 @@ explore('mysql-proxy', mysqlproxy_software_info)
 
 def apache_software_info():
 
-    binary_name = "httpd" if disttool.is_redhat_based() else "apache2"
+    binary_name = "httpd" if linux.os.redhat_family else "apache2"
     binary = which(binary_name)
     if not binary:
         raise SoftwareError("Can't find executable for apache http server")
@@ -382,7 +382,7 @@ explore('rabbitmq', rabbitmq_software_info)
 
 def redis_software_info():
 
-    binary_name = "redis-server" # if disttool.is_redhat_based() else "redis-cli"
+    binary_name = "redis-server" 
     binary = which(binary_name)
     if not binary:
         raise SoftwareError("Can't find executable for redis server")

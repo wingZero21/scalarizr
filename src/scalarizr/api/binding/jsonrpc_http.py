@@ -93,11 +93,11 @@ class WsgiApplication(Security):
                 start_response('400 Bad request', [], sys.exc_info())
                 return str(sys.exc_info()[1])
 
-            LOG.debug('request: %s', data)
+            #LOG.debug('request: %s', data)
             req = json.loads(data)
             with self.handle_meta_params(req):
                 result = self.req_handler.handle_request(req, namespace=environ['PATH_INFO'][1:] or None)
-            LOG.debug('response: %s', result)
+            #LOG.debug('response: %s', result)
 
             result = self.encrypt_data(result)
             sig, date = self.sign(result, self._read_crypto_key())

@@ -13,6 +13,7 @@ import re
 import os
 import string
 import time
+import urllib
 
 from scalarizr import linux
 from scalarizr.linux import coreutils
@@ -240,6 +241,20 @@ class YumPackageMgr(PackageMgr):
             self.updatedb()
         self.yum_command('install %s' %  name, raise_exc=True)
 
+    def localinstall(self, name):
+        def do_localinstall(filename):
+             self.yum_command('localinstall --nogpgcheck %s' % filename, raise_exc=True)
+
+        if name.startswith('http://'):
+            filename = os.path.join('/tmp', os.path.basename(name))
+            urllib.urlretrieve(name, filename)
+            try:
+                do_localinstall(filename)
+            finally:
+                os.remove(filename)
+        else:
+            do_localinstall(name)
+       
 
     def remove(self, name, purge=False):
         self.yum_command('remove '+name, raise_exc=True)
@@ -248,7 +263,7 @@ class YumPackageMgr(PackageMgr):
     def info(self, name):
         installed, candidates = self.yum_list(name)
         return {'installed': installed,
-                        'candidate': candidates[-1] if candidates else None}
+                'candidate': candidates[-1] if candidates else None}
 
     def repos(self):
         ret = []
@@ -296,7 +311,7 @@ class RpmPackageMgr(PackageMgr):
         installed_version = self._version_from_name(out)
 
         return {'installed': installed_version if installed else None,
-                        'candidate': None}
+                'candidate': None}
 
     def updatedb(self):
         pass

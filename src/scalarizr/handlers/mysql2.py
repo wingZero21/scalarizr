@@ -15,11 +15,10 @@ import tempfile
 import threading
 
 # Core
-from scalarizr import handlers
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.handlers import ServiceCtlHandler, DbMsrMessages, HandlerError, \
-        prepare_tags, operation
+        build_tags, operation
 import scalarizr.services.mysql as mysql_svc
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
@@ -29,12 +28,10 @@ from scalarizr.util import system2, disttool, firstmatched, initdv2, software, c
 
 
 from scalarizr import storage2, linux
-from scalarizr.storage2 import cloudfs
 from scalarizr.linux import iptables, coreutils
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
-from scalarizr.services import make_backup_steps
 from scalarizr.api import service as preset_service
 
 # Libs
@@ -49,40 +46,6 @@ BASH = '/bin/bash'
 __mysql__ = mysql2_svc.__mysql__
 
 
-'''
-OPT_ROOT_PASSWORD               = "root_password"
-OPT_REPL_PASSWORD               = "repl_password"
-OPT_STAT_PASSWORD       = "stat_password"
-OPT_REPLICATION_MASTER  = "replication_master"
-
-OPT_LOG_FILE                    = "log_file"
-OPT_LOG_POS                             = "log_pos"
-
-OPT_VOLUME_CNF                  = 'volume_config'
-OPT_SNAPSHOT_CNF                = 'snapshot_config'
-
-CHANGE_MASTER_TIMEOUT   = '60'
-'''
-'''
-# Mysql storage constants
-STORAGE_PATH                    = "/mnt/dbstorage"
-STORAGE_TMP_DIR                 = "tmp"
-STORAGE_VOLUME_CNF              = 'mysql.json'
-STORAGE_SNAPSHOT_CNF    = 'mysql-snap.json'
-
-# System users
-ROOT_USER                               = "scalr"
-REPL_USER                               = "scalr_repl"
-STAT_USER                               = "scalr_stat"
-PMA_USER                                = "pma"
-
-BACKUP_CHUNK_SIZE               = 200*1024*1024
-STOP_SLAVE_TIMEOUT              = 180
-DEFAULT_DATADIR                 = "/var/lib/mysql"
-DEBIAN_CNF_PATH                 = "/etc/mysql/debian.cnf"
-
-DATA_DIR = os.path.join(STORAGE_PATH, mysql_svc.STORAGE_DATA_DIR)
-'''
 
 PRIVILEGES = {
         __mysql__['repl_user']: ('Repl_slave_priv', ),
@@ -275,11 +238,11 @@ class MysqlHandler(DBMSRHandler):
 
     def __init__(self):
         self.mysql = mysql_svc.MySQL()
-
+        cnf_ctl = MysqlCnfController() if __mysql__['behavior'] in ('mysql2', 'percona') else None  # mariadb dont do old presets 
         ServiceCtlHandler.__init__(self,
                         __mysql__['behavior'],
                         self.mysql.service,
-                        MysqlCnfController())
+                        cnf_ctl)
 
         self.preset_provider = mysql_svc.MySQLPresetProvider()
         preset_service.services[__mysql__['behavior']] = self.preset_provider
@@ -365,8 +328,6 @@ class MysqlHandler(DBMSRHandler):
 
         if __node__['state'] == 'running':
             vol = storage2.volume(__mysql__['volume'])
-            if not vol.tags:
-                vol.tags = self.resource_tags()
             vol.ensure(mount=True)
             __mysql__['volume'] = vol
             if int(__mysql__['replication_master']):
@@ -730,6 +691,8 @@ class MysqlHandler(DBMSRHandler):
                         self.mysql._init_replication(master=True)
                         # Set read_only option
                         self.mysql.my_cnf.read_only = False
+                        self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
+                        self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
                         self.mysql.service.start()
                         # Update __mysql__['behavior'] configuration
                         __mysql__.update({
@@ -882,6 +845,7 @@ class MysqlHandler(DBMSRHandler):
                                             volume=__mysql__['volume'],
                                             snapshot=mysql2['snapshot_config'])
                 # XXX: ugly
+                old_vol = None
                 if __mysql__['volume'].type == 'eph':
                     self.mysql.service.stop('Swapping storages to reinitialize slave')
 
@@ -889,12 +853,22 @@ class MysqlHandler(DBMSRHandler):
                                     restore.snapshot['id'], restore.log_file, restore.log_pos)
                     new_vol = restore.run()
                 else:
+                    if __node__['platform'] == 'idcf':
+                        self.mysql.service.stop('Detaching old Slave volume')
+                        old_vol = dict(__mysql__['volume'])
+                        old_vol = storage2.volume(old_vol)
+                        old_vol.umount()
+
                     restore.run()
 
                 log_file = restore.log_file
                 log_pos = restore.log_pos
 
                 self.mysql.service.start()
+
+                if __node__['platform'] == 'idcf' and old_vol:
+                    LOG.info('Destroying old Slave volume')
+                    old_vol.destroy(remove_disks=True)
             else:
                 LOG.debug("Stopping slave i/o thread")
                 self.root_client.stop_slave_io_thread()
@@ -912,7 +886,8 @@ class MysqlHandler(DBMSRHandler):
                     user=__mysql__['repl_user'],
                     password=mysql2['repl_password'],
                     log_file=log_file,
-                    log_pos=log_pos
+                    log_pos=log_pos,
+                    timeout=120
             )
 
             LOG.debug("Replication switched")
@@ -1044,6 +1019,9 @@ class MysqlHandler(DBMSRHandler):
                 self.mysql.my_cnf.bind_address = '0.0.0.0'
                 LOG.debug('bind-address post: %s', self.mysql.my_cnf.bind_address)
                 self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
+                self.mysql.my_cnf.set('mysqld/log-bin-index', __mysql__['binlog_dir'] + '/binlog.index')  # MariaDB 
+                self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
+                self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
 
                 #if not os.listdir(__mysql__['data_dir']):
                 if not storage_valid:
@@ -1098,6 +1076,7 @@ class MysqlHandler(DBMSRHandler):
                     root_password=__mysql__['root_password'],
                     repl_password=__mysql__['repl_password'],
                     stat_password=__mysql__['stat_password'],
+                    master_password=__mysql__['master_password']
             )
             if __mysql__['compat_prior_backup_restore']:
                 if 'restore' in __mysql__:
@@ -1154,6 +1133,7 @@ class MysqlHandler(DBMSRHandler):
                 self.mysql.my_cnf.bind_address = '0.0.0.0'
                 LOG.debug('bind-address post: %s', self.mysql.my_cnf.bind_address)
                 self.mysql.my_cnf.read_only = True
+                self.mysql.my_cnf.set('mysqld/log-bin-index', __mysql__['binlog_dir'] + '/binlog.index')  # MariaDB
                 self._fix_percona_debian_cnf()
 
             with op.step(self._step_move_datadir):
@@ -1181,7 +1161,8 @@ class MysqlHandler(DBMSRHandler):
                                 user=__mysql__['repl_user'],
                                 password=__mysql__['repl_password'],
                                 log_file=__mysql__['restore'].log_file,
-                                log_pos=__mysql__['restore'].log_pos)
+                                log_pos=__mysql__['restore'].log_pos,
+                                timeout=240)
 
             with op.step(self._step_collect_hostup_data):
                 # Update HostUp message
@@ -1251,7 +1232,9 @@ class MysqlHandler(DBMSRHandler):
                 __mysql__['root_user']: 'root_password',
                 __mysql__['repl_user']: 'repl_password',
                 __mysql__['stat_user']: 'stat_password',
-                __mysql__['master_user']: 'master_password'}
+                # __mysql__['master_user']: 'master_password'
+                # TODO: disabled scalr_master user until scalr will send/recv it in communication messages
+                }
         creds = {}
         for login, opt_pwd in options.items():
             password = __mysql__[opt_pwd]
@@ -1265,22 +1248,28 @@ class MysqlHandler(DBMSRHandler):
     def create_users(self, **creds):
         users = {}
         root_cli = mysql_svc.MySQLClient(__mysql__['root_user'], creds[__mysql__['root_user']])
+
         local_root = mysql_svc.MySQLUser(root_cli, __mysql__['root_user'],
                                         creds[__mysql__['root_user']], host='localhost')
+
+        #local_master = mysql_svc.MySQLUser(root_cli, __mysql__['master_user'], 
+        #                                creds[__mysql__['master_user']], host='localhost', 
+        #                                privileges=PRIVILEGES.get(__mysql__['master_user'], None))
+        #users['master@localhost'] = local_master
 
         if not self.mysql.service.running:
             self.mysql.service.start()
 
         try:
             if not local_root.exists() or not local_root.check_password():
-                users.update({'local_root': local_root})
+                users.update({'root@localhost': local_root})
                 self.mysql.service.stop('creating users')
                 self.mysql.service.start_skip_grant_tables()
             else:
                 LOG.debug('User %s exists and has correct password' % __mysql__['root_user'])
         except ServiceError, e:
             if 'Access denied for user' in str(e):
-                users.update({'local_root': local_root})
+                users.update({'root@localhost': local_root})
                 self.mysql.service.stop('creating users')
                 self.mysql.service.start_skip_grant_tables()
             else:
@@ -1290,10 +1279,6 @@ class MysqlHandler(DBMSRHandler):
             user = mysql_svc.MySQLUser(root_cli, login, password,
                                     host='%', privileges=PRIVILEGES.get(login, None))
             users[login] = user
-            if login == __mysql__['master_user']:
-                user2 = mysql_svc.MySQLUser(root_cli, login, password,
-                                    host='localhost', privileges=PRIVILEGES.get(login, None))
-                users[login + '_localhost'] = user2
 
         for login, user in users.items():
             if not user.exists():
@@ -1378,5 +1363,5 @@ class MysqlHandler(DBMSRHandler):
 
 
     def resource_tags(self):
-        return prepare_tags(__mysql__['behavior'],
-                        db_replication_role=__mysql__['replication_master'])
+        purpose = '%s-'%__mysql__['behavior'] + ('master' if int(__mysql__['replication_master'])==1 else 'slave')
+        return build_tags(purpose, 'active')

@@ -161,8 +161,13 @@ class PostgreSql(BaseService):
         self.root_user.apply_private_ssh_key()
         
         self.postgresql_conf.hot_standby = 'on'
-        self.recovery_conf.trigger_file = os.path.join(self.config_dir.path, TRIGGER_NAME)
         self.recovery_conf.standby_mode = 'on'
+
+        trigger_path = os.path.join(self.config_dir.path, TRIGGER_NAME)
+        if os.path.exists(trigger_path):
+            #in case master was rebundled with trigger enabled
+            os.remove(trigger_path)
+        self.recovery_conf.trigger_file = trigger_path
         
         self.change_primary(primary_ip, primary_port, self.root_user.name)
         self.service.start()
@@ -614,7 +619,6 @@ class PSQL(object):
                     
     
 class ClusterDir(object):
-
     base_path = glob.glob(pg_pathname_pattern)[0]
     default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
     
@@ -628,7 +632,7 @@ class ClusterDir(object):
 
     def move_to(self, dst, move_files=True):
         new_cluster_dir = os.path.join(dst, STORAGE_DATA_DIR)
-        
+
         if not os.path.exists(dst):
             LOG.debug('Creating directory structure for postgresql cluster: %s' % dst)
             os.makedirs(dst)

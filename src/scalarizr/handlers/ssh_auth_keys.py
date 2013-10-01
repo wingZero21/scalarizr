@@ -19,7 +19,10 @@ class UpdateSshAuthorizedKeysError(BaseException):
     pass
 
 def get_handlers ():
-    return [SSHKeys()]
+    if linux.os['family'] == 'Windows':
+        return []
+    else:
+        return [SSHKeys()]
 
 class SSHKeys(Handler):
     sshd_config_path = '/etc/ssh/sshd_config'

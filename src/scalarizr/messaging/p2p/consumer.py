@@ -10,6 +10,7 @@ from scalarizr.bus import bus
 # Core
 from scalarizr.messaging import MessageConsumer, MessagingError
 from scalarizr.messaging.p2p import P2pMessageStore, P2pMessage
+from scalarizr.config import STATE
 from scalarizr.util import wait_until, system2
 
 # Stdlibs
@@ -54,11 +55,20 @@ class P2pMessageConsumer(MessageConsumer):
         try:
             if self._server is None:
                 r = urlparse(self.endpoint)
-                self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)
+                msg_port = r.port
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    sock.connect(('0.0.0.0', msg_port))
+                    msg_port = 8011
+                    sock.close()
+                except socket.error:
+                    pass
+                STATE['global.msg_port'] = msg_port
+                self._logger.info('Building message consumer server on %s:%s', r.hostname, msg_port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-                self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
+                self._server = HTTPServer((r.hostname, msg_port), self._get_request_handler_class())
         except (BaseException, Exception), e:
-            self._logger.error("Cannot build server. %s", e)
+            self._logger.error("Cannot build server on port %s. %s", msg_port, e)
             return
 
         self._logger.debug('Starting message consumer %s', self.endpoint)
@@ -102,7 +112,7 @@ class P2pMessageConsumer(MessageConsumer):
                     return
 
                 try:
-                    logger.debug("Decoding message: %s", rawmsg)
+                    #logger.debug("Decoding message: %s", rawmsg)
                     message = P2pMessage()
 
                     mime_type = self.headers.get('Content-Type', 'application/xml')
@@ -111,6 +121,14 @@ class P2pMessageConsumer(MessageConsumer):
                         message.fromjson(rawmsg)
                     else:
                         message.fromxml(rawmsg)
+
+                    # Create a message copy to log it without platform_access_data and with pretty identation  
+                    msg_copy = P2pMessage(message.name, message.meta.copy(), message.body.copy())
+                    msg_copy.id = message.id
+                    if 'platform_access_data' in msg_copy.body:
+                        del msg_copy.body['platform_access_data']
+                    logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
+
 
                 except (BaseException, Exception), e:
                     err = "Cannot decode message. error: %s; raw message: %s" % (str(e), rawmsg)

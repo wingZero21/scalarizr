@@ -1041,6 +1041,7 @@ def create_redis_conf_copy(port=__redis__['defaults']['port']):
     if not os.path.exists(dst):
         LOG.debug('Copying %s to %s.' % (__redis__['defaults']['redis.conf'],dst))
         shutil.copy(__redis__['defaults']['redis.conf'], dst)
+	chown_r(dst, 'redis')
     else:
         LOG.debug('%s already exists.' % dst)
 

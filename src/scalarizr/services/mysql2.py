@@ -25,9 +25,12 @@ class Error(Exception):
     pass
 
 
-__behavior__ = 'percona' \
-            if 'percona' in __node__['behavior'] \
-            else 'mysql2'
+if 'percona' in __node__['behavior']:
+    __behavior__ = 'percona'
+elif 'mariadb' in __node__['behavior']:
+    __behavior__ = 'mariadb'
+else:
+    __behavior__ = 'mysql2'
 
 
 __mysql__ = __node__[__behavior__]
@@ -164,6 +167,7 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
             # Compression is broken
             #'compress': True,
             #'compress_threads': os.sysconf('SC_NPROCESSORS_ONLN'),
+            'ibbackup': 'xtrabackup',
             'user': __mysql__['root_user'],
             'password': __mysql__['root_password']
         }
@@ -214,10 +218,15 @@ class XtrabackupStreamBackup(XtrabackupMixin, backup.Backup):
                         [self._xbak.stdout],
                         self.cloudfs_target,
                         compressor=self.compressor)
+
+        stderr_thread, stderr = cloudfs.readfp_thread(self._xbak.stderr)
+
         manifesto = self._transfer.run()
         if self._killed:
             raise Error("Canceled")
-        stderr = self._xbak.communicate()[1]
+        stderr_thread.join()
+        self._xbak.wait()
+        stderr = stderr[0] if stderr else ''
         if self._xbak.returncode:
             raise Error(stderr)
 
@@ -333,6 +342,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
         innobackupex(__mysql__['data_dir'],
                 apply_log=True,
                 redo_only=True,
+                ibbackup='xtrabackup',
                 user=__mysql__['root_user'],
                 password=__mysql__['root_password'])
 
@@ -358,6 +368,7 @@ class XtrabackupStreamRestore(XtrabackupMixin, backup.Restore):
                             apply_log=True,
                             redo_only=True,
                             incremental_dir=inc_dir,
+                            ibbackup='xtrabackup',
                             user=__mysql__['root_user'],
                             password=__mysql__['root_password'])
                     i += 1
@@ -426,6 +437,8 @@ class MySQLDumpBackup(backup.Backup):
             self.transfer = cloudfs.LargeTransfer(self._gen_src, self._dst,
                                     streamer=None, chunk_size=self.chunk_size)
         result = self.transfer.run()
+        if not result:
+            raise Error("Error while transfering to cloud storage")
 
         def log_stderr(popen):
             LOG.debug("mysqldump log_stderr communicate")
@@ -445,7 +458,10 @@ class MySQLDumpBackup(backup.Backup):
         if self.file_per_database:
             for db_name in self._databases:
                 self._current_db = db_name
-                params = __mysql__['mysqldump_options'].split() + [db_name]
+                params = __mysql__['mysqldump_options'].split()
+                params.extend(['--user', __mysql__['root_user'], 
+                        '--password={0}'.format(__mysql__['root_password']), 
+                        db_name])
                 _mysqldump.args(*params)
                 with self._popen_creation_lock:
                     if self._killed:
@@ -550,7 +566,7 @@ _mysqldump = Exec("/usr/bin/mysqldump")
 class PerconaExec(Exec):
 
     def check(self):
-        if linux.os['family'] in ('RedHat', 'Oracle'):
+        if linux.os['family'] in ('RedHat', 'Oracle') and linux.os['version'] >= (6, 0):
             # Avoid "Can't locate Time/HiRes.pm in @INC"
             # with InnoDB Backup Utility v1.5.1-xtrabackup
             pkgmgr.installed('perl-Time-HiRes')         
@@ -559,7 +575,7 @@ class PerconaExec(Exec):
         if not 'percona' in mgr.repos():
             if linux.os['family'] in ('RedHat', 'Oracle'):
                 url = 'http://www.percona.com/downloads/percona-release/percona-release-0.0-1.%s.rpm' % linux.os['arch']
-                pkgmgr.RpmPackageMgr().install(url)
+                pkgmgr.YumPackageMgr().localinstall(url)
             else:
                 try:
                     codename = linux.os['lsb_codename']

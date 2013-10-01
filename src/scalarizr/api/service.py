@@ -20,7 +20,10 @@ class ServiceAPI(object):
 
         provider = services[behavior]
         manifest = provider.get_manifest(behavior)
-        return provider.get_preset(manifest)
+        if manifest:
+            return provider.get_preset(manifest)
+        else:
+            raise BaseException('Cannot retrieve preset: Manifest not found.')
 
 
     @rpc.service_method
@@ -30,4 +33,7 @@ class ServiceAPI(object):
 
         provider = services[behavior]
         manifest = provider.get_manifest(behavior)
-        provider.set_preset(values, manifest)
+        if manifest:
+            provider.set_preset(values, manifest)
+        else:
+            raise AssertionError('Cannot apply preset: Manifest not found.')

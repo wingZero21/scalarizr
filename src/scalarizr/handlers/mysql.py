@@ -15,7 +15,7 @@ from scalarizr.storage import Storage, StorageError, Snapshot, Volume, transfer
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.messaging import Messages
-from scalarizr.handlers import HandlerError, ServiceCtlHandler, prepare_tags
+from scalarizr.handlers import HandlerError, ServiceCtlHandler, build_tags
 from scalarizr.platform import UserDataOptions
 
 # Libs
@@ -395,6 +395,10 @@ class MysqlMessages:
     @ivar log_pos?
     """
 
+    CONVERT_TO_DBMSR = "Mysql_ConvertToDbMsr"
+
+    CONVERT_TO_DBMSR_RESULT = "Mysql_ConvertToDbMsrResult"
+
     """
     Also MySQL behaviour adds params to common messages:
 
@@ -679,7 +683,6 @@ class MysqlHandler(ServiceCtlHandler):
         elif self._cnf.state == ScalarizrState.RUNNING:
             # Creating self.storage_vol object from configuration
             storage_conf = Storage.restore_config(self._volume_config_path)
-            storage_conf['tags'] = self.mysql_tags
             self.storage_vol = Storage.create(storage_conf)
             if not self.storage_vol.mounted():
                 if not os.path.exists(self.storage_vol.mpoint):
@@ -749,6 +752,7 @@ class MysqlHandler(ServiceCtlHandler):
                         or      message.name == MysqlMessages.CREATE_DATA_BUNDLE
                         or      message.name == MysqlMessages.CREATE_BACKUP
                         or      message.name == MysqlMessages.CREATE_PMA_USER
+                        or      message.name == MysqlMessages.CONVERT_TO_DBMSR
                         or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
 
     def get_initialization_phases(self, hir_message):
@@ -776,6 +780,16 @@ class MysqlHandler(ServiceCtlHandler):
                 self.storage_vol.destroy(remove_disks=True)
                 LOG.info('Volume %s has been destroyed.' % self.storage_vol.id)
 
+
+    def on_Mysql_ConvertToDbmsr(self, message):
+        old_path = bus.cnf.private_path('mysql')
+        new_path = bus.cnf.private_path('mysql2')
+        shutil.copy(old_path, new_path)
+        system2("sed -i 's/\^\[mysql/\^\[mysql2/1' %s" % new_path, shell=True)
+        self.send_message(MysqlMessages.CONVERT_TO_DBMSR_RESULT, {
+            'status': 'ok'
+        })
+ 
 
     def on_Mysql_CreatePmaUser(self, message):
         try:
@@ -1333,6 +1347,7 @@ class MysqlHandler(ServiceCtlHandler):
                     self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
                     self._change_selinux_ctx()
 
+
                 with op.step(self._step_patch_conf):
                     # Init replication
                     self._replication_init(master=True)
@@ -1517,7 +1532,8 @@ class MysqlHandler(ServiceCtlHandler):
     @property
     def mysql_tags(self):
         is_master = bool(int(self._get_ini_options(OPT_REPLICATION_MASTER)[0]))
-        return prepare_tags(BEHAVIOUR, db_replication_role=is_master)
+        purpose = '%s-'%BEHAVIOUR + ('master' if is_master else 'slave')
+        return build_tags(purpose, 'active')
 
 
     def _insert_iptables_rules(self):
@@ -1542,12 +1558,37 @@ class MysqlHandler(ServiceCtlHandler):
         if disttool.is_debian_based() and os.path.exists(debian_cnf):
             LOG.debug("Copying debian.cnf from storage to mysql configuration directory")
             shutil.copy(debian_cnf, '/etc/mysql/')
+            self._fix_percona_debian_cnf()
 
 
     def _copy_debian_cnf(self):
+
         if os.path.exists('/etc/mysql/debian.cnf'):
+            self._fix_percona_debian_cnf()
             LOG.debug("Copying debian.cnf file to mysql storage")
             shutil.copy('/etc/mysql/debian.cnf', self._storage_path)
+
+
+    def _fix_percona_debian_cnf(self):
+        deb_cnf_path = '/etc/mysql/debian.cnf'
+
+        if os.path.exists(deb_cnf_path):
+            self._logger.info('Fixing socket options in %s', deb_cnf_path)
+            debian_cnf = Configuration('mysql')
+            debian_cnf.read(deb_cnf_path)
+
+            sock = None
+            try:
+                out = system2("my_print_defaults mysqld", shell=True)
+                m = re.search("--socket=(.*)", out[0], re.MULTILINE)
+                if m:
+                    sock = m.group(1)
+            except:
+                pass
+
+            debian_cnf.set('client/socket', sock)
+            debian_cnf.set('mysql_upgrade/socket', sock)
+            debian_cnf.write(deb_cnf_path)
 
 
     def _storage_valid(self, path=None):
