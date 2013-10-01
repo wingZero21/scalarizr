@@ -1,6 +1,12 @@
 
 import sys
 import urllib2
+try:
+    import httplib2
+    httplib2_loaded = True
+except ImportError:
+    httplib2_loaded = False
+
 
 # Core
 from scalarizr import config, rpc, linux
@@ -329,6 +335,13 @@ def _init_platform():
         except:
             logger.warn('Failed to update package manager database: %s', 
                     sys.exc_info()[1], exc_info=sys.exc_info())
+
+    if httplib2_loaded:
+        ca_url = 'http://curl.haxx.se/ca/cacert.pem'
+        ca_path = bus.share_path + '/cacert.pem'
+        logger.debug('Fetch CA bundle from %s to %s', ca_url, ca_path)
+        urllib.urlretrieve(ca_url, ca_path)
+        httplib2.CA_CERTS = ca_path
 
     # Initialize platform
     logger.debug("Initialize platform")
