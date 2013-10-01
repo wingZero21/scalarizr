@@ -407,6 +407,27 @@ def redis_software_info():
 explore('redis', redis_software_info)
 
 
+def haproxy_software_info():
+
+    binary_name = "haproxy"
+    binary = which(binary_name)
+    if not binary:
+        raise SoftwareError("Can't find executable for HAProxy")
+
+    out = system2((binary, '-v'))[0]
+    if not out:
+        raise SoftwareError()
+
+    version_string = out.splitlines()[0]
+    res = re.search('[\d\.]+', version_string)
+    if res:
+        version = res.group(0)
+
+        return SoftwareInfo('haproxy', version, out)
+    raise SoftwareError
+explore('haproxy', haproxy_software_info)
+
+
 def mongodb_software_info():
     try:
         mongod = which('mongod')
