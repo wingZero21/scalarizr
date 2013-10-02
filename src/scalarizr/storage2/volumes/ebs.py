@@ -344,8 +344,7 @@ class EbsVolume(base.Volume, EbsMixin):
                     self._attach_volume(ebs, name)
 
             else:
-                if not linux.os.windows_family:
-                    name = ebs.attach_data.device
+                name = ebs.attach_data.device
 
             self._config.update({
                     'id': ebs.id,
@@ -443,7 +442,7 @@ class EbsVolume(base.Volume, EbsMixin):
         )
         LOG.debug('EBS volume %s attached', ebs.id)
 
-        if device_name:
+        if not linux.os.windows_family:
             device = name2device(device_name)
             LOG.debug('EBS device name %s is mapped to %s in operation system',
                             device_name, device)
