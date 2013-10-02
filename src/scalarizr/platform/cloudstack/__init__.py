@@ -94,6 +94,12 @@ class CloudStackPlatform(Platform):
     def get_avail_zone(self):
         return self.get_meta_data('availability-zone')
 
+    def get_ssh_pub_key(self):
+        try:
+            return self.get_meta_data('public-keys')
+        except:
+            return ''
+
 
     def new_cloudstack_conn(self):
         if self._access_data and 'api_url' in self._access_data:
