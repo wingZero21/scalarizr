@@ -284,7 +284,7 @@ def tomcat_software_info():
             msg = (
                 "Can't find Tomcat installation\n"
                 " - CATALINA_HOME env variable is unset\n"
-                " - /opt/"
+                " - /opt/apache-tomcat*\n"
                 " - /usr/share/*tomcat* search is empty\n"
             )
             raise SoftwareError(msg)
