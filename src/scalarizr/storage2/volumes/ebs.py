@@ -16,7 +16,6 @@ import boto.exception
 from scalarizr import linux
 from scalarizr import storage2
 from scalarizr import util
-from scalarizr.externals.logging import Logger
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
@@ -57,20 +56,29 @@ class FreeDeviceLetterMgr(object):
 
 
     def __enter__(self):
-        with self._lock:
-            detached = __node__['ec2']['t1micro_detached_ebs'] or list()
-            detached = set(name[-1] for name in detached)
-        letters = list(set(self._all) - self._acquired - detached)
-        for l in letters:
-            pattern = name2device('/dev/sd' + l) + '*'
-            if not glob.glob(pattern):
-                with self._lock:
-                    if not l in self._acquired:
-                        self._acquired.add(l)
-                        self._local.letter = l
-                        return self
-        msg = 'No free letters for block device name remains'
-        raise storage2.StorageError(msg)
+        if not linux.os.windows_family:
+            with self._lock:
+                detached = __node__['ec2']['t1micro_detached_ebs'] or list()
+                detached = set(name[-1] for name in detached)
+            letters = list(set(self._all) - self._acquired - detached)
+            for l in letters:
+                pattern = name2device('/dev/sd' + l) + '*'
+                if not glob.glob(pattern):
+                    with self._lock:
+                        if not l in self._acquired:
+                            self._acquired.add(l)
+                            self._local.letter = l
+                            return self
+            msg = 'No free letters for block device name remains'
+            raise storage2.StorageError(msg)
+        else:
+            conn = __node__['ec2']['connect_ec2']()
+            devices = list(vol.attach_data.device
+                        for vol in conn.get_all_volumes(filters={'attachment.instance-id': __node__['ec2']['instance_id']}))
+            acquired = list(device[-1] for device in devices)
+            avail = sorted(list(set(self._all) - set(acquired)))
+            return avail[0]
+
 
     def get(self):
         return self._local.letter
@@ -325,12 +333,10 @@ class EbsVolume(base.Volume, EbsMixin):
                     self._wait_attachment_state_change(ebs)
                 if ebs.attachment_state() == 'attached':
                     self._detach_volume(ebs)
-                if not linux.os.windows_family:
-                    with self._free_device_letter_mgr:
-                        name = '/dev/sd%s' % self._free_device_letter_mgr.get()
-                        self._attach_volume(ebs, name)
-                else:
-                    self._attach_volume(ebs)
+                with self._free_device_letter_mgr:
+                    name = '/dev/sd' if not linux.os.windows_family else 'xvd'
+                    name += self._free_device_letter_mgr.get()
+                    self._attach_volume(ebs, name)
 
             else:
                 if not linux.os.windows_family:
