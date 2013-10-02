@@ -77,7 +77,12 @@ class FreeDeviceLetterMgr(object):
                         for vol in conn.get_all_volumes(filters={'attachment.instance-id': __node__['ec2']['instance_id']}))
             acquired = list(device[-1] for device in devices)
             avail = sorted(list(set(self._all) - set(acquired)))
-            return avail[0]
+            try:
+                self._local.letter = avail[0]
+                return self
+            except IndexError:
+                msg = 'No free letters for block device name remains'
+                raise storage2.StorageError(msg)
 
 
     def get(self):
