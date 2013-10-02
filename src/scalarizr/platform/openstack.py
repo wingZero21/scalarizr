@@ -152,20 +152,24 @@ class OpenstackPlatform(platform.Platform):
         Fetches whole metadata dict. Unlike Ec2LikePlatform,
         which fetches data for concrete key.
         """
-        url = self._meta_url
+
         try:
-            r = urllib2.urlopen(url)
-            response = r.read().strip()
-            return json.loads(response)
-        except urllib2.URLError:
-            # TODO: move some keys from metadata to parent dict,
-            # that should be there when fetching from url
-            metadata = self._fetch_metadata_from_file()
-            return {'meta': metadata}
+            try:
+                self._logger('fetching meta-data from %s', self._meta_url)
+                r = urllib2.urlopen(self._meta_url)
+                response = r.read().strip()
+                meta = json.loads(response) 
+            except:
+                self._logger.debug('failed to fetch meta-data: %s', sys.exc_info()[1])
+            else:
+                if meta.get('meta'):
+                    return meta
+                else:
+                    self._logger.debug('meta-data fetched, but has empty user-data (a "meta" key), try next method')
+
+            return {'meta': self._fetch_metadata_from_file()}
         except:
-            msg = "Can't fetch %s metadata URL %s. Error: %s".format(
-                    self.name, url, sys.exc_info()[1])
-            raise platform.PlatformError(msg)
+            raise platform.PlatformError, 'failed to fetch meta-data', sys.exc_info()[2]   
 
     def _fetch_metadata_from_file(self):
         cnf = bus.cnf
