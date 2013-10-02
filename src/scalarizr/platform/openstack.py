@@ -155,7 +155,7 @@ class OpenstackPlatform(platform.Platform):
 
         try:
             try:
-                self._logger('fetching meta-data from %s', self._meta_url)
+                self._logger.debug('fetching meta-data from %s', self._meta_url)
                 r = urllib2.urlopen(self._meta_url)
                 response = r.read().strip()
                 meta = json.loads(response) 
