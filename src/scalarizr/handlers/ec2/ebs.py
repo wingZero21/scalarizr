@@ -12,10 +12,7 @@ from scalarizr import linux
 
 
 def get_handlers ():
-    if linux.os.windows_family:
-        return []
-    else:
-        return [EbsHandler()]
+	return [EbsHandler()]
 
 class EbsHandler(BlockDeviceHandler):
 

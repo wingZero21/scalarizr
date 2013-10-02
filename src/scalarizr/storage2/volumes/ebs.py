@@ -16,7 +16,6 @@ import boto.exception
 from scalarizr import linux
 from scalarizr import storage2
 from scalarizr import util
-from scalarizr.externals.logging import Logger
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
@@ -57,20 +56,36 @@ class FreeDeviceLetterMgr(object):
 
 
     def __enter__(self):
-        with self._lock:
-            detached = __node__['ec2']['t1micro_detached_ebs'] or list()
-            detached = set(name[-1] for name in detached)
-        letters = list(set(self._all) - self._acquired - detached)
-        for l in letters:
-            pattern = name2device('/dev/sd' + l) + '*'
-            if not glob.glob(pattern):
-                with self._lock:
-                    if not l in self._acquired:
-                        self._acquired.add(l)
-                        self._local.letter = l
-                        return self
-        msg = 'No free letters for block device name remains'
-        raise storage2.StorageError(msg)
+        if not linux.os.windows_family:
+            with self._lock:
+                detached = __node__['ec2']['t1micro_detached_ebs'] or list()
+                detached = set(name[-1] for name in detached)
+            letters = list(set(self._all) - self._acquired - detached)
+            for l in letters:
+                pattern = name2device('/dev/sd' + l) + '*'
+                if not glob.glob(pattern):
+                    with self._lock:
+                        if not l in self._acquired:
+                            self._acquired.add(l)
+                            self._local.letter = l
+                            return self
+            msg = 'No free letters for block device name remains'
+            raise storage2.StorageError(msg)
+        else:
+            conn = __node__['ec2']['connect_ec2']()
+            devices = list(vol.attach_data.device
+                        for vol in conn.get_all_volumes(filters={'attachment.instance-id': __node__['ec2']['instance_id']}))
+            acquired = list(device[-1] for device in devices)
+            avail = sorted(list(set(self._all) - set(acquired)))
+            try:
+                letter = avail[0]
+                self._local.letter = letter
+                self._acquired.add(letter)
+                return self
+            except IndexError:
+                msg = 'No free letters for block device name remains'
+                raise storage2.StorageError(msg)
+
 
     def get(self):
         return self._local.letter
@@ -326,7 +341,8 @@ class EbsVolume(base.Volume, EbsMixin):
                 if ebs.attachment_state() == 'attached':
                     self._detach_volume(ebs)
                 with self._free_device_letter_mgr:
-                    name = '/dev/sd%s' % self._free_device_letter_mgr.get()
+                    name = '/dev/sd' if not linux.os.windows_family else 'xvd'
+                    name += self._free_device_letter_mgr.get()
                     self._attach_volume(ebs, name)
 
             else:
@@ -416,8 +432,8 @@ class EbsVolume(base.Volume, EbsMixin):
     def _attach_volume(self, volume, device_name=None):
         ebs = self._ebs_volume(volume)
 
-        LOG.debug('Attaching EBS volume %s (device: %s)', ebs.id, device_name)
-        ebs.attach(self._instance_id(), device_name)
+        LOG.debug('Attaching EBS volume %s (device: %s)', ebs.id, device_name or 'auto')
+        ebs.attach(self._instance_id(), device_name or '')
         LOG.debug('Checking that EBS volume %s is attached', ebs.id)
         msg = "EBS volume %s wasn't attached. Timeout reached (%s seconds)" % (
                         ebs.id, self._global_timeout)
@@ -428,19 +444,20 @@ class EbsVolume(base.Volume, EbsMixin):
         )
         LOG.debug('EBS volume %s attached', ebs.id)
 
-        device = name2device(device_name)
-        LOG.debug('EBS device name %s is mapped to %s in operation system',
-                        device_name, device)
-        LOG.debug('Checking that device %s is available', device)
-        msg = 'Device %s is not available in operation system. ' \
-                        'Timeout reached (%s seconds)' % (
-                        device, self._global_timeout)
-        util.wait_until(
-                lambda: os.access(device, os.F_OK | os.R_OK),
-                sleep=1, logger=LOG, timeout=self._global_timeout,
-                error_text=msg
-        )
-        LOG.debug('Device %s is available', device)
+        if not linux.os.windows_family:
+            device = name2device(device_name)
+            LOG.debug('EBS device name %s is mapped to %s in operation system',
+                            device_name, device)
+            LOG.debug('Checking that device %s is available', device)
+            msg = 'Device %s is not available in operation system. ' \
+                            'Timeout reached (%s seconds)' % (
+                            device, self._global_timeout)
+            util.wait_until(
+                    lambda: os.access(device, os.F_OK | os.R_OK),
+                    sleep=1, logger=LOG, timeout=self._global_timeout,
+                    error_text=msg
+            )
+            LOG.debug('Device %s is available', device)
 
 
     def _detach_volume(self, volume, force=False):
