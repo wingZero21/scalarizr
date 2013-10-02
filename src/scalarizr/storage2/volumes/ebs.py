@@ -78,7 +78,9 @@ class FreeDeviceLetterMgr(object):
             acquired = list(device[-1] for device in devices)
             avail = sorted(list(set(self._all) - set(acquired)))
             try:
-                self._local.letter = avail[0]
+                letter = avail[0]
+                self._local.letter = letter
+                self._acquired.add(letter)
                 return self
             except IndexError:
                 msg = 'No free letters for block device name remains'
