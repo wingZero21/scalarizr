@@ -434,6 +434,9 @@ class Redis(BaseService):
         elif self.persistence_type == 'aof':
             self.redis_conf.appendonly = True
             self.redis_conf.save = {}
+        elif self.persistence_type == 'nopersistence':
+            self.redis_conf.appendonly = False
+            self.redis_conf.save = {}
 
 
     @property

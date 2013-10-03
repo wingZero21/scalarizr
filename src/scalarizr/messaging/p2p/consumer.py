@@ -117,6 +117,7 @@ class P2pMessageConsumer(MessageConsumer):
 
                     mime_type = self.headers.get('Content-Type', 'application/xml')
                     format = ('application/json' in mime_type) and 'json' or 'xml'
+
                     if 'json' == format:
                         message.fromjson(rawmsg)
                     else:
@@ -137,7 +138,7 @@ class P2pMessageConsumer(MessageConsumer):
                     return
 
 
-                logger.debug("Received message '%s' (message_id: %s)", message.name, message.id)
+                logger.debug("Received message '%s' (message_id: %s, format: %s)", message.name, message.id, format)
                 #logger.info("Received ingoing message '%s' in queue %s", message.name, queue)
 
                 try:

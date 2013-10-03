@@ -1,29 +1,37 @@
 import os
 import re
-import sys
 import shutil
 import logging
-import multiprocessing
-#try:
-#    import augeas
-#except ImportError:
-#    pass
+import socket
+import glob
 
 from scalarizr import handlers, linux
 from scalarizr.bus import bus
 from scalarizr.linux import pkgmgr, execute
 from scalarizr.messaging import Messages
-from scalarizr.util import initdv2
+from scalarizr.util import initdv2, firstmatched
 from scalarizr.node import __node__
 
 
 LOG = logging.getLogger(__name__)
 
+__tomcat__ = __node__['tomcat']
+__tomcat__.update({
+    'catalina_home_dir': None,
+    'java_home': firstmatched(lambda path: os.access(path, os.X_OK), [
+            linux.system('echo $JAVA_HOME', shell=True)[0].strip(),
+            '/usr/java/default'], 
+            '/usr'),
+    'config_dir': None,
+    'install_type': None
+})
+
 def get_handlers():
     return [TomcatHandler()]
 
+
 class KeytoolExec(execute.BaseExec):
-    executable = '/usr/bin/keytool'
+    executable = '{0}/bin/keytool'.format(__tomcat__['java_home'])
 
     # keytool uses long args with a short prefix
     def _default_handler(self, key, value, cmd_args):
@@ -36,6 +44,45 @@ class KeytoolExec(execute.BaseExec):
         return ['-{0}'.format(cmd_args[-1])] + cmd_args[0:-1]
 
 
+class CatalinaInitScript(initdv2.ParametrizedInitScript):
+    def __init__(self):
+        initdv2.ParametrizedInitScript.__init__(self, 'tomcat', 
+                __tomcat__['catalina_home_dir'] + '/bin/catalina.sh')
+        self.server_port = None
+
+    def status(self):
+        if not self.server_port:
+            out = augtool(['print /files{0}/server.xml/Server/#attribute/port'.format(__tomcat__['config_dir'])])
+            self.server_port = out.split(' = ')[-1]
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.connect(('', self.server_port))
+            return initdv2.Status.RUNNING
+        except:
+            return initdv2.Status.NOT_RUNNING
+        finally:
+            try:
+                sock.close()
+            except:
+                pass
+
+
+def augload():
+    path = __tomcat__['config_dir']
+    return [
+        'set /augeas/load/Xml/incl[last()+1] "{0}/*.xml"'.format(path),
+        'load',
+        'defvar service /files{0}/server.xml/Server/Service'.format(path)                       
+    ]
+
+def augtool(script_lines):
+    augscript = augload() + script_lines
+    augscript = '\n'.join(augscript)
+    LOG.debug('augscript: %s', augscript)
+    return linux.system(('augtool', ), stdin=augscript)[0].strip()
+
+
 class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
     def __init__(self):
@@ -45,22 +92,37 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             init=self.on_init, 
             start=self.on_start
         )
-        self.tomcat_version = None
-        self.config_dir = None
-        self.init_script_path = None
 
-        if linux.os.debian_family:
-            if (linux.os['name'] == 'Ubuntu' and linux.os['version'] >= (12, 4)) or \
-                (linux.os['name'] == 'Debian' and linux.os['version']  >= (7, 0)):
-                self.tomcat_version = 7
+        # try to read CATALINA_HOME from environment
+        __tomcat__['catalina_home_dir'] = linux.system('echo $CATALINA_HOME', shell=True)[0].strip()
+        if not __tomcat__['catalina_home_dir']:
+            # try to locate CATALINA_HOME in /opt/apache-tomcat*
+            try:
+                __tomcat__['catalina_home_dir'] = glob.glob('/opt/apache-tomcat*')[0]
+            except IndexError:
+                pass
+
+        if __tomcat__['catalina_home_dir']:
+            __tomcat__['install_type'] = 'binary'
+            __tomcat__['config_dir'] = '{0}/conf'.format(__tomcat__['catalina_home_dir'])
+            init_script_path = '/etc/init.d/tomcat'
+            if os.path.exists(init_script_path):
+                self.service = initdv2.ParametrizedInitScript('tomcat', init_script_path)
             else:
-                self.tomcat_version = 6
+                self.service = CatalinaInitScript()
         else:
-            self.tomcat_version = 6
-        self.config_dir = '/etc/tomcat{0}'.format(self.tomcat_version)
-        self.init_script_path = '/etc/init.d/tomcat{0}'.format(self.tomcat_version)  
-
-        self.service = initdv2.ParametrizedInitScript('tomcat', self.init_script_path)
+            __tomcat__['install_type'] = 'package'
+            if linux.os.debian_family:
+                if (linux.os['name'] == 'Ubuntu' and linux.os['version'] >= (12, 4)) or \
+                    (linux.os['name'] == 'Debian' and linux.os['version'] >= (7, 0)):
+                    tomcat_version = 7
+                else:
+                    tomcat_version = 6
+            else:
+                tomcat_version = 6
+            __tomcat__['config_dir'] = '/etc/tomcat{0}'.format(tomcat_version)
+            init_script_path = '/etc/init.d/tomcat{0}'.format(tomcat_version)  
+            self.service = initdv2.ParametrizedInitScript('tomcat', init_script_path)
 
     def on_init(self):
         bus.on(
@@ -78,6 +140,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 Messages.HOST_DOWN) and 'tomcat' in behaviour
 
     def on_host_init_response(self, hir_message):
+        '''
         if not os.path.exists(self.service.initd_script):
             tomcat = 'tomcat{0}'.format(self.tomcat_version)
             pkgs = [tomcat]
@@ -87,15 +150,15 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 pkgs.append('{0}-admin-webapps'.format(tomcat))
             for pkg in pkgs:
                 pkgmgr.installed(pkg)
-        pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
-        #pkgmgr.installed('python-augeas')
-        #__import__('augeas')
-        #globals()['augeas'] = sys.modules['augeas']
+        '''
 
+        pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
+
+    '''
     def _aug_load_tomcat(self, aug):
-        aug.set('/augeas/load/Xml/incl[last()+1]', '{0}/*.xml'.format(self.config_dir))
+        aug.set('/augeas/load/Xml/incl[last()+1]', '{0}/*.xml'.format(__tomcat__['config_dir']))
         aug.load()
-        file_ = self.config_dir + '/server.xml'
+        file_ = __tomcat__['config_dir'] + '/server.xml'
         path = '/augeas/files{0}/error'.format(file_)
         if aug.match(path):
             msg = 'AugeasError: {0}. file: {1} line: {2} pos: {3}'.format(
@@ -105,50 +168,37 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 aug.get(path + '/pos'))
             raise Exception(msg)
         aug.defvar('service', '/files{0}/Server/Service'.format(file_))
+    '''
 
 
     def on_before_host_up(self, message):
         # Fix XML prolog in server.xml
-        fp = open(self.config_dir + '/server.xml')
+        config_dir = __tomcat__['config_dir']
+        fp = open(config_dir + '/server.xml')
         prolog = fp.readline()
         fp.close()
         if prolog.startswith("<?xml version='1.0'"):
             LOG.info('Making xml prolog in server.xml compatible with augtool')
-            shutil.copy(self.config_dir + '/server.xml', self.config_dir + '/server.xml.0')
-            with open(self.config_dir + '/server.xml.0') as fpr:
-                with open(self.config_dir + '/server.xml', 'w') as fpw:
+            shutil.copy(config_dir + '/server.xml', config_dir + '/server.xml.0')
+            with open(config_dir + '/server.xml.0') as fpr:
+                with open(config_dir + '/server.xml', 'w') as fpw:
                     fpr.readline()  # skip xml prolog
                     fpw.write('<?xml version="1.0" encoding="utf-8"?>\n')
                     for line in fpr:
                         fpw.write(line)
-            os.remove(self.config_dir + '/server.xml.0')
-
-
+            os.remove(config_dir + '/server.xml.0')
 
 
         # Enable SSL
-        '''
-        import augeas
-        aug = augeas.Augeas()
-        self._aug_load_tomcat(aug)
-        ports = [aug.get(path) for path in aug.match('$service/Connector/*/port')]
-        if not '8443' in ports:
-        '''
-        load_lens = [
-            'set /augeas/load/Xml/incl[last()+1] "{0}/*.xml"'.format(self.config_dir),
-            'load',
-            'defvar service /files{0}/server.xml/Server/Service'.format(self.config_dir)                       
-        ]
-        augscript = '\n'.join(load_lens + [
-            'print $service/Connector/*/port'
-        ])
-        LOG.debug('augscript: %s', augscript)
+        if not '8443' in augtool(['print $service/Connector/*/port']):
+            if __tomcat__['install_type'] == 'binary':
+                # catalina.sh shows error when tomcat is not running
+                if self.service.running:
+                    self.service.stop()
+            else:
+                self.service.stop()
 
-        out = linux.system(('augtool',), stdin=augscript)[1]
-        if not '8443' in out:
-            self.service.stop()
-
-            keystore_path = self.config_dir + '/keystore'
+            keystore_path = config_dir + '/keystore'
             if not os.path.exists(keystore_path):
                 LOG.info('Initializing keystore in %s', keystore_path)
                 keytool = KeytoolExec()
@@ -173,22 +223,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             LOG.info('Keystore type: %s', keystore_type)
 
             LOG.info('Enabling HTTPS on 8443')
-            '''
-            aug.set('$service/Connector[last()+1]/#attribute/port', '8443')
-            aug.defvar('attrs', '$service/Connector[last()]/#attribute')
-            aug.set('$attrs/protocol', 'org.apache.coyote.http11.Http11NioProtocol')
-            aug.set('$attrs/SSLEnabled', 'true')
-            aug.set('$attrs/maxThreads', '150')
-            aug.set('$attrs/scheme', 'https')
-            aug.set('$attrs/keystoreFile', keystore_path)
-            aug.set('$attrs/keystoreType', keystore_type)
-            aug.set('$attrs/secure', 'true')
-            aug.set('$attrs/clientAuth', 'false')
-            aug.set('$attrs/sslProtocol', 'TLS')
-            aug.save()
-            '''
-
-            augscript = '\n'.join(load_lens + [
+            augscript = [
                 'set $service/Connector[last()+1]/#attribute/port 8443',
                 'defvar attrs $service/Connector[last()]/#attribute',
                 'set $attrs/protocol org.apache.coyote.http11.Http11NioProtocol',
@@ -201,9 +236,8 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 'set $attrs/clientAuth false',
                 'set $attrs/sslProtocol TLS',
                 'save'
-            ])
-            LOG.debug('augscript: %s', augscript)
-            linux.system(('augtool', ), stdin=augscript)
+            ]
+            augtool(augscript)
 
 
         # TODO: Import PEM cert/pk into JKS
