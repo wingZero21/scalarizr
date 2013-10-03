@@ -179,7 +179,7 @@ class Platform():
 
         def images(self):
             if bus.scalr_version >= (3, 1, 0):
-                return os.path.join(self.root(), 'images')
+                return os.path.join(self.root(), 'images/')
             else:
                 return '%s://scalr2-images-%s-%s' % (
                         self.platform.cloud_storage_path.split('://')[0],
