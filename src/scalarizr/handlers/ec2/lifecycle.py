@@ -49,7 +49,7 @@ class Ec2LifeCycleHandler(Handler):
         producer = msg_service.get_producer()
         producer.on("before_send", self.on_before_message_send)
 
-        if not os_dist.windows_family:
+        if not os_dist.windows_family and not __node__.get('hostname'):
             # Set the hostname to this instance's public hostname
             try:
                 hostname_as_pubdns = int(__ec2__['hostname_as_pubdns'])
