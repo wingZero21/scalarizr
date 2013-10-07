@@ -518,6 +518,7 @@ class NginxAPI(object):
                      destinations,
                      port=None,
                      ip_hash=True,
+                     least_conn=False,
                      max_fails=None,
                      fail_timeout=None,
                      weight=None):
@@ -532,6 +533,7 @@ class NginxAPI(object):
                                               destinations,
                                               port=port,
                                               ip_hash=ip_hash,
+                                              least_conn=least_conn,
                                               max_fails=max_fails,
                                               fail_timeout=fail_timeout,
                                               weight=weight)
@@ -542,6 +544,7 @@ class NginxAPI(object):
                            destinations,
                            port=None,
                            ip_hash=True,
+                           least_conn=False,
                            max_fails=None,
                            fail_timeout=None,
                            weight=None):
@@ -550,6 +553,8 @@ class NginxAPI(object):
         config.add('upstream', name or 'backend')
         if ip_hash:
             config.add('upstream/ip_hash', '')
+        if least_conn:
+            config.add('upstream/least_conn', '')
 
         for dest in destinations:
             servers = dest['servers']
@@ -618,6 +623,7 @@ class NginxAPI(object):
                       grouped_destinations,
                       port=None,
                       ip_hash=True,
+                      least_conn=False,
                       max_fails=None,
                       fail_timeout=None,
                       weight=None,
@@ -658,6 +664,7 @@ class NginxAPI(object):
                               backend_destinations,
                               port=port,
                               ip_hash=ip_hash,
+                              least_conn=least_conn,
                               max_fails=max_fails,
                               fail_timeout=fail_timeout,
                               weight=weight)
@@ -862,14 +869,55 @@ class NginxAPI(object):
                   write_proxies=True):
         """
         Adds proxy.
-        :param name:
+
+        All backend_* params are used for default values and can be overrided
+        by values given for certain backend in backends list
+
+        :param name: name for proxy. Used as hostname - server_name in nginx server section
 
         :param backends: is list of dictionaries which contains servers
         and/or roles with params and inner naming in this module for such dicts
         is ``destinations``. So keep in mind that ``backend`` word in all other
         places of this module means nginx upstream config.
 
-        :param templates:
+        :param port: port for proxy to listen http
+
+        :param http: if False proxy will not listen http port
+
+        :param ssl: if True proxy will listen ssl port
+
+        :param ssl_port: port for proxy to listen https
+
+        :param ssl_certificate_id: scalr ssl certificate id. Will be fetched through queryenv
+
+        :param backend_port: default port for backend servers to be proxied on
+
+        :param backend_ip_hash: defines default presence of ip_hash in backend config
+
+        :param backend_least_conn: defines default presence of least_conn in backend config
+
+        :param backend_max_fails: default value of max_fails for servers in backends
+
+        :param backend_fail_timeout: default value (in secs) of fail_timeout for servers in backends
+
+        :param backend_weight: default value of weight for servers in backends
+
+        :param templates: list of template dictionaries.
+        Template dictionary consists of template content and location to be included in.
+        'server' key determines that template is used for all proxy-server config part,
+        not separate location.
+        E.g.: ``[{'content': <raw_config>, 'location': '/admin'},
+                 {'content': <another_raw>, 'server': True}]``
+
+        :param reread_conf: if True app_servers_inc and proxies_inc will be reloaded from files
+        before proxy addition
+
+        :param reload_service: if True service will be reloaded after proxy will be added
+
+        :param hash_backend_name: if True backend names will be hashed
+
+        :param write_proxies: if False changes will not be written in proxies_inc file.
+        This can be used if we only need to add backend.
         """
         # typecast is needed because scalr sends bool params as strings: '1' for True, '0' for False 
         ssl = _bool_from_scalr_str(ssl)
@@ -900,6 +948,7 @@ class NginxAPI(object):
                                                     ip_hash=backend_ip_hash,
                                                     max_fails=backend_max_fails,
                                                     fail_timeout=backend_fail_timeout,
+                                                    least_conn=backend_least_conn,
                                                     weight=backend_weight,
                                                     hash_name=hash_backend_name)
 
