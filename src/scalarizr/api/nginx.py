@@ -668,8 +668,8 @@ class NginxAPI(object):
             config.add('%s/proxy_intercept_errors' % location_xpath, 'on')
 
             if location is '/':
-                config.add('%s/error_page' % location_xpath, '500 501 = /500.html')
-                config.add('%s/error_page' % location_xpath, '502 503 504 = /502.html')
+                config.add('%s/error_page' % location_xpath, '500 501 /500.html')
+                config.add('%s/error_page' % location_xpath, '502 503 504 /502.html')
 
         
 
