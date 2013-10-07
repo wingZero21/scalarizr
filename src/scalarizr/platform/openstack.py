@@ -95,8 +95,7 @@ class OpenstackPlatform(platform.Platform):
     def get_private_ip(self):
         if self._private_ip is None:
             for iface in platform.net_interfaces():
-                #if iface['ipv4'].startswith('10.') or iface['ipv4'].startswith('172.'):
-                if any(map(lambda x: iface['ipv4'].startswith(x), ('10.', '172.', '192.168.'))):
+                if platform.is_private_ip(iface['ipv4']):
                     self._private_ip = iface['ipv4']
                     break
 
@@ -122,7 +121,7 @@ class OpenstackPlatform(platform.Platform):
                 ips = [address['addr'] 
                         for network in server.addresses.values()
                         for address in network
-                        if address['addr'].startswith('10.')]
+                        if platform.is_private_ip(address['addr'])]
                 if ips:
                     private_ip = ips[0]
 

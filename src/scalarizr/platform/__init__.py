@@ -333,3 +333,6 @@ else:
                 'ipv6': None
                 } for i in range(0, outbytes, struct_size))
 
+
+def is_private_ip(ipaddr):
+    return any(map(lambda x: ipaddr.startswith(x), ('10.', '172.', '192.168.')))
