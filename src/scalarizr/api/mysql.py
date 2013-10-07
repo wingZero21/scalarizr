@@ -5,10 +5,10 @@ Created on Dec 04, 2011
 '''
 from __future__ import with_statement
 
-import threading
 import string
 
-from scalarizr import handlers, rpc, storage2
+from scalarizr import rpc, storage2
+from scalarizr.api import operation
 from scalarizr.services import mysql as mysql_svc
 from scalarizr.services import ServiceError
 from scalarizr.services.mysql2 import __mysql__
@@ -27,13 +27,14 @@ class MySQLAPI(object):
 
     def __init__(self):
         self._mysql_init = mysql_svc.MysqlInitScript()
+        self._op_api = operation.OperationAPI()
 
     @rpc.service_method
     def grow_volume(self, volume, growth, async=False):
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
 
-        def do_grow():
+        def do_grow(op):
             vol = storage2.volume(volume)
             self._mysql_init.stop('Growing data volume')
             try:
@@ -43,21 +44,8 @@ class MySQLAPI(object):
             finally:
                 self._mysql_init.start()
 
-        if async:
-            txt = 'Grow MySQL/Percona/MariaDB data volume'
-            op = handlers.operation(name=txt)
+        return self._op_api.go_with('Grow MySQL/Percona/MariaDB data volume', do_grow, async=async)
 
-            def block():
-                op.define()
-                with op.phase(txt):
-                    with op.step(txt):
-                        data = do_grow()
-                op.ok(data=data)
-            threading.Thread(target=block).start()
-            return op.id
-
-        else:
-            return do_grow()
 
     def _check_invalid(self, param, name, type_):
         assert isinstance(param, type_), \

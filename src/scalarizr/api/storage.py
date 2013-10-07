@@ -1,15 +1,11 @@
-from __future__ import with_statement
 '''
 Created on Nov 25, 2011
 
 @author: marat
 '''
-from __future__ import with_statement
 
-import threading
-
-from scalarizr import handlers, rpc
-from scalarizr import storage2
+from scalarizr import rpc, storage2
+from scalarizr.api import operation
 
 
 class StorageAPI(object):
@@ -18,6 +14,9 @@ class StorageAPI(object):
             'empty': "'%s' can't be blank",
             'invalid': "'%s' is invalid, '%s' expected"
     }
+
+    def __init__(self):
+        self._op_api = operation.OperationAPI()
 
     @rpc.service_method
     def create(self, volume=None, mkfs=False, mount=False, fstab=False, async=False):
@@ -44,26 +43,11 @@ class StorageAPI(object):
         '''
         self._check_invalid(volume, 'volume', dict)
 
-        def do_create():
+        def do_create(op):
             vol = storage2.volume(volume)
             vol.ensure(mkfs=mkfs, mount=mount, fstab=fstab)
             return dict(vol)
-
-
-        if async:
-            txt = 'Create volume'
-            op = handlers.operation(name=txt)
-            def block():
-                op.define()
-                with op.phase(txt):
-                    with op.step(txt):
-                        data = do_create()
-                op.ok(data=data)
-            threading.Thread(target=block).start()
-            return op.id
-
-        else:
-            return do_create()
+        return self._op_api.go_with('Create volume', do_create, async=async)
 
 
     @rpc.service_method
@@ -90,26 +74,13 @@ class StorageAPI(object):
         if tags:
             self._check_invalid(tags, 'tags', dict)
 
-        def do_snapshot():
+        def do_snapshot(op):
             vol = storage2.volume(volume)
             vol.ensure()
             snap = vol.snapshot(description=description, tags=tags)
             return dict(snap)
 
-        if async:
-            txt = 'Create snapshot'
-            op = handlers.operation(name=txt)
-            def block():
-                op.define()
-                with op.phase(txt):
-                    with op.step(txt):
-                        data = do_snapshot()
-                op.ok(data=data)
-            threading.Thread(target=block).start()
-            return op.id
-
-        else:
-            return do_snapshot()
+        return self._op_api.go_with('Create snapshot', do_snapshot, async=async)
 
 
     @rpc.service_method
@@ -130,26 +101,13 @@ class StorageAPI(object):
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
 
-        def do_detach():
+        def do_detach(op):
             vol = storage2.volume(volume)
             vol.ensure()
             vol.detach(force=force, **kwds)
             return dict(vol)
 
-        if async:
-            txt = 'Detach volume'
-            op = handlers.operation(name=txt)
-            def block():
-                op.define()
-                with op.phase(txt):
-                    with op.step(txt):
-                        data = do_detach()
-                op.ok(data=data)
-            threading.Thread(target=block).start()
-            return op.id
-
-        else:
-            return do_detach()
+        return self._op_api.go_with('Detach volume', do_detach, async=async)
 
 
     @rpc.service_method
@@ -170,26 +128,13 @@ class StorageAPI(object):
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
 
-        def do_destroy():
+        def do_destroy(op):
             vol = storage2.volume(volume)
             vol.ensure()
             vol.detach(force=force, **kwds)
             return dict(vol)
 
-        if async:
-            txt = 'Destroy volume'
-            op = handlers.operation(name=txt)
-            def block():
-                op.define()
-                with op.phase(txt):
-                    with op.step(txt):
-                        data = do_destroy()
-                op.ok(data=data)
-            threading.Thread(target=block).start()
-            return op.id
-
-        else:
-            return do_destroy()
+        return self._op_api.go_with('Destroy volume', do_destroy, async=async)
 
 
     @rpc.service_method
@@ -197,25 +142,12 @@ class StorageAPI(object):
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
 
-        def do_grow():
+        def do_grow(op):
             vol = storage2.volume(volume)
             growed_vol = vol.grow(**growth)
             return dict(growed_vol)
 
-        if async:
-            txt = 'Grow volume'
-            op = handlers.operation(name=txt)
-            def block():
-                op.define()
-                with op.phase(txt):
-                    with op.step(txt):
-                        data = do_grow()
-                op.ok(data=data)
-            threading.Thread(target=block).start()
-            return op.id
-
-        else:
-            return do_grow()
+        return self._op_api.go_with('Grow volume', do_grow, async=async)
 
 
     @rpc.service_method
@@ -224,25 +156,12 @@ class StorageAPI(object):
         self._check_invalid(volume, 'index', int)
         self._check_empty(volume.get('id'), 'volume.id')
 
-        def do_replace_raid_disk():
+        def do_replace_raid_disk(op):
             vol = storage2.volume(volume)
             vol.replace_disk(index, disk)
             return dict(vol)
 
-        if async:
-            txt = 'Replace RAID disk'
-            op = handlers.operation(name=txt)
-            def block():
-                op.define()
-                with op.phase(txt):
-                    with op.step(txt):
-                        data = do_replace_raid_disk()
-                op.ok(data=data)
-            threading.Thread(target=block).start()
-            return op.id
-
-        else:
-            return do_replace_raid_disk()
+        return self._op_api.go_with('Replace RAID disk', do_replace_raid_disk, async=async)
 
 
     def _check_invalid(self, param, name, type_):
