@@ -28,8 +28,7 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
     def get_os_type_id(self, conn):
         pl = bus.platform
         vm = conn.listVirtualMachines(id=pl.get_instance_id())[0]
-        tpl = conn.listTemplates('self', id=vm.templateid)[0]
-        return tpl.ostypeid
+        return vm.guestosid
 
 
     def rebundle(self):

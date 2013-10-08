@@ -58,7 +58,6 @@ class CinderWrapper(OpenstackServiceWrapper):
                                     self.tenant,
                                     auth_url=self.auth_url,
                                     region_name=self.region_name,
-                                    insecure=True,  # FIXME: SCALARIZR-1139
                                     **kwargs)
 
 
@@ -72,7 +71,6 @@ class NovaWrapper(OpenstackServiceWrapper):
                                   auth_url=self.auth_url,
                                   region_name=self.region_name,
                                   service_type=service_type,
-                                  insecure=True,  # FIXME: SCALARIZR-1139
                                   **kwargs)
 
 
@@ -97,8 +95,7 @@ class OpenstackPlatform(platform.Platform):
     def get_private_ip(self):
         if self._private_ip is None:
             for iface in platform.net_interfaces():
-                #if iface['ipv4'].startswith('10.') or iface['ipv4'].startswith('172.'):
-                if any(map(lambda x: iface['ipv4'].startswith(x), ('10.', '172.', '192.168.'))):
+                if platform.is_private_ip(iface['ipv4']):
                     self._private_ip = iface['ipv4']
                     break
 
@@ -124,7 +121,7 @@ class OpenstackPlatform(platform.Platform):
                 ips = [address['addr'] 
                         for network in server.addresses.values()
                         for address in network
-                        if address['addr'].startswith('10.')]
+                        if platform.is_private_ip(address['addr'])]
                 if ips:
                     private_ip = ips[0]
 
@@ -154,32 +151,36 @@ class OpenstackPlatform(platform.Platform):
         Fetches whole metadata dict. Unlike Ec2LikePlatform,
         which fetches data for concrete key.
         """
-        url = self._meta_url
+
         try:
-            r = urllib2.urlopen(url)
-            response = r.read().strip()
-            return json.loads(response)
-        except urllib2.URLError:
-            # TODO: move some keys from metadata to parent dict,
-            # that should be there when fetching from url
-            metadata = self._fetch_metadata_from_file()
-            return {'meta': metadata}
+            try:
+                self._logger.debug('fetching meta-data from %s', self._meta_url)
+                r = urllib2.urlopen(self._meta_url)
+                response = r.read().strip()
+                meta = json.loads(response) 
+            except:
+                self._logger.debug('failed to fetch meta-data: %s', sys.exc_info()[1])
+            else:
+                if meta.get('meta'):
+                    return meta
+                else:
+                    self._logger.debug('meta-data fetched, but has empty user-data (a "meta" key), try next method')
+
+            return {'meta': self._fetch_metadata_from_file()}
         except:
-            msg = "Can't fetch %s metadata URL %s. Error: %s".format(
-                    self.name, url, sys.exc_info()[1])
-            raise platform.PlatformError(msg)
+            raise platform.PlatformError, 'failed to fetch meta-data', sys.exc_info()[2]   
 
     def _fetch_metadata_from_file(self):
         cnf = bus.cnf
         if self._userdata is None:
-            path = cnf.private_path('.user-data')
-            if os.path.exists(path):
-                rawmeta = None
-                with open(path, 'r') as fp:
-                    rawmeta = fp.read()
-                if not rawmeta:
-                    raise platform.PlatformError("Empty user-data")
-                return self._parse_user_data(rawmeta)
+            for path in ('/etc/.scalr-user-data', cnf.private_path('.user-data')):
+                if os.path.exists(path):
+                    rawmeta = None
+                    with open(path, 'r') as fp:
+                        rawmeta = fp.read()
+                    if not rawmeta:
+                        raise platform.PlatformError("Empty user-data")
+                    return self._parse_user_data(rawmeta)
         return self._userdata
 
     def set_access_data(self, access_data):
@@ -232,7 +233,6 @@ class OpenstackPlatform(platform.Platform):
         return swiftclient.Connection(keystone_url, 
                     self._access_data["username"],
                     password or api_key,
-                    insecure=True,  # FIXME: SCALARIZR-1139
                     **kwds)
 
 

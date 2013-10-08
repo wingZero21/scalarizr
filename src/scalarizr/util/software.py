@@ -274,11 +274,17 @@ def tomcat_software_info():
     catalina_home = linux.system('echo $CATALINA_HOME', shell=True)[0].strip()
     if not catalina_home:
         try:
+            catalina_home = glob.glob('/opt/apache-tomcat*')[0]
+        except IndexError:
+            pass
+    if not catalina_home:
+        try:
             catalina_home = glob.glob('/usr/share/*tomcat*')[0]
         except IndexError:
             msg = (
                 "Can't find Tomcat installation\n"
                 " - CATALINA_HOME env variable is unset\n"
+                " - /opt/apache-tomcat*\n"
                 " - /usr/share/*tomcat* search is empty\n"
             )
             raise SoftwareError(msg)

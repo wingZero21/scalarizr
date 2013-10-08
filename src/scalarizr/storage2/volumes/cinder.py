@@ -41,7 +41,7 @@ def device2name(device):
 class FreeDeviceLetterMgr(object):
 
     def __init__(self):
-        self._all = set(string.ascii_lowercase[1:16])
+        self._all = set(string.ascii_lowercase[2:16])
         self._acquired = set()
         self._lock = threading.Lock()
         self._local = threading.local()
