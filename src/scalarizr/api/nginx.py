@@ -815,8 +815,8 @@ class NginxAPI(object):
             config.add('%s/proxy_pass' % location_xpath, 'http://%s' % backend_name)
 
             if location is '/':
-                config.add('%s/error_page' % location_xpath, '500 501 = /500.html')
-                config.add('%s/error_page' % location_xpath, '502 503 504 = /502.html')
+                config.add('%s/error_page' % location_xpath, '500 501 /500.html')
+                config.add('%s/error_page' % location_xpath, '502 503 504 /502.html')
 
         return config
 
@@ -1045,6 +1045,8 @@ class NginxAPI(object):
     def make_proxy(self, hostname, **kwds):
         """
         RPC method for adding or updating proxy configuration.
+        Removes proxy with given hostname if exists and recreates it with given
+        parameters. If some exception occures, changes are reverted.
         See add_proxy() for detailed kwds description.
         """
         _logger.debug('making proxy: %s' % hostname)
