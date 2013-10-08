@@ -247,6 +247,7 @@ class ScriptExecutor(Handler):
             LOG.debug('Fetching scripts from incoming message')
             scripts = [Script(name=item['name'],
                                 body=item.get('body'),
+                                run_as=item.get('run_as')
                                 path=item.get('path'),
                                 asynchronous=int(item['asynchronous']),
                                 exec_timeout=item['timeout'],
@@ -268,6 +269,7 @@ class ScriptExecutor(Handler):
 class Script(object):
     name = None
     body = None
+    run_as = None
     path = None
     asynchronous = None
     event_name = None
@@ -376,14 +378,25 @@ class Script(object):
         stdout = open(self.stdout_path, 'w+')
         stderr = open(self.stderr_path, 'w+')
         if self.interpreter == 'powershell':
-            command = ['powershell.exe', 
-                    '-NoProfile', '-NonInteractive', 
-                    '-ExecutionPolicy', 'RemoteSigned', 
-                    '-File', self.exec_path]
+            command = []
+            if self.run_as:
+                command = ['runas', '/user:%s' % self.run_as]
+            command += ['powershell.exe', 
+                        '-NoProfile', '-NonInteractive', 
+                        '-ExecutionPolicy', 'RemoteSigned', 
+                         '-File', self.exec_path]
         elif self.interpreter == 'cmd':
-            command = ['cmd.exe', '/C', self.exec_path]
+            command = []
+            if self.run_as:
+                command = ['runas', '/user:%s' % self.run_as]
+            command += ['cmd.exe', '/C', self.exec_path]
         else:
-            command = self.exec_path
+            command = []
+            if self.run_as:
+                command = ['sudo', '-u', self.run_as]
+            command += [self.exec_path]
+
+        print 'command: ', command
 
         # Start process
         self.logger.debug('Executing %s'
@@ -449,7 +462,8 @@ class Script(object):
                     event_name=self.event_name or '',
                     return_code=self.return_code,
                     event_server_id=self.event_server_id,
-                    event_id=self.event_id
+                    event_id=self.event_id,
+                    run_as=self.run_as
             )
             return ret
 
@@ -466,8 +480,7 @@ class Script(object):
                     shutil.rmtree(f)
 
     def state(self):
-        return {
-                'id': self.id,
+        return {'id': self.id,
                 'pid': self.pid,
                 'name': self.name,
                 'interpreter': self.interpreter,
@@ -475,8 +488,8 @@ class Script(object):
                 'asynchronous': self.asynchronous,
                 'event_name': self.event_name,
                 'role_name': self.role_name,
-                'exec_timeout': self.exec_timeout
-        }
+                'exec_timeout': self.exec_timeout,
+                'run_as': self.run_as}
 
     def _proc_poll(self):
         if self.proc:
