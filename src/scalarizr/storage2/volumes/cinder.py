@@ -284,8 +284,8 @@ class CinderVolume(base.Volume):
                 LOG.debug('Will try attach volume again after %d seconds', ops_delay)
                 continue
             else:
-                msg = 'Unexpected status transition "available" -> "%s".' \
-                        ' Cinder volume %s'.format(new_status, volume_id)
+                msg = 'Unexpected status transition "available" -> "{0}".' \
+                        ' Cinder volume {1}'.format(new_status, volume_id)
                 raise storage2.StorageError(msg)
 
 
