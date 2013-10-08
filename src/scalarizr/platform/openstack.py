@@ -173,14 +173,14 @@ class OpenstackPlatform(platform.Platform):
     def _fetch_metadata_from_file(self):
         cnf = bus.cnf
         if self._userdata is None:
-            path = cnf.private_path('.user-data')
-            if os.path.exists(path):
-                rawmeta = None
-                with open(path, 'r') as fp:
-                    rawmeta = fp.read()
-                if not rawmeta:
-                    raise platform.PlatformError("Empty user-data")
-                return self._parse_user_data(rawmeta)
+            for path in ('/etc/.scalr-user-data', cnf.private_path('.user-data')):
+                if os.path.exists(path):
+                    rawmeta = None
+                    with open(path, 'r') as fp:
+                        rawmeta = fp.read()
+                    if not rawmeta:
+                        raise platform.PlatformError("Empty user-data")
+                    return self._parse_user_data(rawmeta)
         return self._userdata
 
     def set_access_data(self, access_data):
