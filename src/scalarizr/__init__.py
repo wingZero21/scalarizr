@@ -1,6 +1,12 @@
 
 import sys
 import urllib2
+try:
+    import httplib2
+    httplib2_loaded = True
+except ImportError:
+    httplib2_loaded = False
+
 
 # Core
 from scalarizr import config, rpc, linux
@@ -330,6 +336,13 @@ def _init_platform():
             logger.warn('Failed to update package manager database: %s', 
                     sys.exc_info()[1], exc_info=sys.exc_info())
 
+    if httplib2_loaded:
+        ca_url = 'http://curl.haxx.se/ca/cacert.pem'
+        ca_path = bus.share_path + '/cacert.pem'
+        logger.debug('Fetch CA bundle from %s to %s', ca_url, ca_path)
+        urllib.urlretrieve(ca_url, ca_path)
+        httplib2.CA_CERTS = ca_path
+
     # Initialize platform
     logger.debug("Initialize platform")
     if platform_name:
@@ -645,9 +658,9 @@ class Service(object):
                     # toughts that he's an old server and continue rebundling
                     time.sleep(30)
 
-                udfile = cnf.private_path('.user-data')
-                wait_until(lambda: os.path.exists(udfile),
-                        timeout=60, error_text="User-data file %s doesn't exist" % udfile)
+                locs = ('/etc/.scalr-user-data', cnf.private_path('.user-data'))
+                wait_until(lambda: any(map(lambda x: os.path.exists(x), locs)),
+                        timeout=60, error_text="user-data file not found in the following locations: %s" % locs)
             
             # When server bundled by Scalr, often new server are spawned in "importing" state
             # and its important to query user-data first, to override server-id that was bundled.
