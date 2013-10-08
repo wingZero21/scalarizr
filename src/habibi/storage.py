@@ -5,13 +5,16 @@ import sys
 import json
 import uuid
 import logging
-from scalarizr.linux import lvm2
+from scalarizr.linux import lvm2, system
 
 
 LOG = logging.getLogger(__name__)
 
 vg_name = 'vagrant'
 cgroup_mpoint = '/sys/fs/cgroup' # Ubuntu default
+snap_size = '100M'
+snapshot_dir = '/tmp/snapshots'
+port = 12345
 
 
 class StorageManager():
@@ -19,7 +22,7 @@ class StorageManager():
 
     def __init__(self):
         self.volumes = dict()
-        self.snapshots = dict()
+        self.snapshots = []
 
 
     def _server_terminated(self, server_id):
@@ -69,7 +72,7 @@ class StorageManager():
             # Size in Gigabytes
             size = int(size)
 
-        id = str(uuid.uuid4())[:7]
+        id = 'vol-%s' % str(uuid.uuid4())[:7]
 
         lvm2.lvcreate(vg_name, name=id, size='%sG' % size)
         lvinfo = lvm2.lvs(lvm2.lvpath(vg_name, id)).values()[0]
@@ -78,9 +81,8 @@ class StorageManager():
         stat = os.stat(device)
         maj, min = (os.major(stat.st_rdev), os.minor(stat.st_rdev))
 
-        self.volumes[id] = dict(id=id, device=device, attached_to=None,
-                                maj=maj, min=min)
-        return dict(id=id, device=lvinfo.lv_path)
+        self.volumes[id] = dict(id=id, attached_to=None, maj=maj, min=min)
+        return self.volumes[id]
 
 
     def attach_volume(self, volume_id, instance_id):
@@ -89,7 +91,8 @@ class StorageManager():
         attached_to = volume['attached_to']
         assert attached_to == None, 'Volume already attached to instance "%s"' % attached_to
 
-        with open('devices.allow', 'w') as f:
+        allow_path = os.path.join(cgroup_mpoint, 'devices/lxc/%s/devices.allow' % instance_id)
+        with open(allow_path, 'w') as f:
             f.write("b %s:%s rwm\n" % (volume['maj'], volume['min']))
         volume['attached_to'] = instance_id
         return dict(volume=volume)
@@ -101,12 +104,33 @@ class StorageManager():
         attached_to = volume['attached_to']
         assert attached_to == instance_id, 'Volume not atached to instance "%s"' % instance_id
 
-        with open("devices.deny", 'w') as f:
+        deny_path = os.path.join(cgroup_mpoint, 'devices/devices.deny')
+        with open(deny_path, 'w') as f:
             f.write("b %s:%s rwm\n" % (volume['maj'], volume['min']))
 
+        self.volumes[volume_id]['attached_to'] = None
 
     def create_snapshot(self, volume_id):
-        pass
+        assert volume_id in self.volumes, 'Volume "%s" not found' % volume_id
+        volume = self.volumes[volume_id]
+
+        snapshot_id = str(uuid.uuid4())[:7]
+        snap_path = os.path.join(snapshot_dir, snapshot_id)
+
+        lvm2.lvcreate(s=True, n=snapshot_id, L=snap_size, volume['device'])
+        lv_info = None
+        try:
+            lv_info = lvm2.lvs(lvm2.lvpath(vg_name, snapshot_id)).values()[0]
+            system('dd if=%s | cp --sparse=always /dev/stdin %s' % (lv_info.lv_path, snap_path), shell=True)
+        finally:
+            if lv_info:
+                lvm2.lvremove(lv_info.lv_path)
+            else:
+                lvm2.lvremove(os.path.join('/dev', vg_name, snapshot_id))
+
+        snapshot = dict(id=snapshot_id, size=volume['size'])
+        self.snapshots[snapshot_id] = snapshot
+        return snapshot
 
 
     def describe_snapshot(self, id):
@@ -114,3 +138,11 @@ class StorageManager():
             return self.snapshots[id]
         except KeyError:
             raise Exception('Snapshot %s not found' % id)
+
+
+    def describe_volume(self, id):
+        # TODO: check if attached to dead instance, change attachment state
+        try:
+            return self.volumes[id]
+        except KeyError:
+            raise Exception('Volume %s not found' % id)

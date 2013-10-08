@@ -15,13 +15,14 @@ import time
 import string
 import logging
 import threading
+import wsgiref
 import binascii
 import json
 import copy
 import cgi
 from collections import Hashable
 
-from habibi import crypto
+from habibi import crypto, storage
 
 
 logging.basicConfig(
@@ -234,12 +235,18 @@ class Habibi(object):
         self.web_server_thread.setDaemon(True)
         self.web_server_thread.start()
 
+        storage_manager = storage.StorageManager()
+        self.storage_server = wsgiref.simple_server.make_server('0.0.0.0', storage.port, storage_manager)
+        storage_thread = threading.Thread(target=self.storage_server.serve_forever, name='Storage server')
+        storage_thread.start()
+
         if os.path.exists(self.base_dir):
             shutil.rmtree(self.base_dir)
         os.makedirs(self.base_dir)
 
     def stop(self):
         self.web_server.shutdown()
+        self.storage_server.shutdown()
 
     def spy(self, spy):
         self.breakpoints = []
@@ -275,7 +282,9 @@ class Habibi(object):
                 'env_id': '1',
                 'platform': 'lxc',
                 'region': server.zone,
-                'server_index': str(server.index)}
+                'server_index': str(server.index),
+                'storage_service_url': 'http://%s:%s'.format(self.router_ip, storage.port)}
+
 
     def _pack_user_data(self, user_data):
         return ';'.join(['{0}={1}'.format(k, v) for k, v in user_data.items()])
