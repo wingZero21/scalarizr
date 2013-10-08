@@ -34,8 +34,7 @@ __redis__.update({
     'bash': '/bin/bash',
     'db_filename': 'dump.rdb',
     'aof_filename': 'appendonly.aof',
-    'preset_filename': 'redis.conf',
-    'start_timeout': 30  # In seconds
+    'preset_filename': 'redis.conf'
 })
 if linux.os.debian_family:
     __redis__.update({
@@ -157,8 +156,8 @@ class Redisd(object):
                     __redis__['bash'], 
                     __redis__['redis-server'], 
                     self.config_path), shell=True, close_fds=True, preexec_fn=os.setsid)
-                wait_until(lambda: self.running, timeout=__redis__['start_timeout'])
-                wait_until(lambda: self.cli.test_connection(), timeout=__redis__['start_timeout'])
+                wait_until(lambda: self.running)
+                wait_until(lambda: self.cli.test_connection())
                 LOG.debug('%s process has been started.' % SERVICE_NAME)
 
         except PopenError, e:
@@ -170,7 +169,7 @@ class Redisd(object):
         if self.running:
             LOG.info('Stopping redis server on port %s (pid %s). Reason: %s' % (self.port, self.pid, reason))
             os.kill(int(self.pid), signal.SIGTERM)
-            wait_until(lambda: not self.running, timeout=__redis__['start_timeout'])
+            wait_until(lambda: not self.running)
 
 
     def restart(self, reason=None, force=True):
