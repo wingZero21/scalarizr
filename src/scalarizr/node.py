@@ -359,6 +359,8 @@ __node__['nginx'] = Compound({
         Ini('%s/%s.ini' % (public_dir, 'www'), 'www')
 })
 
+__node__['tomcat'] = {}
+
 __node__['ec2'] = Compound({
         't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
         'hostname_as_pubdns': 

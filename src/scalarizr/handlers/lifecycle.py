@@ -9,7 +9,7 @@ from __future__ import with_statement
 # Core
 import scalarizr.handlers
 from scalarizr.bus import bus
-from scalarizr import config
+from scalarizr import config, linux
 from scalarizr.api import operation
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState
@@ -168,6 +168,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                     fp.write('export %s="%s"\n' % kv)
 
 
+    def _assign_hostname(self):
+        if not __node__.get('hostname'):
+            return
+        self._logger.debug('Setting hostname to %s', __node__['hostname'])
+        linux.system('hostname ' + __node__['hostname'], shell=True)
+
+
     def on_start(self):
         if iptables.enabled():
             iptables.save()
@@ -299,6 +306,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                     + "Cross-scalarizr messaging not initialized")
 
         self._fetch_globals()
+        self._assign_hostname()
 
 
     def _start_int_messaging(self):
@@ -348,6 +356,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         def handler():
             self._check_control_ports()
+
+            # FIXME: how about apply all HIR configuration here?
+            __node__.update(message.body.get('base', {}))  # update node with 'base' settings
             bus.fire("host_init_response", message)
 
             hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)

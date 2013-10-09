@@ -2,13 +2,12 @@
 # vi: set ft=ruby :
 
 boxes = {
-  "ubuntu" => "ubuntu1204",
-  "ubuntu1004" => "ubuntu1004",
-  "centos" => "centos63",
-  "centos5" => "centos59",
-  "debian" => "debian7",
-  "amzn" => "amzn1303",
-  "windows" => "windows2008r2"
+  "ubuntu" => "opscode-ubuntu-12.04",
+  "ubuntu1004" => "opscode-ubuntu-10.04",
+  "centos" => "opscode-centos-6.4",
+  "centos5" => "opscode-centos-5.9",
+  "amzn" => "amzn-13.03",
+  "windows" => "windows-2008r2"
 }
 
 Vagrant.configure("2") do |config|

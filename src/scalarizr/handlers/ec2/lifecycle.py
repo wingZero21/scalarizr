@@ -13,7 +13,7 @@ import logging
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.handlers import Handler
-from scalarizr.util import system2, disttool
+from scalarizr.util import system2, disttool, add_authorized_key
 from scalarizr.linux import mount, system, os as os_dist
 
 
@@ -49,7 +49,7 @@ class Ec2LifeCycleHandler(Handler):
         producer = msg_service.get_producer()
         producer.on("before_send", self.on_before_message_send)
 
-        if not os_dist.windows_family:
+        if not os_dist.windows_family and not __node__.get('hostname'):
             # Set the hostname to this instance's public hostname
             try:
                 hostname_as_pubdns = int(__ec2__['hostname_as_pubdns'])
@@ -72,24 +72,11 @@ class Ec2LifeCycleHandler(Handler):
                     with open(path, 'w') as fp:
                         fp.write(c)
 
+
         # Add server ssh public key to authorized_keys
-        authorized_keys_path = "/root/.ssh/authorized_keys"
-        if os.path.exists(authorized_keys_path):
-            c = None
-            with open(authorized_keys_path, 'r') as fp:
-                c = fp.read()
-            ssh_key = self._platform.get_ssh_pub_key()
-            idx = c.find(ssh_key)
-            if idx == -1:
-                if c and c[-1] != '\n':
-                    c += '\n'
-                c += ssh_key + "\n"
-                self._logger.debug("Add server ssh public key to authorized_keys")
-            elif idx > 0 and c[idx-1] != '\n':
-                c = c[0:idx] + '\n' + c[idx:]
-                self._logger.warn('Adding new-line character before server SSH key in authorized_keys file')
-            with open(authorized_keys_path, 'w') as fp:
-                fp.write(c)
+        ssh_key = self._platform.get_ssh_pub_key()
+        if ssh_key:
+            add_authorized_key(ssh_key)
 
         # Mount ephemeral devices
         # Seen on eucalyptus:
