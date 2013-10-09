@@ -23,13 +23,13 @@ Vagrant.configure("2") do |config|
         machine.winrm.password = "vagrant"
         machine.vm.network :private_network, ip: "192.168.33.10" 
       else
-        machine.vm.provision :chef_client do |chef|
-          chef.chef_server_url = "http://sl5.scalr.net:4000"
-          chef.node_name = "#{ENV['USER']}.scalarizr-#{machine.vm.box}-vagrant"
-          chef.validation_client_name = "chef-validator"
-          chef.run_list = ["recipe[vagrant_boxes]"]
-          chef.validation_key_path = "validation.pem"
-        end      
+        #machine.vm.provision :chef_client do |chef|
+        #  chef.chef_server_url = "http://sl5.scalr.net:4000"
+        #  chef.node_name = "#{ENV['USER']}.scalarizr-#{machine.vm.box}-vagrant"
+        #  chef.validation_client_name = "chef-validator"
+        #  chef.run_list = ["recipe[vagrant_boxes]"]
+        #  chef.validation_key_path = "validation.pem"
+        #end      
       end
 
       if name == "amzn"

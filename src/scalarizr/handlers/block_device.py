@@ -152,7 +152,7 @@ class BlockDeviceHandler(handlers.Handler):
             'snap': 'create volume from {0}'
         }
         raid_actions = {
-            'take': 'take {0} ({1} disks: {2})',
+            'take': 'take {0} ({1} {2} disks: {3})',
             'new': 'create {0} {1} volumes',
             'snap': 'create {0} {1} volumes from snapshots ({2})'
         }
@@ -162,25 +162,26 @@ class BlockDeviceHandler(handlers.Handler):
         acts = []
         if vol.id:
             if is_raid:
-                act = raid_actions['take'].format(vol.id, vol.disks[0].type, 
+                act = raid_actions['take'].format(vol.id, 
+                        len(vol.disks), 
+                        vol.disks[0].type, 
                         ', '.join(disk.id for disk in vol.disks))
             else:
                 act = persistent_actions['take'].format(vol.id)
             acts.append(act)
-        else:
-            if vol.snap:
-                if is_raid:
-                    act = raid_actions['snap'].format(len(vol.disks), vol.snap.disks[0].type, 
-                            ', '.join(snap.id for snap in vol.snap.disks))
-                else:
-                    act = persistent_actions['snap'].format(vol.snap.id)
-                acts.append(act)
+        elif vol.snap:
+            if is_raid:
+                act = raid_actions['snap'].format(len(vol.disks), vol.snap['disks'][0]['type'], 
+                        ', '.join(snap['id'] for snap in vol.snap['disks']))
             else:
-                if is_raid:
-                    act = raid_actions['new'].format(len(vol.disks), vol.disks[0].type)
-                else:
-                    act = persistent_actions['new']
-                acts.append(act)
+                act = persistent_actions['snap'].format(vol.snap['id'])
+            acts.append(act)
+        else:
+            if is_raid:
+                act = raid_actions['new'].format(len(vol.disks), vol.disks[0].type)
+            else:
+                act = persistent_actions['new']
+            acts.append(act)
             if vol.mpoint:
                 act = common_actions['mkfs'].format(vol.fstype)
                 acts.append(act)
@@ -188,7 +189,11 @@ class BlockDeviceHandler(handlers.Handler):
             act = common_actions['mount'].format(vol.mpoint)
             acts.append(act)
 
-        msg = 'Ensure {0}: {1}'.format(vol.type, ', '.join(acts))
+        if is_raid:
+            msg = 'Ensure {0}{1}: '.format(vol.type, vol.level)
+        else:
+            msg = 'Ensure {0}: '.format(vol.type)
+        msg += ', '.join(acts)
         log = bus.init_op.logger if bus.init_op else LOG
         log.info(msg)
 

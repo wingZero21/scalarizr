@@ -48,10 +48,10 @@ class OperationAPI(object):
 class _LogHandler(logging.Handler):
     def __init__(self, op):
         self.op = op
-        super(_LogHandler, self).__init__(self)
+        super(_LogHandler, self).__init__(logging.INFO)
 
-    def emit(self, message):
-        self.op.logs.append(message)
+    def emit(self, record):
+        self.op.logs.append(record)
 
 
 class Operation(object):
