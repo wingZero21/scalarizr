@@ -375,7 +375,7 @@ class CinderVolume(base.Volume):
 
         def exit_condition():
             vol[0] = self._cinder.volumes.get(volume_id)
-            return vol[0].status not in ('attaching', 'detaching', 'creating')
+            return vol[0].status not in ('attaching', 'detaching', 'creating', None)
 
         if not exit_condition():
             msg = 'Cinder volume %s hangs in transitional state. ' \
