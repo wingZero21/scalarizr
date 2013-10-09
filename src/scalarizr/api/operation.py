@@ -4,7 +4,8 @@ import sys
 import logging
 import threading
 
-from scalarizr import rpc
+from scalarizr import rpc, bus
+from scalarizr.messaging import Queues, Messages
 
 class OperationAPI(object):
 
@@ -18,12 +19,6 @@ class OperationAPI(object):
     def __init__(self):
         self._ops = {}
 
-    @rpc.service_method
-    def status(self, operation_id=None):
-        '''
-        return status
-        '''
-        return self.get(operation_id).status
 
     @rpc.service_method
     def result(self, operation_id=None):
@@ -31,18 +26,21 @@ class OperationAPI(object):
 
     def create(self, name, func, **kwds):
         op = Operation(name, func, **kwds)
-        self._ops[op.id] = op
+        self._ops[op.operation_id] = op
         return op
 
     def get(self, operation_id):
         # TODO: wrap KeyError
         return self._ops[operation_id]
 
+    def find(self, name=None):
+        return [op for op in self._ops.values() if op.name == name]
+
     def go_with(self, name, func, async=False, **kwds):
         op = self.create(name, func, **kwds)
         if async:
             op.start()
-            return op.id
+            return op.operation_id
         else:
             return op.execute()
 
@@ -59,13 +57,14 @@ class _LogHandler(logging.Handler):
 class Operation(object):
 
     def __init__(self, name, func, **kwds):
-        self.id = str(uuid.uuid4())
+        self.operation_id = str(uuid.uuid4())
         self.name = name
         self.func = func
         self.status = kwds.get('status', 'new')
         self.result = kwds.get('result')
         self.logs = kwds.get('logs', [])
         self.error = kwds.get('error')
+        self.async = False
         self.thread = None
         self.logger = None
         self._init_log()
@@ -81,10 +80,13 @@ class Operation(object):
             self.complete(self.func(self))
         except:
             self.fail()
-            raise
+        finally:
+            svs = bus.messaging_service
+            msg = svs.new_message(Messages.OPERATION_RESULT, None, self.serialize())
+            svs.get_producer().send(Queues.CONTROL, msg)
 
     def execute(self):
-        self.status = 'pending'
+        self.status = 'in-progress'
         self._run()
         return self.result
 
@@ -93,21 +95,23 @@ class Operation(object):
             name='Task {0}'.format(self.name), 
             target=self._run
         )
-        self.status = 'pending'
+        self.async = True
+        self.status = 'in-progress'
         self.thread.start()
 
     def fail(self, *exc_info):
         self.error = exc_info or sys.exc_info()
         self.status = 'failed'
+        self.logger.exception('Operation "%s" (id: %s) failed', 
+                self.name, self.operation_id, exc_info=self.error)
 
     def complete(self, result=None):
         self.result = result
         self.status = 'completed'
 
-
     def serialize(self):
         ret = {
-            'id': self.id,
+            'id': self.operation_id,
             'status': self.status,
             'result': None,
             'error': None,

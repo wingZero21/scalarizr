@@ -10,10 +10,11 @@ from __future__ import with_statement
 import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr import config
+from scalarizr.api import operation
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
-from scalarizr.messaging import Messages, MetaOptions, MessageServiceFactory
+from scalarizr.messaging import Messages, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
 from scalarizr.util.flag import Flag
@@ -35,9 +36,6 @@ def get_handlers():
     return [_lifecycle]
 
 
-
-
-
 class LifeCycleHandler(scalarizr.handlers.Handler):
     _logger = None
     _bus = None
@@ -50,7 +48,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
     def __init__(self):
+        super(LifeCycleHandler, self).__init__()
         self._logger = logging.getLogger(__name__)
+        self._op_api = operation.OperationAPI()
         
         bus.define_events(
             # Fires before HostInit message is sent
@@ -124,7 +124,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
 
-    def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+    def accept(self, message, queue, **kwds):
         return message.name == Messages.INT_SERVER_REBOOT \
             or message.name == Messages.INT_SERVER_HALT \
             or message.name == Messages.HOST_INIT_RESPONSE \
@@ -214,9 +214,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _start_init(self):
         # Regenerage key
         new_crypto_key = cryptotool.keygen()
+        bus.init_op = self._op_api.create('system.init', lambda op: None)
         
         # Prepare HostInit
         msg = self.new_message(Messages.HOST_INIT, dict(
+            operation_id = bus.init_op.operation_id,
             crypto_key = new_crypto_key,
             snmp_port = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
             snmp_community_name = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
@@ -289,8 +291,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if farm_crypto_key:
             self._cnf.write_key(self._cnf.FARM_KEY, farm_crypto_key)
             if not port_in_use(8012):
-                ''' This cond was added to avoid 'Address already in use' 
-                when scalarizr reinitialized with `szradm --reinit` '''
+                # This cond was added to avoid 'Address already in use' 
+                # when scalarizr reinitialized with `szradm --reinit` 
                 self._start_int_messaging()
         else:
             self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
@@ -309,11 +311,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _check_control_ports(self):
         if STATE['global.api_port'] != 8010 or STATE['global.msg_port'] != 8013:
             # API or Messaging on non-default port
-			self.send_message(Messages.UPDATE_CONTROL_PORTS, {
-				'api': STATE['global.api_port'],
-				'messaging': STATE['global.msg_port'],
-				'snmp': 8014
-			})
+            self.send_message(Messages.UPDATE_CONTROL_PORTS, {
+                'api': STATE['global.api_port'],
+                'messaging': STATE['global.msg_port'],
+                'snmp': 8014
+            })
 
 
     def on_IntServerReboot(self, message):
@@ -340,31 +342,33 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
     def on_HostInitResponse(self, message):
         if bus.cnf.state == ScalarizrState.RUNNING:
-            self._logger.info("Ignoring 'HostInitResponse' message, cause state is '%s'", bus.cnf.state)
+            self._logger.info("Ignoring 'HostInitResponse' message, cause state is '%s'", 
+                    bus.cnf.state)
             return
 
-        self._check_control_ports()
-
-        bus.initialization_op = operation(name='Initialization')
-        try:
-            self._define_initialization(message)
+        def handler():
+            self._check_control_ports()
             bus.fire("host_init_response", message)
+
             hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)
             bus.fire("before_host_up", hostup_msg)
             if bus.scalr_version >= (2, 2, 3):
                 self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_subhandler=True)
+
             self.send_message(hostup_msg)
             bus.cnf.state = ScalarizrState.RUNNING
             bus.fire("host_up")
+
+        try:
+            op = bus.init_op
+            assert op
         except:
-            with bus.initialization_op as op:
-                if not op.finished:
-                    with op.phase('Scalarizr routines'):
-                        with op.step('Scalarizr routines'):
-                            op.error()
-            raise
-        with bus.initialization_op as op:
-            op.ok()
+            msg = ("Unrecoverable! Can't find operation 'system.init'. "
+                    "This may caused by Scalarizr restart during initialization. "
+                    "If you're a developer, digging into this problem, see _start_init() method")
+            raise Exception(msg)
+        op.func = handler
+        op.execute()
 
 
     def on_ScalarizrUpdateAvailable(self, message):
@@ -381,28 +385,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         """
         Add scalarizr version to meta
         """
-        message.meta[MetaOptions.SZR_VERSION] = scalarizr.__version__
-        message.meta[MetaOptions.TIMESTAMP] = time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
+        message.meta.update({
+            'szr_version': scalarizr.__version__,
+            'timestamp': time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
+        })
 
-        
-    def _define_initialization(self, hir_message):
-        # XXX: from the hole
-        handlers = bus.messaging_service.get_consumer().listeners[0].get_handlers_chain()
-        phases = {'host_init_response': [], 'before_host_up': []}
-        for handler in handlers:
-            h_phases = handler.get_initialization_phases(hir_message) or {}
-            for key in phases.keys():
-                phases[key] += h_phases.get(key, [])
-
-        phases = phases['host_init_response'] + phases['before_host_up']
-        
-        op = bus.initialization_op
-        op.phases = phases
-        op.define()
-        
-        STATE['lifecycle.initialization_id'] = op.id
-
-    
 
 class IntMessagingService(object):
 

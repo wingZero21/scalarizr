@@ -47,7 +47,7 @@ class StorageAPI(object):
             vol = storage2.volume(volume)
             vol.ensure(mkfs=mkfs, mount=mount, fstab=fstab)
             return dict(vol)
-        return self._op_api.go_with('Create volume', do_create, async=async)
+        return self._op_api.go_with('storage.create', do_create, async=async)
 
 
     @rpc.service_method
@@ -80,7 +80,7 @@ class StorageAPI(object):
             snap = vol.snapshot(description=description, tags=tags)
             return dict(snap)
 
-        return self._op_api.go_with('Create snapshot', do_snapshot, async=async)
+        return self._op_api.go_with('storage.snapshot', do_snapshot, async=async)
 
 
     @rpc.service_method
@@ -107,7 +107,7 @@ class StorageAPI(object):
             vol.detach(force=force, **kwds)
             return dict(vol)
 
-        return self._op_api.go_with('Detach volume', do_detach, async=async)
+        return self._op_api.go_with('storage.detach', do_detach, async=async)
 
 
     @rpc.service_method
@@ -134,7 +134,7 @@ class StorageAPI(object):
             vol.detach(force=force, **kwds)
             return dict(vol)
 
-        return self._op_api.go_with('Destroy volume', do_destroy, async=async)
+        return self._op_api.go_with('storage.destroy', do_destroy, async=async)
 
 
     @rpc.service_method
@@ -147,7 +147,7 @@ class StorageAPI(object):
             growed_vol = vol.grow(**growth)
             return dict(growed_vol)
 
-        return self._op_api.go_with('Grow volume', do_grow, async=async)
+        return self._op_api.go_with('storage.grow', do_grow, async=async)
 
 
     @rpc.service_method
@@ -161,7 +161,7 @@ class StorageAPI(object):
             vol.replace_disk(index, disk)
             return dict(vol)
 
-        return self._op_api.go_with('Replace RAID disk', do_replace_raid_disk, async=async)
+        return self._op_api.go_with('storage.replace-raid-disk', do_replace_raid_disk, async=async)
 
 
     def _check_invalid(self, param, name, type_):

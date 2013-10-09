@@ -91,10 +91,7 @@ class _Bus(Observable):
 
     api_server = None
 
-    initialization_op = None
-    '''
-    @ivar: scalarizr.handlers.operation
-    '''
+    init_op = None
 
     deploy_op = None
 
