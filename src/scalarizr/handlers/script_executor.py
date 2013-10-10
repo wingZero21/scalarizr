@@ -247,7 +247,7 @@ class ScriptExecutor(Handler):
             LOG.debug('Fetching scripts from incoming message')
             scripts = [Script(name=item['name'],
                                 body=item.get('body'),
-                                run_as=item.get('run_as')
+                                run_as=item.get('run_as'),
                                 path=item.get('path'),
                                 asynchronous=int(item['asynchronous']),
                                 exec_timeout=item['timeout'],
