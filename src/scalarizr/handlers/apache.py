@@ -14,7 +14,7 @@ from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.service import CnfController
 from scalarizr.api import service as preset_service
-from scalarizr.handlers import HandlerError, ServiceCtlHandler, operation
+from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 
 # Libs
@@ -284,14 +284,12 @@ class ApacheHandler(ServiceCtlHandler):
             self._rpaf_reload()
 
     def on_before_host_up(self, message):
-
-        with bus.initialization_op as op:
-            with op.phase(self._phase):
-                with op.step(self._step_update_vhosts):
-                    self._update_vhosts()
-                with op.step(self._step_reload_rpaf):
-                    self._rpaf_reload()
-                bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
+        log = bus.init_op.logger if bus.init_op else self._logger
+        log.info('Update virtual hosts')
+        self._update_vhosts()
+        log.info('Reload RPAF')
+        self._rpaf_reload()
+        bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
 
     def on_HostUp(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:

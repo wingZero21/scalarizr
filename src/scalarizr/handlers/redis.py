@@ -207,7 +207,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
             passwords=[self.get_main_password(),]
             num_processes = 1
             farm_role_id = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
-            params = self._queryenv.list_farm_role_params(farm_role_id)
+            params = self._queryenv.list_farm_role_params(farm_role_id).get('params', {})
             if 'redis' in params:
                 redis_data = params['redis']
                 for param in ('ports', 'passwords', 'num_processes'):

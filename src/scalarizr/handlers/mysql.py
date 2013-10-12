@@ -919,37 +919,27 @@ class MysqlHandler(ServiceCtlHandler):
 
     def on_Mysql_CreateDataBundle(self, message):
         try:
-            op = operation(name=self._op_data_bundle, phases=[{
-                    'name': self._phase_data_bundle,
-                    'steps': [self._step_create_data_bundle]
-            }])
-            op.define()
+            bus.fire('before_mysql_data_bundle')
 
-            with op.phase(self._phase_data_bundle):
-                with op.step(self._step_create_data_bundle):
+            # Creating snapshot
+            root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
+            snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
+            used_size = coreutils.statvfs(self._storage_path)['used']
 
-                    bus.fire('before_mysql_data_bundle')
+            bus.fire('mysql_data_bundle', snapshot_id=snap.id)
 
-                    # Creating snapshot
-                    root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
-                    snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
-                    used_size = coreutils.statvfs(self._storage_path)['used']
+            # Notify scalr
+            msg_data = dict(
+                    log_file=log_file,
+                    log_pos=log_pos,
+                    used_size='%.3f' % (float(used_size) / 1024 / 1024,),
+                    status='ok'
+            )
+            msg_data.update(self._compat_storage_data(snap=snap))
+            self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
 
-                    bus.fire('mysql_data_bundle', snapshot_id=snap.id)
-
-                    # Notify scalr
-                    msg_data = dict(
-                            log_file=log_file,
-                            log_pos=log_pos,
-                            used_size='%.3f' % (float(used_size) / 1024 / 1024,),
-                            status='ok'
-                    )
-                    msg_data.update(self._compat_storage_data(snap=snap))
-                    self.send_message(MysqlMessages.CREATE_DATA_BUNDLE_RESULT, msg_data)
-
-            op.ok()
-
-        except (Exception, BaseException), e:
+        except:
+            e = sys.exc_info()[1]
             LOG.exception(e)
 
             # Notify Scalr about error

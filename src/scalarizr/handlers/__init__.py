@@ -8,7 +8,6 @@ from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
 from scalarizr.linux import iptables
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
-from scalarizr.node import __node__
 
 import os
 import logging
@@ -22,130 +21,6 @@ import distutils.version
 LOG = logging.getLogger(__name__)
 
 
-class operation(object):
-    def __init__(self, id=None, name=None, phases=None):
-        self.id = id or str(uuid.uuid4())
-        self.name = name
-        self.phases = phases or []
-        self.finished = False
-        self._depth = None
-        self._phase = None
-        self._step = None
-        self._stepnos = {}
-
-    def phase(self, name):
-        self._phase = name
-        self._depth = 'phase'
-        if not self._phase in self._stepnos:
-            self._stepnos[self._phase] = 0
-        return self
-
-    def step(self, name, warning=False):
-        self._step = name
-        self._depth = 'step'
-        self._warning = warning
-        return self
-
-    def __enter__(self):
-        if self._depth == 'step':
-            self._stepnos[self._phase] += 1
-            STATE['operation.id'] = self.id
-            STATE['operation.step'] = self._step
-            STATE['operation.in_progress'] = 1
-            self.progress(0)
-
-        elif self._depth == 'phase':
-            STATE['operation.phase'] = self._phase
-
-        return self
-
-    def __exit__(self, *args):
-        if self._depth == 'step':
-            try:
-                STATE['operation.step'] = ''
-                STATE['operation.in_progress'] = 0
-                if not args[0]:
-                    self.complete()
-                elif self._warning:
-                    self.warning(exc_info=args)
-                else:
-                    self.error(exc_info=args)
-            finally:
-                self._depth = 'phase'
-
-        elif self._depth == 'phase':
-            STATE['operation.phase'] = ''
-
-
-    def define(self):
-        if bus.scalr_version >= (2, 6):
-            srv = bus.messaging_service
-            msg = srv.new_message(Messages.OPERATION_DEFINITION, None, {
-                    'id': self.id,
-                    'name': self.name,
-                    'phases': self.phases
-            })
-            srv.get_producer().send(Queues.LOG, msg)
-
-    def progress(self, percent=None):
-        self._send_progress('running', progress=percent)
-
-    def complete(self):
-        self._send_progress('complete', progress=100)
-
-    def warning(self, exc_info=None, handler=None):
-        self._send_progress('warning', warning=self._format_error(exc_info, handler))
-
-    def _send_progress(self, status, progress=None, warning=None):
-        if bus.scalr_version >= (2, 6):
-            srv = bus.messaging_service
-            msg = srv.new_message(Messages.OPERATION_PROGRESS, None, {
-                    'id': self.id,
-                    'name': self.name,
-                    'phase': self._phase,
-                    'step': self._step,
-                    'stepno' : self._stepnos[self._phase],
-                    'status': status,
-                    'progress': progress,
-                    'warning': warning
-            })
-            srv.get_producer().send(Queues.LOG, msg)
-
-    def ok(self, data=None):
-        self._send_result('ok', data=data)
-        self.finished = True
-
-    def error(self, exc_info=None, handler=None):
-        self._send_result('error', error=self._format_error(exc_info, handler))
-        self.finished = True
-
-    def _send_result(self, status, error=None, data=None):
-        if bus.scalr_version >= (2, 6):
-            srv = bus.messaging_service
-            msg = srv.new_message(Messages.OPERATION_RESULT, None, {
-                    'id': self.id,
-                    'name': self.name,
-                    'status': status,
-                    'data': data
-            })
-            if status == 'error':
-                msg.body.update({
-                        'error': error,
-                        'phase': self._phase,
-                        'step': self._step,
-                })
-            srv.get_producer().send(Queues.CONTROL, msg)
-
-    def _format_error(self, exc_info=None, handler=None):
-        if not exc_info:
-            exc_info = sys.exc_info()
-        return {
-                'message': str(exc_info[1]),
-                'trace': ''.join(traceback.format_tb(exc_info[2])),
-                'handler': handler
-        }
-
-
 class Handler(object):
     _service_name = behaviour = None
     _logger = logging.getLogger(__name__)
@@ -154,13 +29,6 @@ class Handler(object):
         if self._service_name and self._service_name not in self.get_ready_behaviours():
             msg = 'Cannot load handler %s. Missing software.' % self._service_name
             raise HandlerError(msg)
-
-    def get_initialization_phases(self, hir_message):
-        return {}
-
-    def initialization_id(self):
-        return STATE['lifecycle.initialization_id']
-
 
     def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
         srv = srv or bus.messaging_service
@@ -627,43 +495,41 @@ class ServiceCtlHandler(Handler):
                     LOG.WARNING('Cannot apply preset: Manifest not found.')
 
         else:
+            log = bus.init_op.logger if bus.init_op else LOG
+            if self._cnf_ctl:
+                log.info('Applying configuration preset')
 
-            with bus.initialization_op as op:
-                if self._cnf_ctl:
-                    with op.step('Apply configuration preset'):
+                # Backup default configuration
+                my_preset = self._cnf_ctl.current_preset()
+                self._preset_store.save(my_preset, PresetType.DEFAULT)
 
-                        # Backup default configuration
-                        my_preset = self._cnf_ctl.current_preset()
-                        self._preset_store.save(my_preset, PresetType.DEFAULT)
+                # Stop service if it's already running
+                self._stop_service('Applying configuration preset')
 
-                        # Stop service if it's already running
-                        self._stop_service('Applying configuration preset')
+                cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
+                self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
 
-                        cur_preset = CnfPreset(service_conf.name, service_conf.settings, self._service_name)
-                        self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL, override=False)
+                if cur_preset.name == 'default':
+                    # Scalr respond with default preset
+                    LOG.debug('%s configuration is default', self._service_name)
+                    #self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
+                    self._start_service()
+                    return
 
-                        if cur_preset.name == 'default':
-                            # Scalr respond with default preset
-                            LOG.debug('%s configuration is default', self._service_name)
-                            #self._preset_store.copy(PresetType.DEFAULT, PresetType.LAST_SUCCESSFUL)
-                            self._start_service()
-                            return
+                elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
+                    LOG.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
+                    self._start_service()
+                    return
 
-                        elif self._cnf_ctl.preset_equals(cur_preset, my_preset):
-                            LOG.debug("%s configuration satisfies current preset '%s'", self._service_name, cur_preset.name)
-                            self._start_service()
-                            return
-
-                        else:
-                            LOG.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
-                            self._cnf_ctl.apply_preset(cur_preset)
-
-                    with op.step('Start %s with configuration preset' % service_name):
-                        # Start service with updated configuration
-                        self._start_service_with_preset(cur_preset)
                 else:
-                    with op.step('Start %s' % service_name):
-                        self._start_service()
+                    LOG.info("Applying '%s' preset to %s", cur_preset.name, self._service_name)
+                    self._cnf_ctl.apply_preset(cur_preset)
+
+                log.info('Start %s with configuration preset', service_name)
+                self._start_service_with_preset(cur_preset)
+            else:
+                log.info('Start %s' % service_name)
+                self._start_service()
 
         bus.fire(self._service_name + '_configure', **kwargs)
 
@@ -778,7 +644,7 @@ class FarmSecurityMixin(object):
         )
         self.__on_reload()
         if self._enabled:
-        	self.__insert_iptables_rules()
+            self.__insert_iptables_rules()
 
     def __on_reload(self):
         self._queryenv = bus.queryenv_service
@@ -799,8 +665,8 @@ class FarmSecurityMixin(object):
                 pass
 
     def on_HostInit(self, message):
-    	if not self._enabled:
-    		return
+        if not self._enabled:
+            return
         # Append new server to allowed list
         if not self._iptables.enabled():
             return
@@ -813,8 +679,8 @@ class FarmSecurityMixin(object):
 
 
     def on_HostDown(self, message):
-    	if not self._enabled:
-    		return
+        if not self._enabled:
+            return
         # Remove terminated server from allowed list
         if not self._iptables.enabled():
             return
@@ -905,14 +771,14 @@ def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
         try:
             tags['scalr-owner'] = __node__['owner_email']
         except KeyError:
-                tags['scalr-owner'] = None
+            tags['scalr-owner'] = None
 
     if kwargs:
         # example: tmp = 1
         tags.update(kwargs)
 
     excludes = []
-    for k,v in tags.items():
+    for k, v in tags.items():
         if not v:
             excludes.append(k)
             del tags[k]
