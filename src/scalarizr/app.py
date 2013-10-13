@@ -51,9 +51,6 @@ class NotConfiguredError(BaseException):
     pass
 
 
-__version__ = open(os.path.join(os.path.dirname(__file__), 'version')).read().strip()
-
-
 EMBED_SNMPD = True
 NET_SNMPD = False
 

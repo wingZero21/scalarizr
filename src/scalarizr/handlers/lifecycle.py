@@ -13,7 +13,6 @@ from scalarizr import config, linux
 from scalarizr.api import operation
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState
-from scalarizr.handlers import operation
 from scalarizr.messaging import Messages, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
