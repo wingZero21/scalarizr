@@ -117,7 +117,7 @@ class StorageManager():
         snapshot_id = str(uuid.uuid4())[:7]
         snap_path = os.path.join(snapshot_dir, snapshot_id)
 
-        lvm2.lvcreate(s=True, n=snapshot_id, L=snap_size, volume['device'])
+        lvm2.lvcreate(volume['device'], s=True, n=snapshot_id, L=snap_size)
         lv_info = None
         try:
             lv_info = lvm2.lvs(lvm2.lvpath(vg_name, snapshot_id)).values()[0]
