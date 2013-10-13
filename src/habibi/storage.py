@@ -1,8 +1,10 @@
 __author__ = 'Nick Demyanchuk'
 
+
 import os
 import sys
 import json
+import glob
 import uuid
 import logging
 from scalarizr.linux import lvm2, system
@@ -10,7 +12,7 @@ from scalarizr.linux import lvm2, system
 
 LOG = logging.getLogger(__name__)
 
-vg_name = 'vagrant'
+vg_name = 'tests'
 cgroup_mpoint = '/sys/fs/cgroup' # Ubuntu default
 snap_size = '100M'
 snapshot_dir = '/tmp/snapshots'
@@ -26,7 +28,13 @@ class StorageManager():
 
 
     def _server_terminated(self, server_id):
+        # TODO: detach all volumes
         pass
+
+
+    def _cleanup(self):
+        # Remove all volumes of volume group
+        lvm2.vgremove(vg_name)
 
 
     def __call__(self, environ, start_response):
@@ -50,6 +58,8 @@ class StorageManager():
             except:
                 e = sys.exc_info()[1]
                 result = dict(status='error', error=str(e))
+
+            result = json.dumps(result)
 
             headers = [('Content-type', 'application/json'),
                         ('Content-length', str(len(result))),]
@@ -91,7 +101,10 @@ class StorageManager():
         attached_to = volume['attached_to']
         assert attached_to == None, 'Volume already attached to instance "%s"' % attached_to
 
-        allow_path = os.path.join(cgroup_mpoint, 'devices/lxc/%s/devices.allow' % instance_id)
+
+        allow_path_wildcard = os.path.join(cgroup_mpoint, 'devices/lxc/%s*/devices.allow' % instance_id)
+        allow_path = glob.glob(allow_path_wildcard)[0]
+
         with open(allow_path, 'w') as f:
             f.write("b %s:%s rwm\n" % (volume['maj'], volume['min']))
         volume['attached_to'] = instance_id
