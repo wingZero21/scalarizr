@@ -3,6 +3,7 @@ import sys
 import urllib2
 
 # Core
+from scalarizr import __version__
 from scalarizr import config, rpc, linux
 from scalarizr import node
 from scalarizr.linux import coreutils
