@@ -24,7 +24,6 @@ from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
 from scalarizr.util import system2, disttool, \
         firstmatched, initdv2, software, wait_until, cryptotool,\
         PopenError
-from scalarizr.handlers import operation
 from scalarizr.util.software import which
 from scalarizr.linux import iptables
 from scalarizr.linux import coreutils
@@ -42,7 +41,6 @@ import ConfigParser
 # Extra
 import pexpect
 import signal
-from scalarizr.handlers import operation
 
 
 SU_EXEC = '/bin/su'
@@ -646,21 +644,6 @@ class MysqlHandler(ServiceCtlHandler):
                 'slave_promote_to_master'
         )
 
-        self._phase_mysql = 'Configure MySQL'
-        self._phase_data_bundle = self._op_data_bundle = 'MySQL data bundle'
-        self._phase_backup = self._op_backup = 'MySQL backup'
-        self._step_upload_to_cloud_storage = 'Upload data to cloud storage'
-        self._step_accept_scalr_conf = 'Accept Scalr configuration'
-        self._step_patch_conf = 'Patch my.cnf configuration file'
-        self._step_create_storage = 'Create storage'
-        self._step_move_datadir = 'Move data directory to storage'
-        self._step_create_users = 'Create Scalr users'
-        self._step_restore_users = 'Restore Scalr users'
-        self._step_create_data_bundle = 'Create data bundle'
-        self._step_change_replication_master = 'Change replication Master'
-        self._step_innodb_recovery = 'InnoDB recovery'
-        self._step_collect_hostup_data = 'Collect HostUp data'
-
         self.on_reload()
 
     def on_init(self):
@@ -755,20 +738,6 @@ class MysqlHandler(ServiceCtlHandler):
                         or      message.name == MysqlMessages.CONVERT_TO_DBMSR
                         or  message.name == Messages.UPDATE_SERVICE_CONFIGURATION)
 
-    def get_initialization_phases(self, hir_message):
-        if BEHAVIOUR in hir_message.body:
-            steps = [self._step_accept_scalr_conf, self._step_create_storage]
-            if hir_message.body['mysql']['replication_master'] == '1':
-                steps.append(self._step_create_data_bundle)
-            else:
-                steps.append(self._step_change_replication_master)
-            steps.append(self._step_collect_hostup_data)
-
-
-            return {'before_host_up': [{
-                    'name': self._phase_mysql,
-                    'steps': steps
-            }]}
 
     def on_BeforeHostTerminate(self, message):
         LOG.debug('Handling BeforeHostTerminate message from %s' % message.local_ip)
@@ -848,51 +817,40 @@ class MysqlHandler(ServiceCtlHandler):
             if 'information_schema' in databases:
                 databases.remove('information_schema')
 
-            op = operation(name=self._op_backup, phases=[{
-                    'name': self._phase_backup,
-                    'steps': ["Backup '%s'" % db for db in databases] + [self._step_upload_to_cloud_storage]
-            }])
-            op.define()
+            # Defining archive name and path
+            if not os.path.exists(self._tmp_dir):
+                os.makedirs(self._tmp_dir)
+            backup_filename = '%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S')
+            backup_path = os.path.join(self._tmp_dir, backup_filename)
 
-            with op.phase(self._phase_backup):
+            # Creating archive
+            backup = tarfile.open(backup_path, 'w:gz')
 
-                # Defining archive name and path
-                if not os.path.exists(self._tmp_dir):
-                    os.makedirs(self._tmp_dir)
-                backup_filename = '%s.tar.gz' % time.strftime('%Y-%m-%d-%H:%M:%S')
-                backup_path = os.path.join(self._tmp_dir, backup_filename)
+            # Dump all databases
+            LOG.info("Dumping all databases")
+            tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)
+            for db in databases:
+                dump_path = os.path.join(tmpdir, db + '.sql')
+                mysql.dump_database(db, dump_path)
+                backup.add(dump_path, os.path.basename(dump_path))
 
-                # Creating archive
-                backup = tarfile.open(backup_path, 'w:gz')
+            backup.close()
 
-                # Dump all databases
-                LOG.info("Dumping all databases")
-                tmpdir = tempfile.mkdtemp(dir=self._tmp_dir)
-                for db in databases:
-                    with op.step("Backup '%s'" % db):
-                        dump_path = os.path.join(tmpdir, db + '.sql')
-                        mysql.dump_database(db, dump_path)
-                        backup.add(dump_path, os.path.basename(dump_path))
+            # Creating list of full paths to archive chunks
+            if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
+                parts = [os.path.join(tmpdir, file) for file in coreutils.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
+            else:
+                parts = [backup_path]
+            sizes = [os.path.getsize(file) for file in parts]
 
-                backup.close()
-
-                with op.step(self._step_upload_to_cloud_storage):
-                    # Creating list of full paths to archive chunks
-                    if os.path.getsize(backup_path) > BACKUP_CHUNK_SIZE:
-                        parts = [os.path.join(tmpdir, file) for file in coreutils.split(backup_path, backup_filename, BACKUP_CHUNK_SIZE , tmpdir)]
-                    else:
-                        parts = [backup_path]
-                    sizes = [os.path.getsize(file) for file in parts]
-
-                    cloud_storage_path = self._platform.scalrfs.backups('mysql')
-                    self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-                    trn = transfer.Transfer()
-                    cloud_files = trn.upload(parts, cloud_storage_path)
-                    self._logger.info("Mysql backup uploaded to cloud storage under %s/%s",
-                                                    cloud_storage_path, backup_filename)
+            cloud_storage_path = self._platform.scalrfs.backups('mysql')
+            self._logger.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
+            trn = transfer.Transfer()
+            cloud_files = trn.upload(parts, cloud_storage_path)
+            self._logger.info("Mysql backup uploaded to cloud storage under %s/%s",
+                                            cloud_storage_path, backup_filename)
 
             result = list(dict(path=path, size=size) for path, size in zip(cloud_files, sizes))
-            op.ok(data=result)
 
             # Notify Scalr
             self.send_message(MysqlMessages.CREATE_BACKUP_RESULT, dict(
@@ -1072,8 +1030,7 @@ class MysqlHandler(ServiceCtlHandler):
                         coreutils.remove(os.path.join(self._data_dir, 'relay-log.info'))
                         coreutils.remove(os.path.join(self._data_dir, 'master.info'))
                     except pexpect.TIMEOUT:
-                        raise HandlerError("Timeout (%d seconds) reached " +
-                                                "while waiting for slave stop and master reset." % (timeout,))
+                        raise HandlerError("Timeout (%d seconds) reached while waiting for slave stop and master reset." % (timeout, ))
                     finally:
                         mysql.close()
 
@@ -1212,38 +1169,37 @@ class MysqlHandler(ServiceCtlHandler):
         @param message: HostInitResponse
         """
 
-        with bus.initialization_op as op:
-            with op.phase(self._phase_mysql):
-                with op.step(self._step_accept_scalr_conf):
+        log = bus.init_op.logger if bus.init_op else self._logger
+        log.info('Accept Scalr configuration')
 
-                    if not message.body.has_key("mysql"):
-                        raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
+        if not message.body.has_key("mysql"):
+            raise HandlerError("HostInitResponse message for MySQL behaviour must have 'mysql' property")
 
-                    dir = os.path.dirname(self._volume_config_path)
-                    if not os.path.exists(dir):
-                        os.makedirs(dir)
+        dir = os.path.dirname(self._volume_config_path)
+        if not os.path.exists(dir):
+            os.makedirs(dir)
 
-                    mysql_data = message.mysql.copy()
-                    for key, file in ((OPT_VOLUME_CNF, self._volume_config_path),
-                                                    (OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
-                        if os.path.exists(file):
-                            os.remove(file)
-                        if key in mysql_data:
-                            Storage.backup_config(mysql_data[key], file)
-                            del mysql_data[key]
+        mysql_data = message.mysql.copy()
+        for key, file in ((OPT_VOLUME_CNF, self._volume_config_path),
+                                        (OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
+            if os.path.exists(file):
+                os.remove(file)
+            if key in mysql_data:
+                Storage.backup_config(mysql_data[key], file)
+                del mysql_data[key]
 
-                    # Compatibility with Scalr <= 2.1
-                    if bus.scalr_version <= (2, 1):
-                        if 'volume_id' in mysql_data:
-                            Storage.backup_config(dict(type='ebs', id=mysql_data['volume_id']), self._volume_config_path)
-                            del mysql_data['volume_id']
-                        if 'snapshot_id' in mysql_data:
-                            if mysql_data['snapshot_id']:
-                                Storage.backup_config(dict(type='ebs', id=mysql_data['snapshot_id']), self._snapshot_config_path)
-                            del mysql_data['snapshot_id']
+        # Compatibility with Scalr <= 2.1
+        if bus.scalr_version <= (2, 1):
+            if 'volume_id' in mysql_data:
+                Storage.backup_config(dict(type='ebs', id=mysql_data['volume_id']), self._volume_config_path)
+                del mysql_data['volume_id']
+            if 'snapshot_id' in mysql_data:
+                if mysql_data['snapshot_id']:
+                    Storage.backup_config(dict(type='ebs', id=mysql_data['snapshot_id']), self._snapshot_config_path)
+                del mysql_data['snapshot_id']
 
-                    LOG.debug("Update mysql config with %s", mysql_data)
-                    self._update_config(mysql_data)
+        LOG.debug("Update mysql config with %s", mysql_data)
+        self._update_config(mysql_data)
 
 
     @_reload_mycnf
@@ -1297,113 +1253,113 @@ class MysqlHandler(ServiceCtlHandler):
         @type message: scalarizr.messaging.Message
         @param message: HostUp message
         """
-        LOG.info("Initializing MySQL master")
+        log = bus.init_op.logger
+        log.info("Initializing MySQL master")
 
-        with bus.initialization_op as op:
-            with op.step(self._step_create_storage):
-                # Plug storage
-                volume_cnf = Storage.restore_config(self._volume_config_path)
-                try:
-                    snap_cnf = Storage.restore_config(self._snapshot_config_path)
-                    volume_cnf['snapshot'] = snap_cnf
-                except IOError:
-                    pass
-                self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
-                Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
+        log.info('Create storage')
+        # Plug storage
+        volume_cnf = Storage.restore_config(self._volume_config_path)
+        try:
+            snap_cnf = Storage.restore_config(self._snapshot_config_path)
+            volume_cnf['snapshot'] = snap_cnf
+        except IOError:
+            pass
+        self.storage_vol = self._plug_storage(mpoint=self._storage_path, vol=volume_cnf)
+        Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
-                # Stop MySQL server
-                #self._stop_service('Required by Master initialization process')
-                self._flush_logs()
+        # Stop MySQL server
+        #self._stop_service('Required by Master initialization process')
+        self._flush_logs()
 
-            msg_data = None
-            storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
+        msg_data = None
+        storage_valid = self._storage_valid() # It's important to call it before _move_mysql_dir
 
+        try:
+            log.info('Move data directory to storage')
             try:
-                with op.step(self._step_move_datadir):
-                    try:
-                        datadir = self._mysql_config.get('mysqld/datadir')
-                    except NoPathError:
-                        """ There is no datadir in config """
-                        datadir = DEFAULT_DATADIR
-                        if not 'mysqld' in self._mysql_config.sections('./'):
-                            self._mysql_config.add('mysqld', '')
-                        self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
-                    if not storage_valid and datadir.find(self._data_dir) == 0:
-                        # When role was created from another mysql role it contains modified my.cnf settings
-                        self._repair_original_mycnf()
+                datadir = self._mysql_config.get('mysqld/datadir')
+            except NoPathError:
+                """ There is no datadir in config """
+                datadir = DEFAULT_DATADIR
+                if not 'mysqld' in self._mysql_config.sections('./'):
+                    self._mysql_config.add('mysqld', '')
+                self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
+            if not storage_valid and datadir.find(self._data_dir) == 0:
+                # When role was created from another mysql role it contains modified my.cnf settings
+                self._repair_original_mycnf()
 
-                    # Patch configuration
-                    self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
-                    self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-                    self._change_selinux_ctx()
+            # Patch configuration
+            self._move_mysql_dir('mysqld/datadir', self._data_dir + os.sep)
+            self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
+            self._change_selinux_ctx()
 
+            # Init replication
+            log.info('Patch my.cnf configuration file')
+            self._replication_init(master=True)
 
-                with op.step(self._step_patch_conf):
-                    # Init replication
-                    self._replication_init(master=True)
+            # If It's 1st init of mysql master storage
+            if not storage_valid:
+                self._copy_debian_cnf()
 
-                # If It's 1st init of mysql master storage
-                if not storage_valid:
-                    self._copy_debian_cnf()
+                # Add system users
+                log.info('Create Scalr users')
+                root_password, repl_password, stat_password = \
+                                self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER)
 
-                    with op.step(self._step_create_users):
-                        # Add system users
-                        root_password, repl_password, stat_password = \
-                                        self._add_mysql_users(ROOT_USER, REPL_USER, STAT_USER)
+                log.info('Create data bundle')
+                # Get binary logfile, logpos and create storage snapshot
+                snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
+                Storage.backup_config(snap.config(), self._snapshot_config_path)
 
-                    with op.step(self._step_create_data_bundle):
-                        # Get binary logfile, logpos and create storage snapshot
-                        snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
-                        Storage.backup_config(snap.config(), self._snapshot_config_path)
+                # Update HostUp message
+                msg_data = dict(
+                        root_password=root_password,
+                        repl_password=repl_password,
+                        stat_password=stat_password,
+                        log_file=log_file,
+                        log_pos=log_pos
+                )
+                msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 
-                    # Update HostUp message
-                    msg_data = dict(
-                            root_password=root_password,
-                            repl_password=repl_password,
-                            stat_password=stat_password,
-                            log_file=log_file,
-                            log_pos=log_pos
-                    )
-                    msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+            # If volume has mysql storage directory structure (N-th init)
+            else:
+                # Get required configuration options
+                log.info('InnoDB recovery')
+                root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
 
-                # If volume has mysql storage directory structure (N-th init)
-                else:
-                    # Get required configuration options
-                    with op.step(self._step_innodb_recovery):
-                        root_password, = self._get_ini_options(OPT_ROOT_PASSWORD)
+                self._copy_debian_cnf_back()
+                self._innodb_recovery()
 
-                        self._copy_debian_cnf_back()
-                        self._innodb_recovery()
+                # Create snapshot
+                log.info('Create data bundle')
+                snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
+                Storage.backup_config(snap.config(), self._snapshot_config_path)
 
-                    with op.step(self._step_create_data_bundle):
-                        # Create snapshot
-                        snap, log_file, log_pos = self._create_snapshot(ROOT_USER, root_password, tags=self.mysql_tags)
-                        Storage.backup_config(snap.config(), self._snapshot_config_path)
-
-                    # Update HostUp message
-                    msg_data = dict(
-                            log_file=log_file,
-                            log_pos=log_pos
-                    )
-                    msg_data.update(self._compat_storage_data(self.storage_vol, snap))
+                # Update HostUp message
+                msg_data = dict(
+                        log_file=log_file,
+                        log_pos=log_pos
+                )
+                msg_data.update(self._compat_storage_data(self.storage_vol, snap))
 
 
-            except (BaseException, Exception):
-                if not storage_valid and self._storage_path:
-                    # Perform cleanup
-                    # XXX: it's not safe. `storage_valid` can be calculated wrong and users data will totally lost.
-                    # system2('rm -rf %s' % os.path.join(self._storage_path, '*'), shell=True, raise_exc=False)
-                    pass
-                raise
+        except (BaseException, Exception):
+            if not storage_valid and self._storage_path:
+                # Perform cleanup
+                # XXX: it's not safe. `storage_valid` can be calculated wrong and users data will totally lost.
+                # system2('rm -rf %s' % os.path.join(self._storage_path, '*'), shell=True, raise_exc=False)
+                pass
+            raise
 
-            with op.step(self._step_collect_hostup_data):
-                if msg_data:
-                    message.mysql = msg_data.copy()
-                    try:
-                        del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
-                    except KeyError:
-                        pass
-                    self._update_config(msg_data)
+        if msg_data:
+            log.info('Collect HostUp data')
+            message.mysql = msg_data.copy()
+            try:
+                del msg_data[OPT_SNAPSHOT_CNF], msg_data[OPT_VOLUME_CNF]
+            except KeyError:
+                pass
+            self._update_config(msg_data)
+
 
     def _compat_storage_data(self, vol=None, snap=None):
         ret = dict()
@@ -1425,80 +1381,80 @@ class MysqlHandler(ServiceCtlHandler):
         @type message: scalarizr.messaging.Message
         @param message: HostUp message
         """
+        log = bus.init_op.logger
         LOG.info("Initializing MySQL slave")
 
-        with bus.initialization_op as op:
-            with op.step(self._step_create_storage):
-                # Read required configuration options
-                root_pass, repl_pass, log_file, log_pos = self._get_ini_options(
-                                OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_LOG_FILE, OPT_LOG_POS)
+        log.info('Create storage')
+        # Read required configuration options
+        root_pass, repl_pass, log_file, log_pos = self._get_ini_options(
+                        OPT_ROOT_PASSWORD, OPT_REPL_PASSWORD, OPT_LOG_FILE, OPT_LOG_POS)
 
-                LOG.debug("Initialize slave storage")
-                self.storage_vol = self._plug_storage(self._storage_path,
-                                dict(snapshot=Storage.restore_config(self._snapshot_config_path)))
-                Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
-
-
-            try:
-                with op.step(self._step_patch_conf):
-                    # Stop MySQL
-                    #self._stop_service('Required by Slave initialization process')
-                    self._flush_logs()
-
-                    # Change configuration files
-                    LOG.info("Changing configuration files")
-
-                    if not 'datadir' in self._mysql_config.options('mysqld'):
-                        """ Set default value for datadir """
-                        self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
+        LOG.debug("Initialize slave storage")
+        self.storage_vol = self._plug_storage(self._storage_path,
+                        dict(snapshot=Storage.restore_config(self._snapshot_config_path)))
+        Storage.backup_config(self.storage_vol.config(), self._volume_config_path)
 
 
-                with op.step(self._step_move_datadir):
-                    self._move_mysql_dir('mysqld/datadir', self._data_dir)
-                    self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
-                    self._change_selinux_ctx()
-                    self._replication_init(master=False)
-                    self._copy_debian_cnf_back()
+        try:
+            log.info('Patch my.cnf configuration file')
+            # Stop MySQL
+            #self._stop_service('Required by Slave initialization process')
+            self._flush_logs()
 
-                with op.step(self._step_innodb_recovery):
-                    self._innodb_recovery()
-                    self._start_service()
+            # Change configuration files
+            LOG.info("Changing configuration files")
 
-                with op.step(self._step_change_replication_master):
-                    # Change replication master
-                    master_host = None
-                    LOG.info("Requesting master server")
-                    while not master_host:
-                        try:
-                            master_host = list(host
-                                    for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
-                                    if host.replication_master)[0]
-                        except IndexError:
-                            LOG.debug("QueryEnv respond with no mysql master. " +
-                                            "Waiting %d seconds before the next attempt", 5)
-                            time.sleep(5)
+            if not 'datadir' in self._mysql_config.options('mysqld'):
+                """ Set default value for datadir """
+                self._mysql_config.add('mysqld/datadir', DEFAULT_DATADIR)
 
-                    LOG.debug("Master server obtained (local_ip: %s, public_ip: %s)",
-                                    master_host.internal_ip, master_host.external_ip)
 
-                    host = master_host.internal_ip or master_host.external_ip
-                    self._change_master(
-                            host=host,
-                            user=REPL_USER,
-                            password=repl_pass,
-                            log_file=log_file,
-                            log_pos=log_pos,
-                            mysql_user=ROOT_USER,
-                            mysql_password=root_pass,
-                            timeout=self._change_master_timeout
-                    )
+            log.info('Move data directory to storage')
+            self._move_mysql_dir('mysqld/datadir', self._data_dir)
+            self._move_mysql_dir('mysqld/log_bin', self._binlog_base)
+            self._change_selinux_ctx()
+            self._replication_init(master=False)
+            self._copy_debian_cnf_back()
 
-                with op.step(self._step_collect_hostup_data):
-                    # Update HostUp message
-                    message.mysql = self._compat_storage_data(self.storage_vol)
-            except:
-                exc_type, exc_value, exc_trace = sys.exc_info()
-                raise exc_type, exc_value, exc_trace
+            log.info('InnoDB recovery')
+            self._innodb_recovery()
+            self._start_service()
+
+            # Change replication master
+            log.info('Change replication Master')
+            master_host = None
+            LOG.info("Requesting master server")
+            while not master_host:
+                try:
+                    master_host = list(host
+                            for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
+                            if host.replication_master)[0]
+                except IndexError:
+                    LOG.debug("QueryEnv respond with no mysql master. " +
+                                    "Waiting %d seconds before the next attempt", 5)
+                    time.sleep(5)
+
+            LOG.debug("Master server obtained (local_ip: %s, public_ip: %s)",
+                            master_host.internal_ip, master_host.external_ip)
+
+            host = master_host.internal_ip or master_host.external_ip
+            self._change_master(
+                    host=host,
+                    user=REPL_USER,
+                    password=repl_pass,
+                    log_file=log_file,
+                    log_pos=log_pos,
+                    mysql_user=ROOT_USER,
+                    mysql_password=root_pass,
+                    timeout=self._change_master_timeout
+            )
+
+            # Update HostUp message
+            log.info('Collect HostUp data')
+            message.mysql = self._compat_storage_data(self.storage_vol)
+        except:
+            exc_type, exc_value, exc_trace = sys.exc_info()
+            raise exc_type, exc_value, exc_trace
 
     def _plug_storage(self, mpoint, vol):
         if not isinstance(vol, Volume):

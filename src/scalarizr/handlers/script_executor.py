@@ -9,9 +9,8 @@ from scalarizr import config as szrconfig
 from scalarizr import linux
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
-from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until, system2
+from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
 from scalarizr.config import ScalarizrState
-from scalarizr.handlers import operation
 
 
 import time
@@ -195,28 +194,16 @@ class ScriptExecutor(Handler):
             pass
 
         if scripts[0].event_name:
-            phase = "Executing %d %s script(s)" % (len(scripts), scripts[0].event_name)
+            msg = "Executing %d %s script(s)" % (len(scripts), scripts[0].event_name)
         else:
-            phase = 'Executing %d script(s)' % (len(scripts), )
-        self._logger.info(phase)
+            msg = 'Executing %d script(s)' % (len(scripts), )
+        self._logger.info(msg)
 
-        if self._cnf.state != szrconfig.ScalarizrState.INITIALIZING:
-            # Define operation
-            op = operation(name=self._op_exec_scripts, phases=[{
-                    'name': phase,
-                    'steps': ["Execute '%s'" % script.name for script in scripts if not script.asynchronous]
-            }])
-            op.define()
-        else:
-            op = bus.initialization_op
+        for script in scripts:
+            msg = "Execute '%s' in %s mode" % (script.name, 'async' if script.asynchronous else 'sync')
+            self._execute_one_script(script)
 
-        with op.phase(phase):
-            for script in scripts:
-                step_title = self._step_exec_tpl % (script.name, 'async' if script.asynchronous else 'sync')
-                with op.step(step_title):
-                    self._execute_one_script(script)
-
-    def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+    def accept(self, message, queue, **kwds):
         return not message.name in skip_events
 
     def __call__(self, message):

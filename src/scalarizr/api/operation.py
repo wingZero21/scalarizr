@@ -1,11 +1,16 @@
 
 import uuid
 import sys
-import logging
 import threading
+import time
+import logging
 
-from scalarizr import rpc, bus
+from scalarizr import rpc
+from scalarizr.bus import bus
 from scalarizr.messaging import Queues, Messages
+
+
+LOG = logging.getLogger(__name__)
 
 class OperationAPI(object):
 
@@ -18,7 +23,12 @@ class OperationAPI(object):
 
     def __init__(self):
         self._ops = {}
-
+        self.rotate_thread = threading.Thread(
+            name='Rotate finished operations', 
+            target=OperationAPI.rotate_runnable
+        )
+        self.rotate_thread.setDaemon(True)
+        self.rotate_thread.start()
 
     @rpc.service_method
     def result(self, operation_id=None):
@@ -33,8 +43,19 @@ class OperationAPI(object):
         # TODO: wrap KeyError
         return self._ops[operation_id]
 
-    def find(self, name=None):
-        return [op for op in self._ops.values() if op.name == name]
+    def remove(self, operation_id):
+        del self._ops[operation_id]
+
+    def find(self, name=None, finished_older_then=None):
+        if name:
+            ret = [op for op in self._ops.values() if op.name == name]
+        else:
+            ret = self._ops.values()
+        if finished_older_then:
+            now = time.time()
+            ret = [op for op in ret 
+                    if op.finished_at and now - op.finished_at > finished_older_then]
+        return ret
 
     def go_with(self, name, func, async=False, **kwds):
         op = self.create(name, func, **kwds)
@@ -43,6 +64,18 @@ class OperationAPI(object):
             return op.operation_id
         else:
             return op.execute()
+
+    @classmethod
+    def rotate_runnable(cls):
+        api = cls()
+        one_day = 86400
+        two_days = one_day * 2
+        while True:
+            time.sleep(one_day)
+            LOG.debug('Rotating operations finished older then 2 days')
+            for op in api.find(finished_older_then=two_days):
+                api.remove(op.operation_id)
+
 
 
 class _LogHandler(logging.Handler):
@@ -64,6 +97,8 @@ class Operation(object):
         self.result = kwds.get('result')
         self.logs = kwds.get('logs', [])
         self.error = kwds.get('error')
+        self.started_at = None
+        self.finished_at = None
         self.async = False
         self.thread = None
         self.logger = None
@@ -76,17 +111,19 @@ class Operation(object):
         self.logger.addHandler(hdlr)    
 
     def _run(self):
+        self.status = 'in-progress'
+        self.started_at = time.time() 
         try:
             self.complete(self.func(self))
         except:
             self.fail()
         finally:
+            self.finished_at = time.time()
             svs = bus.messaging_service
             msg = svs.new_message(Messages.OPERATION_RESULT, None, self.serialize())
             svs.get_producer().send(Queues.CONTROL, msg)
 
     def execute(self):
-        self.status = 'in-progress'
         self._run()
         return self.result
 
@@ -96,7 +133,6 @@ class Operation(object):
             target=self._run
         )
         self.async = True
-        self.status = 'in-progress'
         self.thread.start()
 
     def fail(self, *exc_info):

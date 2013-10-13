@@ -378,8 +378,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                     "This may caused by Scalarizr restart during initialization. "
                     "If you're a developer, digging into this problem, see _start_init() method")
             raise Exception(msg)
-        op.func = handler
-        op.execute()
+        else:
+            try:
+                op.func = handler
+                op.execute()
+            finally:
+                bus.init_op = None
+
 
 
     def on_ScalarizrUpdateAvailable(self, message):
