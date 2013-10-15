@@ -27,6 +27,11 @@ def name2device(name):
         name = name.replace('/vd', '/xvd')
     if storage2.RHEL_DEVICE_ORDERING_BUG:
         name = name[0:8] + chr(ord(name[8]) + 4) + name[9:]
+    if name.startswith('/dev/vd'):
+        devices = ['/dev/vd' + a for a in string.ascii_lowercase[1:16]]
+        devices = filter(lambda dev: not os.path.exists(dev), devices)
+        if devices:
+            return devices[0]
     return name
 
 
