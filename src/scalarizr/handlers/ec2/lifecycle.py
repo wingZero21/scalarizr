@@ -10,6 +10,7 @@ import re
 import sys
 import logging
 
+from scalarizr import linux
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.handlers import Handler
