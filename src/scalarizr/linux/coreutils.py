@@ -235,10 +235,15 @@ def statvfs(path='/'):
     
 _dfrow = namedtuple('df', 'device size mpoint')
 
+def _parse_int(val):
+    try:
+        return int(val)
+    except ValueError:
+        return 0
 
 def df():
     out = linux.system(('df', '-Pk'))[0]
-    return [_dfrow(line[0], int(line[1]), line[-1]) 
+    return [_dfrow(line[0], _parse_int(line[1]), line[-1]) 
             for line in map(str.split, out.splitlines()[1:])]
 
 
