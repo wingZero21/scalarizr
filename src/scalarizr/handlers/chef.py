@@ -160,7 +160,7 @@ class ChefHandler(Handler):
 
             self._run_list = self._chef_data.get('run_list')
             if self._run_list:
-                self._with_json_attributes['run_list'] = self._run_list
+                self._with_json_attributes['run_list'] = json.loads(self._run_list)
             elif self._chef_data.get('role'):
                 self._with_json_attributes['run_list'] = ["role[%s]" % self._chef_data['role']]
 
