@@ -54,7 +54,7 @@ skip_events = set()
 
 logs_truncate_over = 20 * 1000
 if linux.os.windows_family:
-    exec_dir_prefix = os.getenv('TEMP') + r'\scalr-scripting.'
+    exec_dir_prefix = os.getenv('TEMP') + r'\scalr-scripting'
     logs_dir = os.getenv('PROGPAMFILES') + r'\Scalarizr\var\log\scripting'
 else:
     exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
