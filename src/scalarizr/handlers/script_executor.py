@@ -307,6 +307,10 @@ class Script(object):
 
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
+        if linux.os['family'] == 'Windows' and self.run_as:
+            raise HandlerError("Windows can't execute scripts remotely " \
+                               "under user other than Administrator. " \
+                               "Script '%s', given user: '%s'" % (self.name, self.run_as))
 
         if self.name and (self.body or self.path):
             random.seed()
@@ -362,7 +366,7 @@ class Script(object):
         # installs interpreter for the next one
         if not os.path.exists(self.interpreter) and linux.os['family'] != 'Windows':
             raise HandlerError("Can't execute script '%s' cause "
-                                            "interpreter '%s' not found" % (self.name, self.interpreter))
+                               "interpreter '%s' not found" % (self.name, self.interpreter))
 
         if not self.path:
             # Write script to disk, prepare execution
@@ -378,18 +382,12 @@ class Script(object):
         stdout = open(self.stdout_path, 'w+')
         stderr = open(self.stderr_path, 'w+')
         if self.interpreter == 'powershell':
-            command = []
-            if self.run_as:
-                command = ['runas', '/user:%s' % self.run_as]
             command = ['powershell.exe', 
                         '-NoProfile', '-NonInteractive', 
                         '-ExecutionPolicy', 'RemoteSigned', 
-                         '-File'] + command + [self.exec_path]
+                         '-File', self.exec_path]
         elif self.interpreter == 'cmd':
-            command = []
-            if self.run_as:
-                command = ['runas', '/user:%s' % self.run_as]
-            command = ['cmd.exe', '/C'] + command + [self.exec_path]
+            command = ['cmd.exe', '/C', self.exec_path]
         else:
             command = []
             if self.run_as:
