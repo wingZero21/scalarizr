@@ -10,6 +10,7 @@ import re
 import sys
 import logging
 
+from scalarizr import linux
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.handlers import Handler
@@ -72,11 +73,11 @@ class Ec2LifeCycleHandler(Handler):
                     with open(path, 'w') as fp:
                         fp.write(c)
 
-
-        # Add server ssh public key to authorized_keys
-        ssh_key = self._platform.get_ssh_pub_key()
-        if ssh_key:
-            add_authorized_key(ssh_key)
+        if not linux.os.windows_family:
+            # Add server ssh public key to authorized_keys
+            ssh_key = self._platform.get_ssh_pub_key()
+            if ssh_key:
+                add_authorized_key(ssh_key)
 
         # Mount ephemeral devices
         # Seen on eucalyptus:
