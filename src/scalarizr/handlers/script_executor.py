@@ -381,15 +381,15 @@ class Script(object):
             command = []
             if self.run_as:
                 command = ['runas', '/user:%s' % self.run_as]
-            command += ['powershell.exe', 
+            command = ['powershell.exe', 
                         '-NoProfile', '-NonInteractive', 
                         '-ExecutionPolicy', 'RemoteSigned', 
-                         '-File', self.exec_path]
+                         '-File'] + command + [self.exec_path]
         elif self.interpreter == 'cmd':
             command = []
             if self.run_as:
                 command = ['runas', '/user:%s' % self.run_as]
-            command += ['cmd.exe', '/C', self.exec_path]
+            command = ['cmd.exe', '/C'] + command + [self.exec_path]
         else:
             command = []
             if self.run_as:
