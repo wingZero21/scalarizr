@@ -1,4 +1,3 @@
-
 # pylint: disable=R0902, W0613, R0913, R0914, R0201, R0904
 
 
@@ -240,6 +239,7 @@ class Habibi(object):
         self.storage_manager = storage.StorageManager()
         self.storage_server = wsgiref.simple_server.make_server('0.0.0.0', storage.port, self.storage_manager)
         storage_thread = threading.Thread(target=self.storage_server.serve_forever, name='Storage server')
+        storage_thread.setDaemon(True)
         storage_thread.start()
 
         if os.path.exists(self.base_dir):
