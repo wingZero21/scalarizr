@@ -183,8 +183,9 @@ class CinderVolume(base.Volume):
 
                 with self._free_device_letter_mgr:
                     name = '/dev/vd%s' % self._free_device_letter_mgr.get()
+                    device = name2device(name)
                     self._attach_volume(device_name=name)
-                    self.device = name2device(name)
+                    self.device = device
             elif not self.device:
                 self.device = volume.attachments[0]['device']
 
@@ -258,7 +259,11 @@ class CinderVolume(base.Volume):
         volume_id = self.id
         self._check_cinder_connection()
 
-        #volume attaching
+        # It's important to calculate device name here, cause 
+        # after device attachment, it will be counted as used      
+        device = name2device(device_name) 
+
+        #volume attaching  
         LOG.debug('Attaching Cinder volume %s (device: %s) to server %s',
                   volume_id,
                   device_name,
@@ -295,7 +300,6 @@ class CinderVolume(base.Volume):
 
 
         # Checking device availability in OS
-        device = name2device(device_name)
         LOG.debug('Cinder device name %s is mapped to %s in operation system',
                   device_name, device)
         LOG.debug('Checking that device %s is available', device)
