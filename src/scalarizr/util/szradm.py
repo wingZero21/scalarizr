@@ -11,7 +11,7 @@ from scalarizr.config import ScalarizrCnf
 from scalarizr.queryenv import QueryEnvService
 from scalarizr.bus import bus
 from scalarizr.util.software import system_info, which
-from scalarizr import init_script
+from scalarizr.app import init_script
 from scalarizr.util import system2
 import smtplib
 from email.Utils import formatdate

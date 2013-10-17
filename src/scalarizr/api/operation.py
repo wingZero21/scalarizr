@@ -144,6 +144,7 @@ class Operation(object):
     def serialize(self):
         ret = {
             'id': self.operation_id,
+            'name': self.name,
             'status': self.status,
             'result': None,
             'error': None,
