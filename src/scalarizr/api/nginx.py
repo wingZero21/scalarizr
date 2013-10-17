@@ -14,6 +14,7 @@ from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
+from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 
@@ -142,11 +143,7 @@ def _bool_from_scalr_str(bool_str):
 
 class NginxAPI(object):
 
-    _instance = None
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(NginxAPI, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
+    __metaclass__ = Singleton
 
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
         _logger.debug('Initializing nginx API.')

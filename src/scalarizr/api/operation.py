@@ -7,6 +7,7 @@ import logging
 
 from scalarizr import rpc
 from scalarizr.bus import bus
+from scalarizr.util import Singleton
 from scalarizr.messaging import Queues, Messages
 
 
@@ -14,12 +15,7 @@ LOG = logging.getLogger(__name__)
 
 class OperationAPI(object):
 
-    _instance = None
-
-    def __new__(cls, *args, **kwds):
-        if not cls._instance:
-            cls._instance = super(OperationAPI, cls).__new__(cls, *args, **kwds)
-        return cls._instance
+    __metaclass__ = Singleton
 
     def __init__(self):
         self._ops = {}
