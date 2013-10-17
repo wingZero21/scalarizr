@@ -260,7 +260,7 @@ class HAProxyHandler(Handler):
                     kwargs["backend"] = "tcp:%s" % proxy["port"]
                     kwargs["server"] = {
                         "host": local_ip,
-                        "port": proxy.get("backend_port", proxy["port"]),
+                        "port": backend.get("port", proxy["port"]),
                     }
                     for name in ("backup", "down"):
                         if name in backend:
