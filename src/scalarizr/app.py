@@ -19,8 +19,6 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.api.binding import jsonrpc_http
 
 from scalarizr.linux import pkgmgr
-if not linux.os.windows_family:
-    from scalarizr.snmp.agent import SnmpServer
 
 # Utils
 from scalarizr.util import initdv2, log, PeriodicalExecutor
@@ -867,6 +865,7 @@ class Service(object):
         # Start SNMP server in a separate process
         pid = os.fork()
         if pid == 0:
+            from scalarizr.snmp.agent import SnmpServer
             globals()['_pid'] = 0
             cnf = bus.cnf; ini = cnf.rawini
             snmp_server = SnmpServer(

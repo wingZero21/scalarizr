@@ -353,7 +353,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                     bus.cnf.state)
             return
 
-        def handler():
+        def handler(*args):
             self._check_control_ports()
 
             # FIXME: how about apply all HIR configuration here?
