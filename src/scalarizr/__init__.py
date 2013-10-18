@@ -755,14 +755,15 @@ class Service(object):
 
         try:
             while self._running:
-                # Recover SNMP
                 if linux.os.windows_family:
                     rc = win32event.WaitForSingleObject(self.hWaitStop, 30000)
                     if rc == win32event.WAIT_OBJECT_0:
                         # Service stopped, stop main loop
                         break
                 else:
-                    self._check_snmp()
+                    if self._snmp_pid != -1:
+                        # Recover SNMP maybe
+                        self._check_snmp()
                     try:
                         select.select([], [], [], 30)
                     except select.error, e:
@@ -1004,7 +1005,7 @@ class Service(object):
 
 
     def onSIGCHILD(self, *args):
-        if self._running and self._snmp_pid:
+        if self._running and self._snmp_pid > 0:
             try:
                 # Restart SNMP process if it terminates unexpectedly
                 pid, sts = os.waitpid(self._snmp_pid, os.WNOHANG)
