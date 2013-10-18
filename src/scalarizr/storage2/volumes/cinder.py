@@ -384,8 +384,7 @@ class CinderVolume(base.Volume):
 
         def exit_condition():
             vol[0] = self._cinder.volumes.get(volume_id)
-            LOG.debug('volume status: %s, type: %s', vol[0].status, type(vol[0].status))
-            return vol[0].status not in ('attaching', 'detaching', 'creating', None)
+            return vol[0].status not in ('attaching', 'detaching', 'creating')
 
         if not exit_condition():
             msg = 'Cinder volume %s hangs in transitional state. ' \
@@ -400,7 +399,7 @@ class CinderVolume(base.Volume):
                 msg = 'Cinder volume %s enters error state after %s.' % \
                     (volume_id, status)
                 raise storage2.StorageError(msg)
-            return vol[0].status
+        return vol[0].status
 
     def _wait_snapshot(self, snapshot_id):
         LOG.debug('Checking that Cinder snapshot %s is completed', snapshot_id)
