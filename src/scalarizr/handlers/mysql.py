@@ -1082,8 +1082,9 @@ class MysqlHandler(ServiceCtlHandler):
                         coreutils.remove(os.path.join(self._data_dir, 'relay-log.info'))
                         coreutils.remove(os.path.join(self._data_dir, 'master.info'))
                     except pexpect.TIMEOUT:
-                        raise HandlerError("Timeout (%d seconds) reached " +
-                                                "while waiting for slave stop and master reset." % (timeout,))
+                        msg = "Timeout (%d seconds) reached " \
+                                "while waiting for slave stop and master reset." % (timeout,)
+                        raise HandlerError(msg)
                     finally:
                         mysql.close()
 
@@ -1235,7 +1236,7 @@ class MysqlHandler(ServiceCtlHandler):
 
                     mysql_data = message.mysql.copy()
                     # New JSON format pass non-string types
-                    mysql_data = dict(zip(mysql_data.keys(), map(str, mysql_data.values())))
+                    mysql_data['replication_master'] = str(mysql_data['replication_master'])
 
                     for key, file in ((OPT_VOLUME_CNF, self._volume_config_path),
                                                     (OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
