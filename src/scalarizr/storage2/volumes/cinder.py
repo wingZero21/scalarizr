@@ -27,6 +27,11 @@ def name2device(name):
         name = name.replace('/vd', '/xvd')
     if storage2.RHEL_DEVICE_ORDERING_BUG:
         name = name[0:8] + chr(ord(name[8]) + 4) + name[9:]
+    if name.startswith('/dev/vd'):
+        devices = ['/dev/vd' + a for a in string.ascii_lowercase[1:16]]
+        devices = filter(lambda dev: not os.path.exists(dev), devices)
+        if devices:
+            return devices[0]
     return name
 
 
@@ -41,7 +46,7 @@ def device2name(device):
 class FreeDeviceLetterMgr(object):
 
     def __init__(self):
-        self._all = set(string.ascii_lowercase[1:16])
+        self._all = set(string.ascii_lowercase[2:16])
         self._acquired = set()
         self._lock = threading.Lock()
         self._local = threading.local()
@@ -178,8 +183,9 @@ class CinderVolume(base.Volume):
 
                 with self._free_device_letter_mgr:
                     name = '/dev/vd%s' % self._free_device_letter_mgr.get()
+                    device = name2device(name)
                     self._attach_volume(device_name=name)
-                    self.device = name2device(name)
+                    self.device = device
             elif not self.device:
                 self.device = volume.attachments[0]['device']
 
@@ -253,7 +259,11 @@ class CinderVolume(base.Volume):
         volume_id = self.id
         self._check_cinder_connection()
 
-        #volume attaching
+        # It's important to calculate device name here, cause 
+        # after device attachment, it will be counted as used      
+        device = name2device(device_name) 
+
+        #volume attaching  
         LOG.debug('Attaching Cinder volume %s (device: %s) to server %s',
                   volume_id,
                   device_name,
@@ -284,13 +294,12 @@ class CinderVolume(base.Volume):
                 LOG.debug('Will try attach volume again after %d seconds', ops_delay)
                 continue
             else:
-                msg = 'Unexpected status transition "available" -> "%s".' \
-                        ' Cinder volume %s' % (new_status, volume_id)
+                msg = 'Unexpected status transition "available" -> "{0}".' \
+                        ' Cinder volume {1}'.format(new_status, volume_id)
                 raise storage2.StorageError(msg)
 
 
         # Checking device availability in OS
-        device = name2device(device_name)
         LOG.debug('Cinder device name %s is mapped to %s in operation system',
                   device_name, device)
         LOG.debug('Checking that device %s is available', device)
@@ -390,7 +399,7 @@ class CinderVolume(base.Volume):
                 msg = 'Cinder volume %s enters error state after %s.' % \
                     (volume_id, status)
                 raise storage2.StorageError(msg)
-            return vol[0].status
+        return vol[0].status
 
     def _wait_snapshot(self, snapshot_id):
         LOG.debug('Checking that Cinder snapshot %s is completed', snapshot_id)

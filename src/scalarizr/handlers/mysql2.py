@@ -690,9 +690,10 @@ class MysqlHandler(DBMSRHandler):
                         self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
                         self.mysql._init_replication(master=True)
                         # Set read_only option
-                        self.mysql.my_cnf.read_only = False
+                        #self.mysql.my_cnf.read_only = False
                         self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
                         self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
+                        self.mysql.my_cnf.delete_options(['mysqld/read_only'])
                         self.mysql.service.start()
                         # Update __mysql__['behavior'] configuration
                         __mysql__.update({
@@ -739,7 +740,8 @@ class MysqlHandler(DBMSRHandler):
                         old_vol.mount()
                     raise
             else:
-                self.mysql.my_cnf.read_only = False
+                #self.mysql.my_cnf.read_only = False
+                self.mysql.my_cnf.delete_options(['mysqld/read_only'])
                 self.mysql.service.start()
 
                 self.root_client.stop_slave()

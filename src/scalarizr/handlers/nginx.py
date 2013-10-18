@@ -571,6 +571,18 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('Update main configuration file')
         dump = self._dump_config(config)
 
+        gzip_vary = config.get_list('http/gzip_vary')
+        if not gzip_vary:
+            config.add('http/gzip_vary', 'on')
+        gzip_proxied = config.get_list('http/gzip_proxied')
+        if not gzip_proxied:
+            config.add('http/gzip_proxied', 'any')
+        gzip_types = config.get_list('http/gzip_types')
+        if not gzip_types:
+            types = 'text/plain text/css application/json application/x-javascript' \
+                'text/xml application/xml application/xml+rss text/javascript'
+            config.add('http/gzip_types', types)
+
         include_list = config.get_list('http/include')
         if not self.api.app_inc_path in include_list:
             self._logger.debug('adding app-servers.include path to main config')

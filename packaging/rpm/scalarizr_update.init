@@ -6,7 +6,6 @@
 # description: Scalarizr is a part of Scalr project
 
 
-. /lib/lsb/init-functions
 . /etc/rc.d/init.d/functions
 
 SCALARIZR_INI='/etc/scalr/public.d/config.ini'
@@ -26,7 +25,7 @@ print p.get('general', '$1')
 }
 
 upd_wait_network() {
-	log_success_msg 'checking network'
+	echo -n 'checking network'
 	$PYTHON -c "
 import time
 import socket
@@ -41,11 +40,11 @@ for _ in range(0, 30):
 else:
     print 'error: Network unreachable'
     sys.exit(1)
-"
+" && success || failure
 }
 
 upd_update_scalarizr() {
-	log_success_msg 'checking scalarizr updates'
+	echo -n 'checking scalarizr updates'
 	PACKAGE="scalarizr-"$(upd_scalarizr_option 'platform')
 	$PYTHON -c "
 from upd.client.package_mgr import $PACKAGE_MGR_CLASS
@@ -62,7 +61,7 @@ versions = mgr.candidates('scalr-upd-client')
 if versions:
 	print 'Installing scalr-upd-client=%s' % versions[-1]
 	mgr.install('scalr-upd-client', versions[-1])
-"
+" && success || failure
 }
 
 
@@ -72,7 +71,8 @@ case "$1" in
 					upd_wait_network
 					upd_update_scalarizr
 				else
-					log_failure_msg "scalarizr config not found: $SCALARIZR_INI"
+					echo -n "scalarizr config not found: $SCALARIZR_INI"
+					failure
 					exit 1
 				fi
                 ;;
