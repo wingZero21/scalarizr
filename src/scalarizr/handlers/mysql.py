@@ -1234,6 +1234,9 @@ class MysqlHandler(ServiceCtlHandler):
                         os.makedirs(dir)
 
                     mysql_data = message.mysql.copy()
+                    # New JSON format pass non-string types
+                    mysql_data = dict(zip(mysql_data.keys(), map(str, mysql_data.values())))
+
                     for key, file in ((OPT_VOLUME_CNF, self._volume_config_path),
                                                     (OPT_SNAPSHOT_CNF, self._snapshot_config_path)):
                         if os.path.exists(file):
