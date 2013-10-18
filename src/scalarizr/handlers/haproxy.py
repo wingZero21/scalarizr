@@ -280,6 +280,7 @@ class HAProxyHandler(Handler):
         LOG.debug('HAProxyHandler on_HostDown')
         local_ip = msg.body.get('local_ip')
         try:
+            LOG.debug("removing server: %s", local_ip)
             self.api.remove_server(local_ip)
         except:
             LOG.error('HAProxyHandler.on_HostDown. Failed to remove server `%s`, '
