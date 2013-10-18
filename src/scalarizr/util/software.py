@@ -80,6 +80,8 @@ def system_info(verbose=False):
             'codename': linux.os['codename']
     }
 
+    ret['os']['arch'] = linux.os['arch']
+
     ret['storage'] = {}
     ret['storage']['fstypes'] = []
 
