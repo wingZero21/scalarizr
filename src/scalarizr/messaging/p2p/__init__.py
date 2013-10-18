@@ -13,7 +13,7 @@ import copy
 import sys
 
 from scalarizr.bus import bus
-from scalarizr.messaging import MessageService, Message, MetaOptions, MessagingError
+from scalarizr.messaging import MessageService, Message, Queues, MetaOptions, MessagingError
 from scalarizr.messaging.p2p.security import P2pMessageSecurity
 
 
@@ -76,6 +76,10 @@ class P2pMessageService(MessageService):
         p = producer.P2pMessageProducer(**params)
         p.filters['protocol'].append(self._security.out_protocol_filter)
         return p
+
+    def send(self, name, body=None, meta=None, queue=None):
+        msg = self.new_message(name, meta, body)
+        self.get_producer().send(queue or Queues.CONTROL, msg)
 
 
 def new_service(**kwargs):

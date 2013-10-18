@@ -6,7 +6,7 @@ import time
 import logging
 
 from scalarizr import rpc
-from scalarizr.bus import bus
+from scalarizr.node import __node__
 from scalarizr.util import Singleton
 from scalarizr.messaging import Queues, Messages
 
@@ -115,9 +115,7 @@ class Operation(object):
             self.fail()
         finally:
             self.finished_at = time.time()
-            svs = bus.messaging_service
-            msg = svs.new_message(Messages.OPERATION_RESULT, None, self.serialize())
-            svs.get_producer().send(Queues.CONTROL, msg)
+            __node__['messaging'].send('OperationResult', body=self.serialize())
 
     def execute(self):
         self._run()
