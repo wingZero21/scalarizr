@@ -37,7 +37,7 @@ class Compound(dict):
 
     def __getattr__(self, name):
         try:
-            self.__getitem__(name)
+            return self.__getitem__(name)
         except KeyError:
             raise AttributeError(name)
 
