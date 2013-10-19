@@ -58,8 +58,8 @@ class FreeDeviceLetterMgr(object):
 
             volumes = cinder.volumes.list()
             devices = [atmt['device'] 
-                        for atmt in vol.attachments 
                         for vol in volumes 
+                        for atmt in vol.attachments
                         if atmt['server_id'] == __openstack__['server_id']]
             acquired = set(device[-1] for device in devices)
 
