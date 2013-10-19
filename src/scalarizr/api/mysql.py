@@ -29,7 +29,7 @@ class MySQLAPI(object):
         self._mysql_init = mysql_svc.MysqlInitScript()
         self._op_api = operation.OperationAPI()
 
-    @rpc.service_method
+    @rpc.command_method
     def grow_volume(self, volume, growth, async=False):
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
@@ -54,7 +54,7 @@ class MySQLAPI(object):
     def _check_empty(self, param, name):
         assert param, self.error_messages['empty'] % name
 
-    @rpc.service_method
+    @rpc.command_method
     def reset_password(self, new_password=None):
         """
         Reset password for MySQL user 'scalr_master'. Return new password
@@ -79,7 +79,7 @@ class MySQLAPI(object):
 
         return new_password
 
-    @rpc.service_method
+    @rpc.query_method
     def replication_status(self):
         mysql_cli = mysql_svc.MySQLClient(__mysql__['root_user'],
                                           __mysql__['root_password'])

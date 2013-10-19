@@ -41,7 +41,7 @@ class RedisAPI(object):
         ini = self._cnf.rawini
         self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 
-    @rpc.service_method
+    @rpc.command_method
     def launch_processes(self, num=None, ports=None, passwords=None, async=False):
         if ports and passwords and len(ports) != len(passwords):
             raise AssertionError('Number of ports must be equal to number of passwords')
@@ -68,14 +68,14 @@ class RedisAPI(object):
         return self._op_api.go_with('Launch Redis processes', do_launch_processes, async=async)
 
 
-    @rpc.service_method
+    @rpc.command_method
     def shutdown_processes(self, ports, remove_data=False, async=False):
         def do_shutdown_processes(op):
             return self._shutdown(ports, remove_data)
         return self._op_api.go_with('Shutdown Redis processes', do_shutdown_processes, async=async)
 
 
-    @rpc.service_method
+    @rpc.query_method
     def list_processes(self):
         return self.get_running_processes()
 
@@ -217,7 +217,7 @@ class RedisAPI(object):
         return host
 
 
-    @rpc.service_method
+    @rpc.command_method
     def reset_password(self, port=__redis__['defaults']['port'], new_password=None):
         """ Reset auth for Redis process on port `port`. Return new password """
         if not new_password:
@@ -238,7 +238,7 @@ class RedisAPI(object):
         return new_password
 
 
-    @rpc.service_method
+    @rpc.query_method
     def replication_status(self):
         ri = redis_service.RedisInstances()
 

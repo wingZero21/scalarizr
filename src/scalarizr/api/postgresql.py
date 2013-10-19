@@ -24,7 +24,7 @@ class PostgreSQLAPI(object):
     AS xlog_delay;
     '''
 
-    @rpc.service_method
+    @rpc.command_method
     def reset_password(self, new_password=None):
         """ Reset password for PostgreSQL user 'scalr_master'. Return new password """
         if not new_password:
@@ -70,7 +70,7 @@ class PostgreSQLAPI(object):
         result['xlog_delay'] = diff_match.group().splitlines()[-1].strip()
         return result
 
-    @rpc.service_method
+    @rpc.query_method
     def replication_status(self):
         psql = postgresql_svc.PSQL()
         try:

@@ -27,7 +27,7 @@ class OperationAPI(object):
         self.rotate_thread.setDaemon(True)
         self.rotate_thread.start()
 
-    @rpc.service_method
+    @rpc.query_method
     def result(self, operation_id=None):
         return self.get(operation_id).serialize()
 
