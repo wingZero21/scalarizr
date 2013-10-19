@@ -52,18 +52,27 @@ class FreeDeviceLetterMgr(object):
         self._local = threading.local()
 
     def __enter__(self):
-        letters = list(self._all - self._acquired)
-        letters.sort()
-        for l in letters:
-            pattern = name2device('/dev/vd' + l) + '*'
-            if not glob.glob(pattern):
-                with self._lock:
-                    if not l in self._acquired:
-                        self._acquired.add(l)
-                        self._local.letter = l
-                        return self
-        msg = 'No free letters for block device name remains'
-        raise storage2.StorageError(msg)
+        with self._lock:
+            cinder = __openstack__['new_cinder_connection']
+            cinder.reconnect()
+
+            volumes = cinder.volumes.list()
+            devices = [atmt['device'] 
+                        for vol in volumes 
+                        for atmt in vol.attachments
+                        if atmt['server_id'] == __openstack__['server_id']]
+            acquired = set(device[-1] for device in devices)
+
+            letters = list(self._all - acquired)
+            letters.sort()
+            if letters:
+                letter = letters[0]
+                self._acquired.add(letter)
+                self._local.letter = letter
+                return self
+
+            msg = 'No free letters for block device name remains'
+            raise storage2.StorageError(msg)
 
     def get(self):
         return self._local.letter
