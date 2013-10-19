@@ -145,14 +145,12 @@ class Operation(object):
             'id': self.operation_id,
             'name': self.name,
             'status': self.status,
-            'result': None,
+            'result': self.result,
             'error': None,
             'trace': None,
             'logs': self.logs
         }
-        if self.status == 'completed':
-            ret['result'] = self.result
-        else:
+        if self.status == 'failed':
             ret['error'] = str(self.error[1])
             ret['trace'] = '\n'.join(traceback.format_tb(self.error[2]))
         return ret
