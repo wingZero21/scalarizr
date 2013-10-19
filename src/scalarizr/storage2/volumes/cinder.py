@@ -54,6 +54,7 @@ class FreeDeviceLetterMgr(object):
     def __enter__(self):
         with self._lock:
             cinder = __openstack__['new_cinder_connection']
+            cinder.reconnect()
 
             volumes = cinder.volumes.list()
             devices = [atmt['device'] 
