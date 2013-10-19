@@ -393,7 +393,7 @@ __node__['scalr'] = Compound({
 })
 
 __node__['messaging'] = Compound({
-    'send': Attr('scalarizr.bus', 'bus.message_service.send')
+    'send': Attr('scalarizr.bus', 'bus.messaging_service.send')
 })
 __node__ = Compound(__node__)
 
