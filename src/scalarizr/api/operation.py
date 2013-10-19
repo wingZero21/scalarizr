@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 import logging
+import traceback
 
 from scalarizr import rpc
 from scalarizr.node import __node__
@@ -80,7 +81,7 @@ class _LogHandler(logging.Handler):
         super(_LogHandler, self).__init__(logging.INFO)
 
     def emit(self, record):
-        self.op.logs.append(record)
+        self.op.logs.append(self.format(record))
 
 
 class Operation(object):
@@ -132,8 +133,8 @@ class Operation(object):
     def fail(self, *exc_info):
         self.error = exc_info or sys.exc_info()
         self.status = 'failed'
-        self.logger.error('Operation "%s" (id: %s) failed', 
-                self.name, self.operation_id, exc_info=self.error)
+        self.logger.error('Operation "%s" (id: %s) failed. Reason: %s', 
+                self.name, self.operation_id, self.error[1])
 
     def complete(self, result=None):
         self.result = result
@@ -146,10 +147,12 @@ class Operation(object):
             'status': self.status,
             'result': None,
             'error': None,
-            'logs': 'todo: serialize {0} log entries'.format(len(self.logs))
+            'trace': None,
+            'logs': self.logs
         }
         if self.status == 'completed':
             ret['result'] = self.result
         else:
-            ret['error'] =  'todo: serialize exception',
+            ret['error'] = str(self.error[1])
+            ret['trace'] = '\n'.join(traceback.format_tb(self.error[2]))
         return ret
