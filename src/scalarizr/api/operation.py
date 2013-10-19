@@ -78,7 +78,7 @@ class OperationAPI(object):
 class _LogHandler(logging.Handler):
     def __init__(self, op):
         self.op = op
-        super(_LogHandler, self).__init__(logging.INFO)
+        logging.Handler.__init__(self, logging.INFO)
 
     def emit(self, record):
         self.op.logs.append(self.format(record))
