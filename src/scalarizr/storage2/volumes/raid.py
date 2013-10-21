@@ -6,6 +6,7 @@ __author__ = 'Nick Demyanchuk'
 import os
 import re
 import sys
+import time
 import Queue
 import base64
 import logging
@@ -127,6 +128,7 @@ class RaidVolume(base.Volume):
         disks_devices = [disk.device for disk in self.disks]
 
         if self.lvm_group_cfg:
+            time.sleep(2)  # Give a time to device manager 
             try:
                 raid_device = mdadm.mdfind(*disks_devices)
             except storage2.StorageError:
