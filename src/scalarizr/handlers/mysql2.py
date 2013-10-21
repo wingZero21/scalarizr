@@ -694,7 +694,7 @@ class MysqlHandler(DBMSRHandler):
                         self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
                         self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
                         self.mysql.my_cnf.delete_options(['mysqld/read_only'])
-                        self.mysql.service.start()
+                        self.mysql.service.restart()
                         # Update __mysql__['behavior'] configuration
                         __mysql__.update({
                                 'replication_master': 1,
@@ -742,7 +742,7 @@ class MysqlHandler(DBMSRHandler):
             else:
                 #self.mysql.my_cnf.read_only = False
                 self.mysql.my_cnf.delete_options(['mysqld/read_only'])
-                self.mysql.service.start()
+                self.mysql.service.restart()
 
                 self.root_client.stop_slave()
                 self.root_client.reset_master()
