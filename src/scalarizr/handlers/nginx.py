@@ -184,15 +184,6 @@ class NginxHandler(ServiceCtlHandler):
                              Messages.VHOST_RECONFIGURE,
                              Messages.UPDATE_SERVICE_CONFIGURATION)
 
-    def get_initialization_phases(self, hir_message):
-        self._phase = 'Configure Nginx'
-        self._step_setup_proxying = 'Setup proxying'
-        self._step_copy_error_pages = 'Copy default html error pages'
-
-        return {'before_host_up': [{
-                    'name': self._phase,
-                    'steps': [self._step_copy_error_pages,
-                              self._step_setup_proxying]}]}
 
     def _set_nginx_v2_mode_flag(self, on):
         if on and not self._get_nginx_v2_mode_flag():
@@ -239,29 +230,28 @@ class NginxHandler(ServiceCtlHandler):
 
     def on_before_host_up(self, message):
         self._logger.debug('Handling on_before_host_up message')
-        with bus.initialization_op as op:
-            with op.phase(self._phase):
+        log = bus.init_op.logger
 
-                with op.step(self._step_copy_error_pages):
-                    self._copy_error_pages()
+        log.info('Copy default html error pages')
+        self._copy_error_pages()
 
-                with op.step(self._step_setup_proxying):
-                    self._logger.debug('Updating main config')
-                    v2_mode = bool(self._proxies) or self._get_nginx_v2_mode_flag()
-                    self._update_main_config(remove_server_section=v2_mode,
-                                             reload_service=False)
+        log.info('Setup proxying')
+        self._logger.debug('Updating main config')
+        v2_mode = bool(self._proxies) or self._get_nginx_v2_mode_flag()
+        self._update_main_config(remove_server_section=v2_mode,
+                                 reload_service=False)
 
-                    if v2_mode:
-                        self._logger.debug('Recreating proxying with proxies:\n%s' % self._proxies)
-                        self.api.recreate_proxying(self._proxies)
-                    else:
-                        # default behaviour
-                        roles_for_proxy = []
-                        if __nginx__['upstream_app_role']:
-                            roles_for_proxy = [__nginx__['upstream_app_role']]
-                        else:
-                            roles_for_proxy = self.get_all_app_roles()
-                        self.make_default_proxy(roles_for_proxy)
+        if v2_mode:
+            self._logger.debug('Recreating proxying with proxies:\n%s' % self._proxies)
+            self.api.recreate_proxying(self._proxies)
+        else:
+            # default behaviour
+            roles_for_proxy = []
+            if __nginx__['upstream_app_role']:
+                roles_for_proxy = [__nginx__['upstream_app_role']]
+            else:
+                roles_for_proxy = self.get_all_app_roles()
+            self.make_default_proxy(roles_for_proxy)
 
         bus.fire('service_configured',
                  service_name=SERVICE_NAME,

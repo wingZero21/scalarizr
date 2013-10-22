@@ -214,7 +214,7 @@ class HAProxyAPI(object):
                 self.remove_server(server=server, backend=backend)
 
 
-    @rpc.service_method
+    @rpc.command_method
     def add_server(self, server=None, backend=None):
         '''Add server with ipaddr in backend section'''
         self.cfg.reload()
@@ -246,7 +246,7 @@ class HAProxyAPI(object):
         self.svc.reload()
 
 
-    @rpc.service_method
+    @rpc.command_method
     def remove_server(self, server, backend=None):
         '''Remove server from backend section with ipaddr'''
         if backend: 
@@ -308,7 +308,7 @@ class HAProxyAPI(object):
 # ---
 
 
-    @rpc.service_method
+    @rpc.command_method
     @validate.param('port', 'server_port', type=int)
     @validate.param('protocol', required=_rule_protocol)
     @validate.param('server_port', optional=True, type=int)
@@ -380,7 +380,7 @@ class HAProxyAPI(object):
             return listener
 
 
-    @rpc.service_method
+    @rpc.command_method
     @validate.param('unhealthy_threshold', 'healthy_threshold', type=int)
     @validate.param('target', optional=_rule_hc_target)
     @validate.param('interval', 'timeout', re=r'(^\d+[smhd]$)|^\d')
@@ -429,7 +429,7 @@ class HAProxyAPI(object):
     
 
 
-    @rpc.service_method
+    @rpc.query_method
     @validate.param('ipaddr', type='ipv4', optional=True)
     def get_servers_health(self, ipaddr=None):
         try:
@@ -447,7 +447,7 @@ class HAProxyAPI(object):
         return stats
 
 
-    @rpc.service_method
+    @rpc.command_method
     @validate.param('port', type=int)
     @validate.param('protocol', required=_rule_protocol)
     def delete_listener(self, port=None, protocol=None):
@@ -489,7 +489,7 @@ class HAProxyAPI(object):
         self.svc.reload()
 
 
-    @rpc.service_method
+    @rpc.command_method
     @validate.param('target', required=_rule_hc_target)
     def reset_healthcheck(self, target):
         '''Return to defaults for `tartget` backend sections'''
@@ -509,7 +509,7 @@ class HAProxyAPI(object):
         self.svc.reload()
 
 
-    @rpc.service_method
+    @rpc.query_method
     def list_listeners(self):
         '''
         @return: Listeners list
@@ -539,7 +539,7 @@ class HAProxyAPI(object):
         return res
 
 
-    @rpc.service_method
+    @rpc.query_method
     def list_servers(self, backend=None):
         '''
         List all servers, or servers from particular backend

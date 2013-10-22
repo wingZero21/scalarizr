@@ -4,6 +4,7 @@ import os
 import re
 import ConfigParser
 import sys
+import copy
 try:
     import json
 except ImportError:
@@ -20,75 +21,61 @@ public_dir = os.path.join(base_dir, 'public.d')
 storage_dir = os.path.join(base_dir, 'storage')
 
 
-class Store(dict):
-    def __len__(self):
-        return 1
+class Store(object):
 
     def __repr__(self):
         return '<%s at %s>' % (type(self).__name__, hex(id(self)))
 
-    def __contains__(self, key):
-        try:
-            self.__getitem__(key)
-            return True
-        except KeyError:
-            return False
 
-    def update(self, *args, **kwds):
-        if args:
-            if len(args) == 1 and isinstance(args[0], dict):
-                kwds = args[0]
-            else:
-                kwds = dict(args)
-        for key, value in kwds.items():
-            self.__setitem__(key, value)
-    
-
-
-class Compound(Store):
+class Compound(dict):
     def __init__(self, patterns=None):
-        self.__re_map = {}
-        self.__plain_map = {}
         patterns = patterns or {}
         for pattern, store in patterns.items():
             keys = pattern.split(',')
             for key in keys:
-                if '*' in key:
-                    key = re.compile(r'^%s$' % key.replace('*', '.+'))
-                    self.__re_map[key] = store
-                elif isinstance(store, Store):
-                    self.__plain_map[key] = store
-                else:
-                    dict.__setitem__(self, key, store)
+                super(Compound, self).__setitem__(key, store)
 
+    def __getattr__(self, name):
+        try:
+            return self.__getitem__(name)
+        except KeyError:
+            raise AttributeError(name)
 
     def __setitem__(self, key, value):
-        store = self.__find_store(key)
-        if store:
-            store.__setitem__(key, value)
+        try:
+            value_now = self.__getitem__(key)
+        except KeyError:
+            value_now = None
+        if isinstance(value_now, Store):
+            value_now.__setitem__(key, value)
         else:
-            dict.__setitem__(self, key, value)
+            super(Compound, self).__setitem__(key, value)
 
 
     def __getitem__(self, key):
-        store = self.__find_store(key)
-        if store:
-            if isinstance(store, Compound):
-                return store
-            else:
-                return store.__getitem__(key)
+        value = super(Compound, self).__getitem__(key)
+        if isinstance(value, Store):
+            return value.__getitem__(key)
         else:
-            return dict.__getitem__(self, key)
+            return value
 
+    def copy(self):
+        ret = Compound()
+        for key in self:
+            value = dict.__getitem__(self, key)
+            if isinstance(value, Store):
+                value = copy.deepcopy(value)
+            ret[key] = value
+        return ret
 
-    def __find_store(self, key):
-        if key in self.__plain_map:
-            return self.__plain_map[key]
-        else:
-            for rkey, store in self.__re_map.items():
-                if rkey.match(key):
-                    return store
-
+    def __repr__(self):
+        ret = {}
+        for key in self:
+            value = dict.__getitem__(self, key)
+            if isinstance(value, Store):
+                value = repr(value)
+            ret[key] = value
+        return repr(ret)
 
 
 class Json(Store):
@@ -316,7 +303,7 @@ for behavior in ('mysql', 'mysql2', 'percona', 'mariadb'):
             'volume,volume_config': 
                             Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
                                     'scalarizr.storage2.volume'),
-            '*_password,log_*,replication_master': 
+            'root_password,repl_password,stat_password,log_file,log_pos,replication_master': 
                             Ini('%s/%s.ini' % (private_dir, behavior), section),
             'mysqldump_options': 
                             Ini('%s/%s.ini' % (public_dir, behavior), section)
@@ -404,4 +391,12 @@ __node__['scalr'] = Compound({
         'version': File(os.path.join(private_dir, '.scalr-version')),
         'id': Ini(os.path.join(private_dir, 'config.ini'), 'general', {'id': 'scalr_id'})
 })
+
+__node__['messaging'] = Compound({
+    'send': Attr('scalarizr.bus', 'bus.messaging_service.send')
+})
 __node__ = Compound(__node__)
+
+
+
+

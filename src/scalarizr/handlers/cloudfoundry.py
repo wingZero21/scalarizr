@@ -1,11 +1,8 @@
-from __future__ import with_statement
 '''
 Created on Aug 29, 2011
 
 @author: marat
 '''
-
-from __future__ import with_statement
 
 from scalarizr import config
 from scalarizr import handlers
@@ -139,7 +136,7 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
         return bool(host)
 
 
-    def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+    def accept(self, message, queue, **kwds):
         result = message.name in (
                         messaging.Messages.HOST_INIT,
                         messaging.Messages.HOST_DOWN,
@@ -147,20 +144,6 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
                         messaging.Messages.BEFORE_HOST_TERMINATE)
         return result
 
-    def get_initialization_phases(self, hir_message):
-        self._phase_cloudfoundry = 'Configure CloudFoundry'
-        self._step_locate_cloud_controller = 'Locate CloudController'
-        self._step_patch_conf = 'Patch configuration files'
-        self._step_start_svs = 'Start services'
-
-        return {'host_init_response': [{
-                'name': self._phase_cloudfoundry,
-                'steps': [
-                        self._step_locate_cloud_controller,
-                        self._step_patch_conf,
-                        self._step_start_svs
-                ]
-        }]}
 
     def on_init(self, *args, **kwds):
         LOG.debug('Called on_init')
@@ -184,29 +167,27 @@ class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
     def on_before_host_up(self, msg):
         LOG.debug('Called on_before_host_up')
+        log = bus.init_op.logger if bus.init_op else LOG
 
-        with bus.initialization_op as op:
-            with op.phase(self._phase_cloudfoundry):
+        log.info('Locating CloudController')
+        self._locate_cloud_controller()
 
-                with op.step(self._step_locate_cloud_controller):
-                    self._locate_cloud_controller()
+        log.info('Patching configuration files')
+        LOG.debug('Setting ip route')
+        for name in _components:
+            _cf.components[name].ip_route = local_ip()
+        LOG.debug('Creating log directories')
+        for name in _components:
+            cmp = _cf.components[name]
+            if 'log_file' in cmp.config:
+                dir = os.path.dirname(cmp.config['log_file'])
+                if not os.path.exists(dir):
+                    os.makedirs(dir)
+        for name in _services:
+            _cf.services[name].ip_route = local_ip()
 
-                with op.step(self._step_patch_conf):
-                    LOG.debug('Setting ip route')
-                    for name in _components:
-                        _cf.components[name].ip_route = local_ip()
-                    LOG.debug('Creating log directories')
-                    for name in _components:
-                        cmp = _cf.components[name]
-                        if 'log_file' in cmp.config:
-                            dir = os.path.dirname(cmp.config['log_file'])
-                            if not os.path.exists(dir):
-                                os.makedirs(dir)
-                    for name in _services:
-                        _cf.services[name].ip_route = local_ip()
-
-                with op.step(self._step_start_svs):
-                    self._start_services()
+        log.info('Starting services')
+        self._start_services()
 
 
     def on_HostUp(self, msg):
@@ -231,6 +212,7 @@ class CloudControllerHandler(handlers.Handler):
     LOG = logging.getLogger(__name__ + '.cloud_controller')
 
     def __init__(self):
+        super(CloudControllerHandler, self).__init__()
         bus.on(init=self.on_init)
 
     def _set_volume_config(self, cnf):
@@ -338,12 +320,6 @@ class CloudControllerHandler(handlers.Handler):
             )
             self._init_objects()
 
-            self._phase_cloudfoundry = 'Configure CloudFoundry'
-            self._step_create_storage = 'Create VCAP data storage'
-            self._step_locate_nginx = 'Locate Nginx frontend'
-            self._step_create_database = 'Create CloudController database'
-
-
     def on_reload(self):
         self._init_objects()
 
@@ -358,44 +334,46 @@ class CloudControllerHandler(handlers.Handler):
         '''
         Store volume configuration from HIR message
         '''
+        log = bus.init_op.logger if bus.init_op else self.LOG
         self.LOG.debug('Called on_host_init_response')
         ini = msg.body.get(_bhs.cloud_controller, {})
-        self.volume_config = ini.pop('volume_config',
-                                                                dict(type='loop',file='/mnt/cfdata.loop',size=500))
+        self.volume_config = ini.pop('volume_config', dict(
+            type='loop', 
+            file='/mnt/cfdata.loop',
+            size=500
+        ))
 
         '''
         Plug storage, initialize database
         Why here? cause before_host_up routines could be executed after MysqlHandler
         and it will lead to fail
         '''
-        with bus.initialization_op as op:
-            with op.phase(self._phase_cloudfoundry):
-                with op.step(self._step_create_storage):
-                    # Initialize storage
-                    LOG.info('Initializing vcap data storage')
-                    tmp_mpoint = '/mnt/tmp.vcap'
-                    try:
-                        self.volume = self._plug_storage(mpoint=tmp_mpoint)
-                        if not _cf.valid_datadir(tmp_mpoint):
-                            LOG.info('Copying data from %s to storage', _datadir)
-                            rsync(_datadir + '/', tmp_mpoint, archive=True, delete=True)
 
-                        LOG.debug('Mounting storage to %s', _datadir)
-                        self.volume.umount()
-                        self.volume.mount(_datadir)
-                    except:
-                        LOG.exception('Failed to initialize storage')
-                    finally:
-                        if os.path.exists(tmp_mpoint):
-                            os.removedirs(tmp_mpoint)
-                    self.volume_config = self.volume.config()
+        log.info('Creating VCAP data storage')
+        # Initialize storage
+        tmp_mpoint = '/mnt/tmp.vcap'
+        try:
+            self.volume = self._plug_storage(mpoint=tmp_mpoint)
+            if not _cf.valid_datadir(tmp_mpoint):
+                LOG.info('Copying data from %s to storage', _datadir)
+                rsync(_datadir + '/', tmp_mpoint, archive=True, delete=True)
 
-                with op.step(self._step_locate_nginx):
-                    _cf.components['cloud_controller'].allow_external_app_uris = True
-                    self._locate_nginx()
+            LOG.debug('Mounting storage to %s', _datadir)
+            self.volume.umount()
+            self.volume.mount(_datadir)
+        except:
+            LOG.exception('Failed to initialize storage')
+        finally:
+            if os.path.exists(tmp_mpoint):
+                os.removedirs(tmp_mpoint)
+        self.volume_config = self.volume.config()
 
-                with op.step(self._step_create_database):
-                    _cf.init_db()
+        log.info('Locating Nginx frontend')
+        _cf.components['cloud_controller'].allow_external_app_uris = True
+        self._locate_nginx()
+
+        log.info('Creating CloudController database')
+        _cf.init_db()
 
 
     def on_before_host_up(self, msg):
@@ -405,7 +383,7 @@ class CloudControllerHandler(handlers.Handler):
 
 class SvssHandler(handlers.Handler):
 
-    def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+    def accept(self, message, queue, **kwds):
         return is_service() and message.name in (messaging.Messages.HOST_INIT_RESPONSE, )
 
     def on_HostInitResponse(self, msg):
