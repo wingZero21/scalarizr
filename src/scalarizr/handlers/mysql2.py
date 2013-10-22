@@ -960,8 +960,9 @@ class MysqlHandler(DBMSRHandler):
             return
         if disttool.is_redhat_based():
             LOG.debug('Changing SELinux file security context for new mysql datadir')
-            system2((chcon, '-R', '-h', 'system_u:object_r:mysqld_db_t',
-                            os.path.dirname(__mysql__['storage_dir'])), raise_exc=False)
+            system2((chcon, '-R', '-u', 'system_u', '-r',
+                     'object_r', '-t', 'mysqld_db_t', os.path.dirname(__mysql__['storage_dir'])), raise_exc=False)
+
 
     def _fix_percona_debian_cnf(self):
         if __mysql__['behavior'] == 'percona' and \
@@ -1038,11 +1039,11 @@ class MysqlHandler(DBMSRHandler):
                                         mgr = pkgmgr.package_mgr()
                                         mgr.install('policycoreutils-python')
                                         semanage = software.which('semanage')
-                                    linux.system([semanage, 'fcontext', '-a', '-t', 'mysqld_db_t',
-                                                                                '"%s(/.*)?"' % __mysql__['storage_dir']])
+                                    linux.system('%s fcontext -a -t mysqld_db_t "%s(/.*)?"'
+                                                 % (semanage, __mysql__['storage_dir']), shell=True)
                                     # Restore selinux context
                                     restorecon = software.which('restorecon')
-                                    linux.system([restorecon, '-R', '-v', __mysql__['storage_dir']])
+                                    linux.system('%s -R -v %s' % (restorecon, __mysql__['storage_dir']), shell=True)
                         except:
                            LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
 
