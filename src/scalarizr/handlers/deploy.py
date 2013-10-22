@@ -1,11 +1,8 @@
-from __future__ import with_statement
 '''
 Created on Apr 6, 2011
 
 @author: marat
 '''
-
-from __future__ import with_statement
 
 import os
 import sys
@@ -17,8 +14,9 @@ import mimetypes
 from urlparse import urlparse
 
 from scalarizr.bus import bus
+from scalarizr.api import operation
 from scalarizr.messaging import Messages, Queues
-from scalarizr.handlers import Handler, script_executor, operation
+from scalarizr.handlers import Handler, script_executor
 from scalarizr.util import system2, dicts
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
@@ -41,27 +39,17 @@ def get_handlers():
 class DeploymentHandler(Handler):
 
     def __init__(self):
+        super(DeploymentHandler, self).__init__()
         self._logger = logging.getLogger(__name__)
         self._log_hdlr = DeployLogHandler()
-        self._script_executor = None
-
-        self._phase_deploy = 'Deploy'
-        self._step_execute_pre_deploy_script = 'Execute pre deploy script'
-        self._step_execute_post_deploy_script = 'Execute post deploy script'
-        self._step_update_from_scm = 'Update from SCM'
-        
+        self._script_executor = None        
         bus.on(init=self.on_init)
 
     def on_init(self):
         bus.on(host_init_response=self.on_host_init_response)
         
-
-    def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+    def accept(self, message, queue, **kwds):
         return message.name == Messages.DEPLOY
-
-    def get_initialization_phases(self, hir_message):
-        if 'deploy' in hir_message.body:
-            return {'host_init_response': [self._get_phase_definition(hir_message)]}
         
     def on_host_init_response(self, message):
         if 'deploy' in message.body:
@@ -77,30 +65,11 @@ class DeploymentHandler(Handler):
         kwargs = dict(name=name, body=body, exec_timeout=exec_timeout or 3600)
         self._script_executor.execute_scripts(scripts=(script_executor.Script(**kwargs), ))
     
-    def _get_phase_definition(self, message):
-        steps = []
-        if 'pre_deploy_routines' in message.body:
-            steps.append(self._step_execute_pre_deploy_script)
-        steps.append(self._step_update_from_scm)
-        if 'post_deploy_routines' in message.body:
-            steps.append(self._step_execute_post_deploy_script)
-            
-        return {'name': self._phase_deploy, 'steps': steps}
-        
-    
     def on_Deploy(self, message, define_operation=True, raise_exc=False):
         msg_body = dicts.encode(message.body, encoding='ascii')        
-        
-        try:
-            if define_operation:
-                op = operation(name='Deploy')
-                op.phases = self._get_phase_definition(message)
-                op.define()
-            else:
-                op = bus.initialization_op
-            
-            with op.phase(self._phase_deploy):
-                            
+     
+        def handler(op):
+            try:            
                 assert 'deploy_task_id' in msg_body, 'deploy task is undefined'
                 assert 'source' in msg_body, 'source is undefined'
                 assert 'type' in msg_body['source'], 'source type is undefined'
@@ -115,15 +84,15 @@ class DeploymentHandler(Handler):
                 src = Source.from_type(src_type, **msg_body['source'])
                 
                 if msg_body.get('pre_deploy_routines') and msg_body['pre_deploy_routines'].get('body'):
-                    with op.step(self._step_execute_pre_deploy_script):
-                        self._exec_script(name='PreDeploy', **msg_body['pre_deploy_routines'])
+                    op.logger.info('Execute pre deploy script')
+                    self._exec_script(name='PreDeploy', **msg_body['pre_deploy_routines'])
                         
-                with op.step(self._step_update_from_scm):
-                    src.update(msg_body['remote_path'])
+                op.logger.info('Update from SCM')
+                src.update(msg_body['remote_path'])
                     
                 if msg_body.get('post_deploy_routines') and msg_body['post_deploy_routines'].get('body'):
-                    with op.step(self._step_execute_post_deploy_script):
-                        self._exec_script(name='PostDeploy', **msg_body['post_deploy_routines'])
+                    op.logger.info('Execute post deploy script')
+                    self._exec_script(name='PostDeploy', **msg_body['post_deploy_routines'])
     
                 self.send_message(
                     Messages.DEPLOY_RESULT, 
@@ -132,25 +101,30 @@ class DeploymentHandler(Handler):
                         deploy_task_id=msg_body['deploy_task_id']
                     )
                 )
-                
-            if define_operation:
-                op.ok()
-            
-        except (Exception, BaseException), e:
-            self._logger.exception(e)
-            self.send_message(
-                Messages.DEPLOY_RESULT, 
-                dict(
-                    status='error', 
-                    last_error=str(e), 
-                    deploy_task_id=msg_body['deploy_task_id']
+
+            except (Exception, BaseException), e:
+                if not raise_exc:
+                    self._logger.exception(e)
+                self.send_message(
+                    Messages.DEPLOY_RESULT, 
+                    dict(
+                        status='error', 
+                        last_error=str(e), 
+                        deploy_task_id=msg_body['deploy_task_id']
+                    )
                 )
-            )
-            if raise_exc:
-                raise
-            
-        finally:
-            self._logger.removeHandler(self._log_hdlr)
+                if raise_exc:
+                    raise
+                
+            finally:
+                self._logger.removeHandler(self._log_hdlr)
+
+        if define_operation:
+            op_api = operation.OperationAPI()
+            op = op_api.create('Deploy', handler)
+            op.execute()
+        else:
+            handler(bus.init_op)
 
 
 class Source(object):
@@ -175,8 +149,9 @@ class SvnSource(Source):
         self.executable = self.EXECUTABLE
         
     def update(self, workdir):
+        log = bus.init_op.logger if bus.init_op else self._logger
         if not os.access(self.executable, os.X_OK):
-            self._logger.info('Installing Subversion SCM...')
+            log.info('Installing Subversion SCM...')
             pkgmgr.installed('subversion')
         
         do_update = False
@@ -212,10 +187,10 @@ class SvnSource(Source):
             args += [self.url]
         args += [workdir]
         
-        self._logger.info('Updating source from %s into working dir %s', self.url, workdir)        
+        log.info('Updating source from %s into working dir %s', self.url, workdir)        
         out = system2(args)[0]
         self._logger.info(out)
-        self._logger.info('Deploying %s to %s has been completed successfully.', 
+        log.info('Deploying %s to %s has been completed successfully.', 
                         self.url, workdir)
         
     @property
@@ -238,8 +213,9 @@ class GitSource(Source):
 
 
     def update(self, workdir):
+        log = bus.init_op.logger if bus.init_op else self._logger
         if not os.access(self.executable, os.X_OK):
-            self._logger.info('Installing Git SCM...')
+            log.info('Installing Git SCM...')
             if linux.os['family'] == 'Debian':
                 package = 'git-core'
             else:
@@ -277,16 +253,16 @@ class GitSource(Source):
 
                     out, err, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
                 else:
-                    self._logger.info('Updating directory %s (git-pull)', workdir)
+                    log.info('Updating directory %s (git-pull)', workdir)
                     out, err, ret_code = system2(('git', 'pull'), env=env, cwd=workdir)
             else:
-                self._logger.info('Checkout from %s', self.url)
+                log.info('Checkout from %s', self.url)
                 out, err, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
 
             if ret_code:
                 raise Exception('Git failed to clone repository. %s' % out)
 
-            self._logger.info('Successfully deployed %s from %s', workdir, self.url)
+            log.info('Successfully deployed %s from %s', workdir, self.url)
         finally:
             shutil.rmtree(tmpdir)
         
@@ -298,13 +274,14 @@ class HttpSource(Source):
         self.url = url
 
     def update(self, workdir):
-        
+        log = bus.init_op.logger if bus.init_op else self._logger
+
         if not os.path.exists(workdir):
             os.makedirs(workdir)
         
         purl = urlparse(self.url)
         
-        self._logger.info('Downloading %s', self.url)
+        log.info('Downloading %s', self.url)
         try:
             hdlrs = [urllib2.HTTPRedirectHandler()]
             if purl.scheme == 'https':
@@ -327,7 +304,7 @@ class HttpSource(Source):
             self._logger.debug('%d bytes downloaded', num_read)
             fp.write(buf)
         fp.close()
-        self._logger.info('File saved as %s', tmpdst)
+        log.info('File saved as %s', tmpdst)
 
         try:
             mime = mimetypes.guess_type(tmpdst)
@@ -349,11 +326,11 @@ class HttpSource(Source):
                 else:
                     raise UndefinedSourceError('Unexpected archive format %s' % str(mime))                        
 
-                self._logger.info('Extracting source from %s into %s', tmpdst, workdir)
+                log.info('Extracting source from %s into %s', tmpdst, workdir)
                 out = system2(unar)[0]
                 self._logger.info(out)
             else:
-                self._logger.info('Moving source from %s to %s', tmpdst, workdir)
+                log.info('Moving source from %s to %s', tmpdst, workdir)
                 dst = os.path.join(workdir, os.path.basename(tmpdst))
                 if os.path.isfile(dst):
                     self._logger.debug('Removing already existed file %s', dst)

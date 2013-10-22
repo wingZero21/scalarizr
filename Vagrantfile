@@ -4,8 +4,8 @@
 boxes = {
   "ubuntu" => "opscode-ubuntu-12.04",
   "ubuntu1004" => "opscode-ubuntu-10.04",
-  "centos" => "opscode-centos-6.3",
-  "centos5" => "opscode-centos-5.8",
+  "centos" => "opscode-centos-6.4",
+  "centos5" => "opscode-centos-5.9",
   "amzn" => "dummy",
   "windows" => "windows-2008r2"
 }

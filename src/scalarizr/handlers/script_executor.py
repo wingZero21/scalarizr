@@ -9,9 +9,8 @@ from scalarizr import config as szrconfig
 from scalarizr import linux
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
-from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until, system2
+from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
 from scalarizr.config import ScalarizrState
-from scalarizr.handlers import operation
 
 
 import time
@@ -54,8 +53,8 @@ skip_events = set()
 
 logs_truncate_over = 20 * 1000
 if linux.os.windows_family:
-    exec_dir_prefix = r'%Temp%\scalr-scripting.'
-    logs_dir = r'%ProgramFiles%\Scalarizr\var\log\scripting'
+    exec_dir_prefix = os.getenv('TEMP') + r'\scalr-scripting'
+    logs_dir = os.getenv('PROGRAMFILES') + r'\Scalarizr\var\log\scripting'
 else:
     exec_dir_prefix = '/usr/local/bin/scalr-scripting.'
     logs_dir = '/var/log/scalarizr/scripting'
@@ -196,28 +195,16 @@ class ScriptExecutor(Handler):
             pass
 
         if scripts[0].event_name:
-            phase = "Executing %d %s script(s)" % (len(scripts), scripts[0].event_name)
+            msg = "Executing %d %s script(s)" % (len(scripts), scripts[0].event_name)
         else:
-            phase = 'Executing %d script(s)' % (len(scripts), )
-        self._logger.info(phase)
+            msg = 'Executing %d script(s)' % (len(scripts), )
+        self._logger.info(msg)
 
-        if self._cnf.state != szrconfig.ScalarizrState.INITIALIZING:
-            # Define operation
-            op = operation(name=self._op_exec_scripts, phases=[{
-                    'name': phase,
-                    'steps': ["Execute '%s'" % script.name for script in scripts if not script.asynchronous]
-            }])
-            op.define()
-        else:
-            op = bus.initialization_op
+        for script in scripts:
+            msg = "Execute '%s' in %s mode" % (script.name, 'async' if script.asynchronous else 'sync')
+            self._execute_one_script(script)
 
-        with op.phase(phase):
-            for script in scripts:
-                step_title = self._step_exec_tpl % (script.name, 'async' if script.asynchronous else 'sync')
-                with op.step(step_title):
-                    self._execute_one_script(script)
-
-    def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+    def accept(self, message, queue, **kwds):
         return not message.name in skip_events
 
     def __call__(self, message):
@@ -248,6 +235,7 @@ class ScriptExecutor(Handler):
             LOG.debug('Fetching scripts from incoming message')
             scripts = [Script(name=item['name'],
                                 body=item.get('body'),
+                                run_as=item.get('run_as'),
                                 path=item.get('path'),
                                 asynchronous=int(item['asynchronous']),
                                 exec_timeout=item['timeout'],
@@ -269,6 +257,7 @@ class ScriptExecutor(Handler):
 class Script(object):
     name = None
     body = None
+    run_as = None
     path = None
     asynchronous = None
     event_name = None
@@ -306,6 +295,10 @@ class Script(object):
 
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
+        if linux.os['family'] == 'Windows' and self.run_as:
+            raise HandlerError("Windows can't execute scripts remotely " \
+                               "under user other than Administrator. " \
+                               "Script '%s', given user: '%s'" % (self.name, self.run_as))
 
         if self.name and (self.body or self.path):
             random.seed()
@@ -361,7 +354,7 @@ class Script(object):
         # installs interpreter for the next one
         if not os.path.exists(self.interpreter) and linux.os['family'] != 'Windows':
             raise HandlerError("Can't execute script '%s' cause "
-                                            "interpreter '%s' not found" % (self.name, self.interpreter))
+                               "interpreter '%s' not found" % (self.name, self.interpreter))
 
         if not self.path:
             # Write script to disk, prepare execution
@@ -378,13 +371,18 @@ class Script(object):
         stderr = open(self.stderr_path, 'w+')
         if self.interpreter == 'powershell':
             command = ['powershell.exe', 
-                    '-NoProfile', '-NonInteractive', 
-                    '-ExecutionPolicy', 'RemoteSigned', 
-                    '-File', self.exec_path]
+                        '-NoProfile', '-NonInteractive', 
+                        '-ExecutionPolicy', 'RemoteSigned', 
+                         '-File', self.exec_path]
         elif self.interpreter == 'cmd':
             command = ['cmd.exe', '/C', self.exec_path]
         else:
-            command = self.exec_path
+            command = []
+            if self.run_as:
+                command = ['sudo', '-u', self.run_as]
+            command += [self.exec_path]
+
+        print 'command: ', command
 
         # Start process
         self.logger.debug('Executing %s'
@@ -450,7 +448,8 @@ class Script(object):
                     event_name=self.event_name or '',
                     return_code=self.return_code,
                     event_server_id=self.event_server_id,
-                    event_id=self.event_id
+                    event_id=self.event_id,
+                    run_as=self.run_as
             )
             return ret
 
@@ -467,8 +466,7 @@ class Script(object):
                     shutil.rmtree(f)
 
     def state(self):
-        return {
-                'id': self.id,
+        return {'id': self.id,
                 'pid': self.pid,
                 'name': self.name,
                 'interpreter': self.interpreter,
@@ -476,8 +474,8 @@ class Script(object):
                 'asynchronous': self.asynchronous,
                 'event_name': self.event_name,
                 'role_name': self.role_name,
-                'exec_timeout': self.exec_timeout
-        }
+                'exec_timeout': self.exec_timeout,
+                'run_as': self.run_as}
 
     def _proc_poll(self):
         if self.proc:

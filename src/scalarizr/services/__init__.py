@@ -423,39 +423,3 @@ class PresetProvider(object):
                     result[conf_name] = dict(include=data['include'], exclude=data['exclude'])
         return result
 
-
-
-def backup_step_msg(str_or_tuple):
-    if isinstance(str_or_tuple, str):
-        return "Backup '%s'" % str_or_tuple
-
-    start = str_or_tuple[0]
-    end = str_or_tuple[1]
-    num = str_or_tuple[2]
-    if start+1 != end:
-        return 'Backup %d-%d of %d databases' % (start+1, end, num)
-    else:
-        return 'Backup last database'
-
-
-# number of databases backuped in single step
-backup_num_databases_in_step = 10
-
-def backup_databases_iterator(databases):
-    page_size = backup_num_databases_in_step
-    num_db = len(databases)
-    if num_db >= page_size:
-        for start in xrange(0, num_db, page_size):
-            end = start + page_size
-            if end > num_db:
-                end = num_db
-            yield (databases[start:end], backup_step_msg((start, end, num_db)))
-    else:
-        for db_name in databases:
-            yield ([db_name], backup_step_msg(db_name))
-
-def make_backup_steps(db_list, _operation, _single_backup_fun):
-    for db_portion, step_msg in backup_databases_iterator(db_list):
-        with _operation.step(step_msg):
-            for db_name in db_portion:
-                _single_backup_fun(db_name)

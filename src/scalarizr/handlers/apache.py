@@ -68,29 +68,17 @@ class ApacheHandler(ServiceCtlHandler):
                 message.name == Messages.BEFORE_HOST_TERMINATE)
 
 
-    def get_initialization_phases(self, hir_message):
-        self._phase = 'Configure Apache'
-        self._step_update_vhosts = 'Update virtual hosts'
-        self._step_reload_rpaf = 'Reload RPAF'
-
-        return {'before_host_up': [{
-                'name': self._phase,
-                'steps': [self._step_update_vhosts, self._step_reload_rpaf]
-        }]}
-
-
     def on_host_init_response(self, message):
         pass
 
 
     def on_before_host_up(self, message):
-        with bus.initialization_op as op:
-            with op.phase(self._phase):
-                with op.step(self._step_update_vhosts):
-                    self.api.reload_vhosts()
-                with op.step(self._step_reload_rpaf):
-                    self._rpaf_reload()
-                bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
+        log = bus.init_op.logger if bus.init_op else self._logger
+        log.info('Update virtual hosts')
+        self.api.reload_vhosts()
+        log.info('Reload RPAF')
+        self._rpaf_reload()
+        bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
 
 
     def on_start(self):

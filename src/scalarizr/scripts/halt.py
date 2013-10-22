@@ -8,7 +8,7 @@ Created on Mar 3, 2010
 
 from scalarizr.messaging import Messages, Queues
 from scalarizr.bus import bus
-from scalarizr import init_script
+from scalarizr.app import init_script
 import logging
 import sys
 try:

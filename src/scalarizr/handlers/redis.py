@@ -24,15 +24,13 @@ from scalarizr.services import redis, backup
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
-from scalarizr.handlers import operation, build_tags
+from scalarizr.handlers import build_tags
 from scalarizr import node
 
 
 BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
 
-
 __redis__ = redis.__redis__
-
 
 STORAGE_PATH                            = '/mnt/redisstorage'
 STORAGE_VOLUME_CNF                      = 'redis.json'
@@ -92,7 +90,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
     @property
     def redis_tags(self):
-        purpose = '%s-'%BEHAVIOUR + ('master' if self.is_replication_master else 'slave')
+        purpose = '%s-' % BEHAVIOUR + ('master' if self.is_replication_master else 'slave')
         return build_tags(purpose, 'active')
 
 
@@ -203,11 +201,11 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
             vol.ensure(mount=True)
             __redis__['volume'] = vol
 
-            ports=[__redis__['defaults']['port'],]
-            passwords=[self.get_main_password(),]
+            ports = [__redis__['defaults']['port'],]
+            passwords = [self.get_main_password(),]
             num_processes = 1
             farm_role_id = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_FARMROLE_ID)
-            params = self._queryenv.list_farm_role_params(farm_role_id)
+            params = self._queryenv.list_farm_role_params(farm_role_id).get('params', {})
             if 'redis' in params:
                 redis_data = params['redis']
                 for param in ('ports', 'passwords', 'num_processes'):
@@ -258,76 +256,75 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         @type message: scalarizr.messaging.Message
         @param message: HostInitResponse
         """
-        with bus.initialization_op as op:
-            with op.phase(self._phase_redis):
-                with op.step(self._step_accept_scalr_conf):
+        log = bus.init_op.logger
+        log.info('Accept Scalr configuration')
 
-                    if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
-                        raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property and db_type '%s'"
-                                           % (BEHAVIOUR, BEHAVIOUR, BEHAVIOUR))
+        if not message.body.has_key(BEHAVIOUR) or message.db_type != BEHAVIOUR:
+            raise HandlerError("HostInitResponse message for %s behaviour must have '%s' property and db_type '%s'"
+                               % (BEHAVIOUR, BEHAVIOUR, BEHAVIOUR))
 
-                    config_dir = os.path.dirname(self._volume_config_path)
-                    if not os.path.exists(config_dir):
-                        os.makedirs(config_dir)
+        config_dir = os.path.dirname(self._volume_config_path)
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
 
-                    redis_data = message.redis.copy()
-                    LOG.info('Got Redis part of HostInitResponse: %s' % redis_data)
+        redis_data = message.redis.copy()
+        LOG.info('Got Redis part of HostInitResponse: %s' % redis_data)
 
-                    if 'preset' in redis_data:
-                        self.initial_preset = redis_data['preset']
-                        del redis_data['preset']
-                        LOG.debug('Scalr sent current preset: %s' % self.initial_preset)
+        if 'preset' in redis_data:
+            self.initial_preset = redis_data['preset']
+            del redis_data['preset']
+            LOG.debug('Scalr sent current preset: %s' % self.initial_preset)
 
 
-                    '''
-                    XXX: following line enables support for old scalr installations
-                    use_password shoud be set by postinstall script for old servers
-                    '''
-                    redis_data[OPT_USE_PASSWORD] = redis_data.get(OPT_USE_PASSWORD, '1')
+        '''
+        XXX: following line enables support for old scalr installations
+        use_password shoud be set by postinstall script for old servers
+        '''
+        redis_data[OPT_USE_PASSWORD] = redis_data.get(OPT_USE_PASSWORD, '1')
 
-                    ports = []
-                    passwords = []
-                    num_processes = 1
+        ports = []
+        passwords = []
+        num_processes = 1
 
-                    if 'ports' in redis_data and redis_data['ports']:
-                        ports = map(int, redis_data['ports'])
-                        del redis_data['ports']
+        if 'ports' in redis_data and redis_data['ports']:
+            ports = map(int, redis_data['ports'])
+            del redis_data['ports']
 
-                    if 'passwords' in redis_data and redis_data['passwords']:
-                        passwords = redis_data['passwords']
-                        del redis_data['passwords']
+        if 'passwords' in redis_data and redis_data['passwords']:
+            passwords = redis_data['passwords']
+            del redis_data['passwords']
 
-                    if 'num_processes' in redis_data and redis_data['num_processes']:
-                        num_processes = int(redis_data['num_processes'])
-                        del redis_data['num_processes']
+        if 'num_processes' in redis_data and redis_data['num_processes']:
+            num_processes = int(redis_data['num_processes'])
+            del redis_data['num_processes']
 
-                    redis_data['volume'] = storage2.volume(
-                                    redis_data.pop('volume_config'))
+        redis_data['volume'] = storage2.volume(
+                        redis_data.pop('volume_config'))
 
-                    if redis_data['volume'].device and \
-                                            redis_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
-                        redis_data.pop('snapshot_config', None)
+        if redis_data['volume'].device and \
+                                redis_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+            redis_data.pop('snapshot_config', None)
 
-                    if redis_data.get('snapshot_config'):
-                        redis_data['restore'] = backup.restore(
-                                type='snap_redis',
-                                snapshot=redis_data.pop('snapshot_config'),
-                                volume=redis_data['volume'])
+        if redis_data.get('snapshot_config'):
+            redis_data['restore'] = backup.restore(
+                    type='snap_redis',
+                    snapshot=redis_data.pop('snapshot_config'),
+                    volume=redis_data['volume'])
 
-                    # Update configs
-                    __redis__.update(redis_data)
-                    __redis__['volume'].mpoint = __redis__['storage_dir']
-                    __redis__['volume'].tags = self.redis_tags
-                    if self.default_service.running:
-                        self.default_service.stop('Terminating default redis instance')
+        # Update configs
+        __redis__.update(redis_data)
+        __redis__['volume'].mpoint = __redis__['storage_dir']
+        __redis__['volume'].tags = self.redis_tags
+        if self.default_service.running:
+            self.default_service.stop('Terminating default redis instance')
 
-                    self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type, self.use_passwords)
-                    ports = ports or [__redis__['defaults']['port'],]
-                    passwords = passwords or [self.get_main_password(),]
-                    self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)
+        self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type, self.use_passwords)
+        ports = ports or [__redis__['defaults']['port'],]
+        passwords = passwords or [self.get_main_password(),]
+        self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)
 
-                    if self.use_passwords:
-                        self.security_off()
+        if self.use_passwords:
+            self.security_off()
 
 
     def on_before_host_up(self, message):
@@ -382,35 +379,22 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def on_DbMsr_CreateDataBundle(self, message):
-
         try:
-            op = operation(name=self._op_data_bundle, phases=[{
-                                                              'name': self._phase_data_bundle,
-                                                              'steps': [self._step_create_data_bundle]
-                                                              }])
-            op.define()
+            bus.fire('before_%s_data_bundle' % BEHAVIOUR)
+            # Creating snapshot
+            snap = self._create_snapshot()
+            used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
+            bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
 
+            # Notify scalr
+            msg_data = dict(
+                    db_type         = BEHAVIOUR,
+                    used_size       = '%.3f' % (float(used_size) / 1000,),
+                    status          = 'ok'
+            )
+            msg_data[BEHAVIOUR] = {'snapshot_config': dict(snap)}
 
-            with op.phase(self._phase_data_bundle):
-                with op.step(self._step_create_data_bundle):
-
-                    bus.fire('before_%s_data_bundle' % BEHAVIOUR)
-                    # Creating snapshot
-                    snap = self._create_snapshot()
-                    used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-                    bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
-
-                    # Notify scalr
-                    msg_data = dict(
-                            db_type         = BEHAVIOUR,
-                            used_size       = '%.3f' % (float(used_size) / 1000,),
-                            status          = 'ok'
-                    )
-                    msg_data[BEHAVIOUR] = {'snapshot_config': dict(snap)}
-
-                    self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
-
-            op.ok()
+            self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
         except (Exception, BaseException), e:
             LOG.exception(e)
@@ -518,29 +502,16 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
     def on_DbMsr_CreateBackup(self, message):
         try:
-            op = operation(name=self._op_backup, phases=[{
-                                                         'name': self._phase_backup,
-                                                         'steps': [self._step_copy_database_file,
-                                                                   self._step_upload_to_cloud_storage]
-                                                         }])
-            op.define()
+            # Flush redis data on disk before creating backup
+            LOG.info("Dumping Redis data on disk")
+            self.redis_instances.save_all()
+            dbs = [r.db_path for r in self.redis_instances]
 
-            with op.phase(self._phase_backup):
-
-                with op.step(self._step_copy_database_file):
-                    # Flush redis data on disk before creating backup
-                    LOG.info("Dumping Redis data on disk")
-                    self.redis_instances.save_all()
-                    dbs = [r.db_path for r in self.redis_instances]
-
-            with op.step(self._step_upload_to_cloud_storage):
-                cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
-                LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-                transfer = LargeTransfer(dbs, cloud_storage_path)
-                result = transfer.run()
-                result = handlers.transfer_result_to_backup_result(result)
-
-            op.ok(data=result)
+            cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
+            LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
+            transfer = LargeTransfer(dbs, cloud_storage_path)
+            result = transfer.run()
+            result = handlers.transfer_result_to_backup_result(result)
 
             # Notify Scalr
             self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
@@ -566,40 +537,41 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         @type message: scalarizr.messaging.Message
         @param message: HostUp message
         """
+        log = bus.init_op.logger
 
-        with bus.initialization_op as op:
-            with op.step(self._step_create_storage):
+        log.info("Initializing %s master" % BEHAVIOUR)
+        log.info('Create storage')
 
-                LOG.info("Initializing %s master" % BEHAVIOUR)
+        # Plug storage
+        if 'restore' in __redis__ and \
+                                                        __redis__['restore'].type == 'snap_redis':
+            __redis__['restore'].run()
+        else:
+            if node.__node__['platform'] == 'idcf':
+                if __redis__['volume'].id:
+                    LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
+                    __redis__['volume'].snap = __redis__['volume'].snapshot()
 
-            # Plug storage
-            if 'restore' in __redis__ and \
-                                                            __redis__['restore'].type == 'snap_redis':
-                __redis__['restore'].run()
-            else:
-                if node.__node__['platform'] == 'idcf':
-                    if __redis__['volume'].id:
-                        LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
-                        __redis__['volume'].snap = __redis__['volume'].snapshot()
+            __redis__['volume'].ensure(mount=True, mkfs=True)
+            LOG.debug('Redis volume config after ensure: %s', dict(__redis__['volume']))
 
-                __redis__['volume'].ensure(mount=True, mkfs=True)
-                LOG.debug('Redis volume config after ensure: %s', dict(__redis__['volume']))
+        log.info('Initialize Master')
+        password = self.get_main_password()
 
-            with op.step(self._step_init_master):
-                password = self.get_main_password()
+        self.redis_instances.init_as_masters(mpoint=self._storage_path)
 
-                self.redis_instances.init_as_masters(mpoint=self._storage_path)
+        msg_data = dict()
+        msg_data.update({
+            'replication_master': '1',
+            OPT_MASTER_PASSWORD: password
+        })
 
-                msg_data = dict()
-                msg_data.update({'replication_master'                 :       '1',
-                                 OPT_MASTER_PASSWORD                    :       password})
+        log.info('Collect HostUp data')
+        # Update HostUp message
 
-            with op.step(self._step_collect_host_up_data):
-                # Update HostUp message
-
-                if msg_data:
-                    message.db_type = BEHAVIOUR
-                    message.redis = msg_data.copy()
+        if msg_data:
+            message.db_type = BEHAVIOUR
+            message.redis = msg_data.copy()
 
 
     @property
@@ -649,36 +621,35 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         @type message: scalarizr.messaging.Message
         @param message: HostUp message
         """
-        LOG.info("Initializing %s slave" % BEHAVIOUR)
+        log = bus.init_op.logger
+        log.info("Initializing %s slave" % BEHAVIOUR)
 
-        with bus.initialization_op as op:
-            with op.step(self._step_create_storage):
+        log.info('Create storage')
 
-                LOG.debug("Initializing slave storage")
-                __redis__['volume'].ensure(mount=True, mkfs=True)
+        LOG.debug("Initializing slave storage")
+        __redis__['volume'].ensure(mount=True, mkfs=True)
 
-            with op.step(self._step_init_slave):
-                # Change replication master
-                master_host = self._get_master_host()
+        log.info('Initialize Slave')
+        # Change replication master
+        master_host = self._get_master_host()
 
-                LOG.debug("Master server obtained (local_ip: %s, public_ip: %s)",
-                        master_host.internal_ip, master_host.external_ip)
+        LOG.debug("Master server obtained (local_ip: %s, public_ip: %s)",
+                master_host.internal_ip, master_host.external_ip)
 
-                host = master_host.internal_ip or master_host.external_ip
-                self.redis_instances.init_as_slaves(self._storage_path, host)
-                op.progress(50)
-                self.redis_instances.wait_for_sync()
+        host = master_host.internal_ip or master_host.external_ip
+        self.redis_instances.init_as_slaves(self._storage_path, host)
+        self.redis_instances.wait_for_sync()
 
-            with op.step(self._step_collect_host_up_data):
-                # Update HostUp message
-                message.db_type = BEHAVIOUR
+        log.info('Collect HostUp data')
+        # Update HostUp message
+        message.db_type = BEHAVIOUR
 
 
     def _update_config(self, data):
     #XXX: I just don't like it
         #ditching empty data
         updates = dict()
-        for k,v in data.items():
+        for k, v in data.items():
             if v:
                 updates[k] = v
 
