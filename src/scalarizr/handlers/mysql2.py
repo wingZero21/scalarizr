@@ -10,8 +10,6 @@ import time
 import shutil
 import logging
 import glob
-import tarfile
-import tempfile
 import threading
 
 # Core
@@ -28,7 +26,7 @@ from scalarizr.util import system2, disttool, firstmatched, initdv2, software, c
 
 
 from scalarizr import storage2, linux
-from scalarizr.linux import iptables, coreutils
+from scalarizr.linux import iptables, coreutils, pkgmgr
 from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
@@ -1027,6 +1025,27 @@ class MysqlHandler(DBMSRHandler):
 
                 #if not os.listdir(__mysql__['data_dir']):
                 if not storage_valid:
+                    if linux.os['family'] == 'RedHat':
+                        try:
+                            # Check if selinux enabled
+                            selinuxenabled_bin = software.which('selinuxenabled')
+                            if selinuxenabled_bin:
+                                se_enabled = not system2((selinuxenabled_bin, ), raise_exc=False)[2]
+                                if se_enabled:
+                                    # Set selinux context for new mysql datadir
+                                    semanage = software.which('semanage')
+                                    if not semanage:
+                                        mgr = pkgmgr.package_mgr()
+                                        mgr.install('policycoreutils-python')
+                                        semanage = software.which('semanage')
+                                    linux.system([semanage, 'fcontext', '-a', '-t', 'mysqld_db_t',
+                                                                                '"%s(/.*)?"' % __mysql__['storage_dir']])
+                                    # Restore selinux context
+                                    restorecon = software.which('restorecon')
+                                    linux.system([restorecon, '-R', '-v', __mysql__['storage_dir']])
+                        except:
+                           LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
+
                     linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
                     coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
                 if 'restore' in __mysql__ and \
