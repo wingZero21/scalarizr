@@ -129,7 +129,7 @@ class SystemAPI(object):
                 setattr(self, name, attr)
 
 
-    @rpc.service_method
+    @rpc.query_method
     def call_auth_shutdown_hook(self):
         script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
         LOG.debug("Executing %s" % script_path)
@@ -140,7 +140,7 @@ class SystemAPI(object):
             raise Exception('File not exists: %s' % script_path)
 
 
-    @rpc.service_method
+    @rpc.command_method
     def fqdn(self, fqdn=None):
         '''
         Get/Update host FQDN
@@ -180,7 +180,7 @@ class SystemAPI(object):
             return system2(('hostname', ))[0].strip()
 
 
-    @rpc.service_method
+    @rpc.query_method
     def block_devices(self):
         '''
         Block devices list
@@ -195,7 +195,7 @@ class SystemAPI(object):
         return devicelist
 
 
-    @rpc.service_method
+    @rpc.query_method
     def uname(self):
         '''
         Return system information
@@ -223,7 +223,7 @@ class SystemAPI(object):
         }
 
 
-    @rpc.service_method
+    @rpc.query_method
     def dist(self):
         '''
         Return Linux distribution information 
@@ -241,7 +241,7 @@ class SystemAPI(object):
         }
 
 
-    @rpc.service_method
+    @rpc.query_method
     def pythons(self):
         '''
         Return installed Python versions
@@ -269,7 +269,7 @@ class SystemAPI(object):
         return map(lambda x: x.lower().replace('python', '').strip(), sorted(list(set(result))))
 
 
-    @rpc.service_method
+    @rpc.query_method
     def cpu_info(self):
         '''
         Return CPU info from /proc/cpuinfo
@@ -294,7 +294,7 @@ class SystemAPI(object):
         return res
 
 
-    @rpc.service_method
+    @rpc.query_method
     def cpu_stat(self):
 
         '''
@@ -317,7 +317,7 @@ class SystemAPI(object):
         }
 
 
-    @rpc.service_method
+    @rpc.query_method
     def mem_info(self):
         '''
         Return Memory information from /proc/meminfo
@@ -348,7 +348,7 @@ class SystemAPI(object):
         }
 
 
-    @rpc.service_method
+    @rpc.query_method
     def load_average(self):
         '''
         Return Load average (1, 5, 15) in 3 items list  
@@ -357,7 +357,7 @@ class SystemAPI(object):
         return os.getloadavg()
 
 
-    @rpc.service_method
+    @rpc.query_method
     def disk_stats(self):
         '''
         Disks I/O statistics
@@ -398,7 +398,7 @@ class SystemAPI(object):
         return devicelist
 
 
-    @rpc.service_method
+    @rpc.query_method
     def net_stats(self):
         '''
         Network I/O statistics
@@ -435,7 +435,7 @@ class SystemAPI(object):
         return res
 
 
-    @rpc.service_method
+    @rpc.query_method
     def statvfs(self, mpoints=None):
         if not isinstance(mpoints, list):
             raise Exception('Argument "mpoints" should be a list of strings, '
@@ -456,7 +456,7 @@ class SystemAPI(object):
         return res
 
 
-    @rpc.service_method
+    @rpc.query_method
     def scaling_metrics(self):
         '''
         @return list of scaling metrics
@@ -492,7 +492,7 @@ class SystemAPI(object):
             wrk_pool.join()
 
 
-    @rpc.service_method
+    @rpc.query_method
     def get_script_logs(self, exec_script_id, maxsize=max_log_size):
         '''
         :return: out and err logs
@@ -545,7 +545,7 @@ if linux.os.windows_family:
     class WindowsSystemAPI(SystemAPI):
 
         @coinitialized
-        @rpc.service_method
+        @rpc.query_method
         def disk_stats(self):
             wmi = client.GetObject('winmgmts:')
 
@@ -566,7 +566,7 @@ if linux.os.windows_family:
             return res
 
         @coinitialized
-        @rpc.service_method
+        @rpc.query_method
         def block_devices(self):
             wmi = client.GetObject('winmgmts:')
 
@@ -578,13 +578,13 @@ if linux.os.windows_family:
             return res
 
         @coinitialized
-        @rpc.service_method
+        @rpc.query_method
         def dist(self):
             uname = platform.uname()
             return dict(system=uname[0], release=uname[2], version=uname[3])
 
         @coinitialized
-        @rpc.service_method
+        @rpc.query_method
         def net_stats(self):
             wmi = client.GetObject('winmgmts:')
 
@@ -607,11 +607,11 @@ if linux.os.windows_family:
                 )
             return res
 
-        @rpc.service_method
+        @rpc.query_method
         def load_average(self):
             raise Exception('Not available on windows platform')
 
-        @rpc.service_method
+        @rpc.query_method
         def uname(self):
             uname = platform.uname()
             return dict(zip(
@@ -619,7 +619,7 @@ if linux.os.windows_family:
             ))
 
         @coinitialized
-        @rpc.service_method
+        @rpc.query_method
         def cpu_stat(self):
             wmi = client.GetObject('winmgmts:')
 
@@ -634,7 +634,7 @@ if linux.os.windows_family:
             }
 
         @coinitialized
-        @rpc.service_method
+        @rpc.query_method
         def mem_info(self):
             wmi = client.GetObject('winmgmts:')
 
@@ -648,7 +648,7 @@ if linux.os.windows_family:
             }
 
         @coinitialized
-        @rpc.service_method
+        @rpc.query_method
         def statvfs(self, mpoints=None):
             wmi = client.GetObject('winmgmts:')
 

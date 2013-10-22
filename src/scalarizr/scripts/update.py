@@ -5,7 +5,7 @@ Created on Jul 20, 2010
 @author: marat
 '''
 
-from scalarizr import init_script
+from scalarizr.app import init_script
 from scalarizr.util import disttool, system2
 import logging
 

@@ -14,6 +14,7 @@ from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
+from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 
@@ -142,11 +143,7 @@ def _bool_from_scalr_str(bool_str):
 
 class NginxAPI(object):
 
-    _instance = None
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(NginxAPI, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
+    __metaclass__ = Singleton
 
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
         _logger.debug('Initializing nginx API.')
@@ -250,23 +247,23 @@ class NginxAPI(object):
         else:
             self.service.reload()
 
-    @rpc.service_method
+    @rpc.command_method
     def start_service(self):
         self.service.start()
 
-    @rpc.service_method
+    @rpc.command_method
     def stop_service(self):
         self.service.stop()
 
-    @rpc.service_method
+    @rpc.command_method
     def reload_service(self):
         self.service.reload()
 
-    @rpc.service_method
+    @rpc.command_method
     def restart_service(self):
         self.service.restart()
 
-    @rpc.service_method
+    @rpc.command_method
     def recreate_proxying(self, proxy_list, reload_service=True):
         if not proxy_list:
             proxy_list = []
@@ -1018,7 +1015,7 @@ class NginxAPI(object):
         for xpath in reversed(xpaths_to_remove):
             self.proxies_inc.remove(xpath)
 
-    @rpc.service_method
+    @rpc.command_method
     def remove_proxy(self, hostname, reload_service=True):
         """
         Removes proxy with given hostname. Removes created server and its backends.
@@ -1041,7 +1038,7 @@ class NginxAPI(object):
         if reload_service:
             self._reload_service()
 
-    @rpc.service_method
+    @rpc.command_method
     def make_proxy(self, hostname, **kwds):
         """
         RPC method for adding or updating proxy configuration.
@@ -1108,7 +1105,7 @@ class NginxAPI(object):
 
         return result
 
-    @rpc.service_method
+    @rpc.command_method
     def add_server(self,
                    backend,
                    server,
@@ -1154,7 +1151,7 @@ class NginxAPI(object):
         if reload_service:
             self._reload_service()
 
-    @rpc.service_method
+    @rpc.command_method
     def remove_server(self,
                       backend,
                       server,
@@ -1199,7 +1196,6 @@ class NginxAPI(object):
         if reload_service:
             self._reload_service()
 
-    @rpc.service_method
     def add_server_to_role(self, 
                            server,
                            role_id,
@@ -1244,7 +1240,6 @@ class NginxAPI(object):
             if reload_service:
                 self._reload_service()
 
-    @rpc.service_method
     def remove_server_from_role(self,
                                 server,
                                 role_id,
@@ -1284,7 +1279,6 @@ class NginxAPI(object):
                 self._reload_service()
 
 
-    @rpc.service_method
     def remove_server_from_all_backends(self,
                                         server,
                                         update_conf=True,
@@ -1316,7 +1310,6 @@ class NginxAPI(object):
             if reload_service:
                 self._reload_service()
 
-    @rpc.service_method
     def enable_ssl(self,
                    hostname,
                    ssl_port=None,
@@ -1369,7 +1362,6 @@ class NginxAPI(object):
             if reload_service:
                 self._reload_service()
 
-    @rpc.service_method
     def disable_ssl(self, hostname, update_conf=True, reload_service=True):
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)

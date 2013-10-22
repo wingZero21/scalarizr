@@ -11,7 +11,7 @@ import time
 from scalarizr.messaging import Messages, Queues
 from scalarizr.bus import bus
 from scalarizr.util import initdv2
-from scalarizr import init_script
+from scalarizr.app import init_script
 import logging
 
 def main():

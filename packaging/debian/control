@@ -73,11 +73,11 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-         python-novaclient (>= 2.6.1),
+         python-novaclient (>= 2.15.0),
          python-rackspace-novaclient (>= 1.0),
-         python-cinderclient (>= 1.0.1),
+         python-cinderclient (>= 1.0.5),
          python-swiftclient (>= 1.2.0),
-         python-keystoneclient (>= 0.2.2)
+         python-keystoneclient (>= 0.3.2)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Openstack cloud

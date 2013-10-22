@@ -105,7 +105,8 @@ class P2pMessageProducer(messaging.MessageProducer):
 
             if message.name not in ('Log', 'OperationDefinition',
                                                     'OperationProgress', 'OperationResult'):
-                self._logger.debug("Delivering message '%s' %s", message.name, data)
+                self._logger.debug("Delivering message '%s' %s. Json: %s, Headers: %s",
+                                   message.name, data, use_json, headers)
 
             for f in self.filters['protocol']:
                 data = f(self, queue, data, headers)
