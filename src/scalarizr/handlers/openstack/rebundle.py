@@ -18,7 +18,7 @@ def get_handlers():
     if linux.os.windows_family:
         return [OpenstackRebundleWindowsHandler()]
     else:
-        return []
+        return [OpenstackRebundleLinuxHandler()]
 
 
 class OpenstackRebundleWindowsHandler(handlers.Handler):
@@ -53,7 +53,6 @@ class OpenstackRebundleWindowsHandler(handlers.Handler):
             ))
 
 
-
 class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
 
     def rebundle(self):
@@ -63,12 +62,14 @@ class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
 
         server = nova.servers.get(__node__['openstack']['server_id'])
         system2("sync", shell=True)
-        image = server.create_image(image_name)
+        LOG.info('Creating server image (server_id: %s)', server.id)
+        image_id = server.create_image(image_name)
+        LOG.info('Server image %s created', image_id)
 
         result = [None]
         def image_completed():
             try:
-                result[0] = nova.images.get(image.id)
+                result[0] = nova.images.get(image_id)
                 return result[0].status in ('ACTIVE', 'FAILED')
             except:
                 e = sys.exc_info()[1]
