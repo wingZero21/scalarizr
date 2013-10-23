@@ -11,6 +11,7 @@ boxes = {
 }
 
 Vagrant.configure("2") do |config|
+  config.berkshelf.enabled = true
   boxes.each do |name, box|
     config.vm.define name do |machine|
       machine.vm.box = box
