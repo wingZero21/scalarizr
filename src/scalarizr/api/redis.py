@@ -65,14 +65,14 @@ class RedisAPI(object):
             result = self._launch(ports, passwords, op)
             return dict(ports=result[0], passwords=result[1])
 
-        return self._op_api.go_with('Launch Redis processes', do_launch_processes, async=async)
+        return self._op_api.run('Launch Redis processes', do_launch_processes, async=async)
 
 
     @rpc.command_method
     def shutdown_processes(self, ports, remove_data=False, async=False):
         def do_shutdown_processes(op):
             return self._shutdown(ports, remove_data)
-        return self._op_api.go_with('Shutdown Redis processes', do_shutdown_processes, async=async)
+        return self._op_api.run('Shutdown Redis processes', do_shutdown_processes, async=async)
 
 
     @rpc.query_method

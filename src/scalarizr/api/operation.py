@@ -43,24 +43,23 @@ class OperationAPI(object):
     def remove(self, operation_id):
         del self._ops[operation_id]
 
-    def find(self, name=None, finished_older_then=None):
+    def find(self, name=None, finished_before=None):
         if name:
             ret = [op for op in self._ops.values() if op.name == name]
         else:
             ret = self._ops.values()
-        if finished_older_then:
+        if finished_before:
             now = time.time()
             ret = [op for op in ret 
-                    if op.finished_at and now - op.finished_at > finished_older_then]
+                    if op.finished_at and now - op.finished_at > finished_before]
         return ret
 
-    def go_with(self, name, func, async=False, **kwds):
+    def run(self, name, func, async=False, **kwds):
         op = self.create(name, func, **kwds)
         if async:
-            op.start()
-            return op.operation_id
+            return op.run_async()
         else:
-            return op.execute()
+            return op.run()
 
     @classmethod
     def rotate_runnable(cls):
@@ -70,7 +69,7 @@ class OperationAPI(object):
         while True:
             time.sleep(one_day)
             LOG.debug('Rotating operations finished older then 2 days')
-            for op in api.find(finished_older_then=two_days):
+            for op in api.find(finished_before=two_days):
                 api.remove(op.operation_id)
 
 
@@ -118,17 +117,18 @@ class Operation(object):
             self.finished_at = time.time()
             __node__['messaging'].send('OperationResult', body=self.serialize())
 
-    def execute(self):
+    def run(self):
         self._run()
         return self.result
 
-    def start(self):
+    def run_async(self):
         self.thread = threading.Thread(
             name='Task {0}'.format(self.name), 
             target=self._run
         )
         self.async = True
         self.thread.start()
+        return self.operation_id
 
     def fail(self, *exc_info):
         self.error = exc_info or sys.exc_info()

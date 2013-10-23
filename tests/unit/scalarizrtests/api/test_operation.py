@@ -32,7 +32,7 @@ class TestOperation(object):
 			deep()
 
 		op = operation.OperationAPI().create('test_serialize_error', fn_raises_error)
-		op.execute()
+		op.run()
 
 		_, kwds = self.assert_op_result()
 		eq_(kwds['body']['name'], 'test_serialize_error')
@@ -51,7 +51,7 @@ class TestOperation(object):
 		def fn(op):
 			return result_data
 		op = operation.OperationAPI().create('test_serialize', fn)
-		op.execute()
+		op.run()
 
 		_, kwds = self.assert_op_result()
 		eq_(kwds['body']['status'], 'completed')
