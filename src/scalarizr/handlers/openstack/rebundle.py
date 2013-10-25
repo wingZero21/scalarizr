@@ -4,6 +4,7 @@ import sys
 import time
 import shutil
 
+
 from scalarizr.node import __node__
 from scalarizr import linux, handlers
 from scalarizr.handlers import rebundle as rebundle_hdlr
@@ -60,10 +61,10 @@ class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
         nova = __node__['openstack']['new_nova_connection']
         nova.connect()
 
-        server = nova.servers.get(__node__['openstack']['server_id'])
+        server_id = __node__['openstack']['server_id']
         system2("sync", shell=True)
-        LOG.info('Creating server image (server_id: %s)', server.id)
-        image_id = server.create_image(image_name)
+        LOG.info('Creating server image (server_id: %s)', server_id)
+        image_id = nova.servers.create_image(server_id, image_name)
         LOG.info('Server image %s created', image_id)
 
         result = [None]
