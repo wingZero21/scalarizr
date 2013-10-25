@@ -382,6 +382,7 @@ if [ ! -f "$pub_cnf_dir/openstack.ini" ]; then
 [handlers]
 
 openstack_vol = scalarizr.handlers.openstack.vol
+openstack_rebundle = scalarizr.handlers.openstack.rebundle
 EOF
 fi
 
