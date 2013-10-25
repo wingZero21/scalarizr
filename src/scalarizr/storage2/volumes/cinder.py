@@ -7,7 +7,7 @@ import string
 import threading
 from time import sleep
 
-from novaclient.exceptions import ClientException
+import novaclient.exceptions as nova_exc
 
 from scalarizr import node
 from scalarizr import storage2
@@ -29,7 +29,7 @@ def name2device(name):
         name = name[0:8] + chr(ord(name[8]) + 4) + name[9:]
     if name.startswith('/dev/vd'):
         devices = ['/dev/vd' + a for a in string.ascii_lowercase[1:16]]
-        devices = filter(lambda dev: not os.path.exists(dev), devices)
+        devices = [dev for dev in devices if not os.path.exists(dev)]
         if devices:
             return devices[0]
     return name
@@ -46,7 +46,9 @@ def device2name(device):
 class FreeDeviceLetterMgr(object):
 
     def __init__(self):
-        self._all = set(string.ascii_lowercase[2:16])
+        # skip vdb cause enter.it has problems with it
+        # skip vdc cause rax-ng always returns 'The supplied device path (/dev/vdb) is in use'
+        self._all = set(string.ascii_lowercase[4:16])
         self._acquired = set()
         self._lock = threading.Lock()
         self._local = threading.local()
@@ -84,9 +86,24 @@ class FreeDeviceLetterMgr(object):
 
 
 class CinderVolume(base.Volume):
+    attach_lock = threading.Lock()
+    letters = set(string.ascii_lowercase[1:16])
+
+    @classmethod
+    def taken_devices(cls):
+        devs = glob.glob('/dev/xvd*') + glob.glob('/dev/vd*') + glob.glob('/dev/sd*')
+        devs = [x for x in devs if x[-1] in string.ascii_lowercase]
+        return devs
+
+    @classmethod
+    def taken_letters(cls):
+        lets = [x[-1] for x in cls.taken_devices()]
+        return set(lets)
+
 
     _global_timeout = 3600
     _free_device_letter_mgr = FreeDeviceLetterMgr()
+
 
     def _check_cinder_connection(self):
         if not self._cinder:
@@ -184,25 +201,22 @@ class CinderVolume(base.Volume):
 
             server_ids = map(lambda info: info['server_id'],
                              volume.attachments)
+            my_server_id = __openstack__['server_id']
             if not (volume.status == 'in-use' and
-                    self._server_id() in server_ids):
+                    my_server_id in server_ids):
                 self._wait_status_transition()
                 if len(volume.attachments) > 0:
                     self._detach_volume()
-
-                with self._free_device_letter_mgr:
-                    name = '/dev/vd%s' % self._free_device_letter_mgr.get()
-                    device = name2device(name)
-                    self._attach_volume(device_name=name)
-                    self.device = device
+                device = self._attach_volume(server_id=my_server_id)
             elif not self.device:
-                self.device = volume.attachments[0]['device']
+                device = volume.attachments[0]['device']
 
             self._config.update({
                 'id': volume.id,
                 'avail_zone': volume.availability_zone,
                 'size': volume.size,
-                'volume_type': volume.volume_type})
+                'volume_type': volume.volume_type,
+                'device': device})
 
         # TODO: check device availability
 
@@ -245,8 +259,7 @@ class CinderVolume(base.Volume):
         coreutils.sync()
         snapshot = self._cinder.volume_snapshots.create(volume_id,
                                                         force=True,
-                                                        display_description=
-                                                        description)
+                                                        display_description=description)
         LOG.debug('Snapshot %s created for Cinder volume %s',
                   snapshot.id, volume_id)
         if not nowait:
@@ -262,11 +275,62 @@ class CinderVolume(base.Volume):
             description=snapshot.display_description,
             tags=tags)
 
-    def _attach_volume(self, server_id=None, device_name='auto'):
+
+    def _attach_volume(self, server_id=None):
+        '''
+        :rtype: tuple(cloud_device_name, os_device_name)
+        '''
         if server_id is None:
             server_id = self._server_id()
         volume_id = self.id
         self._check_cinder_connection()
+
+        ops_delay = 10
+        with self.attach_lock:
+            for _ in xrange(5):
+                taken_before = self.taken_devices()
+                self._nova.volumes.create_server_volume(server_id, volume_id, None)
+
+                #waiting for attaching transitional state
+                LOG.debug('Checking that Cinder volume %s is attached', volume_id)
+                new_status = self._wait_status_transition(volume_id)
+                if new_status == 'in-use':
+                    LOG.debug('Cinder volume %s attached', volume_id)
+                    break
+                elif new_status == 'available':
+                    LOG.warn('Volume %s status changed to "available" instead of "in-use"')
+                    LOG.debug('Will try attach volume again after %d seconds', ops_delay)
+                    continue
+                else:
+                    msg = 'Unexpected status transition "available" -> "{0}".' \
+                            ' Cinder volume {1}'.format(new_status, volume_id)
+                    raise storage2.StorageError(msg)
+
+            util.wait_until(lambda: self.taken_devices() > taken_before,
+                    start_text='Checking that volume %s is available in OS' % volume_id,
+                    timeout=30,
+                    sleep=1,
+                    error_text='Volume %s attached but not available in OS' % volume_id)
+
+            devices = list(self.taken_devices() - taken_before)
+            if len(devices) > 1:
+                msg = "While polling for attached device, got multiple new devices: %s. " \
+                    "Don't know which one to select".format(devices)
+                raise Exception(msg)
+            return devices[0]
+
+
+
+        '''
+                except nova_exc.Conflict:
+                    raise
+                except nova_exc.ClientException, e:
+                    LOG.warn('Exception caught while trying'
+                             'to attach volume %s: \n%s ', volume_id, e)
+                    LOG.debug('Will try again after %d seconds.', ops_delay)
+                    sleep(ops_delay)
+                else:
+                    break
 
         # It's important to calculate device name here, cause 
         # after device attachment, it will be counted as used      
@@ -284,7 +348,9 @@ class CinderVolume(base.Volume):
                 try:
                     self._nova.volumes.create_server_volume(
                             server_id, volume_id, device_name)
-                except ClientException, e:
+                except nova_exc.Conflict:
+                    raise
+                except nova_exc.ClientException, e:
                     LOG.warn('Exception caught while trying'
                              'to attach volume %s: \n%s ', volume_id, e)
                     LOG.debug('Will try again after %d seconds.', ops_delay)
@@ -322,6 +388,8 @@ class CinderVolume(base.Volume):
                         timeout=self._global_timeout,
                         error_text=msg)
         LOG.debug('Device %s is available', device)
+        return device
+        '''
 
     def _detach(self, force, **kwds):
         self._detach_volume()
