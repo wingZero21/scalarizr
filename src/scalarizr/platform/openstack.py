@@ -308,8 +308,9 @@ class OpenStackCredentialsLoggerFilter(object):
 
 class InfoToDebugFilter(object):
     def filter(self, record):
-        if record.level == logging.INFO:
-            record.level = logging.DEBUG
+        if record.levelno == logging.INFO:
+            record.levelno = logging.DEBUG
+            record.levelname = logging.getLevelName(record.levelno)
             return True
 
 
@@ -319,5 +320,6 @@ for logger_name in ('keystoneclient.client', 'novaclient.client', 'cinderclient.
     logger.addFilter(openstack_filter)
 
 
-logger = logging.getLogger('requests.packages.urllib3')
+logger = logging.getLogger('requests.packages.urllib3.connectionpool')
 logger.addFilter(InfoToDebugFilter())
+
