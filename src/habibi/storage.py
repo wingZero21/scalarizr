@@ -42,7 +42,9 @@ class StorageManager():
 
     def _cleanup(self):
         # Remove all volumes of volume group
-        lvm2.vgremove(vg_name)
+        vg_infos = lvm2.vgs(vg_name)
+        if vg_infos:
+            lvm2.vgremove(vg_name)
 
 
     def __call__(self, environ, start_response):
