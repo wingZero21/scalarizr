@@ -283,7 +283,7 @@ class CinderVolume(base.Volume):
         if server_id is None:
             server_id = self._server_id()
         volume_id = self.id
-        self._check_cinder_connection()
+        self._check_nova_connection()
 
         ops_delay = 10
         with self.attach_lock:
