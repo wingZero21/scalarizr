@@ -1,123 +1,73 @@
+
 # pylint: disable=R0902, W0613, R0913, R0914, R0201, R0904
 
-
-import BaseHTTPServer
-import uuid
+import re
 import os
 import sys
-import re
-import shutil
-import subprocess
-import xml.dom.minidom as dom
-import xml.etree.ElementTree as etree
-import urllib2
-import time
-import string
-import logging
-import threading
-import wsgiref
-import wsgiref.simple_server
-import binascii
+import cgi
 import json
 import copy
-import cgi
-from collections import Hashable
+import uuid
+import time
+import shutil
+import random
+import string
+import urllib2
+import logging
+import binascii
+import threading
+import subprocess
+import BaseHTTPServer
+import xml.dom.minidom as dom
+import xml.etree.ElementTree as etree
 
-from habibi import crypto, storage
+from wsgiref import simple_server
+
+from habibi import crypto, storage, events
 
 
 logging.basicConfig(
         stream=sys.stderr, 
         level=logging.DEBUG, 
-        format='%(name)-20s %(levelname)-8s - %(message)s')
+        format='%(asctime)s %(name)-20s %(levelname)-8s - %(message)s')
 LOG = logging.getLogger('habibi')
+
 VAGRANT_FILE = '''
 Vagrant.configure("2") do |config|
+  #config.vm.box = "my-mongo"
   config.vm.box = "ubuntu1204"
   config.vm.box_url = "http://scalr-labs.s3.amazonaws.com/ubuntu1204-lxc_devel_20130814.box"
   config.vm.synced_folder "../..", "/vagrant0"
+  config.berkshelf.enabled = true
   config.vm.provision :chef_solo do |chef|
-     chef.cookbooks_path = ["../../cookbooks/cookbooks", "../../public_cookbooks/cookbooks"]
-     chef.add_recipe "$behavior"
-     chef.add_recipe "vagrant_boxes::scalarizr_lxc"
-     chef.json = { :user_data => "$user_data" }
+    #chef.cookbooks_path = ["../../cookbooks/cookbooks", "../../public_cookbooks/cookbooks"]
+
+$recipes_for_behaviours
+
+    chef.add_recipe "vagrant_boxes::scalarizr_lxc"
+    chef.json = { :user_data => "$user_data" }
   end
 end
 '''
 
+BERKSHELF_FILE = """
+site :opscode
 
-def hashable(obj):
-    return isinstance(obj, Hashable)
+repo_int = "git@github.com:Scalr/int-cookbooks.git"
+repo_pub = "git@github.com:Scalr/cookbooks.git"
 
+cookbook "vagrant_boxes", git: repo_int, rel: "cookbooks/vagrant_boxes", ref: "HEAD"
+"""
 
-class Notification(object):
-
-    def __init__(self, name=None):
-        self._lock = threading.Condition()
-        self.name = name or ''
-        self._times_notified = 0
-        self._times_waited = 0
-        self._waiters_qty = 0
-
-    def wait(self, timeout=None):
-        try:
-            self._lock.acquire()
-            self._waiters_qty += 1
-            self._lock.wait(timeout)
-            self._waiters_qty -= 1
-            self._times_waited += 1
-        finally:
-            self._lock.release()
-
-    def notify(self):
-        self._lock.acquire()
-        self._lock.notify_all()
-        self._times_notified += 1
-        self._lock.release()
-
-    @property
-    def times_notified(self):
-        return self._times_notified
-
-    @property
-    def times_waited(self):
-        return self._times_waited
-
-    @property
-    def waiters_qty(self):
-        return self._waiters_qty
-
-
-class NotificationCenter(object):
-
-    def __init__(self):
-        self._notification_pool = {}
-
-    def _normalize_notification_name(self, name):
-        if hashable(name) and not isinstance(name, str):
-            return str(hash(name))
-        return name
-
-    def wait_notification(self, name, timeout=None):
-        name = self._normalize_notification_name(name)
-        if name not in self._notification_pool:
-            self._notification_pool[name] = Notification(name)
-        self._notification_pool[name].wait(timeout)
-
-    def notify(self, name):
-        name = self._normalize_notification_name(name)
-        if name in self._notification_pool:
-            self._notification_pool[name].notify()
-
-    def get_notification(self, name):
-        name = self._normalize_notification_name(name)
-        return self._notification_pool.get(name)
+ROUTER_IP = '10.0.3.1'
+ROUTER_PORT = 10001
 
 
 class Server(object):
 
     def __init__(self,
-                 behaviors,
+                 behaviours,
+                 role,
                  sid=None,
                  index=0,
                  crypto_key=None,
@@ -125,18 +75,21 @@ class Server(object):
                  public_ip=None,
                  private_ip=None,
                  status='pending',
-                 zone=None,
-                 notification_center=None):
+                 zone=None):
+        """
+        @param role: Role object
+        @type role: FarmRole
+        """
         self.id = sid or str(uuid.uuid4())
         self.index = index
+        self.role = role
         self.crypto_key = crypto_key or crypto.keygen()
         self.farm_hash = farm_hash or crypto.keygen(10)
         self.public_ip = public_ip
         self.private_ip = private_ip
         self._status = status
-        self.behaviors = behaviors
+        self.behaviours = behaviours
         self.zone = zone
-        self.notification_center = notification_center
 
     def get_rootfs_path(self):
         rootfs_path = ''
@@ -153,206 +106,306 @@ class Server(object):
         return rootfs_path
 
     def set_status(self, new_status):
+        old_status = self._status
         self._status = new_status
-        self.notification_center.notify((self, 'status'))
+        self.role.farm.event_mgr.apply_breakpoints(event='server_status_changed',
+                                                    old_status=old_status,
+                                                    new_status=new_status,
+                                                    server=self)
 
     def get_status(self):
         return self._status
 
     status = property(get_status, set_status)
 
-class Habibi(object):
-
-    def __init__(self, behavior, base_dir=None):
-        #if 'chef' not in behaviors:
-        #    behaviors.append('chef')
-        self.role = {'behaviors': [behavior],
-                     'name': 'habibi-lxc'}
-        self.servers = []
-        self.breakpoints = []
-        self.router_ip = '10.0.3.1'
-        self.port = 10001
-        self.queryenv_version = '2012-07-01'
-        self.base_dir = base_dir or '.habibi'
-        self.RequestHandler.habibi = self
-        self.queryenv = QueryEnv(self)
-        self.web_server = self.web_server_thread = None
-        self.msg_center = NotificationCenter()
-
-    def run_server(self, zone='lxc-zone'):
-        server = Server(behaviors=self.role['behaviors'],
-                        index=self._next_server_index(),
-                        notification_center=self.msg_center,
-                        zone=zone)
-        self.servers.append(server)
-
-        server_dir = self.base_dir + '/' + server.id
-        os.makedirs(server_dir)
-        with open(server_dir + '/Vagrantfile', 'w+') as fp:
-            tpl = string.Template(VAGRANT_FILE)
-            fp.write(tpl.substitute(
-                user_data=self._pack_user_data(self._user_data(server)),
-                behavior=self.role['behaviors'][0]
-                ))
-
-        #subprocess.Popen('vagrant init ubuntu1210', shell=True, cwd=server_dir).communicate()
-        subprocess.Popen('vagrant up --provider lxc', shell=True, cwd=server_dir).communicate()
-        # TODO: server['machine_id']
-        return server
-
-    def stop_server(self, server):
-        if isinstance(server, str):
-            server = self.find_servers(server)[0]
-        server_dir = self.base_dir + '/' + server.id
-        p = subprocess.Popen('vagrant halt', shell=True, cwd=server_dir)
+    def destroy(self):
+        p = subprocess.Popen('vagrant destroy -f', shell=True, cwd=self.server_dir)
         p.communicate()
+        self._status = 'terminated'
+        self.role.farm.event_mgr.apply_breakpoints(event='server_terminated', server=self)
 
-    def destroy_server(self, server):
-        if isinstance(server, str):
-            server = self.find_servers(server)[0]
-        server_dir = self.base_dir + '/' + server.id
-        p = subprocess.Popen('vagrant destroy -f', shell=True, cwd=server_dir)
-        p.communicate()
+    def terminate(self, force=True):
+        pass
+        # TODO: Terminate server, notify farm
 
-    def _perform_server_command(self, server, command):
-        if isinstance(server, str):
-            server = self.find_servers(server)[0]
-        server_dir = self.base_dir + '/' + server.id
-        p = subprocess.Popen('vagrant ssh -c "sudo %s"' % command, shell=True, cwd=server_dir)
-        return p.communicate()
-
-    def cut_off_server(self, server):
-        """ breaks connection to and from server """
-        self._perform_server_command(server, 'iptables -A INPUT -p tcp --dport 22 -j ACCEPT')
-        self._perform_server_command(server, 'iptables -A OUTPUT -p tcp --sport 22 -j ACCEPT')
-        self._perform_server_command(server, 'iptables -P INPUT DROP')
-        self._perform_server_command(server, 'iptables -P OUTPUT DROP')
-        self._perform_server_command(server, 'iptables -P FORWARD DROP')
-
-    def start(self):
-        self.web_server = BaseHTTPServer.HTTPServer(('', self.port), self.RequestHandler)
-        self.web_server_thread = threading.Thread(name='WebServer', 
-                                                 target=self.web_server.serve_forever)
-        self.web_server_thread.setDaemon(True)
-        self.web_server_thread.start()
-
-        self.storage_manager = storage.StorageManager()
-        self.storage_server = wsgiref.simple_server.make_server('0.0.0.0', storage.port, self.storage_manager)
-        storage_thread = threading.Thread(target=self.storage_server.serve_forever, name='Storage server')
-        storage_thread.setDaemon(True)
-        storage_thread.start()
-
-        if os.path.exists(self.base_dir):
-            shutil.rmtree(self.base_dir)
-        os.makedirs(self.base_dir)
 
     def stop(self):
-        # TODO: remove all volumes
-        self.web_server.shutdown()
-        self.storage_manager._cleanup()
-        self.storage_server.shutdown()
+        p = subprocess.Popen('vagrant halt', shell=True, cwd=self.server_dir)
+        p.communicate()
 
-    def spy(self, spy):
-        self.breakpoints = []
-        for name in dir(spy):
-            fn = getattr(spy, name)
-            if hasattr(fn, 'breakpoint'):
-                bp = Breakpoint(fn.breakpoint)
-                self.breakpoints.append((fn, bp))
+    def cut_off(self):
+        self.perform_command('iptables -A INPUT -p tcp --dport 22 -j ACCEPT')
+        self.perform_command('iptables -A OUTPUT -p tcp --sport 22 -j ACCEPT')
+        self.perform_command('iptables -P INPUT DROP')
+        self.perform_command('iptables -P OUTPUT DROP')
+        self.perform_command('iptables -P FORWARD DROP')
 
-    def apply_breakpoints(self, cond, kwds):
-        test_bp = Breakpoint(cond)
-        for bp in self.breakpoints:
-            if bp[1] == test_bp:
-                bp[0](**kwds)
-                LOG.debug('hash of running bg %s', hash(bp[0]))
-                self.msg_center.notify(bp[0])
+    def perform_command(self, command):
+        p = subprocess.Popen('vagrant ssh -c "sudo %s"' % command, shell=True, cwd=self.server_dir)
+        return p.communicate()
+
+    @property
+    def server_dir(self):
+        return  os.path.join(self.role.farm.base_dir, self.id)
+
+
+class FarmRole(object):
+
+    chef_recipes = None
+    def __init__(self, name, behaviours, farm):
+        """
+        @param farm: Farm object (habibi)
+        @type farm: Habibi
+        """
+        if not isinstance(behaviours, (list, tuple)):
+            behaviours = [behaviours]
+        self.behaviours = behaviours
+        self.name = name
+        self.farm = farm
+        self.id = random.randint(1, 1000000)
+        self.servers = []
 
     def _next_server_index(self):
         # TODO: handle holes
         return len(self.servers) + 1
 
+    def _pack_user_data(self, user_data):
+        return ';'.join(['{0}={1}'.format(k, v) for k, v in user_data.items()])
+
+    def run_server(self, zone='lxc-zone'):
+        if not self.farm.started:
+            raise Exception("You should start your farm first.")
+        server = Server(behaviours=self.behaviours,
+                        index=self._next_server_index(),
+                        zone=zone,
+                        role=self)
+        self.servers.append(server)
+
+        server_dir = self.farm.base_dir + '/' + server.id
+        os.makedirs(server_dir)
+
+        recipes_for_behaviours_list = self.chef_recipes or self.behaviours
+        with open(server_dir + '/Vagrantfile', 'w+') as fp:
+            tpl = string.Template(VAGRANT_FILE)
+            recipes_subst = "\n".join(["    chef.add_recipe '%s'" % recipe for recipe in recipes_for_behaviours_list])
+
+            # TODO: multi behaviour roles
+            fp.write(tpl.substitute(
+                user_data=self._pack_user_data(self._user_data(server)),
+                recipes_for_behaviours=recipes_subst
+                ))
+
+        with open(server_dir + '/Berksfile', 'w+') as fp:
+            cookbooks_strs = []
+            for recipe in recipes_for_behaviours_list:
+                cookbook = '::' in recipe and recipe.split('::')[0] or recipe
+                cookbook_str = 'cookbook "{0}", git: repo_pub, rel: "cookbooks/{0}", ref: "HEAD"'.format(cookbook)
+                cookbooks_strs.append(cookbook_str)
+
+            fp.write(BERKSHELF_FILE + '\n' + '\n'.join(cookbooks_strs))
+
+        #subprocess.Popen('vagrant init ubuntu1210', shell=True, cwd=server_dir).communicate()
+        lxc_start = subprocess.Popen('vagrant up --provider lxc', shell=True, cwd=server_dir)
+        lxc_start.communicate()
+        if lxc_start.returncode:
+            raise Exception('Container start or provisioning failed. ret code: %s' % lxc_start.returncode)
+
+        # TODO: server['machine_id']
+        return server
+
+
     def _user_data(self, server):
         return {'szr_key': server.crypto_key,
                 'hash': server.farm_hash,
                 'serverid': server.id,
-                'p2p_producer_endpoint': 'http://{0}:{1}/messaging'.format(self.router_ip,
-                                                                           self.port),
-                'queryenv_url': 'http://{0}:{1}/query-env'.format(self.router_ip,
-                                                                  self.port),
-                'behaviors': ','.join(server.behaviors),
+                'p2p_producer_endpoint': 'http://{0}:{1}/messaging'.format(ROUTER_IP, ROUTER_PORT),
+                'queryenv_url': 'http://{0}:{1}/query-env'.format(ROUTER_IP, ROUTER_PORT),
+                'behaviors': ','.join(server.behaviours),
                 'farm_roleid': '1',
                 'roleid': '1',
                 'env_id': '1',
                 'platform': 'lxc',
                 'region': server.zone,
                 'server_index': str(server.index),
-                'storage_service_url': 'http://{0}:{1}'.format(self.router_ip, storage.port)}
+                'storage_service_url': 'http://{0}:{1}'.format(ROUTER_IP, storage.port)}
 
 
-    def _pack_user_data(self, user_data):
-        return ';'.join(['{0}={1}'.format(k, v) for k, v in user_data.items()])
-
-    def find_servers(self, pattern):
+    def find_servers(self, pattern=None):
         # TODO: finish else clauses - find server if pattern is not uuid
-        if pattern:
-            if re.search(r'\w{8}-\w{4}-\w{4}-\w{4}-\w{12}', pattern):
-                for server in self.servers:
-                    if server.id == pattern:
-                        return [server]
-            else:
-                LOG.warn('pattern %s doesnt match uuid4', pattern)
-        else:
-            return [server for server in self.servers 
+        ret = []
+        if pattern is None:
+            ret = [server for server in self.servers
                         if server.status != 'pending']
-        msg = 'Empty results for search servers by pattern: {0}'.format(pattern)
-        raise LookupError(msg)
 
-    def send(self, msg_name, server_pattern=None, source_msg=None):
+        elif pattern and isinstance(pattern, (str,unicode)):
+            # Assuming it's id
+            for server in self.servers:
+                if server.id == pattern:
+                    ret.append(server)
+
+        elif isinstance(pattern, dict):
+            # pattern = dict attrib -> value
+            for server in self.servers:
+                for find_attr, find_value in pattern.iteritems():
+                    real_value = getattr(server, find_attr)
+                    if real_value != find_value:
+                        break
+                else:
+                    ret.append(server)
+
+        if ret:
+            return ret
+        else:
+            raise LookupError('Empty results for search servers by pattern: {0}'.format(pattern))
+
+
+class Habibi(object):
+
+    def __init__(self, base_dir=None):
+        #if 'chef' not in behaviors:
+        #    behaviors.append('chef')
+        self.servers = []
+        self.event_mgr = events.NotificationCenter()
+        self.queryenv_version = '2012-07-01'
+        self.base_dir = base_dir or '.habibi'
+        self.RequestHandler.habibi = self
+        self.queryenv = QueryEnv(self)
+        self.web_server = self.web_server_thread = None
+        self.roles = []
+        self.farm_crypto_key = crypto.keygen()
+        self.started = False
+
+
+    def add_role(self, name, behaviours):
+        role = FarmRole(name, behaviours, self)
+        self.roles.append(role)
+        return role
+
+
+    def spy(self, spy):
+        for attr_name in dir(spy):
+            if not attr_name.startswith('_'):
+                attr = getattr(spy, attr_name)
+                if callable(attr) and hasattr(attr, '_breakpoint'):
+                    self.event_mgr.add_breakpoint(attr._breakpoint, attr)
+
+
+    def remove_role(self, role):
+        if role not in self.roles:
+            raise Exception('Role %s not found' % role.name)
+        self.roles.remove(role)
+        for server in role.servers:
+            try:
+                server.destroy()
+            except:
+                LOG.debug('Failed to terminate server %s' % server.id, exc_info=sys.exc_info())
+
+
+    def start(self):
+        self.web_server = BaseHTTPServer.HTTPServer(('', ROUTER_PORT), self.RequestHandler)
+        self.web_server_thread = threading.Thread(name='WebServer', 
+                                                target=self.web_server.serve_forever)
+        self.web_server_thread.setDaemon(True)
+        self.web_server_thread.start()
+
+        self.storage_manager = storage.StorageManager(self)
+        self.storage_server = simple_server.make_server('0.0.0.0', storage.port, self.storage_manager)
+        storage_thread = threading.Thread(target=self.storage_server.serve_forever, name='Storage server')
+        storage_thread.setDaemon(True)
+        storage_thread.start()
+
+        storage.lvm2.lvremove(storage.vg_name)
+
+        if os.path.exists(self.base_dir):
+            shutil.rmtree(self.base_dir)
+        os.makedirs(self.base_dir)
+        self.started = True
+
+    def stop(self):
+        self.web_server.shutdown()
+        self.storage_manager._cleanup()
+        self.storage_server.shutdown()
+        self.started = False
+
+
+    def find_servers(self, pattern=None):
+        ret = []
+        for role in self.roles:
+            try:
+                role_servers = role.find_servers(pattern)
+                ret.extend(role_servers)
+            except LookupError:
+                pass
+
+        if ret:
+            return ret
+        else:
+            raise LookupError()
+
+
+    def _send_triggered(self, msg_name, server_pattern=None, source_msg=None, source_server=None):
         servers = self.find_servers(server_pattern)
         #source_server = self.find_servers(source_msg.meta['server_id'])[0]
 
         for server in servers:
-            msg = Message()
-            msg.id = str(uuid.uuid4())
-            msg.name = msg_name
-            msg.body = source_msg.body.copy()
-            msg.body['scripts'] = []
-            msg.body['behaviour'] = list(server.behaviors)
+            try:
+                msg = Message()
+                msg.id = str(uuid.uuid4())
+                msg.name = msg_name
+                msg.body = source_msg.body.copy() if source_msg else {}
+                msg.body['scripts'] = []
+                msg.body['behaviour'] = list(server.behaviours)
+                fields =  dict(source_msg=source_msg, source_server=source_server)
+                self.send(msg, server, fields)
 
-            self.apply_breakpoints(cond={'msg_name': msg.name, 
-                                         'target_index': str(server.index),
-                                         'target_behavior': server.behaviors[0]}, 
-                                   kwds={'target_msg': msg,
-                                         'target_server': server,
-                                         'source_msg': source_msg})
+            except:
+                e = sys.exc_info()[1]
+                LOG.error('Failed to send message to server %s: %s', server.id, e)
 
-            LOG.debug('<~ %s to %s', msg.name, server.id)
-            xml_data = msg.toxml()
-            LOG.debug(' * data: %s', xml_data)
-            LOG.debug(' * key: %s', server.crypto_key)
-            crypto_key = binascii.a2b_base64(server.crypto_key)
-            encrypted_data = crypto.encrypt(xml_data, crypto_key)
-            signature, timestamp = crypto.sign(encrypted_data, crypto_key)
 
-            url = 'http://{0}:8013/control'.format(server.public_ip)
-            req = urllib2.Request(url, encrypted_data, {
-                'Content-type': 'application/xml',
-                'Date': timestamp,
-                'X-Signature': signature,
-                'X-Server-Id': server.id})
-            opener = urllib2.build_opener(urllib2.HTTPRedirectHandler())
-            opener.open(req)
+    def send(self, msg, server, bpoint_add_fields=None):
+        # TODO: remove redundant fields since we have better filters now
+        bpoint = {'event': 'before_message_send',
+                 'msg_name': msg.name,
+                 'target_index': str(server.index),
+                 'target_behaviour': server.behaviours[0],
+                 'target_msg': msg,
+                 'target_server': server}
+
+        if bpoint_add_fields:
+            bpoint.update(bpoint_add_fields)
+        self.event_mgr.apply_breakpoints(bpoint)
+
+        LOG.debug('<~ %s to %s', msg.name, server.id)
+        xml_data = msg.toxml()
+        LOG.debug(' * data: %s', xml_data)
+        LOG.debug(' * key: %s', server.crypto_key)
+        crypto_key = binascii.a2b_base64(server.crypto_key)
+        encrypted_data = crypto.encrypt(xml_data, crypto_key)
+        signature, timestamp = crypto.sign(encrypted_data, crypto_key)
+
+        url = 'http://{0}:8013/control'.format(server.public_ip)
+        req = urllib2.Request(url, encrypted_data, {
+            'Content-type': 'application/xml',
+            'Date': timestamp,
+            'X-Signature': signature,
+            'X-Server-Id': server.id})
+        opener = urllib2.build_opener(urllib2.HTTPRedirectHandler())
+        opener.open(req)
+
         
     def on_message(self, msg):
         server_id = msg.meta['server_id']
-        LOG.debug('~> %s from %s', msg.name, server_id)
+        LOG.debug('Incoming message  "%s" from %s', msg.name, server_id)
         server = self.find_servers(server_id)[0]
 
-        self.apply_breakpoints(cond={'msg_name': msg.name, 
-                                     'source_index': str(server.index),
-                                     'source_behavior': server.behaviors[0]}, 
-                               kwds={'source_msg': msg})
+        self.event_mgr.apply_breakpoints(**{'event': 'incoming_message',
+                                                'msg_name': msg.name,
+                                                'source_index': str(server.index),
+                                                'source_behaviour': server.behaviours[0],
+                                                'source_msg': msg, 'source_server': server})
+
+        kwds = dict(source_msg=msg, source_server=server)
 
         if msg.name == 'HostInit':
             server.status = 'initializing'
@@ -361,17 +414,19 @@ class Habibi(object):
             server.crypto_key = msg.body['crypto_key'].strip()
 
             time.sleep(1)  # It's important gap for Scalarizr
-            self.send('HostInitResponse', server_pattern=server_id, source_msg=msg)
-            self.send('HostInit', source_msg=msg)
+            self._send_triggered('HostInitResponse', server_pattern=server_id, **kwds)
+            self._send_triggered('HostInit', **kwds)
         elif msg.name == 'BeforeHostUp':
-            self.send('BeforeHostUp', source_msg=msg)
+            self._send_triggered('BeforeHostUp', **kwds)
         elif msg.name == 'HostUp':
             server.status = 'running'
-            self.send('HostUp', source_msg=msg)
+            self._send_triggered('HostUp', **kwds)
+        elif msg.name == 'HostDown':
+            pass
+        elif msg.name == 'BeforeHostDown':
+            pass
         elif msg.name in ('OperationDefinition', 'OperationProgress', 'OperationResult'):
             pass
-        else:
-            LOG.debug('Unprocessed message: %s' % msg)
 
 
     class RequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -474,42 +529,38 @@ class QueryEnv(object):
     def __init__(self, habibi):
         self.habibi = habibi
         self.fields = None
-        self._handlers = dict()
+        self._handlers = []
 
-
-    def subscribe(self, method, function):
-        if not method in self._handlers:
-            self._handlers[method] = list()
-        self._handlers[method].append(function)
+    def subscribe(self, function):
+        self._handlers.append(function)
 
     def run(self, operation, fields):
-        self.fields = fields
         try:
             method_name = operation.replace('-', '_')
             self.LOG.debug('run %s', operation)
             response = etree.Element('response')
             if hasattr(self, method_name):
-                response.append(getattr(self, method_name)())
-            if method_name in self._handlers:
-                for hndlr in self._handlers[method_name]:
-                    hndlr(method_name, response, fields)
+                response.append(getattr(self, method_name)(fields))
+
+            for hndlr in self._handlers:
+                hndlr(method_name, response, fields)
+
             return etree.tostring(response)
         except:
             exc_info = sys.exc_info()
             LOG.error('Queryenv error', exc_info=exc_info)
             raise
-        finally:
-            self.fields = None
 
-    def get_latest_version(self):
+
+    def get_latest_version(self, fields):
         ret = etree.Element('version')
         ret.text = self.habibi.queryenv_version
         return ret
 
-    def list_global_variables(self):
+    def list_global_variables(self, fields):
         return etree.Element('variables')
 
-    def get_global_config(self):
+    def get_global_config(self, fields):
         ret = etree.Element('settings')
         settings = {'dns.static.endpoint': 'scalr-dns.com',
                     'scalr.version': '4.5.0',
@@ -520,27 +571,33 @@ class QueryEnv(object):
             ret.append(setting)
         return ret
 
-    def list_roles(self):
+    def list_roles(self, fields):
+        with_init = fields.getvalue('showInitServers') == '1'
         ret = etree.Element('roles')
-        role = etree.Element('role')
-        role.attrib.update({'id': '1',
+        for role in self.habibi.roles:
+
+            role_el = etree.Element('role')
+            role_el.attrib.update({'id': str(role.id),
                             'role-id': '1',
-                            'behaviour': ','.join(self.habibi.role['behaviors']),
-                            'name': self.habibi.role['name']})
-        hosts = etree.Element('hosts')
-        role.append(hosts)
-        for server in self.habibi.servers:
-            host = etree.Element('host')
-            host.attrib.update({'internal-ip': server.private_ip,
-                                'external-ip': server.public_ip,
-                                'status': server.status,
-                                'index': str(server.index),
-                                'cloud-location': server.zone})
-            hosts.append(host)
-        ret.append(role)
+                            'behaviour': ','.join(role.behaviours),
+                            'name': role.name})
+            hosts = etree.Element('hosts')
+            role_el.append(hosts)
+
+            for server in role.servers:
+                if not with_init and server.status in ('pending', 'initializing'):
+                    continue
+                host = etree.Element('host')
+                host.attrib.update({'internal-ip': server.private_ip,
+                                    'external-ip': server.public_ip,
+                                    'status': server.status,
+                                    'index': str(server.index),
+                                    'cloud-location': server.zone})
+                hosts.append(host)
+            ret.append(role_el)
         return ret
 
-    def get_service_configuration(self):
+    def get_service_configuration(self, fields):
         return etree.Element('settings')
 
 
@@ -626,30 +683,6 @@ class Message(object):
             el.appendChild(doc.createTextNode(value or ''))
 
 
-class Breakpoint(object):
-
-    def __init__(self, cond):
-        bp = cond.copy()
-        for key in ('source', 'target'):
-            if bp.get(key):
-                if '.' in bp[key]:
-                    bp[key + '_behavior'], bp[key + '_index'] = bp[key].split('.')
-                else:
-                    bp[key + '_behavior'] = bp[key]
-                del bp[key]
-        self.cond = bp
-
-    def __eq__(self, test_cond):
-        if not isinstance(test_cond, Breakpoint):
-            test_bp = Breakpoint(test_cond)
-        else:
-            test_bp = test_cond
-        inc_cond = {}
-        for k in self.cond.keys():
-            inc_cond[k] = test_bp.cond.get(k)
-        #LOG.debug('Compare test/self: %s and %s', inc_cond, self.cond)
-        return inc_cond == self.cond
-
 
 def xml_strip(el):
     for child in list(el.childNodes):
@@ -657,16 +690,11 @@ def xml_strip(el):
             el.removeChild(child)
         else:
             xml_strip(child)
-    return el 
+    return el
 
 
-def breakpoint(**kwds):
-    def wrapper(fn):
-        fn.breakpoint = kwds
-        return fn
-    return wrapper
 
-
+"""
 class SampleSpy(object):
 
     @breakpoint(msg_name='HostInit', source='base.1')
@@ -686,7 +714,7 @@ class SampleSpy(object):
     @breakpoint(msg_name='HostUp', source='base')
     def hup(self, **kwds):
         print 'recv HostUp from server'
-
+"""
 
 # class PxcSpy(object):
 #     pass
