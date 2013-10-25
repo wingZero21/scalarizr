@@ -375,8 +375,7 @@ nimbula_rebundle = scalarizr.handlers.nimbula.rebundle
 EOF
 fi
 
-if [ ! -f "$pub_cnf_dir/openstack.ini" ]; then
-        cat <<EOF > "$pub_cnf_dir/openstack.ini"
+cat <<EOF > "$pub_cnf_dir/openstack.ini"
 [openstack]
 
 [handlers]
@@ -384,7 +383,7 @@ if [ ! -f "$pub_cnf_dir/openstack.ini" ]; then
 openstack_vol = scalarizr.handlers.openstack.vol
 openstack_rebundle = scalarizr.handlers.openstack.rebundle
 EOF
-fi
+
 
 if [ ! -f "$pub_cnf_dir/postgresql.ini" ]; then
         cat <<EOF > "$pub_cnf_dir/postgresql.ini"
