@@ -93,7 +93,7 @@ class CinderVolume(base.Volume):
     def taken_devices(cls):
         devs = glob.glob('/dev/xvd*') + glob.glob('/dev/vd*') + glob.glob('/dev/sd*')
         devs = [x for x in devs if x[-1] in string.ascii_lowercase]
-        return devs
+        return set(devs)
 
     @classmethod
     def taken_letters(cls):
