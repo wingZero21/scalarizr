@@ -305,7 +305,19 @@ class OpenStackCredentialsLoggerFilter(object):
             record.msg = re.sub(self.request_re, r'\1 <HIDDEN>', message)
             return True
 
+
+class InfoToDebugFilter(object):
+    def filter(self, record):
+        if record.level == logging.INFO:
+            record.level = logging.DEBUG
+            return True
+
+
 openstack_filter = OpenStackCredentialsLoggerFilter()
-for logger_name in ('keystoneclient', 'novaclient', 'cinderclient'):
-    logger = logging.getLogger('%s.client' % logger_name)
+for logger_name in ('keystoneclient.client', 'novaclient.client', 'cinderclient.client'):
+    logger = logging.getLogger(logger_name)
     logger.addFilter(openstack_filter)
+
+
+logger = logging.getLogger('requests.packages.urllib3')
+logger.addFilter(InfoToDebugFilter())
