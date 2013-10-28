@@ -134,7 +134,7 @@ class Operation(object):
         self.error = exc_info or sys.exc_info()
         self.status = 'failed'
         self.logger.error('Operation "%s" (id: %s) failed. Reason: %s', 
-                self.name, self.operation_id, self.error[1])
+                self.name, self.operation_id, self.error[1], exc_info=self.error)
 
     def complete(self, result=None):
         self.result = result

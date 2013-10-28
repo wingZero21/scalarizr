@@ -119,12 +119,9 @@ class Configuration:
         if self.etree:
             indent(self.etree.getroot())
 
-
     def _read0(self, file):
         fp = open(file)
         self.readfp(fp)
-
-
 
     def readfp(self, fp):
         try:
@@ -167,6 +164,26 @@ class Configuration:
             fp.close()
         except:
             raise
+
+    def dumps(self):
+        """
+        Dump configuration to string instead of file
+        @return: str
+        """
+        s = StringIO()
+        try:
+            self.write_fp(s, close=False)
+            return s.getvalue()
+        finally:
+            s.close()
+
+    def reads(self, s):
+        """
+        @type s: str
+        @param s: String, containing configuration
+        """
+        fp = StringIO(s)
+        self.readfp(fp)
 
     def extend(self, conf):
         """
