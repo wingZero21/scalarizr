@@ -309,12 +309,11 @@ class Habibi(object):
         self.web_server_thread.start()
 
         self.storage_manager = storage.StorageManager(self)
+        self.storage_manager.cleanup()
         self.storage_server = simple_server.make_server('0.0.0.0', storage.port, self.storage_manager)
         storage_thread = threading.Thread(target=self.storage_server.serve_forever, name='Storage server')
         storage_thread.setDaemon(True)
         storage_thread.start()
-
-        storage.lvm2.lvremove(storage.vg_name)
 
         if os.path.exists(self.base_dir):
             shutil.rmtree(self.base_dir)
