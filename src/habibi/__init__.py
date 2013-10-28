@@ -322,7 +322,7 @@ class Habibi(object):
 
     def stop(self):
         self.web_server.shutdown()
-        self.storage_manager._cleanup()
+        self.storage_manager.cleanup()
         self.storage_server.shutdown()
         self.started = False
 
