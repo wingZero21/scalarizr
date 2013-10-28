@@ -149,7 +149,7 @@ class CSVolume(base.Volume):
             # We should wait for state chage
             if self._native_vol.vmstate == 'Stopping':
                 def vm_state_changed():
-                    self._native_vol = self._conn.listVolumes(self._native_vol.id)[0]
+                    self._native_vol = self._conn.listVolumes(id=self._native_vol.id)[0]
                     return not hasattr(self._native_vol, 'virtualmachineid') or \
                         self._native_vol.vmstate != 'Stopping'
                 wait_until(vm_state_changed)
