@@ -11,12 +11,11 @@ boxes = {
 }
 
 Vagrant.configure("2") do |config|
-  config.berkshelf.enabled = true
   boxes.each do |name, box|
-    config.vm.define name do |machine|
+   config.berkshelf.enabled = true 
+   config.vm.define name do |machine|
       machine.vm.box = box
       machine.vm.provision :chef_solo do |chef|
-        chef.cookbooks_path = "cookbooks/cookbooks"
         chef.add_recipe "vagrant_boxes::scalarizr"
       end
 
