@@ -4,8 +4,7 @@ repo_int = "git@github.com:Scalr/int-cookbooks.git"
 repo_pub = "git@github.com:Scalr/cookbooks.git"
 
 cookbook "vagrant_boxes", git: repo_int, rel: "cookbooks/vagrant_boxes", ref: "HEAD"
-cookbook "buildscripts", git: repo_int, rel: "cookbooks/vagrant_boxes", ref: "HEAD"
-
+cookbook "buildscripts", git: repo_int, rel: "cookbooks/buildscripts", ref: "HEAD"
 
 cookbook "mysql", git: repo_pub, rel: "cookbooks/mysql", ref: "HEAD"
 cookbook "percona", git: repo_pub, rel: "cookbooks/percona", ref: "HEAD"
