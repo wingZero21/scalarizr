@@ -197,7 +197,7 @@ class CSVolume(base.Volume):
                                 break
                             if 'Internal error executing command' in msg:
                                 int_errs += 1
-                                if int_errs >= 3:
+                                if int_errs >= 10:
                                     raise
                                 time.sleep(30)
                                 continue
