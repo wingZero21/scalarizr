@@ -504,8 +504,16 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             for part in manifest.parts:
                 upload_files.append(os.path.join(manifest_dir, part[0]))
 
-            trn = FileTransfer(src=upload_files, dst=self._platform.scalrfs.images())
-            trn.run()
+            dst = self._platform.scalrfs.images()
+            trn = FileTransfer(src=upload_files, dst=dst)
+            res = trn.run()
+            if res["failed"]:
+                sources = map(lambda job: job["src"], res["failed"])
+                raise HandlerError("Failed uploading the image files to %s:\n" % dst +
+                                   # '\n'.join(sources) + '\n' +
+                                   "\n" +
+                                   "%s failed, %s completed" % (len(res["failed"]), 
+                                                                len(res["completed"])))
             #trn = Transfer(pool=4, max_attempts=5, logger=LOG)
             #trn.upload(upload_files, self._platform.scalrfs.images())
 
