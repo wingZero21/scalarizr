@@ -87,7 +87,7 @@ class ApacheHandler(Handler):
         bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
 
     def on_start(self):
-        if self._cnf.state == ScalarizrState.RUNNING:
+        if __node__['state'] == ScalarizrState.RUNNING:
             self._rpaf_reload()
 
     def on_before_reboot_finish(self):
