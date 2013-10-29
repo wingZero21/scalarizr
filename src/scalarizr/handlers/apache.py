@@ -56,7 +56,7 @@ class ApacheHandler(Handler):
             host_init_response=self.on_host_init_response,
             before_reboot_finish=self.on_before_reboot_finish,
         )
-        if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
+        if __node__['state'] == ScalarizrState.BOOTSTRAPPING:
             self.api.init_service()
 
     def on_VhostReconfigure(self, message):

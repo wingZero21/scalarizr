@@ -740,6 +740,7 @@ class SSLCertificate(object):
         if authority:
             with open(self.chain_path, 'w') as fp:
                 fp.write(authority)
+        #TODO: CHOWN!
 
     def ensure(self):
         """
