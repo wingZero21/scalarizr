@@ -9,7 +9,7 @@ from __future__ import with_statement
 # Core
 import scalarizr.handlers
 from scalarizr.bus import bus
-from scalarizr import config
+from scalarizr import config, storage2
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import operation
@@ -128,6 +128,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         return message.name == Messages.INT_SERVER_REBOOT \
             or message.name == Messages.INT_SERVER_HALT \
             or message.name == Messages.HOST_INIT_RESPONSE \
+            or message.name == Messages.BEFORE_HOST_TERMINATE \
             or message.name == Messages.SCALARIZR_UPDATE_AVAILABLE
 
 
@@ -365,6 +366,28 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             raise
         with bus.initialization_op as op:
             op.ok()
+
+    def on_BeforeHostTerminate(self, message):
+        if message.local_ip != __node__['private_ip']:
+            return
+
+        volumes = message.body.get('volumes', [])
+        volumes = volumes or []
+        
+        for volume in volumes:
+            volume = storage2.volume(volume)
+            volume.umount()
+            volume.detach()
+
+        if __node__['platform'] == 'cloudstack':
+            # Important! 
+            # After following code run, server will loose network for some time
+            # Fixes: SMNG-293
+            conn = __node__['cloudstack']['new_conn']()
+            vm = conn.listVirtualMachines(id=__node__['cloudstack']['instance_id'])[0]
+            result = conn.listPublicIpAddresses(ipAddress=vm.publicip)
+            if result:
+                conn.disableStaticNat(result[0].id)
 
 
     def on_ScalarizrUpdateAvailable(self, message):
