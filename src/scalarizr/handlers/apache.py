@@ -37,10 +37,15 @@ class ApacheHandler(Handler):
 
     def __init__(self):
         Handler.__init__(self)
+
         self.api = apache.ApacheAPI()
+
         self.preset_provider = ApachePresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
+        self.initial_preset = None
+
         self._queryenv = bus.queryenv_service
+
         bus.on(init=self.on_init)
         bus.define_events('apache_rpaf_reload')
 
@@ -49,53 +54,61 @@ class ApacheHandler(Handler):
             start=self.on_start,
             before_host_up=self.on_before_host_up,
             host_init_response=self.on_host_init_response,
+            before_reboot_finish=self.on_before_reboot_finish,
         )
         if self._cnf.state == ScalarizrState.BOOTSTRAPPING:
             self.api.init_service()
 
+    def on_VhostReconfigure(self, message):
+        """
+        Message is deprecated since Scalr 4.4.0
+        @param message: None
+        """
+        self.api.reload_virtual_hosts()
+
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
-        return BEHAVIOUR in behaviour and \
-            (message.name == Messages.VHOST_RECONFIGURE or
-                message.name == Messages.UPDATE_SERVICE_CONFIGURATION or
-                message.name == Messages.HOST_UP or
-                message.name == Messages.HOST_DOWN or
-                message.name == Messages.BEFORE_HOST_TERMINATE)
+        return BEHAVIOUR in behaviour and (
+            message.name == Messages.VHOST_RECONFIGURE or
+            message.name == Messages.UPDATE_SERVICE_CONFIGURATION or
+            message.name == Messages.HOST_UP or
+            message.name == Messages.HOST_DOWN or
+            message.name == Messages.BEFORE_HOST_TERMINATE)
 
     def on_host_init_response(self, message):
-        pass
+        apache_msg = message.body
+        log = bus.init_op.logger if bus.init_op else LOG
+        log.info('Deploying virtual hosts: %s' % str(apache_msg))
+        self.api.reconfigure(apache_msg)
+        if 'preset' in apache_msg:
+            self.initial_preset = apache_msg['preset']
 
     def on_before_host_up(self, message):
-        log = bus.init_op.logger if bus.init_op else LOG
-        log.info('Update virtual hosts')
-        self.api.reload_vhosts()
-        log.info('Reload RPAF')
         self._rpaf_reload()
         bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
 
     def on_start(self):
         if self._cnf.state == ScalarizrState.RUNNING:
-            self.api.reload_vhosts()
             self._rpaf_reload()
+
+    def on_before_reboot_finish(self):
+        self.api.reload_virtual_hosts()
 
     def on_HostUp(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
-            ModRPAF.add([message.local_ip])
+            apache.ModRPAF.add([message.local_ip])
             self.api.service.reload('Applying new RPAF proxy IPs list')
 
     def on_HostDown(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
-            ModRPAF.remove([message.local_ip])
+            apache.ModRPAF.remove([message.local_ip])
             self.api.service.reload('Applying new RPAF proxy IPs list')
-
-    def on_VhostReconfigure(self, message):
-        self.api.reload_vhosts()
 
     def _rpaf_reload(self):
         lb_hosts = []
         for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
             for host in role.hosts:
                 lb_hosts.append(host.internal_ip)
-        ModRPAF.update(lb_hosts)
+        apache.ModRPAF.update(lb_hosts)
         self.api.service.reload('Applying new RPAF proxy IPs list')
         bus.fire('apache_rpaf_reload')
 

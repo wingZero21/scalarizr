@@ -3,8 +3,6 @@ __author__ = 'shaitanich'
 import os
 import unittest
 
-import mock
-
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -13,19 +11,6 @@ except ImportError:
 from scalarizr import bus
 from scalarizr.api import apache
 from scalarizr.libs.metaconf import NoPathError
-
-
-bus.etc_path = '/etc/scalr'
-'''
-qs = bus.queryenv_service = mock.Mock()
-qs.list_virtual_hosts.return_value = []
-qs.get_ssl_certificate.return_value = (
-    '1',
-    '2',
-    '3'
-)
-qs.list_farm_role_params.return_value = {}
-'''
 
 
 class QEMock(object):
@@ -38,6 +23,7 @@ class QEMock(object):
 
 
 apache.bus.queryenv_service = QEMock
+bus.etc_path = '/etc/scalr'
 
 
 class ApacheAPITest(unittest.TestCase):
@@ -60,6 +46,20 @@ class ApacheAPITest(unittest.TestCase):
         pairs = apache.get_updated_file_names(data)
         self.assertEqual(pairs, expected)
 
+    def test_statistics(self):
+        keys = [
+            'Uptime',
+            'IdleWorkers',
+            'Total Accesses',
+            'Scoreboard',
+            'BytesPerReq',
+            'Total kBytes',
+            'ReqPerSec',
+            'BusyWorkers',
+            'BytesPerSec'
+        ]
+        self.assertEquals(keys, self.api.get_webserver_statistics().keys())
+
     def _test_mod_rpaf(self):
         raise NotImplementedError
 
@@ -73,7 +73,7 @@ class ApacheAPITest(unittest.TestCase):
 
         self.assertEqual(80, v1.port)
         v1.port = 8080
-        #self.assertEqual(8080, v1.port) #TODO: [SCALARIZR-1214]
+        self.assertEqual(8080, v1.port)
 
         self.assertEqual('dima.com', v1.server_name)
         v1.server_name = 'new.dima.com'
@@ -130,68 +130,107 @@ class ApacheAPITest(unittest.TestCase):
         with self.assertRaises(NoPathError):
             v1.use_certificate(default_certificate.cert_path, default_certificate.key_path)
 
-    def test_simple_vhost(self):
+    def test_virtual_host_lifecycle(self):
         #creating objects
         path = self.api.create_vhost('dima.com', 80, simple_template, ssl=False)
         cv_path = self.api.create_vhost('custom.dima.com', 8080, custom_template, ssl=False)
+        ov_path = self.api.create_vhost('old.dima.com', 443, old_ssl_template, ssl=True)
+        sv_path = self.api.create_vhost(
+            hostname='secure.dima.com',
+            port=443,
+            template=ssl_template,
+            ssl=True,
+            ssl_certificate_id=1
+        )
 
         #files created
         self.assertTrue(os.path.exists(path))
         self.assertTrue(os.path.exists(cv_path))
+        self.assertTrue(os.path.exists(ov_path))
+        self.assertTrue(os.path.exists(sv_path))
 
         #reading created files
         template = open(path, 'r').read().strip()
         cv_template = open(cv_path, 'r').read().strip()
+        ov_template = open(ov_path, 'r').read().strip()
+        sv_template = open(sv_path, 'r').read().strip()
 
         #re-creating objects
         v_host = apache.VirtualHost(template)
         cv_host = apache.VirtualHost(cv_template)
+        old_v_host = apache.VirtualHost(ov_template)
+        ssl_v_host = apache.VirtualHost(sv_template)
 
         #asserting ports
         self.assertEqual(80, v_host.port)
         self.assertEqual(8080, cv_host.port)
+        self.assertEqual(443, old_v_host.port)
+        self.assertEqual(443, ssl_v_host.port)
 
         #asserting bodies
         self.assertEqual(simple_template, v_host.body)
         self.assertEqual(custom_template, cv_host.body)
+        #ssl cert paths changed
+        self.assertNotEqual(old_ssl_template, v_host.body)
+        self.assertNotEqual(ssl_template, cv_host.body)
 
         #asserting created paths
         self.assertTrue(os.path.exists(v_host.custom_log_path))
         self.assertTrue(os.path.exists(cv_host.custom_log_path))  # TODO: USE DIFFERENT PATHS
+        self.assertTrue(os.path.exists(old_v_host.custom_log_path))
+        self.assertTrue(os.path.exists(ssl_v_host.custom_log_path))
+
         self.assertTrue(os.path.exists(v_host.document_root_paths[0]))
         self.assertTrue(os.path.exists(cv_host.document_root_paths[0]))
+        self.assertTrue(os.path.exists(old_v_host.document_root_paths[0]))
+        self.assertTrue(os.path.exists(ssl_v_host.document_root_paths[0]))
+
+        self.assertTrue(os.path.exists(old_v_host.error_log_path))
+        self.assertTrue(os.path.exists(ssl_v_host.error_log_path))
 
         #each virtual host is served by apache
-        self.assertTrue(os.path.basename(path) in apache.list_served_virtual_hosts())
-        self.assertTrue(os.path.basename(cv_path) in apache.list_served_virtual_hosts())
+        self.assertTrue(os.path.basename(path) in self.api.list_served_virtual_hosts())
+        self.assertTrue(os.path.basename(cv_path) in self.api.list_served_virtual_hosts())
+        self.assertTrue(os.path.basename(ov_path) in self.api.list_served_virtual_hosts())
+        self.assertTrue(os.path.basename(sv_path) in self.api.list_served_virtual_hosts())
         #TODO: check apache.conf for port
         #TODO: check if service restart occured
 
+        svh_data = ['dima.com', 80, simple_template, False]
+        ovh_data = ['old.dima.com', 443, old_ssl_template, True]
+
+        data = ovh_data, svh_data
+        self.api.reconfigure(data)
+
+        #Files of removed virtual hosts no longer exist.
+        self.assertFalse(os.path.exists(cv_path))
+        self.assertFalse(os.path.exists(sv_path))
+
+        #Removed virtual hosts are no longer served by apache
+        self.assertFalse(os.path.basename(cv_path) in self.api.list_served_virtual_hosts())
+        self.assertFalse(os.path.basename(sv_path) in self.api.list_served_virtual_hosts())
+
+        #TODO: expand check on reconfigure
+
+        #But reconfigured virtual hosts stil healthy.
+        self.assertTrue(os.path.exists(path))
+        self.assertTrue(os.path.exists(ov_path))
+
+        #TODO: Update two virtual hosts left
+
         #removing all created virtual hosts
         signature1 = (v_host.server_name, v_host.port)
-        signature2 = (cv_host.server_name, cv_host.port)
+        signature2 = (old_v_host.server_name, old_v_host.port)
         hosts_to_remove = (signature1, signature2)
         self.api.delete_vhosts(hosts_to_remove, reload=True)
 
         #Files of removed virtual hosts no longer exist.
         self.assertFalse(os.path.exists(path))
-        self.assertFalse(os.path.exists(cv_path))
+        self.assertFalse(os.path.exists(ov_path))
 
         #Removed virtual hosts are no longer served by apache
-        self.assertFalse(os.path.basename(path) in apache.list_served_virtual_hosts())
-        self.assertFalse(os.path.basename(cv_path) in apache.list_served_virtual_hosts())
-
-    def _test_create_old_ssl_vhost(self):
-        path = self.api.create_vhost('old.dima.com', 443, ssl_template, ssl=True)
-        self.assertTrue(os.path.exists(path))
-
-        template = open(path, 'r').read().strip()
-        v_host = apache.VirtualHost(template)
-        self.assertEqual(old_ssl_template, v_host.body)
-
-    def test_create_ssl_vhost_sni(self):
-        path = self.api.create_vhost('secure.dima.com', 443, ssl_template, ssl=True, ssl_certificate_id=1)
-
+        self.assertFalse(os.path.basename(path) in self.api.list_served_virtual_hosts())
+        self.assertFalse(os.path.basename(ov_path) in self.api.list_served_virtual_hosts())
 
 
 simple_template = '''<VirtualHost *:80>

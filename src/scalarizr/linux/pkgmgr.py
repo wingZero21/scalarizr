@@ -375,11 +375,11 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 
 
 def updatedb():
-	'''
-	Sync packages databases
-	'''
-	mgr = package_mgr()
-	mgr.updatedb()
+    '''
+    Sync packages databases
+    '''
+    mgr = package_mgr()
+    mgr.updatedb()
 
 
 def installed(name, version=None, updatedb=False):
