@@ -60,8 +60,7 @@ class BlockDeviceHandler(handlers.Handler):
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, 
-                Messages.MOUNTPOINTS_RECONFIGURE, 
-                Messages.BEFORE_HOST_TERMINATE)
+                Messages.MOUNTPOINTS_RECONFIGURE)
 
     def on_init(self):
         bus.on(
@@ -224,16 +223,7 @@ class BlockDeviceHandler(handlers.Handler):
             
             bus.fire("block_device_detached", device=message.devname)
 
-    def on_BeforeHostTerminate(self, message):
-        if message.local_ip != __node__['private_ip']:
-            return
 
-        volumes = message.body.get('volumes', [])
-        volumes = volumes or []
-        
-        for volume in volumes:
-            volume = storage2.volume(volume)
-            volume.umount()
-            volume.detach()
+
 
 
