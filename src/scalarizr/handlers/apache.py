@@ -75,12 +75,20 @@ class ApacheHandler(Handler):
             message.name == Messages.BEFORE_HOST_TERMINATE)
 
     def on_host_init_response(self, message):
-        apache_msg = message.body
-        log = bus.init_op.logger if bus.init_op else LOG
-        log.info('Deploying virtual hosts: %s' % str(apache_msg))
-        self.api.reconfigure(apache_msg)
-        if 'preset' in apache_msg:
-            self.initial_preset = apache_msg['preset']
+        if message.body.has_key('apache'):
+            apache_data = message.body['apache']
+            v_hosts = []
+            for vh_data in apache_data['virtual_hosts']:
+                v_hosts.append([
+                    vh_data['hostname'],
+                    vh_data['port'],
+                    vh_data['template'],
+                    vh_data['ssl'],
+                    vh_data['ssl_certificate_id'],
+                ])
+        self.api.reconfigure(v_hosts)
+        if 'preset' in apache_data:
+            self.initial_preset = apache_data['preset']
 
     def on_before_host_up(self, message):
         self._rpaf_reload()
