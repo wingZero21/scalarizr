@@ -387,7 +387,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             vm = conn.listVirtualMachines(id=__node__['cloudstack']['instance_id'])[0]
             result = conn.listPublicIpAddresses(ipAddress=vm.publicip)
             if result:
-                conn.disableStaticNat(result[0].id)
+                try:
+                    conn.disableStaticNat(result[0].id)
+                except:
+                    self._logger.warn(str(sys.exc_info()[1]))
 
 
     def on_ScalarizrUpdateAvailable(self, message):
