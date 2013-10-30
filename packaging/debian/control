@@ -88,7 +88,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack (>= 0.1.r16)
+		python-cloudstack (>= 0.2.3)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for CloudStack (cloud.com) cloud
@@ -99,7 +99,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack 
+		python-cloudstack (>= 0.2.3) 
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for uCloud (Korea Telecom) cloud
@@ -110,7 +110,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack 
+		python-cloudstack (>= 0.2.3)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for IDCF cloud
