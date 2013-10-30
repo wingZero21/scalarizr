@@ -5,6 +5,7 @@ import mock
 import time
 import threading
 from nose.tools import eq_, ok_
+from nose.plugins.attrib import attr
 
 import pprint
 
@@ -21,7 +22,6 @@ class TestOperation(object):
 		if status:
 			eq_(kwds['body']['status'], status)
 		return kwds['body']
-
 
 	def test_result_error(self):
 		def fn_raises_error(op):
@@ -84,14 +84,13 @@ class TestOperation(object):
 			asserts()
 
 	def test_cancel_error(self):
-		msg = 'Exception in op function after it was canceled'
+		msg = 'raised in operation function during cancelation'
 
 		def asserts():
 			result = self.assert_op_result('canceled')
-			eq_(msg, result['error'])
+			ok_(msg in result['error'])
 			
 		self.check_cancel(asserts, op_func=mock.Mock(side_effect=Exception(msg)))
-
 
 	def test_cancel(self):
 		def asserts():
