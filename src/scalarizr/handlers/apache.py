@@ -75,6 +75,7 @@ class ApacheHandler(Handler):
             message.name == Messages.BEFORE_HOST_TERMINATE)
 
     def on_host_init_response(self, message):
+        LOG.debug('Got HostInitResponse message')
         if message.body.has_key('apache'):
             apache_data = message.body['apache']
             v_hosts = []
@@ -86,9 +87,11 @@ class ApacheHandler(Handler):
                     vh_data['ssl'],
                     vh_data['ssl_certificate_id'],
                 ])
-        self.api.reconfigure(v_hosts)
-        if 'preset' in apache_data:
-            self.initial_preset = apache_data['preset']
+            LOG.debug('Configuring VirtualHosts: %s' % v_hosts)
+            self.api.reconfigure(v_hosts)
+
+            if 'preset' in apache_data:
+                self.initial_preset = apache_data['preset']
 
     def on_before_host_up(self, message):
         self._rpaf_reload()

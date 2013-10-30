@@ -463,14 +463,16 @@ class ApacheAPI(object):
 
         if not os.path.exists(__apache__['vhosts_dir']):
             os.makedirs(__apache__['vhosts_dir'])
+            LOG.debug('Created new directory for VirtualHosts: %s' % __apache__['vhosts_dir'])
 
         with ApacheConfig(__apache__['httpd.conf']) as apache_config:
             inc_mask = __apache__['vhosts_dir'] + '/*' + __apache__['vhost_extension']
             if not inc_mask in apache_config.get_list('Include'):
                 apache_config.add('Include', inc_mask)
+                LOG.debug('VirtualHosts directory included in %s' % __apache__['httpd.conf'])
 
         if linux.os.debian_family:
-            LOG.debug("Replacing NameVirtualhost and Virtualhost ports specifically for debian-based linux")
+            LOG.debug("Replacing NameVirtualhost and Virtualhost port values specifically for debian-based linux")
             if os.path.exists(__apache__['default_vhost']):
                 with ApacheConfig(__apache__['default_vhost']) as default_vhost:
                     default_vhost.set('NameVirtualHost', '*:80', force=True)
@@ -482,7 +484,7 @@ class ApacheAPI(object):
                 with open(__apache__['default_vhost'], 'w') as fp:
                     fp.write(dv)
             else:
-                LOG.debug('Cannot find default vhost config file %s. Nothing to patch' % __apache__['default_vhost'])
+                LOG.debug('Cannot find default vhost config file %s. Nothing to patch.' % __apache__['default_vhost'])
             ModRPAF.fix_module()
 
         else:
@@ -493,6 +495,7 @@ class ApacheAPI(object):
         if not os.path.exists(__apache__['logrotate_conf_path']):
             with open(__apache__['logrotate_conf_path'], 'w') as fp:
                 fp.write(__apache__['logrotate_conf'])
+            LOG.debug('LogRorate config updated.')
 
         self.mod_ssl.ensure()
         ModRPAF.ensure_permissions()
@@ -983,10 +986,13 @@ initdv2.explore('apache', ApacheInitScript)
 
 def _open_ports(ports):
     if iptables.enabled():
+        LOG.debug('Allowing ports %s in IPtables' % str(ports))
         rules = []
         for port in ports:
             rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
         iptables.FIREWALL.ensure(rules)
+    else:
+        LOG.debug('Cannot open ports %s: IPtables disabled' % str(ports))
 
 
 def get_virtual_host_path(hostname, port):
