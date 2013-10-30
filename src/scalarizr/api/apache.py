@@ -876,7 +876,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     _apachectl = None
 
     def __init__(self):
-        if 'platform' in __node__ and 'gce' == __node__['platform']:
+        if 'gce' == __node__['platform']:
             pid_dir = '/var/run/httpd'
             if not os.path.exists(pid_dir):
                 os.makedirs(pid_dir)
