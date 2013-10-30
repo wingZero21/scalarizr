@@ -507,15 +507,25 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             dst = self._platform.scalrfs.images()
             trn = FileTransfer(src=upload_files, dst=dst)
             res = trn.run()
-            if res["failed"]:
-                sources = map(lambda job: job["src"], res["failed"])
-                raise HandlerError("Failed uploading the image files to %s:\n" % dst +
-                                   # '\n'.join(sources) + '\n' +
-                                   "\n" +
-                                   "%s failed, %s completed" % (len(res["failed"]), 
-                                                                len(res["completed"])))
             #trn = Transfer(pool=4, max_attempts=5, logger=LOG)
             #trn.upload(upload_files, self._platform.scalrfs.images())
+
+            if res["failed"]:
+                sources = map(lambda job: job["src"], res["failed"])
+                exceptions = map(lambda job: job["exc_info"][1], res["failed"])
+                str_exceptions = map(lambda exc: ': '.join([repr(exc).split('(')[0],
+                                                            exc.message]),
+                                     exceptions)
+                str_fails = map(lambda pair: '  ' + ' => '.join(pair), zip(sources, str_exceptions))
+                raise HandlerError(
+                    "Failed uploading the image files to %s\n" % dst +
+                    "%s out of %s failed:\n" % (
+                        len(res["failed"]),
+                        len(res["completed"]) + len(res["failed"])
+                    ) +
+                    "\n" +
+                    '\n'.join(str_fails)
+                )
 
             manifest_path = os.path.join(self._platform.scalrfs.images(), os.path.basename(manifest_path))
             return manifest_path.split('s3://')[1]
