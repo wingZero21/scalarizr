@@ -76,7 +76,7 @@ class ApacheAPITest(unittest.TestCase):
         v1.port = 8080
 
         #TODO: UNCOMMENT WHEN BOTH SCALARIZR-1220 and SCALARIZR-1214 fixed.
-        #self.assertEqual(8080, v1.port)
+        self.assertEqual(8080, v1.port)
 
         self.assertEqual('dima.com', v1.server_name)
         v1.server_name = 'new.dima.com'

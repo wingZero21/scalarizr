@@ -642,7 +642,7 @@ class VirtualHost(object):
         old_value = mem_config.get('.//VirtualHost')
         host = old_value.split(':')[0]
         new_value = '%s:%s' % (host, port)
-        mem_config.set('.//VirtualHost', new_value)
+        mem_config.set('.//VirtualHost', dict(value=new_value))
         self._update_body(mem_config)
 
     def _get_server_name(self):

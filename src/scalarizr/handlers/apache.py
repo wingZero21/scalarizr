@@ -76,7 +76,7 @@ class ApacheHandler(Handler):
 
     def on_host_init_response(self, message):
         LOG.debug('Got HostInitResponse message')
-        if message.body.has_key('apache'):
+        if 'apache' in message.body:
             apache_data = message.body['apache']
             v_hosts = []
             for vh_data in apache_data['virtual_hosts']:
@@ -88,7 +88,8 @@ class ApacheHandler(Handler):
                     vh_data['ssl_certificate_id'],
                 ])
             LOG.debug('Configuring VirtualHosts: %s' % v_hosts)
-            self.api.reconfigure(v_hosts)
+            applied_vhosts = self.api.reconfigure(v_hosts)
+            LOG.debug('%s Virtual Hosts applied.' % len(applied_vhosts))
 
             if 'preset' in apache_data:
                 self.initial_preset = apache_data['preset']
