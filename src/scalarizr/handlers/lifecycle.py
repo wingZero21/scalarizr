@@ -387,7 +387,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             # Important! 
             # After following code run, server will loose network for some time
             # Fixes: SMNG-293
-            conn = __node__['cloudstack']['new_conn']()
+            conn = __node__['cloudstack']['new_conn']
             vm = conn.listVirtualMachines(id=__node__['cloudstack']['instance_id'])[0]
             result = conn.listPublicIpAddresses(ipAddress=vm.publicip)
             if result:
