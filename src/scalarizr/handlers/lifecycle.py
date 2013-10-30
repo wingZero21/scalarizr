@@ -375,9 +375,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         volumes = volumes or []
         
         for volume in volumes:
-            volume = storage2.volume(volume)
-            volume.umount()
-            volume.detach()
+            try:
+                volume = storage2.volume(volume)
+                volume.umount()
+                volume.detach()
+            except:
+                self._logger.warn('Failed to detach volume %s: %s', 
+                        volume.id, sys.exc_info()[1])
 
         if __node__['platform'] == 'cloudstack':
             # Important! 
@@ -390,7 +394,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                 try:
                     conn.disableStaticNat(result[0].id)
                 except:
-                    self._logger.warn(str(sys.exc_info()[1]))
+                    self._logger.warn('Failed to disable static NAT: %s', 
+                            str(sys.exc_info()[1]))
 
 
     def on_ScalarizrUpdateAvailable(self, message):
