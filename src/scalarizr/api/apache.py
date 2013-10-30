@@ -338,8 +338,8 @@ class ApacheAPI(object):
         backup = {}
 
         for vh_data in vhosts:
-            hostname, port, body, ssl = vh_data
-            path = self.create_vhost(hostname, port, body, ssl, reload=False)
+            hostname, port, body, ssl, ssl_certificate_id = vh_data
+            path = self.create_vhost(hostname, port, body, ssl, ssl_certificate_id, reload=False)
             applied_vhosts.append(path)
 
         #cleanup
