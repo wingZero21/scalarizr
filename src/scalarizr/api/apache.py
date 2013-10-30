@@ -819,9 +819,6 @@ class ModSSL(object):
             LOG.debug('Enabling default SSL virtualhost')
             system2((__apache__['a2ensite_path'], 'default-ssl'))
 
-        #TODO: UNCOMMENT WHEN SCALARIZR-1220 IS DONE
-
-        '''
         LOG.debug('Ensuring NameVirtualHost *:%s' % ssl_port)
         if os.path.exists(__apache__['ports_conf_deb']):
             with ApacheConfig(__apache__['ports_conf_deb']) as conf:
@@ -831,7 +828,6 @@ class ModSSL(object):
                     if section['value'] in ('mod_ssl.c', 'mod_gnutls.c'):
                         conf.set('IfModule[%d]/Listen' % i, str(ssl_port), True)
                         conf.set('IfModule[%d]/NameVirtualHost' % i, '*:%s' % ssl_port, True)
-        '''
 
     def _check_mod_ssl_redhat(self, ssl_port=443):
         ssl_conf_path = __apache__['ssl_conf_path']
