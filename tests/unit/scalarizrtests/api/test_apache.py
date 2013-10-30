@@ -46,7 +46,7 @@ class ApacheAPITest(unittest.TestCase):
         pairs = apache.get_updated_file_names(data)
         self.assertEqual(pairs, expected)
 
-    def test_statistics(self):
+    def _test_statistics(self):
         keys = [
             'Uptime',
             'IdleWorkers',
@@ -130,7 +130,7 @@ class ApacheAPITest(unittest.TestCase):
         with self.assertRaises(NoPathError):
             v1.use_certificate(default_certificate.cert_path, default_certificate.key_path)
 
-    def test_virtual_host_lifecycle(self):
+    def _test_virtual_host_lifecycle(self):
         #creating objects
         path = self.api.create_vhost('dima.com', 80, simple_template, ssl=False)
         cv_path = self.api.create_vhost('custom.dima.com', 8080, custom_template, ssl=False)
