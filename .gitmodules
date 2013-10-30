@@ -1,6 +1,0 @@
-[submodule "cookbooks"]
-	path = cookbooks
-	url = git@github.com:Scalr/int-cookbooks.git
-[submodule "public_cookbooks"]
-	path = public_cookbooks
-	url = git@github.com:Scalr/cookbooks.git

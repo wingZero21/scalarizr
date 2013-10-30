@@ -43,24 +43,23 @@ class OperationAPI(object):
     def remove(self, operation_id):
         del self._ops[operation_id]
 
-    def find(self, name=None, finished_older_then=None):
+    def find(self, name=None, finished_before=None):
         if name:
             ret = [op for op in self._ops.values() if op.name == name]
         else:
             ret = self._ops.values()
-        if finished_older_then:
+        if finished_before:
             now = time.time()
             ret = [op for op in ret 
-                    if op.finished_at and now - op.finished_at > finished_older_then]
+                    if op.finished_at and now - op.finished_at > finished_before]
         return ret
 
-    def go_with(self, name, func, async=False, **kwds):
+    def run(self, name, func, async=False, **kwds):
         op = self.create(name, func, **kwds)
         if async:
-            op.start()
-            return op.operation_id
+            return op.run_async()
         else:
-            return op.execute()
+            return op.run()
 
     @classmethod
     def rotate_runnable(cls):
@@ -70,7 +69,7 @@ class OperationAPI(object):
         while True:
             time.sleep(one_day)
             LOG.debug('Rotating operations finished older then 2 days')
-            for op in api.find(finished_older_then=two_days):
+            for op in api.find(finished_before=two_days):
                 api.remove(op.operation_id)
 
 
@@ -81,7 +80,11 @@ class _LogHandler(logging.Handler):
         logging.Handler.__init__(self, logging.INFO)
 
     def emit(self, record):
-        self.op.logs.append(self.format(record))
+        trace_marker = 'Traceback (most recent call last)'
+        msg = self.format(record)
+        if trace_marker in msg:
+            msg = msg[0:msg.index(trace_marker)].strip()
+        self.op.logs.append(msg)
 
 
 class Operation(object):
@@ -90,6 +93,7 @@ class Operation(object):
         self.operation_id = str(uuid.uuid4())
         self.name = name
         self.func = func
+        self.cancel_func = kwds.get('cancel_func')
         self.status = kwds.get('status', 'new')
         self.result = kwds.get('result')
         self.logs = kwds.get('logs', [])
@@ -97,6 +101,7 @@ class Operation(object):
         self.started_at = None
         self.finished_at = None
         self.async = False
+        self.canceled = False
         self.thread = None
         self.logger = None
         self._init_log()
@@ -107,36 +112,49 @@ class Operation(object):
         hdlr.setLevel(logging.INFO)
         self.logger.addHandler(hdlr)    
 
-    def _run(self):
+    def _in_progress(self):
         self.status = 'in-progress'
         self.started_at = time.time() 
         try:
-            self.complete(self.func(self))
+            self._completed(self.func(self))
+            if self.canceled:
+                raise Exception('User canceled')
         except:
-            self.fail()
+            self._failed()
         finally:
             self.finished_at = time.time()
             __node__['messaging'].send('OperationResult', body=self.serialize())
 
-    def execute(self):
-        self._run()
+    def run(self):
+        self._in_progress()
         return self.result
 
-    def start(self):
+    def run_async(self):
         self.thread = threading.Thread(
             name='Task {0}'.format(self.name), 
-            target=self._run
+            target=self._in_progress
         )
         self.async = True
         self.thread.start()
+        return self.operation_id
 
-    def fail(self, *exc_info):
+    def cancel(self):
+        self.canceled = True
+        if self.cancel_func:
+            try:
+                self.cancel_func(self)
+            except:
+                msg = ('Cancelation function failed for '
+                        'operation {0}').format(self.operation_id)
+                self.logger.exception(msg)
+
+    def _failed(self, *exc_info):
         self.error = exc_info or sys.exc_info()
-        self.status = 'failed'
+        self.status = 'failed' if not self.canceled else 'canceled'
         self.logger.error('Operation "%s" (id: %s) failed. Reason: %s', 
-                self.name, self.operation_id, self.error[1])
+                self.name, self.operation_id, self.error[1], exc_info=self.error)
 
-    def complete(self, result=None):
+    def _completed(self, result=None):
         self.result = result
         self.status = 'completed'
 
@@ -150,7 +168,7 @@ class Operation(object):
             'trace': None,
             'logs': self.logs
         }
-        if self.status == 'failed':
+        if self.error:
             ret['error'] = str(self.error[1])
             ret['trace'] = '\n'.join(traceback.format_tb(self.error[2]))
         return ret

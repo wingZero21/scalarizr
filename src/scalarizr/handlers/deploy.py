@@ -121,8 +121,7 @@ class DeploymentHandler(Handler):
 
         if define_operation:
             op_api = operation.OperationAPI()
-            op = op_api.create('Deploy', handler)
-            op.execute()
+            op_api.run('deploy', handler)
         else:
             handler(bus.init_op)
 

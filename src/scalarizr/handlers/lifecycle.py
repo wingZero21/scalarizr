@@ -380,7 +380,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         else:
             try:
                 op.func = handler
-                op.execute()
+                op.run()
             finally:
                 bus.init_op = None
 
