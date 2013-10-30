@@ -75,7 +75,6 @@ class ApacheAPITest(unittest.TestCase):
         self.assertEqual(80, v1.port)
         v1.port = 8080
 
-        #TODO: UNCOMMENT WHEN BOTH SCALARIZR-1220 and SCALARIZR-1214 fixed.
         self.assertEqual(8080, v1.port)
 
         self.assertEqual('dima.com', v1.server_name)
@@ -134,6 +133,7 @@ class ApacheAPITest(unittest.TestCase):
             v1.use_certificate(default_certificate.cert_path, default_certificate.key_path)
 
     def _test_virtual_host_lifecycle(self):
+        #TODO: Enable when all system objects are mocked
         #creating objects
         path = self.api.create_vhost('dima.com', 80, simple_template, ssl=False)
         cv_path = self.api.create_vhost('custom.dima.com', 8080, custom_template, ssl=False)

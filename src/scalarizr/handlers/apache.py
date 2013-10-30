@@ -89,7 +89,7 @@ class ApacheHandler(Handler):
                 ])
             LOG.debug('Configuring VirtualHosts: %s' % v_hosts)
             applied_vhosts = self.api.reconfigure(v_hosts)
-            LOG.debug('%s Virtual Hosts applied.' % len(applied_vhosts))
+            LOG.debug('%s Virtual Hosts configured.' % len(applied_vhosts))
 
             if 'preset' in apache_data:
                 self.initial_preset = apache_data['preset']
