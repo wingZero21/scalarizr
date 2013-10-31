@@ -3,15 +3,17 @@ Created on Dec 04, 2011
 
 @author: marat
 '''
-from __future__ import with_statement
-
+import sys
 import string
+
+from scalarizr.node import __node__
+from scalarizr.services.mysql2 import __mysql__
 
 from scalarizr import rpc, storage2
 from scalarizr.api import operation
 from scalarizr.services import mysql as mysql_svc
+from scalarizr.services import backup
 from scalarizr.services import ServiceError
-from scalarizr.services.mysql2 import __mysql__
 from scalarizr.util.cryptotool import pwgen
 
 
@@ -100,3 +102,44 @@ class MySQLAPI(object):
                 return {'slave': slave_status}
             except ServiceError:
                 return {'slave': {'status': 'down'}}
+
+
+    @rpc.command_method
+    def create_backup(self, async=True):
+
+        def do_backup(op):
+            try:
+                backups_dir = __node__.platform_obj.scalrfs.backups('mysql')
+                bak = op.data['bak'] = backup.backup(
+                    type='mysqldump', 
+                    cloudfs_dir=backups_dir)
+                try:
+                    result = bak.run()
+                finally:
+                    del op.data['bak']
+                # For Scalr < 4.5.0
+                __node__['messaging'].send('DbMsr_CreateBackupResult', dict(
+                    db_type = __mysql__.behavior,
+                    status = 'ok',
+                    backup_parts = result
+                ))
+                return result
+            except:
+                # For Scalr < 4.5.0
+                c, e, t = sys.exc_info()
+                __node__['messaging'].send('DbMsr_CreateBackupResult', dict(
+                    db_type = __mysql__.behavior,
+                    status = 'error',
+                    last_error = str(e)
+                ))
+                raise c, e, t
+
+        def cancel_backup(op):
+            bak = op.data.get('bak')
+            if bak:
+                bak.kill()
+
+        return self._op_api.run('mysql.create-backup', 
+                func=do_backup, cancel_func=cancel_backup, 
+                async=async, exclusive=True)
+

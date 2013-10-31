@@ -4,25 +4,25 @@ from scalarizr.api import operation
 import mock
 import time
 import threading
-from nose.tools import eq_, ok_
+from nose.tools import eq_, ok_, raises
 from nose.plugins.attrib import attr
 
 import pprint
+
+
+def assert_op_result(self, status=None):
+	from scalarizr.node import __node__
+	args, kwds = __node__['messaging'].send.call_args 
+	eq_(args[0], 'OperationResult')
+	if status:
+		eq_(kwds['body']['status'], status)
+	return kwds['body']
 
 
 @mock.patch.dict('scalarizr.node.__node__', {
 	'messaging': mock.MagicMock()
 })
 class TestOperation(object):
-
-	def assert_op_result(self, status=None):
-		from scalarizr.node import __node__
-		args, kwds = __node__['messaging'].send.call_args 
-		eq_(args[0], 'OperationResult')
-		if status:
-			eq_(kwds['body']['status'], status)
-		return kwds['body']
-
 	def test_result_error(self):
 		def fn_raises_error(op):
 			def deep():
@@ -39,7 +39,7 @@ class TestOperation(object):
 		op = operation.OperationAPI().create('test_result_error', fn_raises_error)
 		op.run()
 
-		result = self.assert_op_result('failed')
+		result = assert_op_result('failed')
 		eq_(result['name'], 'test_result_error')
 		eq_(len(result['logs']), 4)
 		ok_(result['logs'][-1].endswith('Reason: [Errno 2] No such file or directory: \'/non/existed/file\''))
@@ -58,7 +58,7 @@ class TestOperation(object):
 		op = operation.OperationAPI().create('test_result', fn)
 		op.run()
 
-		result = self.assert_op_result('completed')
+		result = assert_op_result('completed')
 		eq_(result['result'], result_data)
 
 
@@ -79,7 +79,7 @@ class TestOperation(object):
 		started.wait()
 		op.cancel()
 		canceled.set()
-		time.sleep(.2) # Interrupt thread
+		time.sleep(.01) # Interrupt thread
 		if asserts:
 			asserts()
 
@@ -87,14 +87,14 @@ class TestOperation(object):
 		msg = 'raised in operation function during cancelation'
 
 		def asserts():
-			result = self.assert_op_result('canceled')
+			result = assert_op_result('canceled')
 			ok_(msg in result['error'])
 			
 		self.check_cancel(asserts, op_func=mock.Mock(side_effect=Exception(msg)))
 
 	def test_cancel(self):
 		def asserts():
-			result = self.assert_op_result('canceled')
+			result = assert_op_result('canceled')
 			ok_(result['error'].startswith('User canceled'))
 
 		self.check_cancel(asserts)
@@ -108,6 +108,21 @@ class TestOperation(object):
 	def test_cancel_func_error(self):
 		self.check_cancel(cancel_func=mock.Mock(side_effect=Exception))
 
+	def test_exclusive(self):
+		finished = threading.Event()
+		started = threading.Event()
+		def fn(op):
+			started.set()
+			finished.wait()
 
+		api = operation.OperationAPI()
+		api.run('test_exclusive', fn, exclusive=True, async=True)
+		started.wait()
+		@raises(operation.AlreadyInProgressError)
+		def asserts():
+			api.run('test_exclusive', fn)
+		asserts()
+		finished.set()
+		time.sleep(.01) # Interrupt thread
 
 
