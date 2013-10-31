@@ -341,7 +341,7 @@ class ApacheAPI(object):
             path = self.create_vhost(
                 vh_data['hostname'],
                 vh_data['port'],
-                vh_data['body'],
+                vh_data['template'],
                 vh_data['ssl'],
                 vh_data['ssl_certificate_id'],
                 reload=False
@@ -535,7 +535,7 @@ class ApacheAPI(object):
             for virtual_host_data in raw_data:
                 data = dict()
                 data['hostname'] = virtual_host_data.hostname
-                data['body'] = virtual_host_data.raw
+                data['template'] = virtual_host_data.raw
                 ssl = bool(int(virtual_host_data.https))
                 data['port'] = 443 if ssl else 80
                 data['ssl'] = ssl
