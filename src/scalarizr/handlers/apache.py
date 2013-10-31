@@ -78,15 +78,7 @@ class ApacheHandler(Handler):
         LOG.debug('Got HostInitResponse message')
         if 'apache' in message.body:
             apache_data = message.body['apache']
-            v_hosts = []
-            for vh_data in apache_data['virtual_hosts']:
-                v_hosts.append([
-                    vh_data['hostname'],
-                    vh_data['port'],
-                    vh_data['template'],
-                    vh_data['ssl'],
-                    vh_data['ssl_certificate_id'],
-                ])
+            v_hosts = apache_data['virtual_hosts']
             LOG.debug('Configuring VirtualHosts: %s' % v_hosts)
             applied_vhosts = self.api.reconfigure(v_hosts)
             LOG.debug('%s Virtual Hosts configured.' % len(applied_vhosts))

@@ -331,15 +331,21 @@ class ApacheAPI(object):
     def reconfigure(self, vhosts):
         """
         Deploys multiple VirtualHosts and removes odds.
-        @param vhosts: list, [(hostname, port, template, ssl, ssl_certificate_id),]
+        @param vhosts: list(dict(vhost_data),)
         @return: list, paths to reconfigured VirtualHosts
         """
         applied_vhosts = []
         backup = {}
 
         for vh_data in vhosts:
-            hostname, port, body, ssl, ssl_certificate_id = vh_data
-            path = self.create_vhost(hostname, port, body, ssl, ssl_certificate_id, reload=False)
+            path = self.create_vhost(
+                vh_data['hostname'],
+                vh_data['port'],
+                vh_data['body'],
+                vh_data['ssl'],
+                vh_data['ssl_certificate_id'],
+                reload=False
+            )
             applied_vhosts.append(path)
 
         #cleanup
@@ -518,7 +524,7 @@ class ApacheAPI(object):
         """
         Combines list of virtual hosts in unified format
         regardless of Scalr version.
-        @return: list([hostname, port, body, ssl, ssl_certificate_id],)
+        @return: list(dict(vhost_data))
         """
         result = []
         scalr_version = bus.scalr_version or (4, 4, 0)
@@ -527,11 +533,17 @@ class ApacheAPI(object):
             raw_data = self._query_env.list_virtual_hosts()
 
             for virtual_host_data in raw_data:
-                hostname = virtual_host_data.hostname
-                body = virtual_host_data.raw
+                data = dict()
+                data['hostname'] = virtual_host_data.hostname
+                data['body'] = virtual_host_data.raw
                 ssl = bool(int(virtual_host_data.https))
-                port = 443 if ssl else 80
-                result.append([hostname, port, body, ssl, None])
+                data['port'] = 443 if ssl else 80
+                data['ssl'] = ssl
+                if ssl:
+                    data['ssl_certificate_id'] = virtual_host_data['ssl_certificate_id']
+                else:
+                    data['ssl_certificate_id'] = None
+                result.append(data)
 
         else:
             raw_data = self._query_env.list_farm_role_params()
@@ -540,12 +552,7 @@ class ApacheAPI(object):
                 return []
 
             for virtual_host_data in raw_data['apache']:
-                template = virtual_host_data['template']
-                ssl = bool(int(virtual_host_data['ssl']))
-                hostname = virtual_host_data['hostname']
-                port = virtual_host_data['port']
-                ssl_certificate_id = virtual_host_data['ssl_certificate_id'] if ssl else None
-                result.append([hostname, port, template, ssl, ssl_certificate_id])
+                result.append(virtual_host_data)
 
         return result
 
