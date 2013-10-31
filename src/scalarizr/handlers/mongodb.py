@@ -52,7 +52,7 @@ from scalarizr import storage2
 from scalarizr.node import __node__
 import scalarizr.services.mongodb as mongo_svc
 from scalarizr.messaging.p2p import P2pMessageStore
-from scalarizr.handlers import operation, build_tags
+from scalarizr.handlers import build_tags
 
 from scalarizr.api import mongodb as mongodb_api
 
