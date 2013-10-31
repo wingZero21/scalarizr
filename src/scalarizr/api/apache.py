@@ -138,8 +138,8 @@ class ApacheAPI(object):
         """
         #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
-        path = get_virtual_host_path(hostname, port)
-        assert not os.path.exists(path)
+        v_host_path = get_virtual_host_path(hostname, port)
+        assert not os.path.exists(v_host_path)
 
         v_host = VirtualHost(template)
 
@@ -159,11 +159,11 @@ class ApacheAPI(object):
         assert hostname == v_host.server_name
 
         for directory in v_host.document_root_paths:
-            path = os.path.dirname(directory)
+            docroot_path = os.path.dirname(directory)
 
-            if not os.path.exists(path):
-                os.makedirs(path, 0755)
-                LOG.debug('Created document root %s for %s' % (directory, v_host))
+            if not os.path.exists(docroot_path):
+                os.makedirs(docroot_path, 0755)
+                LOG.debug('Created document root %s for %s' % (docroot_path, v_host))
 
                 shutil.copytree(os.path.join(bus.share_path, 'apache/html'), directory)
                 files = ', '.join(os.listdir(directory))
@@ -180,36 +180,36 @@ class ApacheAPI(object):
                     uname, ', '.join(os.listdir(directory))))
 
         try:
-            path = os.path.dirname(v_host.custom_log_path)
-            if not os.path.exists(path):
-                os.makedirs(path, 0755)
+            clog_path = os.path.dirname(v_host.custom_log_path)
+            if not os.path.exists(clog_path):
+                os.makedirs(clog_path, 0755)
                 LOG.debug('Created CustomLog directory for VirtualHost %s:%s: %s' % (
                     hostname,
                     port,
-                    path,
+                    clog_path,
                 ))
         except NoPathError:
             LOG.debug('CustomLog directive not found in %s' % v_host)
 
         try:
-            path = os.path.dirname(v_host.error_log_path)
-            if not os.path.exists(path):
-                os.makedirs(path, 0755)
+            errlog_path = os.path.dirname(v_host.error_log_path)
+            if not os.path.exists(errlog_path):
+                os.makedirs(errlog_path, 0755)
                 LOG.debug('Created ErrorLog directory for VirtualHost %s:%s: %s' % (
                     hostname,
                     port,
-                    path,
+                    errlog_path,
                 ))
         except NoPathError:
             LOG.debug('ErrorLog directive not found in %s' % v_host)
 
-        if os.path.exists(path) and open(path).read() == v_host.body:
+        if os.path.exists(v_host_path) and open(v_host_path).read() == v_host.body:
             LOG.debug("Skipping VirtualHost %s: No changes." % v_host)
-            return path
+            return v_host_path
 
-        with open(path, 'w') as fp:
+        with open(v_host_path, 'w') as fp:
             fp.write(v_host.body)
-            LOG.debug('VirtualHost %s saved to %s' % (v_host, path))
+            LOG.debug('VirtualHost %s saved to %s' % (v_host, v_host_path))
 
         if port not in self.current_open_ports:
             try:
@@ -223,11 +223,11 @@ class ApacheAPI(object):
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error('ConfigTest failed with error: "%s".' % str(e))
-                LOG.info('Removing %s' % path)
-                os.remove(path)
+                LOG.info('Removing %s' % v_host_path)
+                os.remove(v_host_path)
             self.reload_service()
 
-        return path
+        return v_host_path
 
     @rpc.service_method
     def update_vhost(self,
