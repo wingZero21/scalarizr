@@ -67,13 +67,10 @@ class TestJson(object):
 
 
     def teardown(self):
-        '''
         for name in ('node-test-set-dict.json', 'node-test-set-object.json'):
             filename = os.path.join(self.fixtures_dir, name)
             if os.path.isfile(filename):
                 os.remove(filename)
-        '''
-        pass
 
 
     def test_get(self):
