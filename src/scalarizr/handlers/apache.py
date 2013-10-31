@@ -75,13 +75,13 @@ class ApacheHandler(Handler):
             message.name == Messages.BEFORE_HOST_TERMINATE)
 
     def on_host_init_response(self, message):
-        LOG.debug('Got HostInitResponse message')
+        LOG.info('Got HostInitResponse message')
         if 'apache' in message.body:
             apache_data = message.body['apache']
             v_hosts = apache_data['virtual_hosts']
-            LOG.debug('Configuring VirtualHosts: %s' % v_hosts)
+            LOG.info('Configuring VirtualHosts: %s' % v_hosts)
             applied_vhosts = self.api.reconfigure(v_hosts)
-            LOG.debug('%s Virtual Hosts configured.' % len(applied_vhosts))
+            LOG.info('%s Virtual Hosts configured.' % len(applied_vhosts))
 
             if 'preset' in apache_data:
                 self.initial_preset = apache_data['preset']

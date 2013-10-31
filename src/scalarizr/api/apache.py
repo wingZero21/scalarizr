@@ -163,11 +163,11 @@ class ApacheAPI(object):
 
             if not os.path.exists(docroot_path):
                 os.makedirs(docroot_path, 0755)
-                LOG.debug('Created document root %s for %s' % (docroot_path, v_host))
+                LOG.info('Created document root %s for %s' % (docroot_path, v_host))
 
                 shutil.copytree(os.path.join(bus.share_path, 'apache/html'), directory)
                 files = ', '.join(os.listdir(directory))
-                LOG.debug('Copied document root files: %s' % files)
+                LOG.info('Copied document root files: %s' % files)
 
                 try:
                     pwd.getpwnam('apache')
@@ -176,40 +176,40 @@ class ApacheAPI(object):
                     uname = 'www-data'
 
                 coreutils.chown_r(directory, uname)
-                LOG.debug('Changed owner to %s: %s' % (
+                LOG.info('Changed owner to %s: %s' % (
                     uname, ', '.join(os.listdir(directory))))
 
         try:
             clog_path = os.path.dirname(v_host.custom_log_path)
             if not os.path.exists(clog_path):
                 os.makedirs(clog_path, 0755)
-                LOG.debug('Created CustomLog directory for VirtualHost %s:%s: %s' % (
+                LOG.info('Created CustomLog directory for VirtualHost %s:%s: %s' % (
                     hostname,
                     port,
                     clog_path,
                 ))
         except NoPathError:
-            LOG.debug('CustomLog directive not found in %s' % v_host)
+            LOG.info('CustomLog directive not found in %s' % v_host)
 
         try:
             errlog_path = os.path.dirname(v_host.error_log_path)
             if not os.path.exists(errlog_path):
                 os.makedirs(errlog_path, 0755)
-                LOG.debug('Created ErrorLog directory for VirtualHost %s:%s: %s' % (
+                LOG.info('Created ErrorLog directory for VirtualHost %s:%s: %s' % (
                     hostname,
                     port,
                     errlog_path,
                 ))
         except NoPathError:
-            LOG.debug('ErrorLog directive not found in %s' % v_host)
+            LOG.info('ErrorLog directive not found in %s' % v_host)
 
         if os.path.exists(v_host_path) and open(v_host_path).read() == v_host.body:
-            LOG.debug("Skipping VirtualHost %s: No changes." % v_host)
+            LOG.info("Skipping VirtualHost %s: No changes found." % v_host)
             return v_host_path
 
         with open(v_host_path, 'w') as fp:
             fp.write(v_host.body)
-            LOG.debug('VirtualHost %s saved to %s' % (v_host, v_host_path))
+            LOG.info('VirtualHost %s saved to %s' % (v_host, v_host_path))
 
         if port not in self.current_open_ports:
             try:
@@ -312,7 +312,7 @@ class ApacheAPI(object):
             backup[v_host_path] = open(v_host_path, 'w').read()
 
             os.remove(v_host_path)
-            LOG.debug('Removed VirtualHost %s:%s' % signature)
+            LOG.info('Removed VirtualHost %s:%s' % signature)
 
         if reload:
             try:
@@ -359,7 +359,7 @@ class ApacheAPI(object):
                 with open(old_vhost_path) as fp:
                     backup[old_vhost_path] = fp.read()
 
-                LOG.debug('Removing old vhost file %s' % old_vhost_path)
+                LOG.info('Removing old vhost file %s' % old_vhost_path)
                 os.remove(old_vhost_path)
 
         if reload:
@@ -469,16 +469,16 @@ class ApacheAPI(object):
 
         if not os.path.exists(__apache__['vhosts_dir']):
             os.makedirs(__apache__['vhosts_dir'])
-            LOG.debug('Created new directory for VirtualHosts: %s' % __apache__['vhosts_dir'])
+            LOG.info('Created new directory for VirtualHosts: %s' % __apache__['vhosts_dir'])
 
         with ApacheConfig(__apache__['httpd.conf']) as apache_config:
             inc_mask = __apache__['vhosts_dir'] + '/*' + __apache__['vhost_extension']
             if not inc_mask in apache_config.get_list('Include'):
                 apache_config.add('Include', inc_mask)
-                LOG.debug('VirtualHosts directory included in %s' % __apache__['httpd.conf'])
+                LOG.info('VirtualHosts directory included in %s' % __apache__['httpd.conf'])
 
         if linux.os.debian_family:
-            LOG.debug("Replacing NameVirtualhost and Virtualhost port values specifically for debian-based linux")
+            LOG.info("Replacing NameVirtualhost and Virtualhost port values.")
             if os.path.exists(__apache__['default_vhost']):
                 with ApacheConfig(__apache__['default_vhost']) as default_vhost:
                     default_vhost.set('NameVirtualHost', '*:80', force=True)
@@ -490,7 +490,8 @@ class ApacheAPI(object):
                 with open(__apache__['default_vhost'], 'w') as fp:
                     fp.write(dv)
             else:
-                LOG.debug('Cannot find default vhost config file %s. Nothing to patch.' % __apache__['default_vhost'])
+                LOG.warning('Cannot find default vhost config file %s.' % __apache__['default_vhost'])
+
             ModRPAF.fix_module()
 
         else:
@@ -501,7 +502,7 @@ class ApacheAPI(object):
         if not os.path.exists(__apache__['logrotate_conf_path']):
             with open(__apache__['logrotate_conf_path'], 'w') as fp:
                 fp.write(__apache__['logrotate_conf'])
-            LOG.debug('LogRorate config updated.')
+            LOG.info('LogRorate config updated.')
 
         self.mod_ssl.ensure()
         ModRPAF.ensure_permissions()
@@ -702,7 +703,7 @@ class ModRPAF(object):
         """
         pm = dynimp.package_mgr()
         if '0.6-2' == pm.installed('libapache2-mod-rpaf'):
-            LOG.debug('Patching IfModule value in rpaf.conf')
+            LOG.info('Patching IfModule value in rpaf.conf')
             with ApacheConfig(__apache__['mod_rpaf_path']) as rpaf:
                 try:
                     rpaf.set("./IfModule[@value='mod_rpaf.c']", {'value': 'mod_rpaf-2.0.c'})
@@ -756,7 +757,7 @@ class SSLCertificate(object):
         """
         Fetches SSL Certificate from Scalr and dumps data on disk.
         """
-        LOG.debug("Retrieving ssl cert and private key from Scalr.")
+        LOG.info("Retrieving ssl cert and private key from Scalr.")
         query_env = bus.queryenv_service
         cert_data = query_env.get_ssl_certificate(self.id)
         authority = cert_data[2] if len(cert_data) > 2 else None
@@ -820,16 +821,16 @@ class ModSSL(object):
 
     def _check_mod_ssl_deb(self, ssl_port=443):
 
-        LOG.debug('Ensuring mod_ssl enabled')
+        LOG.info('Ensuring mod_ssl enabled')
         if not os.path.exists(__apache__['ssl_load_deb']):
             LOG.info('Enabling mod_ssl')
             system2((__apache__['a2enmod_path'], 'ssl'))
 
         if not os.path.exists(__apache__['default-ssl_path']):
-            LOG.debug('Enabling default SSL virtualhost')
+            LOG.info('Enabling default SSL virtualhost')
             system2((__apache__['a2ensite_path'], 'default-ssl'))
 
-        LOG.debug('Ensuring NameVirtualHost *:%s' % ssl_port)
+        LOG.info('Ensuring NameVirtualHost *:%s' % ssl_port)
         if os.path.exists(__apache__['ports_conf_deb']):
             with ApacheConfig(__apache__['ports_conf_deb']) as conf:
                 i = 0
@@ -859,15 +860,15 @@ class ModSSL(object):
 
             else:
                 if not ssl_conf.get_list('NameVirtualHost'):
-                    LOG.debug("NameVirtualHost directive not found in %s", ssl_conf_path)
+                    LOG.info("NameVirtualHost directive not found in %s", ssl_conf_path)
                     if not ssl_conf.get_list('Listen'):
-                        LOG.debug("Listen directive not found in %s. ", ssl_conf_path)
-                        LOG.debug("Patching %s with Listen & NameVirtualHost directives.",     ssl_conf_path)
+                        LOG.info("Listen directive not found in %s. ", ssl_conf_path)
+                        LOG.info("Patching %s with Listen & NameVirtualHost directives.",     ssl_conf_path)
                         ssl_conf.add('Listen', str(ssl_port))
                         ssl_conf.add('NameVirtualHost', '*:%s' % ssl_port)
                     else:
-                        LOG.debug("NameVirtualHost directive inserted after Listen directive.")
                         ssl_conf.add('NameVirtualHost', '*:%s' % ssl_port, before_path='Listen')
+                        LOG.info("NameVirtualHost directive inserted after Listen directive.")
 
         with ApacheConfig(__apache__['httpd.conf']) as main_config:
             loaded_in_main = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
@@ -907,7 +908,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
     def reload(self, reason=None):
         if reason:
-            LOG.debug('Reloading apache: %s' % str(reason))
+            LOG.info('Reloading apache: %s' % str(reason))
         if self.running:
             self.configtest()
             out, err, retcode = system2(__apache__['apachectl'] + ' graceful', shell=True)
@@ -952,12 +953,12 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
     def stop(self, reason=None):
         if reason:
-            LOG.debug('Stopping apache: %s' % str(reason))
+            LOG.info('Stopping apache: %s' % str(reason))
         initdv2.ParametrizedInitScript.stop(self)
 
     def restart(self, reason=None):
         if reason:
-            LOG.debug('Restarting apache: %s' % str(reason))
+            LOG.info('Restarting apache: %s' % str(reason))
 
         self.configtest()
 
@@ -993,13 +994,13 @@ initdv2.explore('apache', ApacheInitScript)
 
 def _open_ports(ports):
     if iptables.enabled():
-        LOG.debug('Allowing ports %s in IPtables' % str(ports))
+        LOG.info('Allowing ports %s in IPtables' % str(ports))
         rules = []
         for port in ports:
             rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
         iptables.FIREWALL.ensure(rules)
     else:
-        LOG.debug('Cannot open ports %s: IPtables disabled' % str(ports))
+        LOG.warning('Cannot open ports %s: IPtables disabled' % str(ports))
 
 
 def get_virtual_host_path(hostname, port):
