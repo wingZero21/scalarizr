@@ -517,15 +517,16 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
                                                             exc.message]),
                                      exceptions)
                 str_fails = map(lambda pair: '  ' + ' => '.join(pair), zip(sources, str_exceptions))
-                raise HandlerError(
-                    "Failed uploading the image files to %s\n" % dst +
-                    "%s out of %s failed:\n" % (
-                        len(res["failed"]),
-                        len(res["completed"]) + len(res["failed"])
-                    ) +
-                    "\n" +
-                    '\n'.join(str_fails)
+                msg = ("Failed uploading the image files to {dst}\n"
+                       "{failed} out of {total} failed:\n"
+                       "\n"
+                       "{fails}"
+                ).format(dst=dst,
+                         failed=len(res["failed"]),
+                         total=len(res["completed"]) + len(res["failed"]),
+                         fails='\n'.join(str_fails)
                 )
+                raise HandlerError(msg)
 
             manifest_path = os.path.join(self._platform.scalrfs.images(), os.path.basename(manifest_path))
             return manifest_path.split('s3://')[1]
