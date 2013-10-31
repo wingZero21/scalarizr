@@ -12,7 +12,7 @@ from scalarizr.services.mysql2 import __mysql__
 from scalarizr import rpc, storage2
 from scalarizr.api import operation
 from scalarizr.services import mysql as mysql_svc
-from scalarizr.services import backup
+from scalarizr.services import backup as backup_module
 from scalarizr.services import ServiceError
 from scalarizr.util.cryptotool import pwgen
 
@@ -105,14 +105,16 @@ class MySQLAPI(object):
 
 
     @rpc.command_method
-    def create_backup(self, async=True):
+    def create_backup(self, backup=None, async=True):
 
-        def do_backup(op):
+        def do_backup(op, backup=None):
             try:
-                backups_dir = __node__.platform_obj.scalrfs.backups('mysql')
-                bak = op.data['bak'] = backup.backup(
-                    type='mysqldump', 
-                    cloudfs_dir=backups_dir)
+                backup = {
+                    'type': 'mysqldump',
+                    'cloudfs_dir': __node__.platform_obj.scalrfs.backups('mysql')
+                }
+                backup.update(backup or {})
+                bak = op.data['bak'] = backup_module.backup(**backup)
                 try:
                     result = bak.run()
                 finally:
