@@ -48,15 +48,22 @@ class TestCompound(object):
 
 
     def test_update(self):
+        sub = mock.MagicMock(spec=node.Store)
         mysql = node.Compound({
-                'behavior': 'percona'
+                'behavior': 'percona',
+                'sub_1,sub_2': sub
         })
         mysql.update({
-                'replication_master': '1'
+                'replication_master': '1',
+                'sub_1': 'a value',
+                'sub_2': 'not bad'
         })
+
 
         assert 'replication_master' in mysql
         assert mysql['replication_master'] == '1'
+        sub.__setitem__.call_args_list[0] = mock.call(mysql, 'sub_1', 'a value')
+        sub.__setitem__.call_args_list[1] = mock.call(mysql, 'sub_2', 'not bad')
 
 
 class TestJson(object):

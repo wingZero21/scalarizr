@@ -74,6 +74,10 @@ class Compound(dict):
             ret[key] = value
         return ret
 
+    def update(self, values):
+        for key, value in values.items():
+            self[key] = value
+
     def __repr__(self):
         ret = {}
         for key in self:
