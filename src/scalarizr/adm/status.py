@@ -1,4 +1,4 @@
-from szradm import Command
+from scalarizr.adm.szradm import Command
 
 class ClsCmd(Command):
     class SubCmd(Command):

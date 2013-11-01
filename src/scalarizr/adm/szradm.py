@@ -33,9 +33,10 @@ command_list = []
 def find_modules(directory):
     """Method finds modules in given directory and subdirectories"""
     result = []
+    directory = os.path.abspath(directory)
     module_paths = [os.path.join(directory, m) for m in os.listdir(directory)]
     for path in module_paths:
-        if path.endswith('.py'):
+        if path.endswith('.py') and path is not __file__:
             module_name = os.path.basename(path).replace('.py', '')
             module = imp.load_source(module_name, path)
             result.append(module)
