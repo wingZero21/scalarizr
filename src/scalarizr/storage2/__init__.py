@@ -152,7 +152,10 @@ class NoOpError(StorageError):
     pass
 
 class VolumeNotExistsError(StorageError):
-    pass
+    def __str__(self):
+        return ('Volume not found: {0}. Most likely it was deleted. '
+            'You can check "Regenerate storage if missing volumes" in UI '
+            'to create clean storage volume with the same settings').format(self.args[0])
 
 class OperationError(StorageError):
     pass
