@@ -417,6 +417,18 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                     self._logger.warn('Failed to disable static NAT: %s', 
                             str(sys.exc_info()[1]))
 
+        elif __node__['platform'] == 'openstack':
+            conn = __node__['openstack']['new_nova_connection']
+            conn.reconnect()
+
+            sid = __node__['openstack']['server_id']
+            for vol in conn.volumes.get_server_volumes(sid):
+                try:
+                    conn.volumes.delete_server_volume(sid, vol.id)
+                except:
+                    self._logger.warn('Failed to detach volume %s: %s', 
+                            vol.id, str(sys.exc_info()[1]))
+
 
     def on_ScalarizrUpdateAvailable(self, message):
         self._update_package()
