@@ -178,6 +178,8 @@ class ApacheAPI(object):
                 coreutils.chown_r(directory, uname)
                 LOG.info('Changed owner to %s: %s' % (
                     uname, ', '.join(os.listdir(directory))))
+            else:
+                LOG.info('Document root %s already exists.')
 
         try:
             clog_path = os.path.dirname(v_host.custom_log_path)
