@@ -179,7 +179,7 @@ class ApacheAPI(object):
                 LOG.info('Changed owner to %s: %s' % (
                     uname, ', '.join(os.listdir(directory))))
             else:
-                LOG.info('Document root %s already exists.')
+                LOG.info('Document root %s already exists.' % docroot_path)
 
         try:
             clog_path = os.path.dirname(v_host.custom_log_path)
