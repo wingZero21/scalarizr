@@ -687,7 +687,7 @@ class PostgreSqlHander(ServiceCtlHandler):
            __postgresql__['restore'].type == 'snap_postgresql':
             __postgresql__['restore'].run()
         else:
-            if __node__['platform'] == 'idcf':
+            if __node__['platform'].name == 'idcf':
                 if __postgresql__['volume'].id:
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __postgresql__['volume'].snap = __postgresql__['volume'].snapshot()

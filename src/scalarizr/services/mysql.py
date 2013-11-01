@@ -658,7 +658,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
 
     def __init__(self):
-        if 'gce' == node.__node__['platform']:
+        if 'gce' == node.__node__['platform'].name:
             self.ensure_pid_directory()
 
         self.mysql_cli = MySQLClient()

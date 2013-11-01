@@ -547,7 +547,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                                                         __redis__['restore'].type == 'snap_redis':
             __redis__['restore'].run()
         else:
-            if node.__node__['platform'] == 'idcf':
+            if node.__node__['platform'].name == 'idcf':
                 if __redis__['volume'].id:
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __redis__['volume'].snap = __redis__['volume'].snapshot()

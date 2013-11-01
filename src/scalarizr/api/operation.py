@@ -5,12 +5,10 @@ import threading
 import time
 import logging
 import traceback
-import functools
 
 from scalarizr import rpc
 from scalarizr.node import __node__
 from scalarizr.util import Singleton
-from scalarizr.messaging import Queues, Messages
 
 
 LOG = logging.getLogger(__name__)
@@ -19,6 +17,9 @@ class OperationError(Exception):
     pass
 
 class AlreadyInProgressError(OperationError):
+    pass
+
+class OperationNotFoundError(OperationError):
     pass
 
 class OperationAPI(object):
@@ -38,14 +39,20 @@ class OperationAPI(object):
     def result(self, operation_id=None):
         return self.get(operation_id).serialize()
 
+    @rpc.command_method
+    def cancel(self, operation_id=None):
+        self.get(operation_id).cancel()
+
     def create(self, name, func, **kwds):
         op = Operation(name, func, **kwds)
         self._ops[op.operation_id] = op
         return op
 
     def get(self, operation_id):
-        # TODO: wrap KeyError
-        return self._ops[operation_id]
+        try:
+            return self._ops[operation_id]
+        except KeyError:
+            raise OperationNotFoundError("'{0}' not found" % operation_id)
 
     def remove(self, operation_id):
         del self._ops[operation_id]

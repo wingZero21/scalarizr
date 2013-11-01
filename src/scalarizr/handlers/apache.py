@@ -74,7 +74,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     _apachectl = None
 
     def __init__(self):
-        if 'gce' == node.__node__['platform']:
+        if 'gce' == node.__node__['platform'].name:
             self.ensure_pid_directory()
 
         if disttool.is_redhat_based():

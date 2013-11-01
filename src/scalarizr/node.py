@@ -285,14 +285,14 @@ node = {
         'server_id,role_id,farm_id,farm_role_id,env_id,role_name,server_index':
                                 Ini(os.path.join(private_dir, 'config.ini'), 'general'),
         'message_format': Ini(os.path.join(private_dir, 'config.ini'), 'messaging_p2p'),
-        'platform': Ini(os.path.join(public_dir, 'config.ini'), 'general'),
+        'platform_name': Ini(os.path.join(public_dir, 'config.ini'), 'general'),
+        'platform': Attr('scalarizr.bus', 'bus.platform'),
         'behavior': IniOption(
                                                 [os.path.join(public_dir, 'config.ini'),
                                                  os.path.join(private_dir, 'config.ini')],
                                                 'general', 'behaviour',
                                                 lambda val: val.strip().split(','),
                                                 lambda val: ','.join(val)),
-        'platform_obj': Attr('scalarizr.bus', 'bus.platform'),
         'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),
         'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
         'state': File(os.path.join(private_dir, '.state')),
