@@ -102,7 +102,7 @@ class MongoDBAPI:
     MongoDB API class
     """
 
-    @rpc.service_method
+    @rpc.command_method
     def reset_password(self):
         """ Reset password for Mongo user 'scalr'. Return new password  """
         #TODO: review and finish this method
@@ -113,7 +113,7 @@ class MongoDBAPI:
         return new_password
 
 
-    @rpc.service_method
+    @rpc.command_method
     def enable_mms(self, api_key, secret_key):
         """
         :type api_key: string
@@ -141,7 +141,7 @@ class MongoDBAPI:
         return {'status':status, 'error':error}
 
 
-    @rpc.service_method
+    @rpc.command_method
     def disable_mms(self):
         """
         rtype: dict

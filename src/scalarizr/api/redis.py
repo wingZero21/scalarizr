@@ -7,14 +7,13 @@ Created on Aug 1, 2012
 from __future__ import with_statement
 
 import os
-import sys
 import time
 import logging
-import threading
 from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr import handlers, rpc
+from scalarizr import rpc
 from scalarizr.linux import iptables
+from scalarizr.api import operation
 from scalarizr.util import system2, PopenError
 from scalarizr.services import redis as redis_service
 from scalarizr.handlers import redis as redis_handler
@@ -37,13 +36,12 @@ class RedisAPI(object):
 
     def __init__(self):
         self._cnf = bus.cnf
+        self._op_api = operation.OperationAPI()
         self._queryenv = bus.queryenv_service
         ini = self._cnf.rawini
         self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
 
-
-
-    @rpc.service_method
+    @rpc.command_method
     def launch_processes(self, num=None, ports=None, passwords=None, async=False):
         if ports and passwords and len(ports) != len(passwords):
             raise AssertionError('Number of ports must be equal to number of passwords')
@@ -63,47 +61,30 @@ class RedisAPI(object):
         else:
             ports = available_ports[:num]
 
-        if async:
-            txt = 'Launch Redis processes'
-            op = handlers.operation(name=txt)
-            def block():
-                op.define()
-                with op.phase(txt):
-                    with op.step(txt):
-                        result = self._launch(ports, passwords, op)
-                op.ok(data=dict(ports=result[0], passwords=result[1]))
-            threading.Thread(target=block).start()
-            return op.id
-
-        else:
-            result = self._launch(ports, passwords)
+        def do_launch_processes(op):
+            result = self._launch(ports, passwords, op)
             return dict(ports=result[0], passwords=result[1])
 
+        return self._op_api.run('Launch Redis processes', do_launch_processes, async=async)
 
-    @rpc.service_method
+
+    @rpc.command_method
     def shutdown_processes(self, ports, remove_data=False, async=False):
-        if async:
-            txt = 'Shutdown Redis processes'
-            op = handlers.operation(name=txt)
-            def block():
-                op.define()
-                with op.phase(txt):
-                    with op.step(txt):
-                        self._shutdown(ports, remove_data, op)
-                op.ok()
-            threading.Thread(target=block).start()
-            return op.id
-        else:
+        def do_shutdown_processes(op):
             return self._shutdown(ports, remove_data)
+        return self._op_api.run('Shutdown Redis processes', do_shutdown_processes, async=async)
 
 
-    @rpc.service_method
+    @rpc.query_method
     def list_processes(self):
         return self.get_running_processes()
 
 
-    def _launch(self, ports=[], passwords=[], op=None):
-        LOG.debug('Launching redis processes on ports %s with passwords %s' % (ports, passwords))
+    def _launch(self, ports=None, passwords=None, op=None):
+        log = op.logger if op else LOG
+        ports = ports or []
+        passwords = passwords or []
+        log.debug('Launching redis processes on ports %s with passwords %s', ports, passwords)
         is_replication_master = self.is_replication_master
 
         primary_ip = self.get_primary_ip()
@@ -112,76 +93,54 @@ class RedisAPI(object):
         new_passwords = []
         new_ports = []
 
+        for port, password in zip(ports, passwords or [None for port in ports]):
+            log.info('Launch Redis %s on port %s', 
+                'Master' if is_replication_master else 'Slave', port)
 
+            if iptables.enabled():
+                iptables.FIREWALL.ensure({
+                        "jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port
+                })
 
-        for port,password in zip(ports, passwords or [None for port in ports]):
-            if op:
-                op.step('Launch Redis %s on port %s' % ('Master' if is_replication_master else 'Slave', port))
-            try:
-                if op:
-                    op.__enter__()
+            redis_service.create_redis_conf_copy(port)
+            redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
 
-                if iptables.enabled():
-                    iptables.FIREWALL.ensure({
-                            "jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port
-                    })
-
-
-                redis_service.create_redis_conf_copy(port)
-                redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
-
-                if not redis_process.service.running:
-                    LOG.debug('Launch Redis %s on port %s' % ('Master' if is_replication_master else 'Slave', port))
-                    if is_replication_master:
-                        current_password = redis_process.init_master(STORAGE_PATH)
-                    else:
-                        current_password = redis_process.init_slave(STORAGE_PATH, primary_ip, port)
-                    new_passwords.append(current_password)
-                    new_ports.append(port)
-                    LOG.debug('Redis process has been launched on port %s with password %s' % (port, current_password))
-
+            if not redis_process.service.running:
+                if is_replication_master:
+                    current_password = redis_process.init_master(STORAGE_PATH)
                 else:
-                    raise BaseException('Cannot launch redis on port %s: the process is already running' % port)
+                    current_password = redis_process.init_slave(STORAGE_PATH, primary_ip, port)
+                new_passwords.append(current_password)
+                new_ports.append(port)
+                log.debug('Redis process has been launched on port %s with password %s' % (port, current_password))
 
-            except:
-                if op:
-                    op.__exit__(sys.exc_info())
-                raise
-            finally:
-                if op:
-                    op.__exit__(None)
+            else:
+                raise BaseException('Cannot launch redis on port %s: the process is already running' % port)
+
         return (new_ports, new_passwords)
 
 
     def _shutdown(self, ports, remove_data=False, op=None):
+        log = op.logger if op else LOG
         is_replication_master = self.is_replication_master
         freed_ports = []
         for port in ports:
-            if op:
-                msg = 'Shutdown Redis %s on port %s' % ('Master' if is_replication_master else 'Slave', port)
-                op.step(msg)
-            try:
-                if op:
-                    op.__enter__()
-                LOG.debug('Shutting down redis instance on port %s' % (port))
-                instance = redis_service.Redis(port=port)
-                if instance.service.running:
-                    password = instance.redis_conf.requirepass
-                    instance.password = password
-                    LOG.debug('Dumping redis data on disk using password %s from config file %s' % (password, instance.redis_conf.path))
-                    instance.redis_cli.save()
-                    LOG.debug('Stopping the process')
-                    instance.service.stop()
-                    freed_ports.append(port)
-                if remove_data and os.path.exists(instance.db_path):
-                    os.remove(instance.db_path)
-            except:
-                if op:
-                    op.__exit__(sys.exc_info())
-                raise
-            finally:
-                if op:
-                    op.__exit__(None)
+            log.info('Shutdown Redis %s on port %s', 
+                    'Master' if is_replication_master else 'Slave', port)
+
+            instance = redis_service.Redis(port=port)
+            if instance.service.running:
+                password = instance.redis_conf.requirepass
+                instance.password = password
+                log.debug('Dumping redis data on disk using password %s from config file %s', 
+                        password, instance.redis_conf.path)
+                instance.redis_cli.save()
+                log.debug('Stopping the process')
+                instance.service.stop()
+                freed_ports.append(port)
+            if remove_data and os.path.exists(instance.db_path):
+                os.remove(instance.db_path)
+
         return dict(ports=freed_ports)
 
 
@@ -212,13 +171,13 @@ class RedisAPI(object):
                 if p:
                     conf_path = __redis__['defaults']['redis.conf']
 
-            LOG.debug('Got config path %s for port %s' % (conf_path, port))
+            LOG.debug('Got config path %s for port %s', conf_path, port)
             redis_conf = redis_service.RedisConf(conf_path)
             password = redis_conf.requirepass
             processes[port] = password
             ports.append(port)
             passwords.append(password)
-            LOG.debug('Redis config %s has password %s' % (conf_path, password))
+            LOG.debug('Redis config %s has password %s', conf_path, password)
         return dict(ports=ports, passwords=passwords)
 
 
@@ -228,7 +187,7 @@ class RedisAPI(object):
         if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, 'replication_master'):
             value = self._cnf.rawini.get(CNF_SECTION, 'replication_master')
         res = True if int(value) else False
-        LOG.debug('is_replication_master: %s' % res)
+        LOG.debug('is_replication_master: %s', res)
         return res
 
 
@@ -237,7 +196,7 @@ class RedisAPI(object):
         value = 'snapshotting'
         if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, OPT_PERSISTENCE_TYPE):
             value = self._cnf.rawini.get(CNF_SECTION, OPT_PERSISTENCE_TYPE)
-        LOG.debug('persistence_type: %s' % value)
+        LOG.debug('persistence_type: %s', value)
         return value
 
 
@@ -254,11 +213,11 @@ class RedisAPI(object):
                                 "Waiting %d seconds before the next attempt" % 5)
                 time.sleep(5)
         host = master_host.internal_ip or master_host.external_ip
-        LOG.debug('primary IP: %s' % host)
+        LOG.debug('primary IP: %s', host)
         return host
 
 
-    @rpc.service_method
+    @rpc.command_method
     def reset_password(self, port=__redis__['defaults']['port'], new_password=None):
         """ Reset auth for Redis process on port `port`. Return new password """
         if not new_password:
@@ -279,7 +238,7 @@ class RedisAPI(object):
         return new_password
 
 
-    @rpc.service_method
+    @rpc.query_method
     def replication_status(self):
         ri = redis_service.RedisInstances()
 

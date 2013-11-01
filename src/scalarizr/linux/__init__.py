@@ -75,6 +75,7 @@ class __os(dict):
             self['name'] = 'Windows'
             self['release'] = win32_ver[1]
             self['codename'] = win32_ver[0]
+            self['arch'] = 'x86_64' if platform.uname()[4].upper() == 'AMD64' else 'i386'
 
         elif osmod.path.isfile('/etc/lsb-release'):
             for line in open('/etc/lsb-release').readlines():

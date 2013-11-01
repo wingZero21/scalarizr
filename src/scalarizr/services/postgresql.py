@@ -1033,6 +1033,8 @@ class PgHbaConf(object):
             LOG.debug('Adding record "%s" to %s' % (str(record),self.path))
             with open(self.path, 'a') as fp:
                 fp.write('\n'+str(record)+'\n')
+        else:
+            LOG.debug('Record "%s" is already in %s. Nothing to add.' % (str(record),self.path))
             
     def delete_record(self, record, delete_similar=False):
         deleted = []

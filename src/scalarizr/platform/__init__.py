@@ -179,7 +179,7 @@ class Platform():
 
         def images(self):
             if bus.scalr_version >= (3, 1, 0):
-                return os.path.join(self.root(), 'images')
+                return os.path.join(self.root(), 'images/')
             else:
                 return '%s://scalr2-images-%s-%s' % (
                         self.platform.cloud_storage_path.split('://')[0],
@@ -333,3 +333,6 @@ else:
                 'ipv6': None
                 } for i in range(0, outbytes, struct_size))
 
+
+def is_private_ip(ipaddr):
+    return any(map(lambda x: ipaddr.startswith(x), ('10.', '172.', '192.168.')))

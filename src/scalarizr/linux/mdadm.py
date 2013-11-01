@@ -1,5 +1,6 @@
 from __future__ import with_statement
 
+import logging
 import re
 import os
 from scalarizr import linux
@@ -16,6 +17,7 @@ mdadm_binary = linux.which('mdadm')
 if not os.path.exists('/proc/mdstat'):
     coreutils.modprobe('md_mod')
 
+LOG = logging.getLogger(__name__)
 
 def mdadm(mode, md_device=None, *devices, **long_kwds):
     """
@@ -37,6 +39,8 @@ def mdfind(*devices):
 
     with open('/proc/mdstat') as f:
         stat = f.readlines()
+        
+    LOG.debug('mdstat: %s', stat)
 
     for line in stat:
         if all(map(lambda x: x in line, devices_base)):

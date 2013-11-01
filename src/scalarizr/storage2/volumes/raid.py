@@ -6,6 +6,7 @@ __author__ = 'Nick Demyanchuk'
 import os
 import re
 import sys
+import time
 import Queue
 import base64
 import logging
@@ -15,7 +16,7 @@ import itertools
 
 
 from scalarizr import storage2, util
-from scalarizr.linux import mdadm, lvm2, coreutils
+from scalarizr.linux import mdadm, lvm2, coreutils, os as os_detect
 from scalarizr.storage2.volumes import base
 
 
@@ -28,9 +29,8 @@ class RaidVolume(base.Volume):
     lv_re = re.compile(r'Logical volume "([^\"]+)" created')
 
 
-    def __init__(self,
-                            disks=None, raid_pv=None, level=None, lvm_group_cfg=None,
-                            vg=None, pv_uuid=None, **kwds):
+    def __init__(self, disks=None, raid_pv=None, level=None, lvm_group_cfg=None,
+                 vg=None, pv_uuid=None, **kwds):
         '''
         :type disks: list
         :param disks: Raid disks
@@ -65,6 +65,19 @@ class RaidVolume(base.Volume):
                         lvm_group_cfg=lvm_group_cfg,
                         vg=vg, pv_uuid=pv_uuid, **kwds)
         self.features.update({'restore': True, 'grow': True})
+
+
+    def _disable_autoassembly(self):
+        try:
+            mdadm_conf_path = '/etc/mdadm.conf' if os_detect.rhel_family else '/etc/mdadm/mdadm.conf'
+            with open(mdadm_conf_path) as f:
+                mdadm_conf = f.read()
+
+            if not 'AUTO -all' in mdadm_conf:
+                with open(mdadm_conf_path, 'w') as f:
+                    f.write(mdadm_conf + '\n' + 'AUTO -all')
+        except:
+            LOG.warning('Autoassembly was not disabled.', exc_info=sys.exc_info())
 
     def _ensure(self):
         self._v1_compat = self.snap and len(self.snap['disks']) and \
@@ -117,6 +130,9 @@ class RaidVolume(base.Volume):
 
         assert int(self.level) in (0,1,5,10), 'Unknown raid level: %s' % self.level
 
+        # Making sure autoassembly is disabled before attaching disks
+        self._disable_autoassembly()
+
         disks = []
         for disk in self.disks:
             disk = storage2.volume(disk)
@@ -127,6 +143,7 @@ class RaidVolume(base.Volume):
         disks_devices = [disk.device for disk in self.disks]
 
         if self.lvm_group_cfg:
+            time.sleep(2)  # Give a time to device manager 
             try:
                 raid_device = mdadm.mdfind(*disks_devices)
             except storage2.StorageError:

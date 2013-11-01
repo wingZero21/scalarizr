@@ -25,6 +25,7 @@ class LoopVolume(base.Volume):
                             file=None,
                             size=None,
                             zerofill=None,
+                            adjust_size=True,
                             **kwds):
         '''
         :type file: string
@@ -36,9 +37,12 @@ class LoopVolume(base.Volume):
         :type zerofill: bool
         :param zerofill: Fill device with zero bytes. Takes more time,
                 but greater GZip compression
+        :type adjust_size: bool
+        :param adjust_size: If passed size is greater then free space, 
+                adjust size to max available.
         '''
         super(LoopVolume, self).__init__(file=file, size=size,
-                        zerofill=zerofill, **kwds)
+                        zerofill=zerofill, adjust_size=True, **kwds)
         self.features.update(dict(restore=True, grow=True))
 
     def _ensure(self):
@@ -75,10 +79,13 @@ class LoopVolume(base.Volume):
                     size = total * pc / 100
                     free = stat.f_bsize * stat.f_bfree / 1048576
                     if size > free:
-                        msg = 'Expected loop size is greater then ' \
-                                        'available free space on a root filesystem. ' \
-                                        'Expected: %sMb / Free: %sMb' % (size, free)
-                        raise storage2.StorageError(msg)
+                        if self.adjust_size:
+                            size = free
+                        else:
+                            msg = 'Expected loop size is greater then ' \
+                                            'available free space on a root filesystem. ' \
+                                            'Expected: %sMb / Free: %sMb' % (size, free)
+                            raise storage2.StorageError(msg)
                 else:
                     size = int(float(self.size) * 1024)
                 dd_kwds = {'if': '/dev/zero', 'of': self.file, 'bs': '1M'}
@@ -145,10 +152,6 @@ class LoopVolume(base.Volume):
     def _destroy(self, force, **kwds):
         if force and self.file:
             os.remove(self.file)
-
-
-    def _clone(self, config):
-        config.pop('file', None)
 
 
     def _uniq(self):

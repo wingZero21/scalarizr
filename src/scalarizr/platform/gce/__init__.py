@@ -146,7 +146,7 @@ class GcePlatform(Platform):
         self.compute_svc_mgr = GoogleServiceManager(
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
-                self, 'storage', 'v1beta1', *STORAGE_FULL_SCOPE)
+                self, 'storage', 'v1beta2', *STORAGE_FULL_SCOPE)
 
 
     def get_user_data(self, key=None):

@@ -129,8 +129,8 @@ class GoogleCSTransferProvider(transfer.TransferProvider):
         pl = bus.platform
         proj_id = pl.get_numeric_project_id()
 
-        req_body = dict(id=bucket_name, projectId=proj_id)
-        req = self.cloudstorage.buckets().insert(body=req_body)
+        req_body = dict(name=bucket_name)
+        req = self.cloudstorage.buckets().insert(project=proj_id, body=req_body)
         try:
             req.execute()
         except:
