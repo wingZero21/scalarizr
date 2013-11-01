@@ -855,7 +855,8 @@ class NginxAPI(object):
                   reread_conf=True,
                   reload_service=True,
                   hash_backend_name=True,
-                  write_proxies=True):
+                  write_proxies=True,
+                  **kwds):
         """
         Adds proxy.
 
