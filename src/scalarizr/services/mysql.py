@@ -126,7 +126,7 @@ class MySQL(BaseService):
 
                 raw_value = self.my_cnf.get(directive)
                 LOG.debug('directive %s:%s' % (directive, raw_value))
-                if raw_value:
+                if raw_value and node.__node__['platform'] != 'openstack':
                     src_dir = os.path.dirname(raw_value + "/") + "/"
                     LOG.debug('source path: %s' % src_dir)
                     if os.path.isdir(src_dir) and src_dir != dest:
