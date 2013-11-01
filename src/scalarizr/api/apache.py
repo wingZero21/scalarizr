@@ -159,12 +159,13 @@ class ApacheAPI(object):
         assert hostname == v_host.server_name
 
         for directory in v_host.document_root_paths:
-            docroot_path = os.path.dirname(directory)
+            docroot_parent_path = os.path.dirname(directory)
 
-            if not os.path.exists(docroot_path):
-                os.makedirs(docroot_path, 0755)
-                LOG.info('Created document root %s for %s' % (docroot_path, v_host))
+            if not os.path.exists(docroot_parent_path):
+                os.makedirs(docroot_parent_path, 0755)
+                LOG.info('Created parent directory of document root %s for %s' % (directory, v_host))
 
+            if not os.path.exists(directory) or not os.listdir(directory):
                 shutil.copytree(os.path.join(bus.share_path, 'apache/html'), directory)
                 files = ', '.join(os.listdir(directory))
                 LOG.info('Copied document root files: %s' % files)
@@ -179,7 +180,7 @@ class ApacheAPI(object):
                 LOG.info('Changed owner to %s: %s' % (
                     uname, ', '.join(os.listdir(directory))))
             else:
-                LOG.info('Document root %s already exists.' % docroot_path)
+                LOG.info('Document root %s already exists.' % directory)
 
         try:
             clog_path = os.path.dirname(v_host.custom_log_path)
