@@ -203,7 +203,7 @@ class ApacheAPI(object):
                     errlog_path,
                 ))
         except NoPathError:
-            LOG.info('ErrorLog directive not found in %s' % v_host)
+            LOG.debug('ErrorLog directive not found in %s' % v_host)
 
         if os.path.exists(v_host_path) and open(v_host_path).read() == v_host.body:
             LOG.info("Skipping VirtualHost %s: No changes found." % v_host)
@@ -759,7 +759,7 @@ class SSLCertificate(object):
         """
         Fetches SSL Certificate from Scalr and dumps data on disk.
         """
-        LOG.info("Retrieving ssl cert and private key from Scalr.")
+        LOG.info("Retrieving ssl cert %s from Scalr." % self.id or "'default'")
         query_env = bus.queryenv_service
         cert_data = query_env.get_ssl_certificate(self.id)
         authority = cert_data[2] if len(cert_data) > 2 else None
