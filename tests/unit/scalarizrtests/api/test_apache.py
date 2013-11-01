@@ -29,7 +29,7 @@ bus.etc_path = '/etc/scalr'
 class ApacheAPITest(unittest.TestCase):
 
     def setUp(self):
-        apache.__node__['platform'] = 'ec2'
+        apache.__node__ = dict(platform='ec2')
         self.api = apache.ApacheAPI()
 
     def test_update_setup(self):
