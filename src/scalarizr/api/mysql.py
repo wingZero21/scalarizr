@@ -177,5 +177,6 @@ class MySQLAPI(object):
 
         return self._op_api.run('mysql.create-backup', 
                 func=do_backup, cancel_func=cancel_backup, 
+                func_kwds={'backup': backup},
                 async=async, exclusive=True)
 
