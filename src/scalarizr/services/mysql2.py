@@ -445,11 +445,20 @@ class MySQLDumpBackup(backup.Backup):
             out, err = popen.communicate()
             LOG.debug("mysqldump log_stderr communicate done")
             if err:
-                LOG.debug("mysqldump stderr: %s", err)
-        map(log_stderr, self._popens)
+                LOG.debug("mysqldump (code %s) stderr for %s: %s", popen.returncode, popen.db_name, err)
+            return popen.db_name, popen.returncode, err
+        mysqldump_results = map(log_stderr, self._popens)
 
         if self._killed:
             raise Error("Canceled")
+
+        mysqldump_errors = []
+        for db_name, retcode, err in mysqldump_results:
+            if retcode:
+                mysqldump_errors.append('%s: "%s"' % db_name, err)
+        if mysqldump_errors:
+            raise Error("Mysqldump has returned a non-zero code.\n" + 
+                        '\n'.join(mysqldump_errors))
 
         result = transfer_result_to_backup_result(result)
         return result
@@ -467,6 +476,7 @@ class MySQLDumpBackup(backup.Backup):
                     if self._killed:
                         return
                     popen = _mysqldump.popen(stdin=None, bufsize=-1)
+                    popen.db_name = db_name
                     self._popens.append(popen)
                 stream = popen.stdout
                 yield cloudfs.NamedStream(stream, db_name)
@@ -477,6 +487,7 @@ class MySQLDumpBackup(backup.Backup):
                 if self._killed:
                     return
                 popen = _mysqldump.popen(stdin=None, bufsize=-1)
+                popen.db_name = "all-databases"
                 self._popens.append(popen)
             yield popen.stdout
 

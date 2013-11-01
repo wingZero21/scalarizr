@@ -123,30 +123,30 @@ class _P2pMessageStore:
         with self._local_storage_lock:
             self._unhandled_messages.append((queue, message))
 
-        conn = self._conn()
-        cur = conn.cursor()
-        try:
-            sql = 'INSERT INTO p2p_message (id, message, message_id, ' \
-                    'message_name, queue, is_ingoing, in_is_handled, in_consumer_id, format) ' \
-                    'VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)'
+            conn = self._conn()
+            cur = conn.cursor()
+            try:
+                sql = 'INSERT INTO p2p_message (id, message, message_id, ' \
+                        'message_name, queue, is_ingoing, in_is_handled, in_consumer_id, format) ' \
+                        'VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)'
 
-            #self._logger.debug('Representation mes: %s', repr(str(message)))
-            cur.execute(sql, [message.tojson().decode('utf-8'), message.id, message.name, queue, 1, 0, consumer_id, 'json'])
-            '''
-            cur.execute(sql, [str(message), message.id.decode('utf-8'),
-                            message.name.decode('utf-8'), queue.encode('utf-8'), 1, 0,
-                            consumer_id.encode('utf-8')])
-            '''
-            if message.meta.has_key(MetaOptions.REQUEST_ID):
-                cur.execute("""UPDATE p2p_message
-                                SET response_uuid = ? WHERE message_id = ?""",
-                        [message.id, message.meta[MetaOptions.REQUEST_ID]])
+                #self._logger.debug('Representation mes: %s', repr(str(message)))
+                cur.execute(sql, [message.tojson().decode('utf-8'), message.id, message.name, queue, 1, 0, consumer_id, 'json'])
+                '''
+                cur.execute(sql, [str(message), message.id.decode('utf-8'),
+                                message.name.decode('utf-8'), queue.encode('utf-8'), 1, 0,
+                                consumer_id.encode('utf-8')])
+                '''
+                if message.meta.has_key(MetaOptions.REQUEST_ID):
+                    cur.execute("""UPDATE p2p_message
+                                    SET response_uuid = ? WHERE message_id = ?""",
+                            [message.id, message.meta[MetaOptions.REQUEST_ID]])
 
-            self._logger.debug("Commiting put_ingoing")
-            conn.commit()
-            self._logger.debug("Commited put_ingoing")
-        finally:
-            cur.close()
+                self._logger.debug("Commiting put_ingoing")
+                conn.commit()
+                self._logger.debug("Commited put_ingoing")
+            finally:
+                cur.close()
 
 
     def get_unhandled(self, consumer_id):

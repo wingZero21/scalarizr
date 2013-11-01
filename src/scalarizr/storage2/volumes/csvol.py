@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 import string
+import time
 import threading
 import glob
 
@@ -148,7 +149,7 @@ class CSVolume(base.Volume):
             # We should wait for state chage
             if self._native_vol.vmstate == 'Stopping':
                 def vm_state_changed():
-                    self._native_vol = self._conn.listVolumes(self._native_vol.id)[0]
+                    self._native_vol = self._conn.listVolumes(id=self._native_vol.id)[0]
                     return not hasattr(self._native_vol, 'virtualmachineid') or \
                         self._native_vol.vmstate != 'Stopping'
                 wait_until(vm_state_changed)
@@ -181,15 +182,27 @@ class CSVolume(base.Volume):
 
                 if self.id:
                     LOG.debug('Volume %s has been already created', self.id)
-                    try:
-                        LOG.debug('XXX: Volumes attached to terminated instances ' \
-                                'are not visible in listVolumes view. ' \
-                                'Calling detachVolume to force volume be visibile')
-                        self._conn.detachVolume(id=self.id)
-                    except Exception, e:
-                        if 'does not exist' in str(e):
-                            raise storage2.VolumeNotExistsError(self.id)
-                        # pass other errors
+                    int_errs = 0
+                    while True:
+                        try:
+                            LOG.debug('XXX: Volumes attached to terminated instances ' \
+                                    'are not visible in listVolumes view. ' \
+                                    'Calling detachVolume to force volume be visibile')
+                            self._conn.detachVolume(id=self.id)
+                        except Exception, e:
+                            msg = str(e)
+                            if 'does not exist' in msg:
+                                raise storage2.VolumeNotExistsError(self.id)
+                            if 'not attached' in msg:
+                                break
+                            if 'Internal error executing command' in msg:
+                                int_errs += 1
+                                if int_errs >= 10:
+                                    raise
+                                time.sleep(30)
+                                continue
+                            # pass other errors
+                        break
 
                     try:
                         vol_list = self._conn.listVolumes(id=self.id)
