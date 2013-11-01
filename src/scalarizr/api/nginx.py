@@ -396,16 +396,6 @@ class NginxAPI(object):
         cert, key, cacert = queryenv.get_ssl_certificate(ssl_certificate_id)
         return self.update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
 
-    def _get_default_templates(self):
-        """ 
-        Returns dict of templates SCALR_NGINX_HTTP_CONF, SCALR_NGINX_SSL_CONF
-        and SCALR_NGINX_BACKEND_CONF
-        """
-        queryenv = bus.queryenv_service
-        glob_vars = queryenv.list_global_variables()
-        return {'nginx_server': glob_vars.get('SCALR_NGINX_HTTP_CONF'),
-                'ssl': glob_vars.get('SCALR_NGINX_SSL_CONF')}
-
     def _normalize_destinations(self, destinations):
         """
         Parses list of destinations. They are dictionaries. Dictionary example:
@@ -756,15 +746,16 @@ class NginxAPI(object):
         config = metaconf.Configuration('nginx')
 
         server_wide_template = grouped_templates.get('server')
+        config.add('server', '')
         if server_wide_template:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
             with open(temp_file, 'w') as fp:
                 fp.write(server_wide_template['content'])
-            config.read(temp_file)
+            template_conf = metaconf.Configuration('nginx')
+            template_conf.read(temp_file)
+            config.insert_conf(template_conf, 'server')
             os.remove(temp_file)
-        else:
-            config.add('server', '')
 
         if port:
             config.add('server/listen', str(port))
@@ -803,7 +794,7 @@ class NginxAPI(object):
                 temp_file = self.proxies_inc_dir + '/temalate.tmp'
                 # TODO: this is ugly. Find the way to read conf from string
                 with open(temp_file, 'w') as fp:
-                    fp.write(server_wide_template['content'])
+                    fp.write(grouped_templates[location]['content'])
                 template_conf = metaconf.Configuration('nginx')
                 template_conf.read(temp_file)
                 config.insert_conf(template_conf, location_xpath)
