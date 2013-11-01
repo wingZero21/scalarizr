@@ -1,7 +1,8 @@
 from szradm import Command
 
-class clsCmd(Command):
-    pass
+class ClsCmd(Command):
+    class SubCmd(Command):
+        pass
 
 @Command.command
 def status():
