@@ -96,7 +96,7 @@ class ApacheFormatProvider(IniFormatProvider):
             new_section.attrib['mc_type'] = 'section'
             value = result.group('value').strip()
             if value:
-                new_section.text = value
+                new_section.attrib['value'] = value
 
             opened = 1
 
@@ -125,7 +125,8 @@ class ApacheFormatProvider(IniFormatProvider):
 
     def write_section(self, fp, node):
         if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'section':
-            value = ' ' + (node.text.strip() or '')
+            text = node.text.strip()
+            value = ' ' + node.attrib['value'] if node.attrib.has_key('value') else ''
             tag = unquote(node.tag)
             fp.write(self._pad*self._nesting + '<' + tag + value + '>\n')
             self._nesting +=1

@@ -40,10 +40,13 @@ class StorageManager():
                 self.detach_volume(volume['id'], server['id'])
 
 
-    def _cleanup(self):
+    def cleanup(self):
         # Remove all volumes of volume group
-        vg_infos = lvm2.vgs(vg_name)
-        if vg_infos:
+        try:
+            lvm2.vgs(vg_name)
+        except lvm2.NotFound:
+            pass
+        else:
             lvm2.vgremove(vg_name)
 
 
