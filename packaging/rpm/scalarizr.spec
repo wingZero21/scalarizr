@@ -143,9 +143,9 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr CloudStack (cloud.com) edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-cloudstack >= 0.1.r16
+Requires:       python26-cloudstack >= 0.2.3
 %else
-Requires:       python-cloudstack >= 0.1.r16
+Requires:       python-cloudstack >= 0.2.3
 Requires:       lsscsi
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
