@@ -642,10 +642,11 @@ class NginxAPI(object):
             role_ids = set([dest.get('id') for dest in backend_destinations])
             role_ids.discard(None)
 
-            if location.startswith('/'):
-                location = location[1:]
-
-            name = self._make_backend_name(hostname, location, role_ids, hash_name)
+            name = self._make_backend_name(
+                hostname,
+                location[1:] if location.startswith('/') else location,
+                role_ids,
+                hash_name)
 
             self._add_backend(name,
                               backend_destinations,
@@ -662,7 +663,7 @@ class NginxAPI(object):
 
     def _is_redirector(self, conf, server_xpath):
         try:
-            _ = conf.get('%s/rewrite' % server_xpath)
+            conf.get('%s/rewrite' % server_xpath)
         except metaconf.NoPathError:
             return False
         else:
