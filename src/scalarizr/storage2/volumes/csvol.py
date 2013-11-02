@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import threading
+import uuid
 
 from scalarizr import node, linux
 from scalarizr.linux import coreutils
@@ -162,7 +163,7 @@ class CSVolume(base.Volume):
                                 self.disk_offering_id = dskoffer.id
                                 break
                     self._native_vol = self._create_volume(
-                        name='%s-%s' % (__cloudstack__['instance_id'], os.path.basename(devname)),
+                        name=getattr(self, 'scalr_storage_id', str(uuid.uuid4())),
                         zone_id=__cloudstack__['zone_id'],
                         size=self.size,
                         disk_offering_id=self.disk_offering_id,
