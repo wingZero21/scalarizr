@@ -2,6 +2,8 @@ from __future__ import with_statement
 import os
 import sys
 import uuid
+import string
+import glob
 
 from scalarizr import storage2
 from scalarizr.libs import bases
@@ -365,3 +367,13 @@ class Snapshot(Base):
 
 
 storage2.snapshot_types['base'] = Snapshot
+
+
+def taken_devices():
+    devs = glob.glob('/dev/xvd*') + glob.glob('/dev/vd*') + glob.glob('/dev/sd*')
+    devs = [x for x in devs if x[-1] in string.ascii_lowercase]
+    return set(devs)
+
+def taken_letters():
+    lets = [x[-1] for x in taken_devices()]
+    return set(lets)
