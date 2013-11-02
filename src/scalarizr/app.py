@@ -643,7 +643,8 @@ class Service(object):
         pl = bus.platform
 
         # Check that service started after dirty bundle
-        if ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
+        if not optparser.values.import_server and \
+            ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
 
             # XXX: nimbula's user-data is uploaded by ssh
             server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)

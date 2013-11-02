@@ -45,7 +45,6 @@ def device2name(device):
 
 class CinderVolume(base.Volume):
     attach_lock = threading.Lock()
-    letters = set(string.ascii_lowercase[1:16])
 
     _global_timeout = 3600
 
