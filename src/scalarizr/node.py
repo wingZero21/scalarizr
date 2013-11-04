@@ -26,6 +26,12 @@ class Store(object):
     def __repr__(self):
         return '<%s at %s>' % (type(self).__name__, hex(id(self)))
 
+    def __getitem__(self, key):
+        raise NotImplementedError()
+
+    def __setitem__(self, key, name):
+        raise NotImplementedError()
+
 
 class Compound(dict):
     def __init__(self, patterns=None):
@@ -43,7 +49,7 @@ class Compound(dict):
 
     def __setitem__(self, key, value):
         try:
-            value_now = self.__getitem__(key)
+            value_now = dict.__getitem__(self, key)
         except KeyError:
             value_now = None
         if isinstance(value_now, Store):
@@ -53,7 +59,7 @@ class Compound(dict):
 
 
     def __getitem__(self, key):
-        value = super(Compound, self).__getitem__(key)
+        value =  dict.__getitem__(self, key)
         if isinstance(value, Store):
             return value.__getitem__(key)
         else:
@@ -67,6 +73,10 @@ class Compound(dict):
                 value = copy.deepcopy(value)
             ret[key] = value
         return ret
+
+    def update(self, values):
+        for key, value in values.items():
+            self[key] = value
 
     def __repr__(self):
         ret = {}

@@ -504,10 +504,29 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             for part in manifest.parts:
                 upload_files.append(os.path.join(manifest_dir, part[0]))
 
-            trn = FileTransfer(src=upload_files, dst=self._platform.scalrfs.images())
-            trn.run()
+            dst = self._platform.scalrfs.images()
+            trn = FileTransfer(src=upload_files, dst=dst)
+            res = trn.run()
             #trn = Transfer(pool=4, max_attempts=5, logger=LOG)
             #trn.upload(upload_files, self._platform.scalrfs.images())
+
+            if res["failed"]:
+                sources = map(lambda job: job["src"], res["failed"])
+                exceptions = map(lambda job: job["exc_info"][1], res["failed"])
+                str_exceptions = map(lambda exc: ': '.join([repr(exc).split('(')[0],
+                                                            exc.message]),
+                                     exceptions)
+                str_fails = map(lambda pair: '  ' + ' => '.join(pair), zip(sources, str_exceptions))
+                msg = ("Failed uploading the image files to {dst}\n"
+                       "{failed} out of {total} failed:\n"
+                       "\n"
+                       "{fails}"
+                ).format(dst=dst,
+                         failed=len(res["failed"]),
+                         total=len(res["completed"]) + len(res["failed"]),
+                         fails='\n'.join(str_fails)
+                )
+                raise HandlerError(msg)
 
             manifest_path = os.path.join(self._platform.scalrfs.images(), os.path.basename(manifest_path))
             return manifest_path.split('s3://')[1]
