@@ -33,6 +33,8 @@ def get_handlers():
 class ApacheHandler(Handler):
 
     _queryenv = None
+    _initial_preset = None
+    _initial_v_hosts = None
     _service_name = SERVICE_NAME
 
     def __init__(self):
@@ -42,7 +44,8 @@ class ApacheHandler(Handler):
 
         self.preset_provider = ApachePresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
-        self.initial_preset = None
+        self._initial_preset = None
+        self._initial_v_hosts = None
 
         self._queryenv = bus.queryenv_service
 
@@ -78,17 +81,20 @@ class ApacheHandler(Handler):
         LOG.info('Got HostInitResponse message')
         if 'apache' in message.body:
             apache_data = message.body['apache']
-            v_hosts = apache_data['virtual_hosts']
-            LOG.info('Configuring VirtualHosts: %s' % v_hosts)
-            applied_vhosts = self.api.reconfigure(v_hosts)
-            LOG.info('%s Virtual Hosts configured.' % len(applied_vhosts))
+            self._initial_v_hosts = apache_data['virtual_hosts']
 
             if 'preset' in apache_data:
-                self.initial_preset = apache_data['preset']
+                self._initial_preset = apache_data['preset']
 
     def on_before_host_up(self, message):
+        if self._initial_v_hosts:
+            LOG.info('Configuring VirtualHosts: %s' % self._initial_v_hosts)
+            applied_vhosts = self.api.reconfigure(self._initial_v_hosts)
+            LOG.info('%s Virtual Hosts configured.' % len(applied_vhosts))
+
         self._rpaf_reload()
-        bus.fire('service_configured', service_name=SERVICE_NAME, preset=self.initial_preset)
+        
+        bus.fire('service_configured', service_name=SERVICE_NAME, preset=self._initial_preset)
 
     def on_start(self):
         if __node__['state'] == ScalarizrState.RUNNING:
