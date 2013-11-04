@@ -94,7 +94,7 @@ class ApacheHandler(Handler):
         if __node__['state'] == ScalarizrState.RUNNING:
             self._rpaf_reload()
 
-    def on_before_reboot_finish(self):
+    def on_before_reboot_finish(self, *args, **kwargs):
         self.api.reload_virtual_hosts()
 
     def on_HostUp(self, message):
