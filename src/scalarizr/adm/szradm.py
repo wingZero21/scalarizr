@@ -2,6 +2,7 @@
 import sys
 import os
 import imp
+import inspect
 
 from docopt import docopt
 
@@ -32,11 +33,15 @@ command_list = []
 
 def find_modules(directory):
     """Method finds modules in given directory and subdirectories"""
-    result = []
     directory = os.path.abspath(directory)
+    result = []
+
     module_paths = [os.path.join(directory, m) for m in os.listdir(directory)]
     for path in module_paths:
-        if path.endswith('.py') and path is not __file__:
+        is_module = path.endswith('.py') \
+            and path is not __file__ \
+            and path is not os.path.join(__dir__, '__init__.py')
+        if is_module:
             module_name = os.path.basename(path).replace('.py', '')
             module = imp.load_source(module_name, path)
             result.append(module)
@@ -47,14 +52,10 @@ def find_modules(directory):
 
 def find_commands():
     """Method finds commands in modules of this package"""
-    module_paths = [os.path.join(__dir__, m) for m in os.listdir(__dir__)]
-    for path in module_paths:
-        if path.endswith('.py'):
-            # import module, find commands
-            pass
-        elif os.path.isdir(path):
-            # import modules from package
-            pass
+    modules = find_modules(__dir__)
+    for module in modules:
+        is_command = lambda x: inspect.isclass(x) and issubclass(x, Command)
+        commands = [el[1] for el in inspect.getmembers(module) if is_command(el[1])]
 
 
 def main(**argv):
