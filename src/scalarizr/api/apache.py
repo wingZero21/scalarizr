@@ -550,9 +550,11 @@ class ApacheAPI(object):
                 result.append(data)
 
         else:
-            raw_data = self._query_env.list_farm_role_params()
+            raw_data = self._query_env.list_farm_role_params(__node__['farm_role_id'])
+            params = raw_data.get('params', {})
+            LOG.debug('QueryEnv returned list of farmrole params: %s' % params)
 
-            if not 'apache' in raw_data:
+            if not 'apache' in params:
                 return []
 
             for virtual_host_data in raw_data['apache']:
