@@ -21,6 +21,27 @@ class QEMock(object):
             return dima_cert, dima_key
         return marat_cert, marat_key
 
+    @classmethod
+    def list_farm_role_params(*args, **kwargs):
+        app = {
+            'app': {
+                'virtual_hosts':
+                [{
+                    'hostname': 'www.dima.com',
+                    'port': '80',
+                    'ssl': '0',
+                    'ssl_certificate_id': None,
+                    'template': simple_template},
+                {
+                    'hostname': 'www.dima.com',
+                    'port': '443',
+                    'ssl': '1',
+                    'ssl_certificate_id': '410',
+                    'template': ssl_template
+                }]},
+            'volumes': None}
+        return dict(params=app)
+
 
 apache.bus.queryenv_service = QEMock
 bus.etc_path = '/etc/scalr'
@@ -29,8 +50,15 @@ bus.etc_path = '/etc/scalr'
 class ApacheAPITest(unittest.TestCase):
 
     def setUp(self):
-        apache.__node__ = dict(platform='ec2')
+        apache.__node__ = dict(
+            platform='ec2',
+            farm_role_id=1
+        )
         self.api = apache.ApacheAPI()
+
+    def test__fetch_virtual_hosts(self):
+        data = QEMock.list_farm_role_params()['params']['app']['virtual_hosts']
+        self.assertEquals(data, self.api._fetch_virtual_hosts())
 
     def test_update_setup(self):
         data = [

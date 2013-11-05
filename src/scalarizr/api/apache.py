@@ -553,9 +553,8 @@ class ApacheAPI(object):
             raw_data = self._query_env.list_farm_role_params(__node__['farm_role_id'])
             params = raw_data.get('params', {})
             LOG.debug('QueryEnv returned list of farmrole params: %s' % params)
-
-            for virtual_host_data in params['app']:
-                result.append(virtual_host_data)
+            app_data = params.get('app', {})
+            result += app_data.get('virtual_hosts', [])
 
         return result
 
