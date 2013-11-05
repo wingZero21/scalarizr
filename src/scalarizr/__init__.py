@@ -467,6 +467,11 @@ def _cleanup_after_rebundle():
             mysql_bhv = firstmatched(lambda x: x in node.__node__['behavior'], ('mysql', 'mysql2', 'percona'))
             vol = node.__node__[mysql_bhv]['volume']
             vol.destroy(force=True)
+
+    if os.path.exists('/etc/chef/client.pem'):
+        os.remove('/etc/chef/client.pem')
+    if os.path.exists('/etc/chef/client.rb'):
+        os.remove('/etc/chef/client.rb')
     
     # Reset private configuration
     priv_path = cnf.private_path()
