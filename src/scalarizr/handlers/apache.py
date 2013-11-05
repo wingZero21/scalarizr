@@ -10,11 +10,11 @@ import logging
 
 from scalarizr.bus import bus
 from scalarizr.api import apache
-from scalarizr.util import disttool
 from scalarizr.node import __node__
 from scalarizr.linux import coreutils
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
+from scalarizr.util import disttool, initdv2
 from scalarizr.api import service as preset_service
 from scalarizr.services import PresetProvider, BaseConfig
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
@@ -104,7 +104,12 @@ class ApacheHandler(Handler):
 
     def on_start(self):
         if __node__['state'] == ScalarizrState.RUNNING:
-            self._rpaf_reload()
+            try:
+                self._rpaf_reload()
+            except initdv2.InitdError, e:
+                if 'not running' in str(e) and self.api.service.running:
+                    self.api.service.start()
+
 
     def on_before_reboot_finish(self, *args, **kwargs):
         self.api.reload_virtual_hosts()
