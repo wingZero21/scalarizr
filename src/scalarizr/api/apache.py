@@ -583,7 +583,6 @@ class ApacheAPI(object):
                     virtual_host_data['ssl_certificate_id'] = None  # Handling '0'
                 result.append(virtual_host_data)
 
-
         return result
 
 

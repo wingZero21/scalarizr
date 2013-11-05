@@ -57,8 +57,16 @@ class ApacheAPITest(unittest.TestCase):
         self.api = apache.ApacheAPI()
 
     def test__fetch_virtual_hosts(self):
-        data = QEMock.list_farm_role_params()['params']['app']['virtual_hosts']
-        self.assertEquals(data, self.api._fetch_virtual_hosts())
+        fetched = self.api._fetch_virtual_hosts()
+        expected = QEMock.list_farm_role_params()['params']['app']['virtual_hosts']
+        self.assertEquals(len(fetched), 2)
+        self.assertEqual(expected[0]['hostname'], fetched[0]['hostname'])
+        self.assertEqual(expected[0]['port'], fetched[0]['port'])
+        self.assertEqual(expected[0]['template'], fetched[0]['template'])
+        self.assertFalse(fetched[0]['ssl'])
+        self.assertFalse(fetched[0]['ssl_certificate_id'])
+        self.assertTrue(fetched[1]['ssl'])
+
 
     def test_update_setup(self):
         data = [
