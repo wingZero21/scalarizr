@@ -120,7 +120,7 @@ class ApacheAPI(object):
     def __init__(self):
         self.service = initdv2.lookup('apache')
         self.mod_ssl = ModSSL()
-        self.current_open_ports = [80, 443]
+        self.current_open_ports = []
         self._query_env = bus.queryenv_service
 
     @rpc.service_method
@@ -214,12 +214,7 @@ class ApacheAPI(object):
             fp.write(v_host.body)
             LOG.info('VirtualHost %s saved to %s' % (v_host, v_host_path))
 
-        if port not in self.current_open_ports:
-            try:
-                _open_ports([port])
-                self.current_open_ports += port
-            except (Exception, BaseException):
-                pass
+        self._open_ports([port])
 
         if reload:
             try:
@@ -491,7 +486,7 @@ class ApacheAPI(object):
         """
         self.service.stop('Configuring Apache Web Server')
 
-        _open_ports(self.current_open_ports)
+        self._open_ports([80, 443])
 
         if not os.path.exists(__apache__['vhosts_dir']):
             os.makedirs(__apache__['vhosts_dir'])
@@ -584,6 +579,19 @@ class ApacheAPI(object):
                 result.append(virtual_host_data)
 
         return result
+
+    def _open_ports(self, ports):
+        if iptables.enabled():
+            LOG.info('Allowing ports %s in IPtables' % str(ports))
+            rules = []
+            for port in ports:
+                if port not in self.current_open_ports:
+                    rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
+                    self.current_open_ports.append(port)
+            if rules:
+                iptables.FIREWALL.ensure(rules)
+        else:
+            LOG.warning('Cannot open ports %s: IPtables disabled' % str(ports))
 
 
 class VirtualHost(object):
@@ -1018,17 +1026,6 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
 
 initdv2.explore('apache', ApacheInitScript)
-
-
-def _open_ports(ports):
-    if iptables.enabled():
-        LOG.info('Allowing ports %s in IPtables' % str(ports))
-        rules = []
-        for port in ports:
-            rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
-        iptables.FIREWALL.ensure(rules)
-    else:
-        LOG.warning('Cannot open ports %s: IPtables disabled' % str(ports))
 
 
 def get_virtual_host_path(hostname, port):
