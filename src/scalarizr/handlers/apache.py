@@ -88,12 +88,12 @@ class ApacheHandler(Handler):
 
     def on_before_host_up(self, message):
         if self._initial_v_hosts:
-            LOG.info('Configuring VirtualHosts: %s' % self._initial_v_hosts)
+            LOG.debug('Configuring VirtualHosts: %s' % self._initial_v_hosts)
             applied_vhosts = self.api.reconfigure(self._initial_v_hosts)
             LOG.info('%s Virtual Hosts configured.' % len(applied_vhosts))
 
         self._rpaf_reload()
-        
+
         bus.fire('service_configured', service_name=SERVICE_NAME, preset=self._initial_preset)
 
     def on_start(self):

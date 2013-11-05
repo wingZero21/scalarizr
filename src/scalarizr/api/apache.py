@@ -168,7 +168,7 @@ class ApacheAPI(object):
             if not os.path.exists(directory) or not os.listdir(directory):
                 shutil.copytree(os.path.join(bus.share_path, 'apache/html'), directory)
                 files = ', '.join(os.listdir(directory))
-                LOG.info('Copied document root files: %s' % files)
+                LOG.debug('Copied document root files: %s' % files)
 
                 try:
                     pwd.getpwnam('apache')
@@ -177,10 +177,10 @@ class ApacheAPI(object):
                     uname = 'www-data'
 
                 coreutils.chown_r(directory, uname)
-                LOG.info('Changed owner to %s: %s' % (
+                LOG.debug('Changed owner to %s: %s' % (
                     uname, ', '.join(os.listdir(directory))))
             else:
-                LOG.info('Document root %s already exists.' % directory)
+                LOG.debug('Document root %s already exists.' % directory)
 
         try:
             clog_path = os.path.dirname(v_host.custom_log_path)
@@ -854,7 +854,6 @@ class ModSSL(object):
             LOG.info('Enabling default SSL virtualhost')
             system2((__apache__['a2ensite_path'], 'default-ssl'))
 
-        LOG.info('Ensuring NameVirtualHost *:%s' % ssl_port)
         if os.path.exists(__apache__['ports_conf_deb']):
             with ApacheConfig(__apache__['ports_conf_deb']) as conf:
                 i = 0
@@ -863,6 +862,7 @@ class ModSSL(object):
                     if section['value'] in ('mod_ssl.c', 'mod_gnutls.c'):
                         conf.set('IfModule[%d]/Listen' % i, str(ssl_port), True)
                         conf.set('IfModule[%d]/NameVirtualHost' % i, '*:%s' % ssl_port, True)
+            LOG.info('NameVirtualHost *:%s added to %s' % (ssl_port, __apache__['ports_conf_deb']))
 
     def _check_mod_ssl_redhat(self, ssl_port=443):
         ssl_conf_path = __apache__['ssl_conf_path']
