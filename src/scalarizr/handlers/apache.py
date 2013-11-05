@@ -45,7 +45,7 @@ class ApacheHandler(Handler):
         self.preset_provider = ApachePresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
         self._initial_preset = None
-        self._initial_v_hosts = None
+        self._initial_v_hosts = []
 
         self._queryenv = bus.queryenv_service
 
@@ -78,10 +78,16 @@ class ApacheHandler(Handler):
             message.name == Messages.BEFORE_HOST_TERMINATE)
 
     def on_host_init_response(self, message):
-        LOG.info('Got HostInitResponse message')
         if 'apache' in message.body:
             apache_data = message.body['apache']
-            self._initial_v_hosts = apache_data['virtual_hosts']
+
+            for virtual_host_data in apache_data.get('virtual_hosts', []):
+                virtual_host_data['ssl'] = bool(int(virtual_host_data['ssl']))
+
+                if not virtual_host_data['ssl']:
+                    virtual_host_data['ssl_certificate_id'] = None  # Handling '0'
+
+                self._initial_v_hosts.append(virtual_host_data)
 
             if 'preset' in apache_data:
                 self._initial_preset = apache_data['preset']
