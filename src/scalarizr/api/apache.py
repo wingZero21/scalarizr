@@ -139,7 +139,7 @@ class ApacheAPI(object):
         #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
         v_host_path = get_virtual_host_path(hostname, port)
-        assert not os.path.exists(v_host_path)
+        #assert not os.path.exists(v_host_path)
 
         v_host = VirtualHost(template)
 
