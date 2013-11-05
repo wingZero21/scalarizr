@@ -577,7 +577,12 @@ class ApacheAPI(object):
             params = raw_data.get('params', {})
             LOG.debug('QueryEnv returned list of farmrole params: %s' % params)
             app_data = params.get('app', {})
-            result += app_data.get('virtual_hosts', [])
+            for virtual_host_data in app_data.get('virtual_hosts', []):
+                virtual_host_data['ssl'] = bool(int(virtual_host_data['ssl']))
+                if not virtual_host_data['ssl']:
+                    virtual_host_data['ssl_certificate_id'] = None  # Handling '0'
+                result.append(virtual_host_data)
+
 
         return result
 
