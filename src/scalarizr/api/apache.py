@@ -155,7 +155,7 @@ class ApacheAPI(object):
                 ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
             )
 
-        assert port == v_host.port
+        assert int(port) == int(v_host.port)
         assert hostname == v_host.server_name
 
         for directory in v_host.document_root_paths:
