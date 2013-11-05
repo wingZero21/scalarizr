@@ -139,7 +139,7 @@ class ApacheAPI(object):
         #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
         v_host_path = get_virtual_host_path(hostname, port)
-        #assert not os.path.exists(v_host_path)
+        assert not os.path.exists(v_host_path)
 
         v_host = VirtualHost(template)
 
@@ -338,9 +338,20 @@ class ApacheAPI(object):
         @return: list, paths to reconfigured VirtualHosts
         """
         applied_vhosts = []
+        new_vhosts = []
         backup = {}
+        reload = False
 
         for vh_data in vhosts:
+
+            host, port = vh_data['hostname'], vh_data['port']
+            v_host_path = get_virtual_host_path(host, port)
+
+            if os.path.exists(v_host_path):
+                with open(v_host_path) as fp:
+                    backup[v_host_path] = fp.read()
+                os.remove(v_host_path)
+
             path = self.create_vhost(
                 vh_data['hostname'],
                 vh_data['port'],
@@ -351,9 +362,18 @@ class ApacheAPI(object):
             )
             applied_vhosts.append(path)
 
+            if path in backup:
+                with open(path) as fp:
+                    new_body = fp.read()
+                    old_body = backup[path]
+                if old_body != new_body:
+                    reload = True
+            else:
+                new_vhosts.append(path)
+                reload = True
+
         #cleanup
         vhosts_dir = __apache__['vhosts_dir']
-
         for fname in os.listdir(vhosts_dir):
             old_vhost_path = os.path.join(vhosts_dir, fname)
 
@@ -364,6 +384,7 @@ class ApacheAPI(object):
 
                 LOG.info('Removing old vhost file %s' % old_vhost_path)
                 os.remove(old_vhost_path)
+                reload = True
 
         if reload:
             try:
@@ -371,16 +392,18 @@ class ApacheAPI(object):
             except initdv2.InitdError, e:
                 LOG.error('ConfigTest failed with error: "%s".' % str(e))
 
+                for path in new_vhosts:
+                    LOG.info("Removing %s" % path)
+                    os.remove(path)
+
                 for path, body in backup.items():
                     LOG.info('Recreating %s' % path)
                     with open(path, 'w') as fp:
                         fp.write(body)
 
-                for path in applied_vhosts:
-                    LOG.info("Removing %s" % path)
-                    os.remove(path)
-
             self.reload_service()
+        else:
+            LOG.info('No changes were made in apache configuration.')
 
         return applied_vhosts
 
