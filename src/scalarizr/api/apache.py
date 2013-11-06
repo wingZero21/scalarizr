@@ -461,6 +461,16 @@ class ApacheAPI(object):
         return result
 
     @rpc.service_method
+    def set_default_ssl_certificate(self, id):
+        """
+        If the certificate with given ID already exists on disk
+        this method adds it to the default SSL virtual host.
+        Otherwice default system certificate will be used.
+        """
+        cert = SSLCertificate(id)
+        self.mod_ssl.set_default_certificate(cert)
+
+    @rpc.service_method
     def start_service(self):
         self.service.start()
 
@@ -777,7 +787,12 @@ class SSLCertificate(object):
         self.id = ssl_certificate_id
 
     def update(self, cert, key, authority=None):
-
+        """
+        Dumps certificate on disk.
+        @param cert: String, certificate pem
+        @param key: String, certificate key
+        @param authority: String, CA Cert
+        """
         st = os.stat(__apache__['httpd.conf'])
 
         with open(self.cert_path, 'w') as fp:
@@ -834,6 +849,11 @@ class SSLCertificate(object):
 class ModSSL(object):
 
     def set_default_certificate(self, cert):
+        """
+        If certificate files exist on disk
+        this method adds this certificate to the default SSL virtual host.
+        Otherwice default system certificate will be used.
+        """
         if os.path.exists(cert.cert_path):
             cert_path = cert.cert_path
         else:
@@ -859,6 +879,12 @@ class ModSSL(object):
 class DebianBasedModSSL(ModSSL):
 
     def ensure(self, ssl_port=443):
+        """
+        Enables mod_ssl and default SSL-based virtual host.
+        Sets NameVirtualHost and Listen values in this virtual host.
+        @param ssl_port: int, port number
+        the default SSL-based virtual host will listen to.
+        """
         self._enable_mod_ssl()
         self._enable_default_ssl_virtual_host()
         self._set_name_virtual_host(ssl_port)
@@ -888,6 +914,13 @@ class DebianBasedModSSL(ModSSL):
 class RedHatBasedModSSL(ModSSL):
 
     def ensure(self, ssl_port=443):
+        """
+        Installs and enables mod_ssl. Then enables default SSL-based virtual host
+        by adding module path to the main apache2 config.
+        Sets NameVirtualHost and Listen values in this virtual host.
+        @param ssl_port: int, port number
+        the default SSL-based virtual host will listen to.
+        """
         self._install_mod_ssl()
         self._ensure_ssl_conf()
         self._enable_mod_ssl()
