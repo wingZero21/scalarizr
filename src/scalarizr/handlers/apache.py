@@ -59,8 +59,6 @@ class ApacheHandler(Handler):
             host_init_response=self.on_host_init_response,
             before_reboot_finish=self.on_before_reboot_finish,
         )
-        if __node__['state'] == ScalarizrState.BOOTSTRAPPING:
-            self.api.init_service()
 
     def on_VhostReconfigure(self, message):
         """
@@ -93,6 +91,8 @@ class ApacheHandler(Handler):
                 self._initial_preset = apache_data['preset']
 
     def on_before_host_up(self, message):
+        self.api.init_service()
+
         if self._initial_v_hosts:
             LOG.debug('Configuring VirtualHosts: %s' % self._initial_v_hosts)
             applied_vhosts = self.api.reconfigure(self._initial_v_hosts)
