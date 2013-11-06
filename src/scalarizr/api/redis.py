@@ -16,9 +16,13 @@ from scalarizr.linux import iptables
 from scalarizr.api import operation
 from scalarizr.util import system2, PopenError
 from scalarizr.services import redis as redis_service
+from scalarizr.services import backup
 from scalarizr.handlers import redis as redis_handler
+from scalarizr.handlers import transfer_result_to_backup_result, DbMsrMessages
 from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
+from scalarizr.storage2.cloudfs import LargeTransfer
+from scalarizr.node import __node__
 
 
 BEHAVIOUR = CNF_SECTION = redis_handler.CNF_SECTION
@@ -258,3 +262,86 @@ class RedisAPI(object):
             slaves[redis_process.port] = repl_data
 
         return {'slaves': slaves}
+
+
+    @rpc.command_method
+    def create_databundle(self, async=True):
+
+        def do_databundle():
+            try:
+                bus.fire('before_%s_data_bundle' % BEHAVIOUR)
+                # Creating snapshot
+                LOG.info("Creating Redis data bundle")
+                backup_obj = backup.backup(type='snap_redis',
+                                           volume=__redis__['volume'],
+                                           tags=self.redis_tags)  # TODO: generate the same way as in
+                                                                  # mysql api or use __node__
+                restore = backup_obj.run()
+                snap = restore.snapshot
+
+
+                used_size = int(system2(('df', '-P', '--block-size=M', STORAGE_PATH))[0].split('\n')[1].split()[2][:-1])
+                bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
+
+                # Notify scalr
+                msg_data = dict(
+                        db_type         = BEHAVIOUR,
+                        used_size       = '%.3f' % (float(used_size) / 1000,),
+                        status          = 'ok'
+                )
+                msg_data[BEHAVIOUR] = {'snapshot_config': dict(snap)}
+
+                __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, 
+                                        msg_data)
+
+            except (Exception, BaseException), e:
+                LOG.exception(e)
+
+                # Notify Scalr about error
+                __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, 
+                                        dict(db_type=BEHAVIOUR,
+                                             status='error',
+                                             last_error= str(e)))
+
+        return self._op_api.run('redis.create-databundle', 
+                                func=do_databundle,
+                                func_kwds={},
+                                async=async,
+                                exclusive=True)  #?
+
+
+    @rpc.command_method
+    def create_backup(self, async=True):
+
+        def do_backup():
+            try:
+                dbs = filter(lambda name: name.endswith(('.aof', '.rdb')),
+                             os.listdir(STORAGE_PATH))
+                dbs = map(lambda name: os.path.join(STORAGE_PATH, name),
+                          dbs)
+                
+                cloud_storage_path = bus.platform.scalrfs.backups(BEHAVIOUR)  #? __node__.platform
+                LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
+                transfer = LargeTransfer(dbs, cloud_storage_path)
+                result = transfer.run()
+                result = transfer_result_to_backup_result(result)
+
+                __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT,
+                                        dict(db_type = BEHAVIOUR,
+                                             status = 'ok',
+                                             backup_parts = result))
+
+            except (Exception, BaseException), e:
+                LOG.exception(e)
+
+                # Notify Scalr about error
+                __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT,
+                                        dict(db_type = BEHAVIOUR,
+                                             status = 'error',
+                                             last_error = str(e)))
+
+        return self._op_api.run('redis.create-backup', 
+                                func=do_backup,
+                                func_kwds={},
+                                async=async,
+                                exclusive=True)  #?
