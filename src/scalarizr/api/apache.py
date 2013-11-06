@@ -131,7 +131,7 @@ class ApacheAPI(object):
         @param hostname: Server Name
         @param port: port to listen to
         @param template: VirtualHost body with no certificate paths
-        @param ssl: True if VirtualHost uses certificate
+        @param ssl: True if VirtualHost uses SSL certificate
         @param ssl_certificate_id: ID of SSL certificate
         @param reload: True if immediate apache reload is required.
         @return: path to VirtualHost file
@@ -509,7 +509,6 @@ class ApacheAPI(object):
                 LOG.info('VirtualHosts directory included in %s' % __apache__['httpd.conf'])
 
         if linux.os.debian_family:
-            LOG.info("Replacing NameVirtualhost and Virtualhost port values.")
             if os.path.exists(__apache__['default_vhost']):
                 with ApacheConfig(__apache__['default_vhost']) as default_vhost:
                     default_vhost.set('NameVirtualHost', '*:80', force=True)
@@ -520,6 +519,7 @@ class ApacheAPI(object):
                 dv = vhost_regexp.sub('<VirtualHost *:80>', dv)
                 with open(__apache__['default_vhost'], 'w') as fp:
                     fp.write(dv)
+                LOG.info("Replaced NameVirtualhost and Virtualhost port values in the default virtual host file.")
             else:
                 LOG.warning('Cannot find default vhost config file %s.' % __apache__['default_vhost'])
 
@@ -536,7 +536,9 @@ class ApacheAPI(object):
             LOG.info('LogRorate config updated.')
 
         self.mod_ssl.ensure()
+
         ModRPAF.ensure_permissions()
+
         self.service.start()
 
     def reload_virtual_hosts(self):
@@ -976,6 +978,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     _apachectl = None
 
     def __init__(self):
+        #TODO: fix assertion when platform becomes an object (commit 58921b6303a96c8975e417fd37d70ddc7be9b0b5)
         if 'gce' == __node__['platform']:
             pid_dir = '/var/run/httpd'
             if not os.path.exists(pid_dir):
