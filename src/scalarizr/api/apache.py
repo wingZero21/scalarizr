@@ -891,8 +891,8 @@ class ModSSL(object):
         else:
             key_path = __apache__['key_path_default']
 
-        if os.path.exists(cert.cert_path):
-            ca_crt_path = cert.ca_crt_path
+        if os.path.exists(cert.chain_path):
+            ca_crt_path = cert.chain_path
         else:
             ca_crt_path = None
 
