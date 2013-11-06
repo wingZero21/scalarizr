@@ -10,6 +10,7 @@ from hashlib import sha1
 from scalarizr import rpc
 from scalarizr.bus import bus
 from scalarizr.libs import metaconf
+import scalarizr.libs.metaconf.providers
 from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
@@ -308,7 +309,7 @@ class NginxAPI(object):
                                          'app-servers.include.new')
 
             self.service.configtest()
-        except initdv2.InitdError, e:
+        except:
             os.remove(self.app_inc_path)
             os.remove(self.proxies_inc_path)
             self.backend_table = backend_table_bak
