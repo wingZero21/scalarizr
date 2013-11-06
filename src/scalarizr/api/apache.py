@@ -159,7 +159,6 @@ class ApacheAPI(object):
             if self.mod_ssl.is_system_certificate_used():
                 self.mod_ssl.set_default_certificate(ssl_certificate)
 
-
         assert int(port) == int(v_host.port)
         assert hostname == v_host.server_name
 
@@ -503,48 +502,63 @@ class ApacheAPI(object):
 
         self._open_ports([80, 443])
 
-        if not os.path.exists(__apache__['vhosts_dir']):
-            os.makedirs(__apache__['vhosts_dir'])
-            LOG.info('Created new directory for VirtualHosts: %s' % __apache__['vhosts_dir'])
+        self.enable_virtual_hosts_directory()
 
-        with ApacheConfig(__apache__['httpd.conf']) as apache_config:
-            inc_mask = __apache__['vhosts_dir'] + '/*' + __apache__['vhost_extension']
-            if not inc_mask in apache_config.get_list('Include'):
-                apache_config.add('Include', inc_mask)
-                LOG.info('VirtualHosts directory included in %s' % __apache__['httpd.conf'])
+        self.fix_default_virtual_host()
 
         if linux.os.debian_family:
-            if os.path.exists(__apache__['default_vhost']):
-                with ApacheConfig(__apache__['default_vhost']) as default_vhost:
-                    default_vhost.set('NameVirtualHost', '*:80', force=True)
-
-                with open(__apache__['default_vhost'], 'r') as fp:
-                    dv = fp.read()
-                vhost_regexp = re.compile('<VirtualHost\s+\*>')
-                dv = vhost_regexp.sub('<VirtualHost *:80>', dv)
-                with open(__apache__['default_vhost'], 'w') as fp:
-                    fp.write(dv)
-                LOG.info("Replaced NameVirtualhost and Virtualhost port values in the default virtual host file.")
-            else:
-                LOG.warning('Cannot find default vhost config file %s.' % __apache__['default_vhost'])
-
             ModRPAF.fix_module()
 
-        else:
-            with ApacheConfig(__apache__['httpd.conf']) as apache_config:
-                if not apache_config.get_list('NameVirtualHost'):
-                    apache_config.set('NameVirtualHost', '*:80', force=True)
-
-        if not os.path.exists(__apache__['logrotate_conf_path']):
-            with open(__apache__['logrotate_conf_path'], 'w') as fp:
-                fp.write(__apache__['logrotate_conf'])
-            LOG.info('LogRorate config updated.')
+        self.update_log_rotate_config()
 
         self.mod_ssl.ensure()
 
         ModRPAF.ensure_permissions()
 
         self.service.start()
+
+    def enable_virtual_hosts_directory(self):
+        if not os.path.exists(__apache__['vhosts_dir']):
+            os.makedirs(__apache__['vhosts_dir'])
+            LOG.info('Created new directory for VirtualHosts: %s' % __apache__['vhosts_dir'])
+
+        with ApacheConfig(__apache__['httpd.conf']) as apache_config:
+            inc_mask = __apache__['vhosts_dir'] + '/*' + __apache__['vhost_extension']
+
+            if not inc_mask in apache_config.get_list('Include'):
+                apache_config.add('Include', inc_mask)
+                LOG.info('VirtualHosts directory included in %s' % __apache__['httpd.conf'])
+
+    def fix_default_virtual_host(self):
+        if linux.os.debian_family:
+            if os.path.exists(__apache__['default_vhost']):
+
+                with ApacheConfig(__apache__['default_vhost']) as default_vhost:
+                    default_vhost.set('NameVirtualHost', '*:80', force=True)
+
+                with open(__apache__['default_vhost'], 'r') as fp:
+                    dv = fp.read()
+
+                vhost_regexp = re.compile('<VirtualHost\s+\*>')
+                dv = vhost_regexp.sub('<VirtualHost *:80>', dv)
+
+                with open(__apache__['default_vhost'], 'w') as fp:
+                    fp.write(dv)
+
+                LOG.info("Replaced NameVirtualhost and Virtualhost port values in the default virtual host file.")
+            else:
+                LOG.warning('Cannot find default vhost config file %s.' % __apache__['default_vhost'])
+
+        else:
+            with ApacheConfig(__apache__['httpd.conf']) as apache_config:
+                if not apache_config.get_list('NameVirtualHost'):
+                    apache_config.set('NameVirtualHost', '*:80', force=True)
+
+    def update_log_rotate_config(self):
+        if not os.path.exists(__apache__['logrotate_conf_path']):
+            with open(__apache__['logrotate_conf_path'], 'w') as fp:
+                fp.write(__apache__['logrotate_conf'])
+            LOG.info('LogRorate config updated.')
 
     def reload_virtual_hosts(self):
         """
