@@ -107,7 +107,7 @@ class ApacheHandler(Handler):
             try:
                 self._rpaf_reload()
             except initdv2.InitdError, e:
-                if 'not running' in str(e) and self.api.service.running:
+                if 'not running' in str(e) and not self.api.service.running:
                     self.api.service.start()
 
 
