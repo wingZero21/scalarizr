@@ -119,7 +119,7 @@ class ApacheAPI(object):
 
     def __init__(self):
         self.service = initdv2.lookup('apache')
-        self.mod_ssl = ModSSL()
+        self.mod_ssl = DebianBasedModSSL() if linux.os.debian_family else RedHatBasedModSSL()
         self.current_open_ports = []
         self._query_env = bus.queryenv_service
 
@@ -778,16 +778,20 @@ class SSLCertificate(object):
 
     def update(self, cert, key, authority=None):
 
+        st = os.stat(__apache__['httpd.conf'])
+
         with open(self.cert_path, 'w') as fp:
             fp.write(cert)
+        os.chown(self.cert_path, st.st_uid, st.st_gid)
 
         with open(self.key_path, 'w') as fp:
             fp.write(key)
+        os.chown(self.key_path, st.st_uid, st.st_gid)
 
         if authority:
             with open(self.chain_path, 'w') as fp:
                 fp.write(authority)
-        #TODO: CHOWN!
+            os.chown(self.chain_path, st.st_uid, st.st_gid)
 
     def ensure(self):
         """
@@ -848,24 +852,28 @@ class ModSSL(object):
         v_host = VirtualHost(__apache__['ssl_conf_path'])
         v_host.use_certificate(cert_path, key_path, ca_crt_path)
 
+    def ensure(self):
+        raise NotImplementedError
+
+
+class DebianBasedModSSL(ModSSL):
+
     def ensure(self, ssl_port=443):
-        if linux.os.debian_family:
-            self._check_mod_ssl_deb(ssl_port)
+        self._enable_mod_ssl()
+        self._enable_default_ssl_virtual_host()
+        self._set_name_virtual_host(ssl_port)
 
-        elif linux.os.redhat_family:
-            self._check_mod_ssl_redhat(ssl_port)
-
-    def _check_mod_ssl_deb(self, ssl_port=443):
-
-        LOG.info('Ensuring mod_ssl enabled')
+    def _enable_mod_ssl(self):
         if not os.path.exists(__apache__['ssl_load_deb']):
-            LOG.info('Enabling mod_ssl')
             system2((__apache__['a2enmod_path'], 'ssl'))
+            LOG.info('mod_ssl enabled.')
 
+    def _enable_default_ssl_virtual_host(self):
         if not os.path.exists(__apache__['default-ssl_path']):
-            LOG.info('Enabling default SSL virtualhost')
             system2((__apache__['a2ensite_path'], 'default-ssl'))
+            LOG.info('Default SSL virtualhost enabled.')
 
+    def _set_name_virtual_host(self, ssl_port):
         if os.path.exists(__apache__['ports_conf_deb']):
             with ApacheConfig(__apache__['ports_conf_deb']) as conf:
                 i = 0
@@ -876,18 +884,41 @@ class ModSSL(object):
                         conf.set('IfModule[%d]/NameVirtualHost' % i, '*:%s' % ssl_port, True)
             LOG.info('NameVirtualHost *:%s added to %s' % (ssl_port, __apache__['ports_conf_deb']))
 
-    def _check_mod_ssl_redhat(self, ssl_port=443):
-        ssl_conf_path = __apache__['ssl_conf_path']
 
+class RedHatBasedModSSL(ModSSL):
+
+    def ensure(self, ssl_port=443):
+        self._install_mod_ssl()
+        self._ensure_ssl_conf()
+        self._enable_mod_ssl()
+        self._set_name_virtual_host(ssl_port)
+
+    def _install_mod_ssl(self):
         if not os.path.exists(__apache__['mod_ssl_file']):
-            LOG.info('%s does not exist. Trying to install' % __apache__['mod_ssl_file'])
+            LOG.info('%s does not exist. Trying to install mod_ssl.' % __apache__['mod_ssl_file'])
             pm = pkgmgr.PackageMgr()
             pm.install('mod_ssl')
 
-        #ssl.conf part
+    def _ensure_ssl_conf(self):
+        ssl_conf_path = __apache__['ssl_conf_path']
         if not os.path.exists(ssl_conf_path):
-            raise ApacheError("SSL config %s doesn`t exist", ssl_conf_path)
+            LOG.warning("SSL config %s doesn`t exist", ssl_conf_path)
+            open(ssl_conf_path, 'w').close()
+            st = os.stat(__apache__['httpd.conf'])
+            os.chown(ssl_conf_path, st.st_uid, st.st_gid)
 
+    def _enable_mod_ssl(self):
+        with ApacheConfig(__apache__['httpd.conf']) as main_config:
+            loaded_in_main = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
+            if not loaded_in_main:
+                if os.path.exists(__apache__['ssl_conf_path']):
+                    loaded_in_ssl = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
+                    if not loaded_in_ssl:
+                        main_config.add('LoadModule', 'ssl_module modules/mod_ssl.so')
+                        LOG.info('Default SSL virtualhost enabled.')
+
+    def _set_name_virtual_host(self, ssl_port=443):
+        ssl_conf_path = __apache__['ssl_conf_path']
         with ApacheConfig(ssl_conf_path) as ssl_conf:
             if ssl_conf.empty:
                 LOG.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
@@ -905,14 +936,6 @@ class ModSSL(object):
                     else:
                         ssl_conf.add('NameVirtualHost', '*:%s' % ssl_port, before_path='Listen')
                         LOG.info("NameVirtualHost directive inserted after Listen directive.")
-
-        with ApacheConfig(__apache__['httpd.conf']) as main_config:
-            loaded_in_main = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
-            if not loaded_in_main:
-                if os.path.exists(ssl_conf_path):
-                    loaded_in_ssl = [module for module in main_config.get_list('LoadModule') if 'mod_ssl.so' in module]
-                    if not loaded_in_ssl:
-                        main_config.add('LoadModule', 'ssl_module modules/mod_ssl.so')
 
 
 class ApacheInitScript(initdv2.ParametrizedInitScript):
