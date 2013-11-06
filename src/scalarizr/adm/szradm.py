@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import sys
 import os
+import re
 import imp
 import inspect
 
@@ -27,8 +28,13 @@ class Command(object):
         pass
 
 
-# list containing methods and functions that are defined as commands
-command_list = []
+def camel_to_underscore(name):
+    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+
+def underscore_to_hyphen(name):
+    return name.replace('_', '-')
 
 
 def find_modules(directory):
@@ -52,10 +58,13 @@ def find_modules(directory):
 
 def find_commands():
     """Method finds commands in modules of this package"""
+    result = []
     modules = find_modules(__dir__)
     for module in modules:
         is_command = lambda x: inspect.isclass(x) and issubclass(x, Command)
         commands = [el[1] for el in inspect.getmembers(module) if is_command(el[1])]
+        result.extend(commands)
+    return result
 
 
 def main(**argv):
