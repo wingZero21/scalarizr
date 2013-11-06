@@ -914,7 +914,7 @@ class MongoCLI(object):
         '''
         try:
             self.connection.database_names()
-        except pymongo.errors.AutoReconnect, e:
+        except (pymongo.errors.AutoReconnect, pymongo.errors.ConnectionFailure), e:
             if "Connection refused" in str(e):
                 return False
         except pymongo.errors.OperationFailure, e:
