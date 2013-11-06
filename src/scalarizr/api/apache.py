@@ -907,6 +907,7 @@ class ModSSL(object):
 
         system_crt = v_host.ssl_cert_path == __apache__['crt_path_default']
         system_pkey = v_host.ssl_key_path == __apache__['key_path_default']
+        
         return system_crt and system_pkey
 
     def ensure(self):
