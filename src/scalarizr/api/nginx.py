@@ -276,7 +276,10 @@ class NginxAPI(object):
         for proxy_parms in proxy_list:
             if 'hostname' in proxy_parms:
                 proxy_parms['name'] = proxy_parms.pop('hostname')
-            self.add_proxy(reload_service=False, **proxy_parms)
+            try:
+                self.add_proxy(reload_service=False, **proxy_parms)
+            except metaconf.providers.ParseError, e:
+                raise BaseException('Syntax error in template for proxy %s' % proxy_parms['name'])
 
         if reload_service:
             self._reload_service()
