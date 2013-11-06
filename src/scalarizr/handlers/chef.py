@@ -9,14 +9,16 @@ import sys
 import time
 import json
 import signal
+import shutil
 import logging
+import tempfile
 
 from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.util import system2, initdv2, PopenError
 from scalarizr.util.software import which
-from scalarizr.handlers import Handler
+from scalarizr.handlers import Handler, HandlerError, deploy
 
 if linux.os.windows_family:
     import win32service
@@ -34,6 +36,10 @@ validation_client_name '%(validator_name)s'
 node_name        '%(node_name)s'
 '''
 
+SOLO_CONF_TPL = '''
+cookbook_path "{0}"
+file_cache_path "{0}"
+'''
 
 def get_handlers():
     return (ChefHandler(), )
@@ -150,9 +156,11 @@ class ChefHandler(Handler):
         if 'chef' in message.body and message.body['chef']:
             if linux.os.windows_family:
                 self._chef_client_bin = r'C:\opscode\chef\bin\chef-client.bat'
+                self._chef_solo_bin = r'C:\opscode\chef\bin\chef-solo.bat'
             else:
                 # Workaround for 'chef' behavior enabled, but chef not installed
-                self._chef_client_bin = which('chef-client')  
+                self._chef_client_bin = which('chef-client')
+                self._chef_solo_bin = which('chef-solo')
 
             self._chef_data = message.chef.copy()
             if not self._chef_data.get('node_name'):
@@ -204,43 +212,80 @@ class ChefHandler(Handler):
 
         try:
             # Create client configuration
-            _dir = os.path.dirname(self._client_conf_path)
-            if not os.path.exists(_dir):
-                os.makedirs(_dir)
-            with open(self._client_conf_path, 'w+') as fp:
-                fp.write(CLIENT_CONF_TPL % self._chef_data)
-            os.chmod(self._client_conf_path, 0644)
+            if self._chef_data.get('server_url'):
+                _dir = os.path.dirname(self._client_conf_path)
+                if not os.path.exists(_dir):
+                    os.makedirs(_dir)
+                with open(self._client_conf_path, 'w+') as fp:
+                    fp.write(CLIENT_CONF_TPL % self._chef_data)
+                os.chmod(self._client_conf_path, 0644)
 
-            # Delete client.pem
-            if os.path.exists(self._client_key_path):
-                os.remove(self._client_key_path)
+                # Delete client.pem
+                if os.path.exists(self._client_key_path):
+                    os.remove(self._client_key_path)
 
-            # Write validation cert
-            with open(self._validator_key_path, 'w+') as fp:
-                fp.write(self._chef_data['validator_key'])
+                # Write validation cert
+                with open(self._validator_key_path, 'w+') as fp:
+                    fp.write(self._chef_data['validator_key'])
 
-            log.info('Registering Chef node %s', 
-                    self._chef_data['node_name'])
-            try:
-                self.run_chef_client()
-            finally:
-                os.remove(self._validator_key_path)
-
-            if self._with_json_attributes:
+                log.info('Registering Chef node %s',
+                        self._chef_data['node_name'])
                 try:
-                    log.info('Applying Chef run list %s', 
-                            self._with_json_attributes['run_list'])
-                    with open(self._json_attributes_path, 'w+') as fp:
-                        json.dump(self._with_json_attributes, fp)
-
-                    self.run_chef_client(with_json_attributes=True)
-                    msg.chef = self._chef_data
+                    self.run_chef_client()
                 finally:
-                    os.remove(self._json_attributes_path)
+                    os.remove(self._validator_key_path)
 
-            if self._chef_data.get('daemonize'):
-                log.info('Daemonizing chef-client')
-                self.run_chef_client(daemonize=True)
+                if self._with_json_attributes:
+                    try:
+                        log.info('Applying Chef run list %s',
+                                self._with_json_attributes['run_list'])
+                        with open(self._json_attributes_path, 'w+') as fp:
+                            json.dump(self._with_json_attributes, fp)
+
+                        self.run_chef_client(with_json_attributes=True)
+                        msg.chef = self._chef_data
+                    finally:
+                        os.remove(self._json_attributes_path)
+
+                if self._chef_data.get('daemonize'):
+                    log.info('Daemonizing chef-client')
+                    self.run_chef_client(daemonize=True)
+
+            elif self._chef_data.get('cookbook_url'):
+                cookbook_url = self._chef_data['cookbook_url']
+                temp_dir = tempfile.mkdtemp()
+                try:
+                    # TODO: detect src_type
+                    src_type = 'git'
+                    if src_type == 'git':
+                        ssh_key = self._chef_data.get('ssh_private_key')
+                        downloader = deploy.GitSource(cookbook_url, ssh_private_key=ssh_key)
+                        downloader.update(temp_dir)
+                    elif src_type == 'http':
+                        downloader = deploy.HttpSource(cookbook_url)
+                        downloader.update(temp_dir)
+                    else:
+                        raise HandlerError('Unknown cookbook url type: %s' % src_type)
+                    cookbook_path = os.path.join(temp_dir, self._chef_data.get('rel_path') or '')
+
+                    chef_solo_cfg_path = os.path.join(temp_dir, 'solo.rb')
+                    with open(chef_solo_cfg_path, 'w') as f:
+                        f.write(SOLO_CONF_TPL.format(cookbook_path))
+
+                    attrs_path = os.path.join(temp_dir, 'runlist.json')
+                    with open(attrs_path, 'w') as f:
+                        json.dump(self._with_json_attributes, f)
+
+                    system2([self._chef_solo_bin, '-c', chef_solo_cfg_path, '-j', attrs_path],
+                            close_fds=not linux.os.windows_family,
+                            log_level=logging.INFO,
+                            preexec_fn=not linux.os.windows_family and os.setsid or None,
+                            env=self._environ_variables)
+                finally:
+                    shutil.rmtree(temp_dir)
+
+            else:
+                raise HandlerError('Neither chef server not cookbook url were specified')
         finally:
             self._chef_data = None
 
