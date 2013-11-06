@@ -896,7 +896,10 @@ class ModSSL(object):
         else:
             ca_crt_path = None
 
-        v_host = VirtualHost(__apache__['ssl_conf_path'])
+        with open(__apache__['ssl_conf_path'], 'r') as fp:
+            body = fp.read()
+
+        v_host = VirtualHost(body)
         v_host.use_certificate(cert_path, key_path, ca_crt_path)
 
     def is_system_certificate_used(self):
@@ -907,7 +910,7 @@ class ModSSL(object):
 
         system_crt = v_host.ssl_cert_path == __apache__['crt_path_default']
         system_pkey = v_host.ssl_key_path == __apache__['key_path_default']
-        
+
         return system_crt and system_pkey
 
     def ensure(self):
