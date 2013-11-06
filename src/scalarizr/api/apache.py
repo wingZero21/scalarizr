@@ -155,6 +155,11 @@ class ApacheAPI(object):
                 ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
             )
 
+            #Compatibility with old apache handler
+            if self.mod_ssl.is_system_certificate_used():
+                self.mod_ssl.set_default_certificate(ssl_certificate)
+
+
         assert int(port) == int(v_host.port)
         assert hostname == v_host.server_name
 
@@ -873,6 +878,12 @@ class ModSSL(object):
 
         v_host = VirtualHost(__apache__['ssl_conf_path'])
         v_host.use_certificate(cert_path, key_path, ca_crt_path)
+
+    def is_system_certificate_used(self):
+        v_host = VirtualHost(__apache__['ssl_conf_path'])
+        system_crt = v_host.ssl_cert_path == __apache__['crt_path_default']
+        system_pkey = v_host.ssl_key_path == __apache__['key_path_default']
+        return system_crt and system_pkey
 
     def ensure(self):
         raise NotImplementedError
