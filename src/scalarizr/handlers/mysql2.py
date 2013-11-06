@@ -1048,6 +1048,16 @@ class MysqlHandler(DBMSRHandler):
                            LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
 
                     linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
+                    if __mysql__['behavior'] == 'percona':
+                        self.mysql.service.start()
+                        debian_cnf = metaconf.Configuration('mysql')
+                        debian_cnf.read(__mysql__['debian.cnf'])
+                        sql = ("GRANT ALL PRIVILEGES ON *.* "
+                                "TO 'debian-sys-maint'@'localhost' "
+                                "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
+                        self.root_client.fetchall(sql)
+                        self.mysql.service.stop()
+
                     coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
                 if 'restore' in __mysql__ and \
                                 __mysql__['restore'].type == 'xtrabackup':
