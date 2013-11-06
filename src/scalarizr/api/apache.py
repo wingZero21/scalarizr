@@ -723,7 +723,11 @@ class VirtualHost(object):
         self._update_body(mem_config)
 
     def _get_server_name(self):
-        return self._cnf.get('.//ServerName')
+        try:
+            server_name = self._cnf.get('.//ServerName')
+        except NoPathError:
+            server_name = ''
+        return server_name
 
     def _set_server_name(self, new_name):
         mem_config = self._cnf
@@ -896,7 +900,11 @@ class ModSSL(object):
         v_host.use_certificate(cert_path, key_path, ca_crt_path)
 
     def is_system_certificate_used(self):
-        v_host = VirtualHost(__apache__['ssl_conf_path'])
+        with open(__apache__['ssl_conf_path'], 'r') as fp:
+            body = fp.read()
+
+        v_host = VirtualHost(body)
+
         system_crt = v_host.ssl_cert_path == __apache__['crt_path_default']
         system_pkey = v_host.ssl_key_path == __apache__['key_path_default']
         return system_crt and system_pkey
@@ -1007,15 +1015,14 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     def __init__(self):
         #TODO: fix assertion when platform becomes an object (commit 58921b6303a96c8975e417fd37d70ddc7be9b0b5)
         if 'gce' == __node__['platform']:
-            pid_dir = '/var/run/httpd'
-            if not os.path.exists(pid_dir):
-                os.makedirs(pid_dir)
+            gce_pid_dir = '/var/run/httpd'
+            if not os.path.exists(gce_pid_dir):
+                os.makedirs(gce_pid_dir)
 
         pid_file = None
         if linux.os.redhat_family:
             pid_file = '/var/run/httpd/httpd.pid' if linux.os["release"].version[0] == 6 else '/var/run/httpd.pid'
         elif linux.os.debian_family:
-            pid_file = None
             if os.path.exists('/etc/apache2/envvars'):
                 pid_file = system2('/bin/sh', stdin='. /etc/apache2/envvars; echo -n $APACHE_PID_FILE')[0]
             if not pid_file:
