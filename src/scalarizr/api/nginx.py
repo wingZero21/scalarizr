@@ -570,7 +570,7 @@ class NginxAPI(object):
 
                 _weight = dest.get('weight', weight)
                 if _weight:
-                    server = '%s %s' % (server, 'weight=%s' % weight)
+                    server = '%s %s' % (server, 'weight=%s' % _weight)
 
                 config.add('upstream/server', server)
 
