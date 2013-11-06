@@ -273,16 +273,16 @@ class NginxAPI(object):
         self._clear_nginx_includes()
         self.backend_table = {}
 
-        for proxy_parms in proxy_list:
-            if 'hostname' in proxy_parms:
-                proxy_parms['name'] = proxy_parms.pop('hostname')
-            try:
+        try:
+            for proxy_parms in proxy_list:
+                if 'hostname' in proxy_parms:
+                    proxy_parms['name'] = proxy_parms.pop('hostname')
+                
                 self.add_proxy(reload_service=False, **proxy_parms)
-            except metaconf.providers.ParseError, e:
+            if reload_service:
+                self._reload_service()
+        except:
                 raise BaseException('Syntax error in template for proxy %s' % proxy_parms['name'])
-
-        if reload_service:
-            self._reload_service()
 
     def _replace_string_in_file(self, file_path, s, new_s):
         raw = None
