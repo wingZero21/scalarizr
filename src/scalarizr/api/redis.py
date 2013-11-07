@@ -17,7 +17,6 @@ from scalarizr.api import operation
 from scalarizr.util import system2, PopenError
 from scalarizr.services import redis as redis_service
 from scalarizr.services import backup
-from scalarizr.handlers import redis as redis_handler
 from scalarizr.handlers import transfer_result_to_backup_result, DbMsrMessages
 from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
@@ -25,9 +24,9 @@ from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.node import __node__
 
 
-BEHAVIOUR = CNF_SECTION = redis_handler.CNF_SECTION
-OPT_PERSISTENCE_TYPE = redis_handler.OPT_PERSISTENCE_TYPE
-STORAGE_PATH = redis_handler.STORAGE_PATH
+BEHAVIOUR = CNF_SECTION = config.BuiltinBehaviours.REDIS
+OPT_PERSISTENCE_TYPE = 'persistence_type'
+STORAGE_PATH = '/mnt/redisstorage'
 
 
 LOG = logging.getLogger(__name__)
@@ -274,8 +273,8 @@ class RedisAPI(object):
                 LOG.info("Creating Redis data bundle")
                 backup_obj = backup.backup(type='snap_redis',
                                            volume=__redis__['volume'],
-                                           tags=self.redis_tags)  # TODO: generate the same way as in
-                                                                  # mysql api or use __node__
+                                           tags=__redis__['volume'].tags)  # TODO: generate the same way as in
+                                                                           # mysql api or use __node__
                 restore = backup_obj.run()
                 snap = restore.snapshot
 
@@ -293,6 +292,8 @@ class RedisAPI(object):
 
                 __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, 
                                         msg_data)
+
+                return restore
 
             except (Exception, BaseException), e:
                 LOG.exception(e)
@@ -330,6 +331,8 @@ class RedisAPI(object):
                                         dict(db_type = BEHAVIOUR,
                                              status = 'ok',
                                              backup_parts = result))
+
+                return result  #?
 
             except (Exception, BaseException), e:
                 LOG.exception(e)
