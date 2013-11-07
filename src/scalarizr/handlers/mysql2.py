@@ -1048,7 +1048,7 @@ class MysqlHandler(DBMSRHandler):
                            LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
 
                     linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
-                    if __mysql__['behavior'] == 'percona':
+                    if __mysql__['behavior'] == 'percona' and linux.os.debian_family:
                         self.mysql.service.start()
                         debian_cnf = metaconf.Configuration('mysql')
                         debian_cnf.read(__mysql__['debian.cnf'])
