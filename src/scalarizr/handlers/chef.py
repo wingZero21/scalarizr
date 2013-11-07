@@ -256,7 +256,11 @@ class ChefHandler(Handler):
                 temp_dir = tempfile.mkdtemp()
                 try:
                     # TODO: detect src_type
-                    src_type = 'git'
+                    try:
+                        src_type = self._chef_data['cookbook_url_type']
+                    except KeyError:
+                        raise HandlerError('Cookbook source type was not specified')
+
                     if src_type == 'git':
                         ssh_key = self._chef_data.get('ssh_private_key')
                         downloader = deploy.GitSource(cookbook_url, ssh_private_key=ssh_key)
@@ -265,8 +269,8 @@ class ChefHandler(Handler):
                         downloader = deploy.HttpSource(cookbook_url)
                         downloader.update(temp_dir)
                     else:
-                        raise HandlerError('Unknown cookbook url type: %s' % src_type)
-                    cookbook_path = os.path.join(temp_dir, self._chef_data.get('rel_path') or '')
+                        raise HandlerError('Unknown cookbook source type: %s' % src_type)
+                    cookbook_path = os.path.join(temp_dir, self._chef_data.get('relative_path') or '')
 
                     chef_solo_cfg_path = os.path.join(temp_dir, 'solo.rb')
                     with open(chef_solo_cfg_path, 'w') as f:
@@ -281,6 +285,8 @@ class ChefHandler(Handler):
                             log_level=logging.INFO,
                             preexec_fn=not linux.os.windows_family and os.setsid or None,
                             env=self._environ_variables)
+                except:
+                    self._logger.error('Chef-solo bootstrap failed', exc_info=sys.exc_info())
                 finally:
                     shutil.rmtree(temp_dir)
 
