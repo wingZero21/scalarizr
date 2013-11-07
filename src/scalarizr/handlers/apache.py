@@ -108,7 +108,7 @@ class ApacheHandler(Handler):
                 self._rpaf_reload()
             except initdv2.InitdError, e:
                 if 'not running' in str(e) and not self.api.service.running:
-                    self.api.service.start()
+                    self.api.start_service()
 
 
     def on_before_reboot_finish(self, *args, **kwargs):
@@ -117,12 +117,12 @@ class ApacheHandler(Handler):
     def on_HostUp(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
             apache.ModRPAF.add([message.local_ip])
-            self.api.service.reload('Applying new RPAF proxy IPs list')
+            self.api.reload_service('Applying new RPAF proxy IPs list')
 
     def on_HostDown(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
             apache.ModRPAF.remove([message.local_ip])
-            self.api.service.reload('Applying new RPAF proxy IPs list')
+            self.api.reload_service('Applying new RPAF proxy IPs list')
 
     def _rpaf_reload(self):
         lb_hosts = []
@@ -130,7 +130,7 @@ class ApacheHandler(Handler):
             for host in role.hosts:
                 lb_hosts.append(host.internal_ip)
         apache.ModRPAF.update(lb_hosts)
-        self.api.service.reload('Applying new RPAF proxy IPs list')
+        self.api.reload_service('Applying new RPAF proxy IPs list')
         bus.fire('apache_rpaf_reload')
 
     on_BeforeHostTerminate = on_HostDown

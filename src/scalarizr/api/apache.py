@@ -479,16 +479,16 @@ class ApacheAPI(object):
         self.service.start()
 
     @rpc.service_method
-    def stop_service(self):
-        self.service.stop()
+    def stop_service(self, reason=None):
+        self.service.stop(reason)
+
+    @rpc.service_method
+    def restart_service(self, reason=None):
+        self.service.restart(reason)
 
     @rpc.service_method
     def reload_service(self):
         self.service.reload()
-
-    @rpc.service_method
-    def restart_service(self):
-        self.service.restart()
 
     @rpc.service_method
     def configtest(self):
@@ -498,7 +498,7 @@ class ApacheAPI(object):
         """
         Configures apache service
         """
-        self.service.stop('Configuring Apache Web Server')
+        self.stop_service('Configuring Apache Web Server')
 
         self._open_ports([80, 443])
 
@@ -515,7 +515,7 @@ class ApacheAPI(object):
 
         ModRPAF.ensure_permissions()
 
-        self.service.start()
+        self.start_service()
 
     def enable_virtual_hosts_directory(self):
         if not os.path.exists(__apache__['vhosts_dir']):
@@ -1027,6 +1027,16 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     _apachectl = None
 
     def __init__(self):
+
+        pid_file = self._get_pid_file_path()
+        initdv2.ParametrizedInitScript.__init__(
+            self,
+            'apache',
+            __apache__['initd_script'],
+            pid_file=pid_file,
+        )
+
+    def _get_pid_file_path(self):
         #TODO: fix assertion when platform becomes an object (commit 58921b6303a96c8975e417fd37d70ddc7be9b0b5)
         if 'gce' == __node__['platform']:
             gce_pid_dir = '/var/run/httpd'
@@ -1041,13 +1051,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
                 pid_file = system2('/bin/sh', stdin='. /etc/apache2/envvars; echo -n $APACHE_PID_FILE')[0]
             if not pid_file:
                 pid_file = '/var/run/apache2.pid'
-
-        initdv2.ParametrizedInitScript.__init__(
-            self,
-            'apache',
-            __apache__['initd_script'],
-            pid_file=pid_file,
-        )
+        return pid_file
 
     def reload(self, reason=None):
         if reason:
