@@ -1055,7 +1055,7 @@ class MysqlHandler(DBMSRHandler):
                         sql = ("GRANT ALL PRIVILEGES ON *.* "
                                 "TO 'debian-sys-maint'@'localhost' "
                                 "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
-                        self.root_client.fetchall(sql)
+                        linux.system(['mysql', '-u', 'root', '-e', sql])
                         self.mysql.service.stop()
 
                     coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
