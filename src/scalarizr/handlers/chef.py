@@ -287,6 +287,7 @@ class ChefHandler(Handler):
                             env=self._environ_variables)
                 except:
                     self._logger.error('Chef-solo bootstrap failed', exc_info=sys.exc_info())
+                    raise
                 finally:
                     shutil.rmtree(temp_dir)
 
