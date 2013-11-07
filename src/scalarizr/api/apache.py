@@ -881,10 +881,14 @@ class ModSSL(object):
         this method adds this certificate to the default SSL virtual host.
         Otherwice default system certificate will be used.
         """
+        ssl_conf_path = __apache__['ssl_conf_path']
+
         if os.path.exists(cert.cert_path):
             cert_path = cert.cert_path
+            cert_str = cert.id
         else:
             cert_path = __apache__['crt_path_default']
+            cert_str = 'System default'
 
         if os.path.exists(cert.key_path):
             key_path = cert.key_path
@@ -896,11 +900,16 @@ class ModSSL(object):
         else:
             ca_crt_path = None
 
-        with open(__apache__['ssl_conf_path'], 'r') as fp:
+        with open(ssl_conf_path, 'r') as fp:
             body = fp.read()
 
         v_host = VirtualHost(body)
         v_host.use_certificate(cert_path, key_path, ca_crt_path)
+
+        with open(ssl_conf_path, 'w') as fp:
+            fp.write(v_host.body)
+
+        LOG.info("Certificate %s is set to %s" % (cert_str, ssl_conf_path))
 
     def is_system_certificate_used(self):
         with open(__apache__['ssl_conf_path'], 'r') as fp:
@@ -908,10 +917,11 @@ class ModSSL(object):
 
         v_host = VirtualHost(body)
 
+        has_certificate = v_host.ssl_cert_path and v_host.ssl_key_path
         system_crt = v_host.ssl_cert_path == __apache__['crt_path_default']
         system_pkey = v_host.ssl_key_path == __apache__['key_path_default']
 
-        return system_crt and system_pkey
+        return has_certificate and system_crt and system_pkey
 
     def ensure(self):
         raise NotImplementedError
