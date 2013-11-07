@@ -740,7 +740,9 @@ class MysqlHandler(DBMSRHandler):
             else:
                 #self.mysql.my_cnf.read_only = False
                 self.mysql.my_cnf.delete_options(['mysqld/read_only'])
-                self.mysql.service.restart()
+                #self.mysql.service.restart()
+                self.mysql.service.stop()
+                self.mysql.service.start()
 
                 self.root_client.stop_slave()
                 self.root_client.reset_master()
