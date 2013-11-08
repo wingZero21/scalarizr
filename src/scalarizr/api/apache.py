@@ -633,7 +633,7 @@ class VirtualHost(object):
     body = None
 
     def __init__(self, template):
-        self.body = template
+        self.body = str(template)  # [SCALARIZR-1226]
 
     def __repr__(self):
         return "%s:%s" % (self.server_name, self.port)
@@ -1151,8 +1151,8 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
         if not self._main_process_started():
             self.start()
-
-        ret = initdv2.ParametrizedInitScript.restart(self)
+        else:
+            initdv2.ParametrizedInitScript.restart(self)
         if self.pid_file:
             try:
                 wait_until(
@@ -1163,7 +1163,6 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
             except:
                 raise initdv2.InitdError("Cannot start Apache: pid file %s hasn't been created" % self.pid_file)
         time.sleep(0.5)
-        return ret
 
     @staticmethod
     def _main_process_started():
