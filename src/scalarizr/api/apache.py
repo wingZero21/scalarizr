@@ -227,7 +227,8 @@ class ApacheAPI(object):
                 LOG.error('ConfigTest failed with error: "%s".' % str(e))
                 LOG.info('Removing %s' % v_host_path)
                 os.remove(v_host_path)
-            self.reload_service()
+            else:
+                self.reload_service()
 
         return v_host_path
 
@@ -296,8 +297,8 @@ class ApacheAPI(object):
                 LOG.info("Restoring %s" % old_path)
                 with open(old_path, 'w') as fp:
                     fp.write(old_body)
-
-            self.reload_service()
+            else:
+                self.reload_service()
 
     @rpc.service_method
     def delete_vhosts(self, vhosts, reload=True):
@@ -326,8 +327,8 @@ class ApacheAPI(object):
                     LOG.info('Recreating %s' % path)
                     with open(path, 'w') as fp:
                         fp.write(body)
-
-            self.reload_service()
+            else:
+                self.reload_service()
 
     @rpc.service_method
     def reconfigure(self, vhosts):
@@ -399,8 +400,8 @@ class ApacheAPI(object):
                     LOG.info('Recreating %s' % path)
                     with open(path, 'w') as fp:
                         fp.write(body)
-
-            self.reload_service()
+            else:
+                self.reload_service()
         else:
             LOG.info('No changes were made in apache configuration.')
 
@@ -487,8 +488,8 @@ class ApacheAPI(object):
         self.service.restart(reason)
 
     @rpc.service_method
-    def reload_service(self):
-        self.service.reload()
+    def reload_service(self, reason=None):
+        self.service.reload(reason)
 
     @rpc.service_method
     def configtest(self):
@@ -806,6 +807,50 @@ class ApacheConfig(object):
         self._cnf.write(self.path)
 
 
+class BackupManager(object):
+
+    path = None
+    before = None
+    backup = {}
+
+    def __init__(self, path):
+        self.path = path
+        self.before = None
+
+    def _get_fdata(self):
+        if os.path.exists(self.path):
+            with open(self.path, 'w') as fp:
+                text = fp.read()
+            st = os.stat(self.path)
+            return text, st.st_uid, st.st_gid, st.st_mode
+
+    def __enter__(self):
+        self.before = self._get_fdata()
+
+    def __exit__(self, type, value, traceback):
+        after = self._get_fdata()
+        if self.before != after:
+            BackupManager.backup[self.path] = self.before
+
+    @classmethod
+    def restore(cls, path):
+        if path in cls.backup:
+            data = cls.backup[path]
+            if not data and os.path.exists(path):
+                os.remove(path)
+                LOG.debug("%s removed to restore its previous state")
+            else:
+                text, st_uid, st_gid, st_mode = data
+                with open(path, 'w') as fp:
+                    fp.write(text)
+                os.chown(path, st_uid, st_gid)
+                os.chmod(path, st_mode)
+                LOG.debug("%s restored to its previous state")
+        else:
+            LOG.debug("Cannot restore %s: file wasn't changed")
+        del cls.backup[path]
+
+
 class SSLCertificate(object):
 
     id = None
@@ -1038,6 +1083,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
     def _get_pid_file_path(self):
         #TODO: fix assertion when platform becomes an object (commit 58921b6303a96c8975e417fd37d70ddc7be9b0b5)
+
         if 'gce' == __node__['platform']:
             gce_pid_dir = '/var/run/httpd'
             if not os.path.exists(gce_pid_dir):
@@ -1054,10 +1100,8 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         return pid_file
 
     def reload(self, reason=None):
-        if reason:
-            LOG.info('Reloading apache: %s' % str(reason))
+        LOG.info('Reloading apache: %s' % str(reason) if reason else '')
         if self.running:
-            self.configtest()
             out, err, retcode = system2(__apache__['apachectl'] + ' graceful', shell=True)
             if retcode > 0:
                 raise initdv2.InitdError('Cannot reload apache: %s' % err)
@@ -1099,15 +1143,11 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         return True
 
     def stop(self, reason=None):
-        if reason:
-            LOG.info('Stopping apache: %s' % str(reason))
+        LOG.info('Stopping apache: %s' % str(reason) if reason else '')
         initdv2.ParametrizedInitScript.stop(self)
 
     def restart(self, reason=None):
-        if reason:
-            LOG.info('Restarting apache: %s' % str(reason))
-
-        self.configtest()
+        LOG.info('Restarting apache: %s' % str(reason) if reason else '')
 
         if not self._main_process_started():
             self.start()
