@@ -9,19 +9,15 @@ from __future__ import with_statement
 
 import os
 import time
-import shutil
-import tarfile
 import logging
-import tempfile
 
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
-from scalarizr.config import ScalarizrState, BuiltinBehaviours
+from scalarizr.config import ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.util import system2, disttool, software, cryptotool, initdv2
-from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.linux import iptables
 from scalarizr.handlers import build_tags
 from scalarizr.api import service as preset_service
@@ -129,6 +125,8 @@ class PostgreSqlHander(ServiceCtlHandler):
             
             'slave_promote_to_master'
         )   
+
+        self._postgresql_api = postgresql_api.PostgreSQLAPI()
 
         self.on_reload()        
 
@@ -416,31 +414,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
     def on_DbMsr_CreateDataBundle(self, message):
-        try:
-            bus.fire('before_postgresql_data_bundle')
-            snap = self._create_snapshot()
-            used_size = int(system2(('df', '-P', '--block-size=M', STORAGE_PATH))[0].split('\n')[1].split()[2][:-1])
-            bus.fire('postgresql_data_bundle', snapshot_id=snap.id)
+        LOG.debug("on_DbMsr_CreateDataBundle")
+        self._postgresql_api.create_databundle(async=True)
 
-            # Notify scalr
-            msg_data = {
-            'db_type': BEHAVIOUR,
-            'status': 'ok',
-            'used_size' : '%.3f' % (float(used_size) / 1000,),
-            BEHAVIOUR: {OPT_SNAPSHOT_CNF: dict(snap)}
-            }
-            self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
-
-        except (Exception, BaseException), e:
-            LOG.exception(e)
-            
-            # Notify Scalr about error
-            self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
-                db_type     = BEHAVIOUR,
-                status      ='error',
-                last_error  = str(e)
-            ))
-            
 
     def on_DbMsr_PromoteToMaster(self, message):
         """
@@ -592,86 +568,10 @@ class PostgreSqlHander(ServiceCtlHandler):
     def on_DbMsr_CreateBackup(self, message):
         #TODO: Think how to move the most part of it into Postgresql class 
         # Retrieve password for scalr pg user
-        tmpdir = backup_path = None
-        try:
-            # Get databases list
-            psql = PSQL(user=self.postgresql.root_user.name)
-            databases = psql.list_pg_databases()
-            if 'template0' in databases:
-                databases.remove('template0')
-            
-            if not os.path.exists(self._tmp_path):
-                os.makedirs(self._tmp_path)
-                
-            # Defining archive name and path
-            backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-            backup_path = os.path.join(self._tmp_path, backup_filename)
-            
-            # Creating archive 
-            backup = tarfile.open(backup_path, 'w:gz')
+        LOG.debug("on_DbMsr_CreateBackup")
+        self._postgresql_api.create_backup(async=True)
 
-            # Dump all databases
-            LOG.info("Dumping all databases")
-            tmpdir = tempfile.mkdtemp(dir=self._tmp_path)       
-            chown_r(tmpdir, self.postgresql.root_user.name)
 
-            def _single_backup(db_name):
-                dump_path = tmpdir + os.sep + db_name + '.sql'
-                pg_args = '%s %s --no-privileges -f %s' % (PG_DUMP, db_name, dump_path)
-                su_args = [SU_EXEC, '-', self.postgresql.root_user.name, '-c', pg_args]
-                err = system2(su_args)[1]
-                if err:
-                    raise HandlerError('Error while dumping database %s: %s' % (db_name, err))
-                backup.add(dump_path, os.path.basename(dump_path))  
-
-            for db_name in databases:
-                _single_backup(db_name)
-                   
-            backup.close()
-            
-            # Creating list of full paths to archive chunks
-            #if os.path.getsize(backup_path) > __postgresql__['pgdump_chunk_size']:
-            #    parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, __postgresql__['pgdump_chunk_size'], tmpdir)]
-            #else:
-            #    parts = [backup_path]
-            #sizes = [os.path.getsize(file) for file in parts]
-
-            cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
-            LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-
-            lt_tags = {'created_on': 'master' if int(__postgresql__[OPT_REPLICATION_MASTER]) else 'slave'}
-            trn = LargeTransfer(backup_path, cloud_storage_path, tags=lt_tags)
-            manifest = trn.run()
-            LOG.info("Postgresql backup uploaded to cloud storage under %s/%s",
-                            cloud_storage_path, backup_filename)
-            
-            result = list(dict(path=os.path.join(cloud_storage_path, c[0]), size=c[2]) for c in
-                            manifest['files'][0]['chunks'])
-                
-            # Notify Scalr
-            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                db_type = BEHAVIOUR,
-                status = 'ok',
-                backup_parts = result
-            ))
-                        
-        except (Exception, BaseException), e:
-            LOG.exception(e)
-            
-            # Notify Scalr about error
-            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                db_type = BEHAVIOUR,
-                status = 'error',
-                last_error = str(e)
-            ))
-            
-        finally:
-            if tmpdir:
-                shutil.rmtree(tmpdir, ignore_errors=True)
-            if backup_path and os.path.exists(backup_path):
-                os.remove(backup_path)              
-        
-                                
     def _init_master(self, message):
         """
         Initialize postgresql master
