@@ -31,18 +31,19 @@ from scalarizr.services import postgresql as postgresql_svc
 from scalarizr.node import __node__
 from scalarizr import storage2
 from scalarizr.services import backup
+from scalarizr.api import postgresql as postgresql_api
 
 
-BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.POSTGRESQL
+BEHAVIOUR = SERVICE_NAME = postgresql_api.BEHAVIOUR
 LOG = logging.getLogger(__name__)
 
 PG_SOCKET_DIR = '/var/run/postgresql/'
-STORAGE_PATH = "/mnt/pgstorage"
+STORAGE_PATH = postgresql_api.STORAGE_PATH
 STORAGE_VOLUME_CNF = 'postgresql.json'
 STORAGE_SNAPSHOT_CNF = 'postgresql-snap.json'
 
 OPT_VOLUME_CNF = 'volume_config'
-OPT_SNAPSHOT_CNF = 'snapshot_config'
+OPT_SNAPSHOT_CNF = postgresql_api.OPT_SNAPSHOT_CNF
 OPT_ROOT_USER = 'root_user'
 OPT_ROOT_PASSWORD = "root_password"
 OPT_ROOT_SSH_PUBLIC_KEY = "root_ssh_public_key"
