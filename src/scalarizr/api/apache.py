@@ -631,12 +631,24 @@ class ApacheAPI(object):
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
 
 
-class VirtualHost(object):
+class BasicApacheConfiguration(object):
 
     body = None
 
-    def __init__(self, template):
-        self.body = str(template)  # [SCALARIZR-1226]
+    def __init__(self, body):
+        self.body = str(body)  # [SCALARIZR-1226]
+
+    @property
+    def _cnf(self):
+        cnf = Configuration("apache")
+        cnf.reads(self.body)
+        return cnf
+
+    def _update_body(self, config_obj):
+        self.body = config_obj.dumps()
+
+
+class VirtualHost(BasicApacheConfiguration):
 
     def __repr__(self):
         return "%s:%s" % (self.server_name, self.port)
@@ -700,15 +712,6 @@ class VirtualHost(object):
 
         self._update_body(mem_config)
 
-    @property
-    def _cnf(self):
-        cnf = Configuration("apache")
-        cnf.reads(self.body)
-        return cnf
-
-    def _update_body(self, config_obj):
-        self.body = config_obj.dumps()
-
     def _get_port(self):
         raw_host = self._cnf.get(".//VirtualHost").split(":")
         if len(raw_host) > 1 and raw_host[1].isdigit():
@@ -743,18 +746,7 @@ class VirtualHost(object):
     port = property(_get_port, _set_port)
 
 
-class ModRPAF(object):
-
-    body = None
-
-    def __init__(self, body):
-        self.body = str(body)
-
-    @property
-    def _cnf(self):
-        cnf = Configuration("apache")
-        cnf.reads(self.body)
-        return cnf
+class ModRPAF(BasicApacheConfiguration):
 
     def list_proxy_ips(self):
         raw_value = self._cnf.get(".//RPAFproxy_ips")

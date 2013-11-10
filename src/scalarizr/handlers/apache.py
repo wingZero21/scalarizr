@@ -144,7 +144,7 @@ class ApacheHandler(Handler):
         for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
             for host in role.hosts:
                 lb_hosts.append(host.internal_ip)
-                
+
         lb_hosts = lb_hosts or ['127.0.0.1', ]
 
         mod_rpaf_path = __apache__["mod_rpaf_path"]
