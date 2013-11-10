@@ -116,20 +116,45 @@ class ApacheHandler(Handler):
 
     def on_HostUp(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
-            apache.ModRPAF.add([message.local_ip])
+            mod_rpaf_path = __apache__["mod_rpaf_path"]
+            mod_rpaf = apache.ModRPAF(mod_rpaf_path)
+
+            mod_rpaf.add([message.local_ip])
+
+            with open(mod_rpaf_path, "w") as fp:
+                fp.write(mod_rpaf.body)
+
             self.api.reload_service("Applying new RPAF proxy IPs list")
 
     def on_HostDown(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
-            apache.ModRPAF.remove([message.local_ip])
+            mod_rpaf_path = __apache__["mod_rpaf_path"]
+            mod_rpaf = apache.ModRPAF(mod_rpaf_path)
+
+            mod_rpaf.remove([message.local_ip])
+
+            with open(mod_rpaf_path, "w") as fp:
+                fp.write(mod_rpaf.body)
+
             self.api.reload_service("Applying new RPAF proxy IPs list")
 
     def _rpaf_reload(self):
         lb_hosts = []
+
         for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
             for host in role.hosts:
                 lb_hosts.append(host.internal_ip)
-        apache.ModRPAF.update(lb_hosts)
+                
+        lb_hosts = lb_hosts or ['127.0.0.1', ]
+
+        mod_rpaf_path = __apache__["mod_rpaf_path"]
+        mod_rpaf = apache.ModRPAF(mod_rpaf_path)
+
+        mod_rpaf.update(lb_hosts)
+
+        with open(mod_rpaf_path, "w") as fp:
+            fp.write(mod_rpaf.body)
+
         self.api.reload_service("Applying new RPAF proxy IPs list")
         bus.fire("apache_rpaf_reload")
 

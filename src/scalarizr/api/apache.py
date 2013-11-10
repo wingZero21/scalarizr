@@ -38,7 +38,6 @@ etc_path = bus.etc_path or "/etc/scalr"
 
 apache = {
     "vhosts_dir":           os.path.join(etc_path, "private.d/vhosts"),
-    "cert_path":            os.path.join(etc_path, "private.d/keys"),
     "keys_dir":             os.path.join(etc_path, "private.d/keys"),
     "vhost_extension":      ".vhost.conf",
     "logrotate_conf_path":  "/etc/logrotate.d/scalarizr_app"}
@@ -82,7 +81,7 @@ else:
     apache.update({
         "httpd.conf":       "/etc/httpd/conf/httpd.conf",
         "ssl_conf_path":    "/etc/httpd/conf.d/ssl.conf",
-        "default_vhost":    "/etc/httpd/sites-enabled/000-default",
+        "default_vhost":    "/etc/httpd/sites-enabled/000-default",  # Not used
         "mod_ssl_file":     "/etc/httpd/modules/mod_ssl.so",
         "mod_rpaf_path":    "/etc/httpd/conf.d/mod_rpaf.conf",
         "key_path_default": "/etc/pki/tls/private/localhost.key",
@@ -507,12 +506,16 @@ class ApacheAPI(object):
 
         self.fix_default_virtual_host()
 
-        if linux.os.debian_family:
-            ModRPAF.fix_module()
-
         self.update_log_rotate_config()
 
         self.mod_ssl.ensure()
+
+        if linux.os.debian_family:
+            mod_rpaf_path = __apache__["mod_rpaf_path"]
+            mod_rpaf = ModRPAF(mod_rpaf_path)
+            mod_rpaf.fix_module()
+            with open(mod_rpaf_path, "w") as fp:
+                fp.write(mod_rpaf.body)
 
         ModRPAF.ensure_permissions()
 
@@ -742,47 +745,59 @@ class VirtualHost(object):
 
 class ModRPAF(object):
 
-    path = None
+    body = None
 
-    @staticmethod
-    def add(ips):
-        with ApacheConfig(__apache__["mod_rpaf_path"]) as rpaf:
-            proxy_ips = set(re.split(r"\s+", rpaf.get(".//RPAFproxy_ips")))
-            proxy_ips |= set(ips)
-            if not proxy_ips:
-                    proxy_ips.add("127.0.0.1")
-            rpaf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+    def __init__(self, body):
+        self.body = str(body)
 
-    @staticmethod
-    def remove(ips):
-        with ApacheConfig(__apache__["mod_rpaf_path"]) as rpaf:
-            proxy_ips = set(re.split(r"\s+", rpaf.get(".//RPAFproxy_ips")))
-            proxy_ips -= set(ips)
-            if not proxy_ips:
-                    proxy_ips.add("127.0.0.1")
-            rpaf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+    @property
+    def _cnf(self):
+        cnf = Configuration("apache")
+        cnf.reads(self.body)
+        return cnf
 
-    @staticmethod
-    def update(ips):
-        with ApacheConfig(__apache__["mod_rpaf_path"]) as rpaf:
-            proxy_ips = set(ips)
-            if not proxy_ips:
-                    proxy_ips.add("127.0.0.1")
-            rpaf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+    def list_proxy_ips(self):
+        raw_value = self._cnf.get(".//RPAFproxy_ips")
+        ips = set(re.split(r"\s+", raw_value))
+        return ips
 
-    @staticmethod
-    def fix_module():
+    def add(self, ips):
+        proxy_ips = self.list_proxy_ips()
+        proxy_ips |= set(ips)
+
+        mem_config = self._cnf
+        mem_config.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+        self._update_body(mem_config)
+
+    def remove(self, ips):
+        proxy_ips = self.list_proxy_ips()
+        proxy_ips -= set(ips)
+
+        mem_config = self._cnf
+        mem_config.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+        self._update_body(mem_config)
+
+    def update(self, ips):
+        proxy_ips = set(ips)
+
+        mem_config = self._cnf
+        mem_config.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+        self._update_body(mem_config)
+
+    def fix_module(self):
         """
         fixing bug in rpaf 0.6-2
         """
         pm = dynimp.package_mgr()
         if "0.6-2" == pm.installed("libapache2-mod-rpaf"):
-            LOG.info("Patching IfModule value in rpaf.conf")
-            with ApacheConfig(__apache__["mod_rpaf_path"]) as rpaf:
-                try:
-                    rpaf.set('./IfModule[@value="mod_rpaf.c"]', {"value": "mod_rpaf-2.0.c"})
-                except NoPathError:
-                    pass
+            mem_config = self._cnf
+            try:
+                mem_config.set('./IfModule[@value="mod_rpaf.c"]', {"value": "mod_rpaf-2.0.c"})
+            except NoPathError:
+                pass
+            else:
+                self._update_body(mem_config)
+                LOG.info("Patched IfModule value in rpaf.conf")
 
     @staticmethod
     def ensure_permissions():
@@ -991,7 +1006,7 @@ class DebianBasedModSSL(ModSSL):
             LOG.info("mod_ssl enabled.")
 
     def _enable_default_ssl_virtual_host(self):
-        if not os.path.exists(__apache__["default-ssl_path"]):
+        if not os.path.exists(__apache__["ssl_load_deb"]):
             system2((__apache__["a2ensite_path"], "default-ssl"))
             LOG.info("Default SSL virtualhost enabled.")
 
