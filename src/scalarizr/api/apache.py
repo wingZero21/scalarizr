@@ -526,7 +526,7 @@ class ApacheAPI(object):
             os.makedirs(__apache__["vhosts_dir"])
             LOG.info("Created new directory for VirtualHosts: %s" % __apache__["vhosts_dir"])
 
-        with ApacheConfig(__apache__["httpd.conf"]) as apache_config:
+        with ApacheConfigManager(__apache__["httpd.conf"]) as apache_config:
             inc_mask = __apache__["vhosts_dir"] + "/*" + __apache__["vhost_extension"]
 
             if not inc_mask in apache_config.get_list("Include"):
@@ -537,7 +537,7 @@ class ApacheAPI(object):
         if linux.os.debian_family:
             if os.path.exists(__apache__["default_vhost"]):
 
-                with ApacheConfig(__apache__["default_vhost"]) as default_vhost:
+                with ApacheConfigManager(__apache__["default_vhost"]) as default_vhost:
                     default_vhost.set("NameVirtualHost", "*:80", force=True)
 
                 with open(__apache__["default_vhost"], "r") as fp:
@@ -554,7 +554,7 @@ class ApacheAPI(object):
                 LOG.warning("Cannot find default vhost config file %s." % __apache__["default_vhost"])
 
         else:
-            with ApacheConfig(__apache__["httpd.conf"]) as apache_config:
+            with ApacheConfigManager(__apache__["httpd.conf"]) as apache_config:
                 if not apache_config.get_list("NameVirtualHost"):
                     apache_config.set("NameVirtualHost", "*:80", force=True)
 
@@ -797,7 +797,7 @@ class ModRPAF(BasicApacheConfiguration):
         os.chown(__apache__["mod_rpaf_path"], st.st_uid, st.st_gid)
 
 
-class ApacheConfig(object):
+class ApacheConfigManager(object):
 
     _cnf = None
     path = None
@@ -1004,7 +1004,7 @@ class DebianBasedModSSL(ModSSL):
 
     def _set_name_virtual_host(self, ssl_port):
         if os.path.exists(__apache__["ports_conf_deb"]):
-            with ApacheConfig(__apache__["ports_conf_deb"]) as conf:
+            with ApacheConfigManager(__apache__["ports_conf_deb"]) as conf:
                 i = 0
                 for section in conf.get_dict("IfModule"):
                     i += 1
@@ -1044,7 +1044,7 @@ class RedHatBasedModSSL(ModSSL):
             os.chown(ssl_conf_path, st.st_uid, st.st_gid)
 
     def _enable_mod_ssl(self):
-        with ApacheConfig(__apache__["httpd.conf"]) as main_config:
+        with ApacheConfigManager(__apache__["httpd.conf"]) as main_config:
             loaded_in_main = [module for module in main_config.get_list("LoadModule") if "mod_ssl.so" in module]
             if not loaded_in_main:
                 if os.path.exists(__apache__["ssl_conf_path"]):
@@ -1055,7 +1055,7 @@ class RedHatBasedModSSL(ModSSL):
 
     def _set_name_virtual_host(self, ssl_port=443):
         ssl_conf_path = __apache__["ssl_conf_path"]
-        with ApacheConfig(ssl_conf_path) as ssl_conf:
+        with ApacheConfigManager(ssl_conf_path) as ssl_conf:
             if ssl_conf.empty:
                 LOG.error("SSL config file %s is empty. Filling in with minimal configuration.", ssl_conf_path)
                 ssl_conf.add("Listen", str(ssl_port))
