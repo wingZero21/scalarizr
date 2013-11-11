@@ -110,7 +110,6 @@ class ApacheHandler(Handler):
                 if "not running" in str(e) and not self.api.service.running:
                     self.api.start_service()
 
-
     def on_before_reboot_finish(self, *args, **kwargs):
         self.api.reload_virtual_hosts()
 
