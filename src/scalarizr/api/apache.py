@@ -507,8 +507,13 @@ class ApacheAPI(object):
 
         if linux.os.debian_family:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
-            mod_rpaf = ModRPAF(mod_rpaf_path)
+
+            with open(mod_rpaf_path, "r") as fp:
+                body = fp.read()
+
+            mod_rpaf = ModRPAF(body)
             mod_rpaf.fix_module()
+            
             with open(mod_rpaf_path, "w") as fp:
                 fp.write(mod_rpaf.body)
 
