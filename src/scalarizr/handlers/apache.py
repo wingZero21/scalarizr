@@ -117,8 +117,10 @@ class ApacheHandler(Handler):
     def on_HostUp(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
-            mod_rpaf = apache.ModRPAF(mod_rpaf_path)
+            with open(mod_rpaf_path, "w") as fp:
+                mod_praf_body = fp.read()
 
+            mod_rpaf = apache.ModRPAF(mod_praf_body)
             mod_rpaf.add([message.local_ip])
 
             with open(mod_rpaf_path, "w") as fp:
@@ -129,8 +131,10 @@ class ApacheHandler(Handler):
     def on_HostDown(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
-            mod_rpaf = apache.ModRPAF(mod_rpaf_path)
+            with open(mod_rpaf_path, "w") as fp:
+                mod_praf_body = fp.read()
 
+            mod_rpaf = apache.ModRPAF(mod_praf_body)
             mod_rpaf.remove([message.local_ip])
 
             with open(mod_rpaf_path, "w") as fp:
@@ -148,8 +152,10 @@ class ApacheHandler(Handler):
         lb_hosts = lb_hosts or ['127.0.0.1', ]
 
         mod_rpaf_path = __apache__["mod_rpaf_path"]
-        mod_rpaf = apache.ModRPAF(mod_rpaf_path)
+        with open(mod_rpaf_path, "w") as fp:
+            mod_praf_body = fp.read()
 
+        mod_rpaf = apache.ModRPAF(mod_praf_body)
         mod_rpaf.update(lb_hosts)
 
         with open(mod_rpaf_path, "w") as fp:
