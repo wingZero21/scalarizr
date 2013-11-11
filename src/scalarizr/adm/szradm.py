@@ -41,13 +41,13 @@ class Command(object):
         return self.__doc__
 
     def run_subcommand(self, subcommand=None, *args):
-        for sub_cmd in subcommands:
+        for sub_cmd in self.subcommands:
             name = camel_to_underscore(sub_cmd.__name__).replace('_', '-')
             if name == subcommand:
                 subcommand = sub_cmd()
-                kwds = self.parse_args(args)
-                return sub_cmd(**kwds)
-        raise BaseException('Unknown subcommand: %s')
+                kwds = subcommand.parse_args(args)
+                return subcommand(**kwds)
+        raise BaseException('Unknown subcommand: %s' % subcommand)
 
     def parse_args(self, args):
         arguments = docopt(self.__doc__, argv=args, options_first=True)

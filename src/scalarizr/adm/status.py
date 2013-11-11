@@ -29,7 +29,7 @@ class ClsCmd(Command):
     cls-cmd is test command
 
     Usage:
-      cls-cmd [--version]<command> [<args>...]
+      cls-cmd [--version] [<command>] [<args>...]
 
     Options:
       -v, --version     Show version.
@@ -42,7 +42,8 @@ class ClsCmd(Command):
             print 'cls-cmd version is 0.02'
         if not command:
             print 'Use sub-cmd to see something'
-        return run_subcommand(command, *args)
+        else:
+            return self.run_subcommand(command, *args)
 
 
 @Command.command
