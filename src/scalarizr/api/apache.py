@@ -153,6 +153,7 @@ class ApacheAPI(object):
                 ssl_certificate.key_path,
                 ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
             )
+            LOG.info("Certificate %s is set to %s" % (ssl_certificate_id, v_host))
 
             #Compatibility with old apache handler
             if self.mod_ssl.is_system_certificate_used():
