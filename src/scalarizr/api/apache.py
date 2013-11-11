@@ -153,7 +153,7 @@ class ApacheAPI(object):
                 ssl_certificate.key_path,
                 ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
             )
-            LOG.info("Certificate %s is set to %s" % (ssl_certificate_id, v_host))
+            LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, v_host))
 
             #Compatibility with old apache handler
             if self.mod_ssl.is_system_certificate_used():
@@ -1157,6 +1157,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
     def start(self):
         if not self._main_process_started() and not self.running:
+            LOG.info("Starting apache")
             initdv2.ParametrizedInitScript.start(self)
             if self.pid_file:
                 try:
