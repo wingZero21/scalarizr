@@ -783,7 +783,7 @@ class ModRPAF(BasicApacheConfiguration):
             except NoPathError:
                 pass
             else:
-                self._update_body(mem_config.body)
+                self._update_body(mem_config)
                 LOG.info("Patched IfModule value in rpaf.conf")
 
     @staticmethod
