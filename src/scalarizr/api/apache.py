@@ -1157,18 +1157,19 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
             raise initdv2.InitdError("Configuration isn`t valid: %s" % out)
 
     def start(self):
-        initdv2.ParametrizedInitScript.start(self)
-        if self.pid_file:
-            try:
-                wait_until(lambda: os.path.exists(self.pid_file) or self._main_process_started(), sleep=0.2, timeout=30)
-            except (Exception, BaseException), e:
-                raise initdv2.InitdError("Cannot start Apache (%s)" % str(e))
-        time.sleep(0.5)
-        return True
+        if not self._main_process_started() and not self.running:
+            initdv2.ParametrizedInitScript.start(self)
+            if self.pid_file:
+                try:
+                    wait_until(lambda: os.path.exists(self.pid_file) or self._main_process_started(), sleep=0.2, timeout=30)
+                except (Exception, BaseException), e:
+                    raise initdv2.InitdError("Cannot start Apache (%s)" % str(e))
+            time.sleep(0.5)
 
     def stop(self, reason=None):
-        LOG.info("Stopping apache: %s" % str(reason) if reason else '')
-        initdv2.ParametrizedInitScript.stop(self)
+        if self._main_process_started() and self.running:
+            LOG.info("Stopping apache: %s" % str(reason) if reason else '')
+            initdv2.ParametrizedInitScript.stop(self)
 
     def restart(self, reason=None):
         LOG.info("Restarting apache: %s" % str(reason) if reason else '')
