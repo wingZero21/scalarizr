@@ -41,12 +41,12 @@ class Command(object):
         return self.__doc__
 
     def run_subcommand(self, subcommand=None, *args):
-        for sub_cmd in self.subcommands:
-            name = camel_to_underscore(sub_cmd.__name__).replace('_', '-')
+        for sub_cmd_class in self.subcommands:
+            name = camel_to_underscore(sub_cmd_class.__name__).replace('_', '-')
             if name == subcommand:
-                subcommand = sub_cmd()
-                kwds = subcommand.parse_args(args)
-                return subcommand(**kwds)
+                sub_cmd = sub_cmd_class()
+                kwds = sub_cmd.parse_args(args)
+                return sub_cmd(**kwds)
         raise BaseException('Unknown subcommand: %s' % subcommand)
 
     def parse_args(self, args):
