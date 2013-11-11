@@ -513,7 +513,7 @@ class ApacheAPI(object):
 
             mod_rpaf = ModRPAF(body)
             mod_rpaf.fix_module()
-            
+
             with open(mod_rpaf_path, "w") as fp:
                 fp.write(mod_rpaf.body)
 
@@ -826,7 +826,7 @@ class BackupManager(object):
 
     def _get_content(self):
         if os.path.exists(self.path):
-            with open(self.path, "w") as fp:
+            with open(self.path, "r") as fp:
                 text = fp.read()
             st = os.stat(self.path)
             return text, st.st_uid, st.st_gid, st.st_mode
