@@ -1079,7 +1079,7 @@ class RedHatBasedModSSL(ModSSL):
 
             else:
                 if not ssl_conf.get_list("NameVirtualHost"):
-                    LOG.info("NameVirtualHost directive not found in %s", ssl_conf_path)
+                    LOG.debug("NameVirtualHost directive not found in %s", ssl_conf_path)
                     if not ssl_conf.get_list("Listen"):
                         LOG.info("Listen directive not found in %s. ", ssl_conf_path)
                         LOG.info("Patching %s with Listen & NameVirtualHost directives.",     ssl_conf_path)
