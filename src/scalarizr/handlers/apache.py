@@ -92,6 +92,7 @@ class ApacheHandler(Handler):
 
     def on_before_host_up(self, message):
         self.api.init_service()
+        self.api.start_service()
 
         if self._initial_v_hosts:
             LOG.debug("Configuring VirtualHosts: %s" % self._initial_v_hosts)

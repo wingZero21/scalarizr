@@ -519,8 +519,6 @@ class ApacheAPI(object):
 
         ModRPAF.ensure_permissions()
 
-        self.start_service()
-
     def enable_virtual_hosts_directory(self):
         if not os.path.exists(__apache__["vhosts_dir"]):
             os.makedirs(__apache__["vhosts_dir"])
