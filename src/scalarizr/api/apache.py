@@ -623,7 +623,13 @@ class ApacheAPI(object):
             rules = []
             for port in ports:
                 if port not in self.current_open_ports:
+                    LOG.debug("Port %s(%s) is not in open ports: %s(%s)." % (
+                        port,
+                        type(port),
+                        str(self.current_open_ports),
+                        str([type(port) for port in self.current_open_ports])))
                     rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
+                    LOG.info("Port %s opened." % port)
                     self.current_open_ports.append(port)
             if rules:
                 iptables.FIREWALL.ensure(rules)
