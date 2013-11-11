@@ -547,7 +547,7 @@ class ApacheAPI(object):
                 with open(__apache__["default_vhost"], "w") as fp:
                     fp.write(dv)
 
-                LOG.info("Replaced NameVirtualhost and Virtualhost port values in the default virtual host file.")
+                LOG.info("Replaced NameVirtualhost and Virtualhost values in %s." % __apache__["default_vhost"])
             else:
                 LOG.warning("Cannot find default vhost config file %s." % __apache__["default_vhost"])
 
@@ -617,7 +617,7 @@ class ApacheAPI(object):
 
     def _open_ports(self, ports):
         if iptables.enabled():
-            LOG.info("Allowing ports %s in IPtables" % str(ports))
+            LOG.info("Ensuring ports %s are allowed in IPtables" % str(ports))
             rules = []
             for port in ports:
                 if port not in self.current_open_ports:
