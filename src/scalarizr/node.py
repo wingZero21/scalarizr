@@ -8,17 +8,13 @@ import copy
 try:
     import json
 except ImportError:
-    import simplejson as json
-
-from scalarizr import linux
+    import simplejson as json 
 
 
-base_dir = '/etc/scalr' if linux.os['family'] != 'Windows' \
-                    else os.path.normpath(os.path.join(__file__, '..\..\..\etc'))
-
-private_dir = os.path.join(base_dir, 'private.d')
-public_dir = os.path.join(base_dir, 'public.d')
-storage_dir = os.path.join(base_dir, 'storage')
+base_dir = '/etc/scalr'
+private_dir = base_dir + '/private.d'
+public_dir = base_dir + '/public.d'
+storage_dir = private_dir + '/storage'
 
 
 class Store(object):
@@ -290,25 +286,24 @@ class ScalrVersion(Store):
 
 __node__ = {
         'server_id,role_id,farm_id,farm_role_id,env_id,role_name,server_index':
-                                Ini(os.path.join(private_dir, 'config.ini'), 'general'),
-        'message_format': Ini(os.path.join(private_dir, 'config.ini'), 'messaging_p2p'),
-        'platform': Ini(os.path.join(public_dir, 'config.ini'), 'general'),
+                                Ini(private_dir + '/config.ini', 'general'),
+        'message_format': Ini(private_dir + '/config.ini', 'messaging_p2p'),
+        'platform': Ini(public_dir + '/config.ini', 'general'),
         'behavior': IniOption(
-                                                [os.path.join(public_dir, 'config.ini'),
-                                                 os.path.join(private_dir, 'config.ini')],
+                                                [public_dir + '/config.ini', private_dir + '/config.ini'], 
                                                 'general', 'behaviour',
                                                 lambda val: val.strip().split(','),
                                                 lambda val: ','.join(val)),
         'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),
         'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
-        'state': File(os.path.join(private_dir, '.state')),
-        'rebooted': BoolFile(os.path.join(private_dir, '.reboot')),
-        'halted': BoolFile(os.path.join(private_dir, '.halt')),
-        'cloud_location' : IniOption(os.path.join(private_dir, 'config.ini'), 'general', 'region')
+        'state': File(private_dir + '/.state'),
+        'rebooted': BoolFile(private_dir + '/.reboot'),
+        'halted': BoolFile(private_dir + '/.halt'),
+        'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
 }
 
-for behavior in ('mysql', 'mysql2', 'percona', 'mariadb'):
-    section = 'mysql2' if behavior in ('percona', 'mariadb') else behavior
+for behavior in ('mysql', 'mysql2', 'percona'):
+    section = 'mysql2' if behavior == 'percona' else behavior
     __node__[behavior] = Compound({
             'volume,volume_config': 
                             Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
@@ -356,12 +351,22 @@ __node__['nginx'] = Compound({
         Ini('%s/%s.ini' % (public_dir, 'www'), 'www')
 })
 
+__node__['apache'] = Compound({
+    'vhosts_path,apache_conf_path':
+        Ini('%s/%s.ini' % (public_dir, 'app'), 'app')
+})
+
+__node__['cloudfoundry'] = Compound({
+        'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'cloudfoundry'), 'scalarizr.storage2.volume')
+        })
+
 __node__['tomcat'] = {}
+
 
 __node__['ec2'] = Compound({
         't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
         'hostname_as_pubdns': 
-                                Ini(os.path.join(public_dir, 'ec2.ini'), 'ec2'),
+                                Ini('%s/%s.ini' % (public_dir, 'ec2'), 'ec2'),
         'ami_id': Call('scalarizr.bus', 'bus.platform.get_ami_id'),
         'kernel_id': Call('scalarizr.bus', 'bus.platform.get_kernel_id'),
         'ramdisk_id': Call('scalarizr.bus', 'bus.platform.get_ramdisk_id'),
@@ -398,8 +403,8 @@ __node__['gce'] = Compound({
 })
 
 __node__['scalr'] = Compound({
-        'version': File(os.path.join(private_dir, '.scalr-version')),
-        'id': Ini(os.path.join(private_dir, 'config.ini'), 'general', {'id': 'scalr_id'})
+        'version': File(private_dir + '/.scalr-version'),
+        'id': Ini(private_dir + '/config.ini', 'general', {'id': 'scalr_id'})
 })
 
 __node__['messaging'] = Compound({

@@ -64,6 +64,7 @@ class ScriptExecutor(Handler):
     name = 'script_executor'
     _data = None
 
+
     def __init__(self):
         self.queue = Queue.Queue()
         self.in_progress = []
