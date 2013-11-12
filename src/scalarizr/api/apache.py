@@ -632,19 +632,17 @@ class ApacheAPI(object):
 
 class BasicApacheConfiguration(object):
 
-    body = None
+    #body = None
+    _cnf = None
 
     def __init__(self, body):
-        self.body = str(body)  # [SCALARIZR-1226]
+        config = Configuration("apache")
+        config.reads(str(body))
+        self._cnf = config
 
     @property
-    def _cnf(self):
-        cnf = Configuration("apache")
-        cnf.reads(self.body)
-        return cnf
-
-    def _update_body(self, config_obj):
-        self.body = config_obj.dumps()
+    def body(self):
+        return self._cnf.dumps()
 
 
 class VirtualHost(BasicApacheConfiguration):
@@ -687,29 +685,25 @@ class VirtualHost(BasicApacheConfiguration):
         return doc_roots
 
     def use_certificate(self, cert_path, key_path, chain_path=None):
-        mem_config = self._cnf
+        assert self._cnf.get(".//SSLCertificateFile")
 
-        assert mem_config.get(".//SSLCertificateFile")
-
-        mem_config.set(".//SSLCertificateFile", cert_path)
-        mem_config.set(".//SSLCertificateKeyFile", key_path)
+        self._cnf.set(".//SSLCertificateFile", cert_path)
+        self._cnf.set(".//SSLCertificateKeyFile", key_path)
 
         if chain_path:
             try:
-                mem_config.set(".//SSLCertificateChainFile", chain_path, force=False)
+                self._cnf.set(".//SSLCertificateChainFile", chain_path, force=False)
             except NoPathError:
-                parent = mem_config.etree.find(".//SSLCertificateFile/..")
-                before_el = mem_config.etree.find(".//SSLCertificateFile")
-                ch = mem_config._provider.create_element(
-                    mem_config.etree,
+                parent = self._cnf.etree.find(".//SSLCertificateFile/..")
+                before_el = self._cnf.etree.find(".//SSLCertificateFile")
+                ch = self._cnf._provider.create_element(
+                    self._cnf.etree,
                     ".//SSLCertificateChainFile",
                     chain_path)
                 ch.text = chain_path
                 parent.insert(list(parent).index(before_el), ch)
         else:
-            mem_config.comment(".//SSLCertificateChainFile")
-
-        self._update_body(mem_config)
+            self._cnf.comment(".//SSLCertificateChainFile")
 
     def _get_port(self):
         raw_host = self._cnf.get(".//VirtualHost").split(":")
@@ -721,12 +715,10 @@ class VirtualHost(BasicApacheConfiguration):
             return 80
 
     def _set_port(self, port):
-        mem_config = self._cnf
-        old_value = mem_config.get(".//VirtualHost")
+        old_value = self._cnf.get(".//VirtualHost")
         host = old_value.split(":")[0]
         new_value = "%s:%s" % (host, port)
-        mem_config.set(".//VirtualHost", dict(value=new_value))
-        self._update_body(mem_config)
+        self._cnf.set(".//VirtualHost", dict(value=new_value))
 
     def _get_server_name(self):
         try:
@@ -736,9 +728,7 @@ class VirtualHost(BasicApacheConfiguration):
         return server_name
 
     def _set_server_name(self, new_name):
-        mem_config = self._cnf
-        mem_config.set(".//ServerName", new_name)
-        self._update_body(mem_config)
+        self._cnf.set(".//ServerName", new_name)
 
     server_name = property(_get_server_name, _set_server_name)
 
@@ -755,25 +745,16 @@ class ModRPAF(BasicApacheConfiguration):
     def add(self, ips):
         proxy_ips = self.list_proxy_ips()
         proxy_ips |= set(ips)
-
-        mem_config = self._cnf
-        mem_config.set(".//RPAFproxy_ips", " ".join(proxy_ips))
-        self._update_body(mem_config)
+        self._cnf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
 
     def remove(self, ips):
         proxy_ips = self.list_proxy_ips()
         proxy_ips -= set(ips)
-
-        mem_config = self._cnf
-        mem_config.set(".//RPAFproxy_ips", " ".join(proxy_ips))
-        self._update_body(mem_config)
+        self._cnf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
 
     def update(self, ips):
         proxy_ips = set(ips)
-
-        mem_config = self._cnf
-        mem_config.set(".//RPAFproxy_ips", " ".join(proxy_ips))
-        self._update_body(mem_config)
+        self._cnf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
 
     def fix_module(self):
         """
@@ -781,13 +762,11 @@ class ModRPAF(BasicApacheConfiguration):
         """
         pm = dynimp.package_mgr()
         if "0.6-2" == pm.installed("libapache2-mod-rpaf"):
-            mem_config = self._cnf
             try:
-                mem_config.set('./IfModule[@value="mod_rpaf.c"]', {"value": "mod_rpaf-2.0.c"})
+                self._cnf.set('./IfModule[@value="mod_rpaf.c"]', {"value": "mod_rpaf-2.0.c"})
             except NoPathError:
                 pass
             else:
-                self._update_body(mem_config)
                 LOG.info("Patched IfModule value in rpaf.conf")
 
     @staticmethod
