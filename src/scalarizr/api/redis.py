@@ -43,6 +43,7 @@ class RedisAPI(object):
         self._queryenv = bus.queryenv_service
         ini = self._cnf.rawini
         self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
+        self.redis_instances = redis_service.RedisInstances()
 
     @rpc.command_method
     def launch_processes(self, num=None, ports=None, passwords=None, async=False):
@@ -316,11 +317,9 @@ class RedisAPI(object):
 
         def do_backup():
             try:
-                dbs = filter(lambda name: name.endswith(('.aof', '.rdb')),
-                             os.listdir(STORAGE_PATH))
-                dbs = map(lambda name: os.path.join(STORAGE_PATH, name),
-                          dbs)
-                
+                self.redis_instances.save_all()
+                dbs = [r.db_path for r in self.redis_instances]
+
                 cloud_storage_path = bus.platform.scalrfs.backups(BEHAVIOUR)  #? __node__.platform
                 LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
                 transfer = LargeTransfer(dbs, cloud_storage_path)
