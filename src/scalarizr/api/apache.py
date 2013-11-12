@@ -122,7 +122,7 @@ class ApacheAPI(object):
         self.current_open_ports = []
         self._query_env = bus.queryenv_service
 
-    @rpc.service_method
+    @rpc.command_method
     def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True):
         """
         Creates Name-Based Apache VirtualHost
@@ -235,7 +235,7 @@ class ApacheAPI(object):
 
         return v_host_path
 
-    @rpc.service_method
+    @rpc.command_method
     def update_vhost(self,
                      signature,
                      hostname=None,
@@ -301,7 +301,7 @@ class ApacheAPI(object):
                 BackupManager.free(old_path)
                 self.reload_service()
 
-    @rpc.service_method
+    @rpc.command_method
     def delete_vhosts(self, vhosts, reload=True):
         """
         Deletes VirtualHost
@@ -330,7 +330,7 @@ class ApacheAPI(object):
                 BackupManager.free(backup_list)
                 self.reload_service()
 
-    @rpc.service_method
+    @rpc.command_method
     def reconfigure(self, vhosts):
         """
         Deploys multiple VirtualHosts and removes odds.
@@ -402,7 +402,7 @@ class ApacheAPI(object):
 
         return applied_vhosts
 
-    @rpc.service_method
+    @rpc.query_method
     def get_webserver_statistics(self):
         """
         @return: dict, parsed mod_status data
@@ -440,7 +440,7 @@ class ApacheAPI(object):
                     d[key.strip()] = value.strip()
         return d
 
-    @rpc.service_method
+    @rpc.query_method
     def list_served_virtual_hosts(self):
         """
         Returns all VirtualHosts deployed by Scalr
@@ -460,7 +460,7 @@ class ApacheAPI(object):
 
         return result
 
-    @rpc.service_method
+    @rpc.command_method
     def set_default_ssl_certificate(self, id):
         """
         If the certificate with given ID already exists on disk
@@ -470,23 +470,23 @@ class ApacheAPI(object):
         cert = SSLCertificate(id)
         self.mod_ssl.set_default_certificate(cert)
 
-    @rpc.service_method
+    @rpc.command_method
     def start_service(self):
         self.service.start()
 
-    @rpc.service_method
+    @rpc.command_method
     def stop_service(self, reason=None):
         self.service.stop(reason)
 
-    @rpc.service_method
+    @rpc.command_method
     def restart_service(self, reason=None):
         self.service.restart(reason)
 
-    @rpc.service_method
+    @rpc.command_method
     def reload_service(self, reason=None):
         self.service.reload(reason)
 
-    @rpc.service_method
+    @rpc.command_method
     def configtest(self):
         self.service.configtest()
 
@@ -1086,7 +1086,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     def _get_pid_file_path(self):
         #TODO: fix assertion when platform becomes an object (commit 58921b6303a96c8975e417fd37d70ddc7be9b0b5)
 
-        if "gce" == __node__["platform"]:
+        if "gce" == __node__.platform.name:
             gce_pid_dir = "/var/run/httpd"
             if not os.path.exists(gce_pid_dir):
                 os.makedirs(gce_pid_dir)
