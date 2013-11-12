@@ -43,6 +43,10 @@ class QEMock(object):
         return dict(params=app)
 
 
+class PlatrormMock(object):
+    name = 'ec2'
+
+
 apache.bus.queryenv_service = QEMock
 bus.etc_path = '/etc/scalr'
 
@@ -51,7 +55,7 @@ class ApacheAPITest(unittest.TestCase):
 
     def setUp(self):
         apache.__node__ = dict(
-            platform='ec2',
+            platform=PlatrormMock(),
             farm_role_id=1
         )
         self.api = apache.ApacheAPI()
