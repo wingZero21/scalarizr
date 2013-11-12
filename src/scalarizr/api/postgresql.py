@@ -122,7 +122,7 @@ class PostgreSQLAPI(object):
     @rpc.command_method
     def create_databundle(self, async=True):
 
-        def do_databundle():
+        def do_databundle(op):
             try:
                 bus.fire('before_postgresql_data_bundle')
                 LOG.info("Creating PostgreSQL data bundle")
@@ -168,7 +168,7 @@ class PostgreSQLAPI(object):
     @rpc.command_method
     def create_backup(self, async=True):
 
-        def do_backup():
+        def do_backup(op):
             tmpdir = backup_path = None
             tmp_path = os.path.join(__postgresql__['storage_dir'], 'tmp')
             try:

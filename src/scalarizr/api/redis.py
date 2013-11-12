@@ -267,7 +267,7 @@ class RedisAPI(object):
     @rpc.command_method
     def create_databundle(self, async=True):
 
-        def do_databundle():
+        def do_databundle(op):
             try:
                 bus.fire('before_%s_data_bundle' % BEHAVIOUR)
                 # Creating snapshot
@@ -315,7 +315,7 @@ class RedisAPI(object):
     @rpc.command_method
     def create_backup(self, async=True):
 
-        def do_backup():
+        def do_backup(op):
             try:
                 self.redis_instances.save_all()
                 dbs = [r.db_path for r in self.redis_instances]
