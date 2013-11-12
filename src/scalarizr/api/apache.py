@@ -1086,7 +1086,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     def _get_pid_file_path(self):
         #TODO: fix assertion when platform becomes an object (commit 58921b6303a96c8975e417fd37d70ddc7be9b0b5)
 
-        if "gce" == __node__.platform.name:
+        if "gce" == __node__["platform"].name:
             gce_pid_dir = "/var/run/httpd"
             if not os.path.exists(gce_pid_dir):
                 os.makedirs(gce_pid_dir)
