@@ -35,7 +35,7 @@ def get_truncated_log(logfile, maxsize=None):
     maxsize = maxsize or logs_truncate_over
     f = open(logfile, "r")
     try:
-        ret = unicode(f.read(int(maxsize)), 'utf-8')
+        ret = unicode(f.read(int(maxsize)), 'utf-8', errors='ignore')
         if (os.path.getsize(logfile) > maxsize):
             ret += u"... Truncated. See the full log in " + logfile.encode('utf-8')
         return ret.encode('utf-8')

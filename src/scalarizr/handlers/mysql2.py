@@ -598,7 +598,9 @@ class MysqlHandler(DBMSRHandler):
             else:
                 #self.mysql.my_cnf.read_only = False
                 self.mysql.my_cnf.delete_options(['mysqld/read_only'])
-                self.mysql.service.restart()
+                #self.mysql.service.restart()
+                self.mysql.service.stop()
+                self.mysql.service.start()
 
                 self.root_client.stop_slave()
                 self.root_client.reset_master()
@@ -903,11 +905,20 @@ class MysqlHandler(DBMSRHandler):
                             restorecon = software.which('restorecon')
                             linux.system('%s -R -v %s' % (restorecon, __mysql__['storage_dir']), shell=True)
                 except:
-                   LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
+                    LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
 
             linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
-            coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+            if __mysql__['behavior'] == 'percona' and linux.os.debian_family:
+                self.mysql.service.start()
+                debian_cnf = metaconf.Configuration('mysql')
+                debian_cnf.read(__mysql__['debian.cnf'])
+                sql = ("GRANT ALL PRIVILEGES ON *.* "
+                        "TO 'debian-sys-maint'@'localhost' "
+                        "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
+                linux.system(['mysql', '-u', 'root', '-e', sql])
+                self.mysql.service.stop()
 
+            coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
         if 'restore' in __mysql__ and \
                         __mysql__['restore'].type == 'xtrabackup':
             # XXX: when restoring data bundle on ephemeral storage, data dir should by empty
