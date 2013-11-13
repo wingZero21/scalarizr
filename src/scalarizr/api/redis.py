@@ -258,7 +258,8 @@ class RedisAPI(object):
             for key, val in redis_process.redis_cli.info.items():
                 if key.startswith('master'):
                     repl_data[key] = val
-            repl_data['status'] = repl_data['master_link_status']
+            if 'master_link_status' in repl_data:
+                repl_data['status'] = repl_data['master_link_status']
             slaves[redis_process.port] = repl_data
 
         return {'slaves': slaves}
