@@ -1,9 +1,8 @@
 from scalarizr.adm.szradm import Command
-from scalarizr.adm.szradm import SubCommand
 from scalarizr.util import system2
 
 
-class SubCmd(SubCommand):
+class SubCmd(Command):
     """
     sub-cmd subcommand test. Prins its arg.
 
@@ -43,7 +42,7 @@ class ClsCmd(Command):
         if not command:
             print 'Use sub-cmd to see something'
         else:
-            return self.run_subcommand(command, *args)
+            return self.run_subcommand(command, args)
 
 
 @Command.command
@@ -56,3 +55,6 @@ def status():
     """
     out = system2(['uname -a'], shell=True)[0]
     print out
+
+
+commands = [status, ClsCmd]
