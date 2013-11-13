@@ -3,7 +3,7 @@ Feature: Nginx
 
 # 1
 Scenario: Proxy to a server
-    Given I have a server  
+    Given I have a server
     When I add proxy
     Then I expect proxying to server
 
@@ -33,7 +33,6 @@ Scenario: Proxy HTTPS
     Then I expect proxying https -> http
 
 #6
-# not impl
 Scenario: HTTPS only
     Given I have a server
     And I have SSL keypair
@@ -66,3 +65,16 @@ Scenario: Proxy with advancend configuration
     Then I expect S and R servers are regular in backend
     And I expect SB and RB servers are backup in backend 
     And I expect SD and RD servers are down in backend
+
+# 10
+Scenario: Reconfigure passes
+    Given I have proxy to server
+    When I reconfigure proxy to another server
+    Then I expect proxying to another server
+
+# 11
+Scenario: Reconfigure fails
+    Given I have proxy to server
+    When I reconfigure proxy with bad configuration
+    Then I expect exception to be thrown
+    And proxy should remain unchanged
