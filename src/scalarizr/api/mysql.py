@@ -3,16 +3,19 @@ Created on Dec 04, 2011
 
 @author: marat
 '''
-from __future__ import with_statement
-
+import sys
 import string
+
+from scalarizr.node import __node__
+from scalarizr.services.mysql2 import __mysql__
 
 from scalarizr import rpc, storage2
 from scalarizr.api import operation
 from scalarizr.services import mysql as mysql_svc
+from scalarizr.services import backup as backup_module
 from scalarizr.services import ServiceError
-from scalarizr.services.mysql2 import __mysql__
 from scalarizr.util.cryptotool import pwgen
+from scalarizr.handlers import build_tags
 
 
 class MySQLAPI(object):
@@ -100,3 +103,80 @@ class MySQLAPI(object):
                 return {'slave': slave_status}
             except ServiceError:
                 return {'slave': {'status': 'down'}}
+
+
+    @rpc.command_method
+    def create_backup(self, backup=None, async=True):
+
+        def do_backup(op, backup=None):
+            try:
+                backup = {
+                    'type': 'mysqldump',
+                    'cloudfs_dir': __node__.platform.scalrfs.backups('mysql')
+                }
+                backup.update(backup or {})
+                if backup['type'] == 'snap_mysql':
+                    descrition = 'MySQL data bundle (farm: {0} role: {1})'.format(
+                            __node__.farm_id, __node__.role_name)
+                    purpose = '{0}-{1}'.format(
+                            __mysql__.behavior, 
+                            'master' if int(__mysql__.replication_master) == 1 else 'slave')
+                    backup.update({
+                        'volume': __mysql__.volume,
+                        'description': descrition,
+                        'tags': build_tags(purpose, 'active')
+                    })
+
+                bak = op.data['bak'] = backup_module.backup(**backup)
+                try:
+                    restore = bak.run()
+                finally:
+                    del op.data['bak']
+
+                # For Scalr < 4.5.0
+                if bak.type == 'mysqldump':
+                    __node__.messaging.send('DbMsr_CreateBackupResult', {
+                        'db_type': __mysql__.behavior,
+                        'status': 'ok',
+                        'backup_parts': restore
+                    })
+                else:
+                    data = {
+                        'restore': dict(restore)
+                    }
+                    if backup.type == 'snap_mysql':
+                        data.update({
+                            'snapshot_config': dict(restore.snapshot),
+                            'log_file': restore.log_file,
+                            'log_pos': restore.log_pos,
+                        })
+                    __node__.messaging.send('DbMsr_CreateDataBundleResult', {
+                        'db_type': __mysql__.behavior,
+                        'status': 'ok',
+                        __mysql__.behavior: data
+                    })
+ 
+                return restore
+            except:
+                # For Scalr < 4.5.0
+                c, e, t = sys.exc_info()
+                msg_name = 'DbMsr_CreateBackupResult' \
+                            if bak.type == 'mysqldump' else \
+                            'DbMsr_CreateDataBundleResult'
+                __node__.messaging.send(msg_name, {
+                    'db_type': __mysql__.behavior,
+                    'status': 'error',
+                    'last_error': str(e)
+                })
+                raise c, e, t
+
+        def cancel_backup(op):
+            bak = op.data.get('bak')
+            if bak:
+                bak.kill()
+
+        return self._op_api.run('mysql.create-backup', 
+                func=do_backup, cancel_func=cancel_backup, 
+                func_kwds={'backup': backup},
+                async=async, exclusive=True)
+

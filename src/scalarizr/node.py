@@ -30,6 +30,9 @@ class Store(object):
 
 
 class Compound(dict):
+    '''
+    pyline: disable=E1101
+    '''
     def __init__(self, patterns=None):
         patterns = patterns or {}
         for pattern, store in patterns.items():
@@ -284,11 +287,12 @@ class ScalrVersion(Store):
     pass
 
 
-__node__ = {
+node = {
         'server_id,role_id,farm_id,farm_role_id,env_id,role_name,server_index':
-                                Ini(private_dir + '/config.ini', 'general'),
-        'message_format': Ini(private_dir + '/config.ini', 'messaging_p2p'),
-        'platform': Ini(public_dir + '/config.ini', 'general'),
+                                Ini(os.path.join(private_dir, 'config.ini'), 'general'),
+        'message_format': Ini(os.path.join(private_dir, 'config.ini'), 'messaging_p2p'),
+        'platform_name': Ini(os.path.join(public_dir, 'config.ini'), 'general'),
+        'platform': Attr('scalarizr.bus', 'bus.platform'),
         'behavior': IniOption(
                                                 [public_dir + '/config.ini', private_dir + '/config.ini'], 
                                                 'general', 'behaviour',
@@ -302,9 +306,9 @@ __node__ = {
         'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
 }
 
-for behavior in ('mysql', 'mysql2', 'percona'):
-    section = 'mysql2' if behavior == 'percona' else behavior
-    __node__[behavior] = Compound({
+for behavior in ('mysql', 'mysql2', 'percona', 'mariadb'):
+    section = 'mysql2' if behavior in ('percona', 'mariadb') else behavior
+    node[behavior] = Compound({
             'volume,volume_config': 
                             Json('%s/storage/%s.json' % (private_dir, 'mysql'), 
                                     'scalarizr.storage2.volume'),
@@ -314,7 +318,7 @@ for behavior in ('mysql', 'mysql2', 'percona'):
                             Ini('%s/%s.ini' % (public_dir, behavior), section)
     })
 
-__node__['redis'] = Compound({
+node['redis'] = Compound({
         'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'redis'),
                  'scalarizr.storage2.volume'),
         'replication_master,persistence_type,use_password,master_password': Ini(
@@ -322,7 +326,7 @@ __node__['redis'] = Compound({
 })
 
 
-__node__['rabbitmq'] = Compound({
+node['rabbitmq'] = Compound({
         'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'rabbitmq'),
                         'scalarizr.storage2.volume'),
         'password,server_index,node_type,cookie,hostname': Ini(
@@ -330,14 +334,14 @@ __node__['rabbitmq'] = Compound({
 
 })
 
-__node__['postgresql'] = Compound({
+node['postgresql'] = Compound({
 'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'postgresql'),
         'scalarizr.storage2.volume'),
 'replication_master,pg_version,scalr_password,root_password, root_user': Ini(
         '%s/%s.ini' % (private_dir, 'postgresql'), 'postgresql')
 })
 
-__node__['mongodb'] = Compound({
+node['mongodb'] = Compound({
         'volume,volume_config':
                                 Json('%s/storage/%s.json' % (private_dir, 'mongodb'), 'scalarizr.storage2.volume'),
         'snapshot,shanpshot_config':
@@ -346,24 +350,24 @@ __node__['mongodb'] = Compound({
                                 Ini('%s/%s.ini' % (private_dir, 'mongodb'), 'mongodb')
 })
 
-__node__['nginx'] = Compound({
+node['nginx'] = Compound({
     'binary_path,app_include_path,https_include_path,app_port,upstream_app_role':
         Ini('%s/%s.ini' % (public_dir, 'www'), 'www')
 })
 
-__node__['apache'] = Compound({
+node['apache'] = Compound({
     'vhosts_path,apache_conf_path':
         Ini('%s/%s.ini' % (public_dir, 'app'), 'app')
 })
 
-__node__['cloudfoundry'] = Compound({
+node['cloudfoundry'] = Compound({
         'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'cloudfoundry'), 'scalarizr.storage2.volume')
         })
 
-__node__['tomcat'] = {}
+node['tomcat'] = {}
 
 
-__node__['ec2'] = Compound({
+node['ec2'] = Compound({
         't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
         'hostname_as_pubdns': 
                                 Ini('%s/%s.ini' % (public_dir, 'ec2'), 'ec2'),
@@ -377,24 +381,24 @@ __node__['ec2'] = Compound({
         'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
         'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
 })
-__node__['cloudstack'] = Compound({
+node['cloudstack'] = Compound({
         'new_conn': Call('scalarizr.bus', 'bus.platform.new_cloudstack_conn'),
         'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
         'zone_id': Call('scalarizr.bus', 'bus.platform.get_avail_zone_id'),
         'zone_name': Call('scalarizr.bus', 'bus.platform.get_avail_zone')
 })
-__node__['openstack'] = Compound({
+node['openstack'] = Compound({
         'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
         'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
         'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
         'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
-__node__['rackspace'] = Compound({
+node['rackspace'] = Compound({
         'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
         'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
 
-__node__['gce'] = Compound({
+node['gce'] = Compound({
         'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
         'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),
         'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id'),
@@ -402,15 +406,15 @@ __node__['gce'] = Compound({
         'zone': Call('scalarizr.bus', 'bus.platform.get_zone')
 })
 
-__node__['scalr'] = Compound({
+node['scalr'] = Compound({
         'version': File(private_dir + '/.scalr-version'),
         'id': Ini(private_dir + '/config.ini', 'general', {'id': 'scalr_id'})
 })
 
-__node__['messaging'] = Compound({
+node['messaging'] = Compound({
     'send': Attr('scalarizr.bus', 'bus.messaging_service.send')
 })
-__node__ = Compound(__node__)
+__node__ = Compound(node)
 
 
 

@@ -124,6 +124,7 @@ class RequestHandler(object):
                             'data': e.data}
         except:
             E, e = sys.exc_info()[:2]
+            code = E.__name__
             if E in (KeyError, IndexError):
                 # file/line/def where exception occurred formatted like exception stacktrace 
                 where = traceback.format_list([traceback.extract_tb(sys.exc_info()[2])[-1]])[0].strip()  
