@@ -72,10 +72,12 @@ class RaidVolume(base.Volume):
             mdadm_conf_path = '/etc/mdadm.conf' if os_detect.rhel_family else '/etc/mdadm/mdadm.conf'
             with open(mdadm_conf_path) as f:
                 mdadm_conf = f.read()
-
-            if not 'AUTO -all' in mdadm_conf:
-                with open(mdadm_conf_path, 'w') as f:
-                    f.write(mdadm_conf + '\n' + 'AUTO -all')
+            # TODO: augeas candidate
+            with open(mdadm_conf_path, 'a') as f:
+                if not 'AUTO -all' in mdadm_conf and mdadm.version() >= (2, 6, 8):
+                    f.write('\nAUTO -all')
+                if not 'DEVICE /dev/null' in mdadm_conf:
+                    f.write('\nDEVICE /dev/null')
         except:
             LOG.warning('Autoassembly was not disabled.', exc_info=sys.exc_info())
 
@@ -128,7 +130,7 @@ class RaidVolume(base.Volume):
         self._check_attr('vg')
         self._check_attr('disks')
 
-        assert int(self.level) in (0,1,5,10), 'Unknown raid level: %s' % self.level
+        assert int(self.level) in (0, 1, 5, 10), 'Unknown raid level: %s' % self.level
 
         # Making sure autoassembly is disabled before attaching disks
         self._disable_autoassembly()

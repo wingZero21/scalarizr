@@ -70,6 +70,10 @@ _rebuild_re             = re.compile('Rebuild\s+Status\s+:\s+(?P<percent>\d+)%')
 _level_re                       = re.compile('Raid Level : (?P<level>.+)')
 
 
+def version():
+    out = mdadm('misc', None, '--version')[0].strip()
+    return tuple(map(int, out.split('-')[1].strip()[1:].split('.')))
+
 def detail(md_device):
     """
     Example:
