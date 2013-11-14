@@ -144,7 +144,7 @@ class MySQLAPI(object):
                     data = {
                         'restore': dict(restore)
                     }
-                    if backup.type == 'snap_mysql':
+                    if backup["type"] == 'snap_mysql':
                         data.update({
                             'snapshot_config': dict(restore.snapshot),
                             'log_file': restore.log_file,
