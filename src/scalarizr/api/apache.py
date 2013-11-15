@@ -993,7 +993,7 @@ class DebianBasedModSSL(ModSSL):
             LOG.info("mod_ssl enabled.")
 
     def _enable_default_ssl_virtual_host(self):
-        if not os.path.exists(__apache__["ssl_load_deb"]):
+        if os.path.exists(__apache__["ssl_load_deb"]):
             system2((__apache__["a2ensite_path"], "default-ssl"))
             LOG.info("Default SSL virtualhost enabled.")
 
