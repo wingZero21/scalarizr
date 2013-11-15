@@ -1,1 +1,0 @@
-# get meta-data from different cloud platforms

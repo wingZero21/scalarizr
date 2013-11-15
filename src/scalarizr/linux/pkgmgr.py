@@ -1,6 +1,3 @@
-from __future__ import with_statement
-from scalarizr.linux import LinuxError
-
 '''
 Created on Aug 28, 2012
 
@@ -14,12 +11,65 @@ import os
 import string
 import time
 import urllib
+import subprocess
+import shutil
+import tempfile
 
-from scalarizr import linux
+from scalarizr import linux, util
 from scalarizr.linux import coreutils
 from urlparse import urlparse
 
 LOG = logging.getLogger(__name__)
+
+
+class Repository(object):
+    filename_tpl = None
+    config_tpl = '{url}'
+
+    def __init__(self, name, url):
+        kwds = {
+            'name': name,
+            'arch': linux.os['arch']
+        }
+        self.name = name
+        self.url = url.format(**kwds)
+        self.filename = self.filename_tpl.format(**kwds)
+        self.config = self.config_tpl.format(**kwds)
+
+    def ensure(self):
+        assert self.filename and self.config
+        with open(self.filename, 'w+') as fp:
+            fp.write(self.config)
+
+    def update_config_file(self, linefn):
+        tmpname = '%s.tmp' % self.filename
+        dst = open(tmpname, 'w')
+        try:
+            for line in open(self.filename, 'r'):
+                dst.write(linefn(line))
+            dst.close()
+        except:
+            os.remove(tmpname)
+        else:
+            shutil.move(tmpname, self.filename)
+        
+    def _comment(self, line):
+        return '#' + line
+    
+    def _uncomment(self, line):
+        return line[1:] if line.startswith('#') else line
+    
+    def disable(self):
+        if self.enabled():
+            self.update_config_file(self._comment)
+    
+    def enable(self):
+        if not self.enabled():
+            self.update_config_file(self._uncomment)
+
+    def enabled(self):
+        return not all(line.startswith('#') for line in open(self.filename))
+
 
 class PackageMgr(object):
 
@@ -70,7 +120,7 @@ class AptPackageMgr(PackageMgr):
                     time.sleep(10)
                     continue
                 else:
-                    raise LinuxError('Apt-get command failed. Out: %s \nErrors: %s' % (out, err))
+                    raise linux.LinuxError('Apt-get command failed. Out: %s \nErrors: %s' % (out, err))
 
             else:
                 return out, err, code
@@ -134,6 +184,9 @@ class AptPackageMgr(PackageMgr):
         names = [os.path.basename(os.path.splitext(f)[0]) for f in files]
         return names
 
+class AptRepository(Repository):
+    filename_tpl = '/etc/apt/sources.list.d/scalr-{name}.list'
+    config_tpl = '{url}'
 
 
 class RpmVersion(object):
@@ -243,7 +296,7 @@ class YumPackageMgr(PackageMgr):
 
     def localinstall(self, name):
         def do_localinstall(filename):
-             self.yum_command('localinstall --nogpgcheck %s' % filename, raise_exc=True)
+            self.yum_command('localinstall --nogpgcheck %s' % filename, raise_exc=True)
 
         if name.startswith('http://'):
             filename = os.path.join('/tmp', os.path.basename(name))
@@ -275,6 +328,15 @@ class YumPackageMgr(PackageMgr):
                 ret.append(m.group(1))
         return map(string.lower, ret)
 
+
+class YumRepository(Repository):
+    filename_tpl = '/etc/yum.repos.d/scalr-{name}.repo'
+    config_tpl = (
+        '[scalr-{name}]\n'
+        'name=scalr-{name}\n'
+        'baseurl={url}\n'
+        'enabled=1\n'
+        'gpgcheck=0\n')
 
 
 class RpmPackageMgr(PackageMgr):
@@ -317,10 +379,121 @@ class RpmPackageMgr(PackageMgr):
         pass
 
 
+if linux.os.windows_family:
+
+    class WinPackageMgr(object):
+        SOURCES_DIR = os.path.join(util.reg_value('InstallDir'), 'etc')
+
+        def __init__(self):
+            self.index = None
+        
+        def install(self, name, version=None, updatedb=False, **kwds):
+            ''' Installs a `version` of package `name` '''
+            if not self.index or updatedb:
+                self.updatedb()
+            packageurl = self.index[name]  # simplification. candidate is always the one.
+
+            tmp_dir = tempfile.mkdtemp()
+            try:
+                packagefile = os.path.join(tmp_dir, os.path.basename(packageurl))
+                LOG.info('Downloading %s', packageurl)
+                urllib.urlretrieve(packageurl, packagefile)
+
+                LOG.info('Executing installer')
+                p = subprocess.Popen('start "Installer" /wait "%s" /S' % packagefile, shell=True)
+                out, err = p.communicate()
+                LOG.debug('out: %s', out)
+                LOG.debug('err: %s', err)
+                if p.returncode:
+                    msg = 'Installation failed. <out>: %s, <err>: %s' % (out, err)
+                    raise Exception(msg)
+                LOG.info('Done')
+            finally:
+                shutil.rmtree(tmp_dir)
+        
+        def installed_version(self, name):
+            ''' Return installed package version '''
+            return '{0}-{1}'.format(util.reg_value('DisplayVersion'), util.reg_value('DisplayRelease'))
+
+        
+        def _join_packages_str(self, sep, name, version, *args):
+            packages = [(name, version)]
+            if args:
+                for i in xrange(0, len(args), 2):
+                    packages.append(args[i:i+2])
+            format = '%s' + sep +'%s'
+            return ' '.join(format % p for p in packages)       
+        
+        def updatedb(self):
+            tmp_dir = tempfile.mkdtemp()
+
+            self.index = {}
+            try:        
+                LOG.debug('Scan package sources dir')
+                for sourcesfile in glob.glob(os.path.join(self.SOURCES_DIR, '*.winrepo')):
+                    LOG.debug('Process sources file %s', sourcesfile)
+                    urls = open(sourcesfile).read().splitlines()
+                    urls = map(string.strip, urls)
+                    urls = filter(lambda u: u and not u.startswith('#'), urls)
+                    for url in urls:
+                        dst = os.path.join(tmp_dir, url.replace('/', '_'))
+                        src = url + '/index'
+                        LOG.debug('Fetching index file %s', src)
+                        urllib.urlretrieve(src, dst)
+
+                        with open(dst) as fp:
+                            for line in fp:
+                                colums = map(string.strip, line.split(' '))
+                                colums = filter(None, colums)
+                                package = colums[0]
+                                packagefile = colums[1]
+                                self.index[package] = url + '/' + packagefile
+            finally:
+                shutil.rmtree(tmp_dir)
+
+        def info(self, name):
+            if not self.index:
+                self.updatedb()
+
+            try:
+                candidate = os.path.basename(self.index[name])
+                candidate = candidate.split('_', 1)[1].rsplit('.', 2)[0]
+            except KeyError:
+                candidate = None
+            try:
+                installed = self.installed_version(name)
+            except:
+                installed = None
+
+            LOG.debug('Package %s info. installed: %s, candidate: %s', name, installed, candidate)
+            return {
+                'installed': installed,
+                'candidate': candidate
+            }
+
+
+    class WinRepository(Repository):
+        filename_tpl = os.path.join(WinPackageMgr.SOURCES_DIR, 'scalr-{name}.winrepo')
+        config_tpl = '{url}'
+
+
 def package_mgr():
-    if linux.os['family'] in ('RedHat', 'Oracle'):
+    if linux.os['family'] == 'Windows':
+        return WinPackageMgr()
+    elif linux.os['family'] in ('RedHat', 'Oracle'):
         return YumPackageMgr()
     return AptPackageMgr()
+
+
+def repository(*args, **kwds):
+    cls = None
+    if linux.os['family'] == 'Windows':
+        cls = WinRepository
+    elif linux.os['family'] in ('RedHat', 'Oracle'):
+        cls = YumRepository
+    else:
+        cls = AptRepository
+    return cls(*args, **kwds)
 
 
 EPEL_RPM_URL = 'http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-7.noarch.rpm'
@@ -355,7 +528,7 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 
     def _vars(s):
         vars_ = re.findall('\$\{.+?\}', s)
-        return map((lambda(name): name[2:-1]), vars_) #2 is len of '${'
+        return map((lambda name: name[2:-1]), vars_) #2 is len of '${'
 
     def _substitude(s):
         for var in _vars(s):
@@ -375,11 +548,11 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 
 
 def updatedb():
-	'''
-	Sync packages databases
-	'''
-	mgr = package_mgr()
-	mgr.updatedb()
+    '''
+    Sync packages databases
+    '''
+    mgr = package_mgr()
+    mgr.updatedb()
 
 
 def installed(name, version=None, updatedb=False):

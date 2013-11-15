@@ -8,6 +8,7 @@ import urlparse
 import re
 import os
 import glob
+import time
 
 
 LOG = logging.getLogger(__name__)
@@ -144,13 +145,17 @@ class GceMeta(UrlMeta):
     user_data_rel = 'attributes/scalr'
 
 
-def meta():
+def meta(timeout=None):
     pvds = (Ec2Meta(), OpenStackMeta(), GceMeta(), 
                 FileMeta('/etc/.scalr-user-data'), 
                 FileMeta('/etc/scalr/private.d/.user-data'))
-    for obj in pvds:
-        if obj.supported():
-            return obj
+    for _ in range(0, timeout or 1):
+        for obj in pvds:
+            if obj.supported():
+                return obj
+        if timeout:
+            time.sleep(1)
 
     msg = "meta-data provider not found. We've those ones: {0}".format(pvds)
     raise NoProviderError(msg)
+

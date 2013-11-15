@@ -131,10 +131,11 @@ class WsgiApplication(Security):
 
 class HttpServiceProxy(rpc.ServiceProxy, Security):
 
-    def __init__(self, endpoint, crypto_key_path):
+    def __init__(self, endpoint, crypto_key_path, server_id=None):
         Security.__init__(self, crypto_key_path)
         rpc.ServiceProxy.__init__(self)
         self.endpoint = endpoint
+        self.server_id = server_id
 
 
     def exchange(self, jsonrpc_req):
@@ -145,6 +146,9 @@ class HttpServiceProxy(rpc.ServiceProxy, Security):
                 'Date': date,
                 'X-Signature': sig
         }
+        if self.server_id:
+            headers['X-Server-Id'] = self.server_id
+
         namespace = self.local.method[0] if len(self.local.method) > 1 else ''
 
         http_req = urllib2.Request(os.path.join(self.endpoint, namespace), jsonrpc_req, headers)
