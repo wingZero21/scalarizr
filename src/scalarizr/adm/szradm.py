@@ -40,7 +40,6 @@ def find_modules(directory):
             yield module
 
 
-
 class Command(object):
     """Class that represents scalarizr command"""
 
@@ -49,6 +48,9 @@ class Command(object):
 
     def __init__(self):
         super(Command, self).__init__()
+        for attr_name in dir(self):
+            attr = getattr(self, attr_name)
+            if inspect.isclass(attr) and 
 
     def __call__(self):
         raise NotImplementedError('You need to define __call__ method')
@@ -89,7 +91,10 @@ class Command(object):
     @classmethod
     def command(cls, function):
         """Decorator that makes new Command class inheritor from function"""
-        call = lambda self, *args, **kwds: function(*args, **kwds)
+        if inspect.ismethod(function):
+            call = function
+        else:
+            call = lambda self, *args, **kwds: function(*args, **kwds)
         attrs = {'__call__': call, '__doc__': function.__doc__}
         command_class = type(function.__name__, (cls,), attrs)
         return command_class
