@@ -223,10 +223,12 @@ class RedisInstances(object):
     persistence_type = None
 
     def __init__(self, master=False, persistence_type='snapshotting', use_passwords=True):
+        LOG.debug("RedisInstances object initialized with persistence type %s" % persistence_type)
         self.master = master
         self.persistence_type = persistence_type
         self.use_passwords = use_passwords
         self.instances = []
+
 
 
     @property
@@ -369,6 +371,7 @@ class Redis(BaseService):
     password = None
 
     def __init__(self, master=False, persistence_type='snapshotting', port=__redis__['defaults']['port'], password=None):
+        LOG.debug("Redis object initialized with persistence type %s" % persistence_type)
         self._objects = {}
         self.is_replication_master = master
         self.persistence_type = persistence_type

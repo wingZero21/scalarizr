@@ -105,8 +105,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         if not value:
             value = 'snapshotting'
             __redis__[OPT_PERSISTENCE_TYPE] = value
-        else:
-            LOG.debug('Got %s : %s' % (OPT_PERSISTENCE_TYPE, value))
+        LOG.debug('Got %s : %s' % (OPT_PERSISTENCE_TYPE, value))
 
         return value
 
