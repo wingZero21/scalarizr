@@ -110,9 +110,7 @@ class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 
     def on_before_host_up(self, message):
         # Service configured
-        with bus.initialization_op as op:
-            with op.phase(self._phase_memcached):
-                bus.fire('service_configured', service_name=SERVICE_NAME)
+        bus.fire('service_configured', service_name=SERVICE_NAME)
 
     def on_host_init_response(self, message):
         if hasattr(message, BEHAVIOUR):
