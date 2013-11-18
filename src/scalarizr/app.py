@@ -334,11 +334,7 @@ def _init_platform():
                     sys.exc_info()[1], exc_info=sys.exc_info())
 
     if httplib2_loaded:
-        ca_url = 'http://curl.haxx.se/ca/cacert.pem'
-        ca_path = bus.share_path + '/cacert.pem'
-        logger.debug('Fetch CA bundle from %s to %s', ca_url, ca_path)
-        urllib.urlretrieve(ca_url, ca_path)
-        httplib2.CA_CERTS = ca_path
+        httplib2.CA_CERTS = os.path.join(os.path.dirname(__file__), 'cacert.pem')
 
     # Initialize platform
     logger.debug("Initialize platform")
