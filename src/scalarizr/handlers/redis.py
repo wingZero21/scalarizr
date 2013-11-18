@@ -493,8 +493,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         log.info('Create storage')
 
         # Plug storage
-        if 'restore' in __redis__ and \
-                                                        __redis__['restore'].type == 'snap_redis':
+        if 'restore' in __redis__ and __redis__['restore'].type == 'snap_redis':
             __redis__['restore'].run()
         else:
             if node.__node__['platform'].name == 'idcf':
