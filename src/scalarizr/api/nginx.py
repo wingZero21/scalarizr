@@ -976,7 +976,8 @@ class NginxAPI(object):
                                    locations_and_backends,
                                    port=port,
                                    http=http,
-                                   grouped_templates=grouped_templates)
+                                   grouped_templates=grouped_templates,
+                                   redirector=False)
 
         if port:
             _open_port(port)
