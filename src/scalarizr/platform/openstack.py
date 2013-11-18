@@ -34,6 +34,12 @@ class OpenstackServiceWrapper(object):
         self.tenant = tenant
         self.auth_url = auth_url
         self.region_name = region_name
+        if os.environ.get('OS_AUTH_SYSTEM'):
+            try:
+                import novaclient.auth_plugin
+                self.auth_plugin = novaclient.auth_plugin.load_plugin(os.environ['OS_AUTH_SYSTEM'])
+            except ImportError:
+                self.auth_plugin = None
         self.connection = None
         self.connect = self.reconnect
 
@@ -53,11 +59,16 @@ class OpenstackServiceWrapper(object):
 class CinderWrapper(OpenstackServiceWrapper):
 
     def _make_connection(self, **kwargs):
+        kwargs = kwargs or {}
+        kwargs.update(dict(
+            auth_url=self.auth_url,
+            region_name=self.region_name          
+        ))
+        if self.auth_plugin:
+            kwargs['auth_plugin'] = self.auth_plugin
         return cinder_client.Client(self.user,
                                     self.password,
                                     self.tenant,
-                                    auth_url=self.auth_url,
-                                    region_name=self.region_name,
                                     **kwargs)
 
 
@@ -65,12 +76,17 @@ class CinderWrapper(OpenstackServiceWrapper):
 class NovaWrapper(OpenstackServiceWrapper):
 
     def _make_connection(self, service_type='compute', **kwargs):
+        kwargs = kwargs or {}
+        kwargs.update(dict(
+            auth_url=self.auth_url,
+            region_name=self.region_name,
+            service_type=service_type           
+        ))
+        if self.auth_plugin:
+            kwargs['auth_plugin'] = self.auth_plugin
         return nova_client.Client(self.user,
                                   self.password,
                                   self.tenant,
-                                  auth_url=self.auth_url,
-                                  region_name=self.region_name,
-                                  service_type=service_type,
                                   **kwargs)
 
 
@@ -192,6 +208,7 @@ class OpenstackPlatform(platform.Platform):
             # to enable Rackspace specific authentification
             os.environ["CINDER_RAX_AUTH"] = "True"
             os.environ["NOVA_RAX_AUTH"] = "True"
+            os.environ["OS_AUTH_SYSTEM"] = "rackspace"
 
     def new_cinder_connection(self):
         if not self._access_data:

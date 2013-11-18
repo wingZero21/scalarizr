@@ -172,6 +172,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _assign_hostname(self):
         if not __node__.get('hostname'):
             return
+        __node__['hostname'] = __node__['hostname'].replace(' ', '')
         self._logger.debug('Setting hostname to %s', __node__['hostname'])
         linux.system('hostname ' + __node__['hostname'], shell=True)
 

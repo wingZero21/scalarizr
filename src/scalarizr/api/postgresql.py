@@ -215,10 +215,12 @@ class PostgreSQLAPI(object):
                 #sizes = [os.path.getsize(file) for file in parts]
 
                 cloud_storage_path = __node__.platform.scalrfs.backups(BEHAVIOUR)
-                LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
 
-                lt_tags = {'created_on': 'master' if int(__postgresql__[OPT_REPLICATION_MASTER]) else 'slave'}
-                trn = LargeTransfer(backup_path, cloud_storage_path, tags=lt_tags)
+                suffix = 'master' if int(__postgresql__[OPT_REPLICATION_MASTER]) else 'slave'
+                backup_tags = {'scalr-purpose': 'postgresql-%s' % suffix}
+
+                LOG.info("Uploading backup to %s with tags %s" % (cloud_storage_path, backup_tags))
+                trn = LargeTransfer(backup_path, cloud_storage_path, tags=backup_tags)
                 manifest = trn.run()
                 LOG.info("Postgresql backup uploaded to cloud storage under %s/%s",
                                 cloud_storage_path, backup_filename)
