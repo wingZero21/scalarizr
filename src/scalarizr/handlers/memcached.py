@@ -104,15 +104,9 @@ class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
         return message.name in (Messages.HOST_INIT, Messages.HOST_DOWN, Messages.UPDATE_SERVICE_CONFIGURATION) \
                         and BEHAVIOUR in behaviour
 
-    def get_initialization_phases(self, hir_message):
-        self._phase_memcached = 'Configure Memcached'
-        return {'before_host_up': [{'name': self._phase_memcached, 'steps': []}]}
-
     def on_before_host_up(self, message):
         # Service configured
-        with bus.initialization_op as op:
-            with op.phase(self._phase_memcached):
-                bus.fire('service_configured', service_name=SERVICE_NAME)
+        bus.fire('service_configured', service_name=SERVICE_NAME)
 
     def on_host_init_response(self, message):
         if hasattr(message, BEHAVIOUR):
