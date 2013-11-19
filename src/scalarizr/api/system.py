@@ -148,7 +148,9 @@ class SystemAPI(object):
         @rtype: str: Current FQDN
         '''
         assert hostname
-
+        system2(('hostname', hostname))
+        '''
+        TODO: test and correct this code 
         # changing permanent hostname
         try:
             if os.path.exists(self._HOSTNAME):
@@ -176,6 +178,7 @@ class SystemAPI(object):
                                     hosts._hosts[index]['hostname'] == old_hn:
                         hosts._hosts[index]['hostname'] = hostname
                 hosts._flush()
+        '''
         return hostname
 
 
