@@ -21,7 +21,7 @@ from scalarizr.config import BuiltinBehaviours
 __rabbitmq__ = __node__['rabbitmq']
 
 
-SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
+SERVICE_NAME = BuiltinBehaviours.RABBITMQ
 RABBIT_CFG_PATH = '/etc/rabbitmq/rabbitmq.config'
 COOKIE_PATH = '/var/lib/rabbitmq/.erlang.cookie'
 RABBITMQ_ENV_CNF_PATH = '/etc/rabbitmq/rabbitmq-env.conf'

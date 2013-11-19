@@ -25,7 +25,7 @@ import scalarizr.services.rabbitmq as rabbitmq_svc
 __rabbitmq__ = __node__['rabbitmq']
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.RABBITMQ
 OPT_VOLUME_CNF = 'volume_config'
 OPT_SNAPSHOT_CNF = 'snapshot_config'
 DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq/mnesia'
