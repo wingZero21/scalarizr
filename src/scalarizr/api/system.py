@@ -151,8 +151,9 @@ class SystemAPI(object):
 
         # changing permanent hostname
         try:
-            with open(self._HOSTNAME, 'r') as fp:
-                old_hn = fp.readline().strip()
+            if os.path.exists(self._HOSTNAME):
+                with open(self._HOSTNAME, 'r') as fp:
+                    old_hn = fp.readline().strip()
             with open(self._HOSTNAME, 'w+') as fp:
                 fp.write('%s\n' % hostname)
         except:
