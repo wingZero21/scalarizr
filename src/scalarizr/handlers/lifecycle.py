@@ -365,8 +365,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             bus.fire("host_init_response", message)
 
             hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)
-            if __node__.get('hostname'):
-                hostup_msg.body['base'] = {'hostname': __node__['hostname']}
+            hostup_msg.body['base'] = {
+                'hostname': self._system_api.get_hostname()
+            }
             bus.fire("before_host_up", hostup_msg)
             if bus.scalr_version >= (2, 2, 3):
                 self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_subhandler=True)
