@@ -1,5 +1,4 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 __author__ = 'Nick Demyanchuk'
 
@@ -73,11 +72,19 @@ class RaidVolume(base.Volume):
             with open(mdadm_conf_path) as f:
                 mdadm_conf = f.read()
             # TODO: augeas candidate
-            with open(mdadm_conf_path, 'a') as f:
-                if not 'AUTO -all' in mdadm_conf and mdadm.version() >= (2, 6, 8):
-                    f.write('\nAUTO -all')
-                if not 'DEVICE /dev/null' in mdadm_conf:
-                    f.write('\nDEVICE /dev/null')
+            with open(mdadm_conf_path, 'w') as f:
+                if mdadm.version() >= (2, 6, 8):
+                    if 'AUTO' in mdadm_conf:
+                        mdadm_conf = re.sub(re.compile('^(AUTO\s+(?!-all).*)$', re.M), '#\g<0>', mdadm_conf)
+                    if not re.search(re.compile('^AUTO\s+-all\s*$', re.M), mdadm_conf):
+                        mdadm_conf += '\nAUTO -all'
+
+                if 'DEVICE' in mdadm_conf:
+                    mdadm_conf = re.sub(re.compile('^(DEVICE\s+(?!/dev/null).*)$', re.M), '#\g<0>', mdadm_conf)
+                if not re.search(re.compile('^DEVICE\s+/dev/null\s*$', re.M), mdadm_conf):
+                    mdadm_conf += '\nDEVICE /dev/null'
+
+                f.write(mdadm_conf)
         except:
             LOG.warning('Autoassembly was not disabled.', exc_info=sys.exc_info())
 
