@@ -175,7 +175,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if not __node__.get('hostname'):
             return
         __node__['hostname'] = __node__['hostname'].replace(' ', '')
-        self._system_api.fqdn(__node__['hostname'])
+        self._system_api.set_hostname(__node__['hostname'])
 
 
     def on_start(self):
