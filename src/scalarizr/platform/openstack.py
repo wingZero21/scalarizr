@@ -34,12 +34,13 @@ class OpenstackServiceWrapper(object):
         self.tenant = tenant
         self.auth_url = auth_url
         self.region_name = region_name
+        self.auth_plugin = None
         if os.environ.get('OS_AUTH_SYSTEM'):
             try:
                 import novaclient.auth_plugin
                 self.auth_plugin = novaclient.auth_plugin.load_plugin(os.environ['OS_AUTH_SYSTEM'])
             except ImportError:
-                self.auth_plugin = None
+                pass
         self.connection = None
         self.connect = self.reconnect
 
