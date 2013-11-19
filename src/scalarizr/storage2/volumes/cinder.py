@@ -51,13 +51,13 @@ class CinderVolume(base.Volume):
     def _check_cinder_connection(self):
         if not self._cinder:
             self._cinder = __openstack__['new_cinder_connection']
-        assert self._cinder.has_connection, \
+        assert self._cinder.has_connection(), \
             self.error_messages['no_connection']
 
     def _check_nova_connection(self):
         if not self._nova:
             self._nova = __openstack__['new_nova_connection']
-        assert self._nova.has_connection, \
+        assert self._nova.has_connection(), \
             self.error_messages['no_connection']
 
     def __init__(self,
@@ -108,7 +108,7 @@ class CinderVolume(base.Volume):
         return srv_id
 
     def _ensure(self):
-        assert (self._cinder and self._cinder.has_connection) or self.id, \
+        assert (self._cinder and self._cinder.has_connection()) or self.id, \
             self.error_messages['no_id_or_conn']
 
         if self._cinder:
@@ -386,7 +386,7 @@ class CinderSnapshot(base.Snapshot):
     }
 
     def _check_cinder_connection(self):
-        assert self._cinder.has_connection, \
+        assert self._cinder and self._cinder.has_connection(), \
             self.error_messages['no_connection']
 
     def __init__(self, **kwds):

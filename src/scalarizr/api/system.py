@@ -141,43 +141,46 @@ class SystemAPI(object):
 
 
     @rpc.command_method
-    def fqdn(self, fqdn=None):
+    def set_hostname(self, hostname=None):
         '''
         Get/Update host FQDN
-        @param fqdn: Fully Qualified Domain Name to set for this host
+        @param hostname: Fully Qualified Domain Name to set for this host
         @rtype: str: Current FQDN
         '''
+        assert hostname
 
-        if fqdn:
-            # changing permanent hostname
-            try:
-                with open(self._HOSTNAME, 'r') as fp:
-                    old_hn = fp.readline().strip()
-                with open(self._HOSTNAME, 'w+') as fp:
-                    fp.write('%s\n' % fqdn)
-            except:
-                raise Exception, 'Can`t write file `%s`.' % \
-                    self._HOSTNAME, sys.exc_info()[2]
-            # changing runtime hostname
-            try:
-                system2(('hostname', fqdn))
-            except:
-                with open(self._HOSTNAME, 'w+') as fp:
-                    fp.write('%s\n' % old_hn)
-                raise Exception('Failed to change the hostname to `%s`' % fqdn)
-            # changing hostname in hosts file
-            if old_hn:
-                hosts = dns.HostsFile()
-                hosts._reload()
-                if hosts._hosts:
-                    for index in range(0, len(hosts._hosts)):
-                        if isinstance(hosts._hosts[index], dict) and \
-                                        hosts._hosts[index]['hostname'] == old_hn:
-                            hosts._hosts[index]['hostname'] = fqdn
-                    hosts._flush()
-            return fqdn
-        else:
-            return system2(('hostname', ))[0].strip()
+        # changing permanent hostname
+        try:
+            with open(self._HOSTNAME, 'r') as fp:
+                old_hn = fp.readline().strip()
+            with open(self._HOSTNAME, 'w+') as fp:
+                fp.write('%s\n' % hostname)
+        except:
+            raise Exception, 'Can`t write file `%s`.' % \
+                self._HOSTNAME, sys.exc_info()[2]
+        # changing runtime hostname
+        try:
+            system2(('hostname', hostname))
+        except:
+            with open(self._HOSTNAME, 'w+') as fp:
+                fp.write('%s\n' % old_hn)
+            raise Exception('Failed to change the hostname to `%s`' % hostname)
+        # changing hostname in hosts file
+        if old_hn:
+            hosts = dns.HostsFile()
+            hosts._reload()
+            if hosts._hosts:
+                for index in range(0, len(hosts._hosts)):
+                    if isinstance(hosts._hosts[index], dict) and \
+                                    hosts._hosts[index]['hostname'] == old_hn:
+                        hosts._hosts[index]['hostname'] = hostname
+                hosts._flush()
+        return hostname
+
+
+    @rpc.query_method
+    def get_hostname(self):
+        return system2(('hostname', ))[0].strip()
 
 
     @rpc.query_method
@@ -264,7 +267,7 @@ class SystemAPI(object):
             if rc == 0:
                 result.append((out or err).strip())
             else:
-                LOG.debug('Can`t execute `%s -V`, details: %s',\
+                LOG.debug("Can`t execute `%s -V`, details: %s",
                         pypath, err or out)
         return map(lambda x: x.lower().replace('python', '').strip(), sorted(list(set(result))))
 

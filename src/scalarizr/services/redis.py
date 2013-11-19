@@ -223,10 +223,12 @@ class RedisInstances(object):
     persistence_type = None
 
     def __init__(self, master=False, persistence_type='snapshotting', use_passwords=True):
+        LOG.debug("RedisInstances object initialized with persistence type %s" % persistence_type)
         self.master = master
         self.persistence_type = persistence_type
         self.use_passwords = use_passwords
         self.instances = []
+
 
 
     @property
@@ -369,6 +371,7 @@ class Redis(BaseService):
     password = None
 
     def __init__(self, master=False, persistence_type='snapshotting', port=__redis__['defaults']['port'], password=None):
+        LOG.debug("Redis object initialized with persistence type %s" % persistence_type)
         self._objects = {}
         self.is_replication_master = master
         self.persistence_type = persistence_type
@@ -427,6 +430,7 @@ class Redis(BaseService):
         self.redis_conf.port = self.port
         self.redis_conf.dbfilename = get_snap_db_filename(self.port)
         self.redis_conf.appendfilename = get_aof_db_filename(self.port)
+
         self.redis_conf.pidfile = get_pidfile(self.port)
         if self.persistence_type == 'snapshotting':
             self.redis_conf.appendonly = False
@@ -436,6 +440,8 @@ class Redis(BaseService):
         elif self.persistence_type == 'nopersistence':
             self.redis_conf.appendonly = False
             self.redis_conf.save = {}
+            assert not self.redis_conf.save
+        LOG.debug('Persistence type is set to %s' % self.persistence_type)
 
 
     @property
@@ -558,10 +564,13 @@ class BaseRedisConfig(BaseConfig):
         if value:
             if append:
                 self.data.add(option, str(value))
+                LOG.debug('Option "%s" added to %s with value "%s"' % (option, self.path, str(value)))
             else:
-                self.data.set(option,str(value), force=True)
+                self.data.set(option, str(value), force=True)
+                LOG.debug('Option "%s" set to "%s" in %s' % (option, str(value), self.path))
         else:
             self.data.comment(option)
+            LOG.debug('Option "%s" commented in %s' % (option, self.path))
         self._cleanup(True)
 
 
@@ -896,7 +905,7 @@ class RedisCLI(object):
     @property
     def master_link_status(self):
         info = self.info
-        if info['role']=='slave':
+        if info['role'] == 'slave':
             return info['master_link_status']
         return None
 
@@ -923,7 +932,7 @@ class RedisCLI(object):
     @property
     def master_last_io_seconds_ago(self):
         info = self.info
-        if info['role']=='slave':
+        if info['role'] == 'slave':
             return int(info['master_last_io_seconds_ago'])
         return None
 
@@ -931,7 +940,7 @@ class RedisCLI(object):
     @property
     def master_sync_in_progress(self):
         info = self.info
-        if info['role']=='slave':
+        if info['role'] == 'slave':
             return True if info['master_sync_in_progress']=='1' else False
         return False
 

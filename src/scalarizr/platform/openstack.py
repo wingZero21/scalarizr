@@ -50,7 +50,6 @@ class OpenstackServiceWrapper(object):
         self.connection = self._make_connection()
 
     #TODO: make connection check more properly
-    @property
     def has_connection(self):
         self.reconnect()
         return self.connection is not None

@@ -105,8 +105,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         if not value:
             value = 'snapshotting'
             __redis__[OPT_PERSISTENCE_TYPE] = value
-        else:
-            LOG.debug('Got %s : %s' % (OPT_PERSISTENCE_TYPE, value))
+        LOG.debug('Got %s : %s' % (OPT_PERSISTENCE_TYPE, value))
 
         return value
 
@@ -493,8 +492,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         log.info('Create storage')
 
         # Plug storage
-        if 'restore' in __redis__ and \
-                                                        __redis__['restore'].type == 'snap_redis':
+        if 'restore' in __redis__ and __redis__['restore'].type == 'snap_redis':
             __redis__['restore'].run()
         else:
             if node.__node__['platform'].name == 'idcf':
