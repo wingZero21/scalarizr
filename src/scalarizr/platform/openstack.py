@@ -66,7 +66,6 @@ class CinderWrapper(OpenstackServiceWrapper):
         ))
         if self.auth_plugin:
             kwargs['auth_plugin'] = self.auth_plugin
-        LOG.debug('CinderWrapper user: %s, pass: %s, tenant: %s, kwds: %s' % (self.user, self.password, self.tenant, kwargs))
         return cinder_client.Client(self.user,
                                     self.password,
                                     self.tenant,
@@ -85,7 +84,6 @@ class NovaWrapper(OpenstackServiceWrapper):
         ))
         if self.auth_plugin:
             kwargs['auth_plugin'] = self.auth_plugin
-        LOG.debug('NovaWrapper user: %s, pass: %s, tenant: %s, kwds: %s' % (self.user, self.password, self.tenant, kwargs))
         return nova_client.Client(self.user,
                                   self.password,
                                   self.tenant,
