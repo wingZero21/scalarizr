@@ -48,9 +48,6 @@ class Command(object):
 
     def __init__(self):
         super(Command, self).__init__()
-        for attr_name in dir(self):
-            attr = getattr(self, attr_name)
-            if inspect.isclass(attr) and 
 
     def __call__(self):
         raise NotImplementedError('You need to define __call__ method')
@@ -63,21 +60,32 @@ class Command(object):
         Searches subcommand in self.subcommands and launches it with given args.
         If no subcommand found - raises exception.
         """
-        for sub_cmd_class in self.subcommands:
-            name = Command.class_to_command_name(sub_cmd_class)
+        for sub_cmd_def in self.subcommands:
+            name = Command.class_to_command_name(sub_cmd_def)
+
             if name == subcommand:
-                sub_cmd = sub_cmd_class()
-                kwds = sub_cmd.parse_args(args)
+                sub_cmd = None
+                kwds = {}
+                if inspect.isclass(sub_cmd_def):
+                    sub_cmd = sub_cmd_def()
+                    kwds = sub_cmd.parse_args(args)
+                else:
+                    sub_cmd = sub_cmd_def
+                    kwds = self.parse_args(args, sub_cmd.__doc__)
+                    kwds['self'] = self
                 return sub_cmd(**kwds)
+
         raise BaseException('Unknown subcommand: %s' % subcommand)
 
-    def parse_args(self, args):
+    def parse_args(self, args, doc=None):
         """
         Parses list of command-line args using self.__doc__ and translates
         them to keyword dictionary which can be used to call self.
         """
-        arguments = docopt(self.__doc__, argv=args, options_first=True)
-        kwds = docopt_args_to_kwds(arguments)
+        if not doc:
+            doc = self.__doc__
+        arguments = docopt(doc, argv=args, options_first=True)
+        kwds = self.docopt_args_to_kwds(arguments)
         return kwds
 
     def docopt_args_to_kwds(self, arguments):
@@ -92,9 +100,10 @@ class Command(object):
     def command(cls, function):
         """Decorator that makes new Command class inheritor from function"""
         if inspect.ismethod(function):
-            call = function
-        else:
-            call = lambda self, *args, **kwds: function(*args, **kwds)
+            function.command = True
+            return function
+
+        call = lambda self, *args, **kwds: function(*args, **kwds)
         attrs = {'__call__': call, '__doc__': function.__doc__}
         command_class = type(function.__name__, (cls,), attrs)
         return command_class
@@ -106,7 +115,7 @@ class Command(object):
         (type or str) -> str
         """
         class_name = c
-        if type(c) == type:
+        if inspect.isclass(c) or inspect.isfunction(c):
             class_name = c.__name__
         return camel_to_underscore(class_name).replace('_', '-')
 
@@ -134,6 +143,7 @@ class Szradm(Command):
         except BaseException:
             print "Unknown command."
             print self.__doc__
+            raise
 
     def find_commands(self, directory=None):
         """
@@ -143,20 +153,21 @@ class Szradm(Command):
         if not directory:
             directory = __dir__
         modules = find_modules(directory)
-
         for module in modules:
             # 'commands' is name of attr that defines list of provided top-level szradm commands.
             # Subcommands should not be included
             if hasattr(module, 'commands'):
+                # print module
                 for cmd in module.commands:
+                    # print cmd
                     yield cmd
 
 
 def main(argv):
     arguments = docopt(Szradm.__doc__, argv=argv[1:], options_first=True)
-    szradm_kwds = docopt_args_to_kwds(arguments)
-
     szradm = Szradm()
+    szradm_kwds = szradm.docopt_args_to_kwds(arguments)
+
     return szradm(**szradm_kwds)
 
 
