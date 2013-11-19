@@ -59,7 +59,7 @@ __redis__.update({
 })
 
 
-SERVICE_NAME = CNF_SECTION = 'redis'
+SERVICE_NAME = 'redis'
 LOG = logging.getLogger(__name__)
 
 
@@ -219,17 +219,9 @@ class RedisInstances(object):
     __metaclass__ = Singleton
 
     instances = None
-    master = None
-    persistence_type = None
 
-    def __init__(self, master=False, persistence_type='snapshotting', use_passwords=True):
-        LOG.debug("RedisInstances object initialized with persistence type %s, repl_role: %s" % (
-            persistence_type, master,))
-        self.master = master
-        self.persistence_type = persistence_type
-        self.use_passwords = use_passwords
+    def __init__(self):
         self.instances = []
-
 
 
     @property
@@ -268,7 +260,7 @@ class RedisInstances(object):
     def init_processes(self, num, ports=None, passwords=None):
         ports = ports or []
         passwords = passwords or []
-        if not self.use_passwords:
+        if not __redis__[node.OPT_USE_PASSWORD]:
             # Ignoring passwords from HostInitResponse if use_password=0
             passwords = [None for password in passwords]
         if len(ports) < num:
@@ -283,7 +275,7 @@ class RedisInstances(object):
 
         if len(passwords) < len(ports):
             diff = len(ports) - len(passwords)
-            if self.use_passwords:
+            if __redis__[node.OPT_USE_PASSWORD]:
                 LOG.debug("Generating %s additional passwords for ports %s" % (diff, ports[-diff:]))
                 additional_passwords= [cryptotool.pwgen(20) for port in ports[-diff:]]
                 LOG.debug("Generated passwords: %s" % str(additional_passwords))
@@ -296,10 +288,10 @@ class RedisInstances(object):
 
         creds = dict(zip(ports, passwords))
         LOG.debug("Initializing redis processes: %s" % str(creds))
-        for port,password in creds.items():
+        for port, password in creds.items():
             if port not in self.ports:
                 create_redis_conf_copy(port)
-                redis_process = Redis(self.master, self.persistence_type, port, password)
+                redis_process = Redis(port, password)
                 self.instances.append(redis_process)
         LOG.debug('Total of redis processes: %d' % len(self.instances))
 
@@ -371,11 +363,8 @@ class Redis(BaseService):
     port = None
     password = None
 
-    def __init__(self, master=False, persistence_type='snapshotting', port=__redis__['defaults']['port'], password=None):
-        LOG.debug("Redis object initialized with persistence type %s" % persistence_type)
+    def __init__(self, port=__redis__['defaults']['port'], password=None):
         self._objects = {}
-        self.is_replication_master = master
-        self.persistence_type = persistence_type
         self.port = port
         self.password = password
 
@@ -386,7 +375,6 @@ class Redis(BaseService):
         self.redis_conf.masterauth = None
         self.redis_conf.slaveof = None
         self.service.start()
-        self.is_replication_master = True
         return self.current_password
 
 
@@ -395,7 +383,6 @@ class Redis(BaseService):
         self.init_service(mpoint)
         self.change_primary(primary_ip, primary_port)
         self.service.start()
-        self.is_replication_master = False
         return self.current_password
 
 
@@ -431,18 +418,19 @@ class Redis(BaseService):
         self.redis_conf.port = self.port
         self.redis_conf.dbfilename = get_snap_db_filename(self.port)
         self.redis_conf.appendfilename = get_aof_db_filename(self.port)
-
         self.redis_conf.pidfile = get_pidfile(self.port)
-        if self.persistence_type == 'snapshotting':
+
+        persistence_type = __redis__[node.OPT_PERSISTENCE_TYPE]
+        if persistence_type == 'snapshotting':
             self.redis_conf.appendonly = False
-        elif self.persistence_type == 'aof':
+        elif persistence_type == 'aof':
             self.redis_conf.appendonly = True
             self.redis_conf.save = {}
-        elif self.persistence_type == 'nopersistence':
+        elif persistence_type == 'nopersistence':
             self.redis_conf.appendonly = False
             self.redis_conf.save = {}
             assert not self.redis_conf.save
-        LOG.debug('Persistence type is set to %s' % self.persistence_type)
+        LOG.debug('Persistence type is set to %s' % persistence_type)
 
 
     @property

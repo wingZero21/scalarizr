@@ -1,8 +1,8 @@
-'''
+"""
 Created on Aug 1, 2012
 
-@author: dmitry
-'''
+@author: Dmytro Korsakov
+"""
 
 from __future__ import with_statement
 
@@ -21,11 +21,10 @@ from scalarizr.handlers import transfer_result_to_backup_result, DbMsrMessages
 from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.storage2.cloudfs import LargeTransfer
-from scalarizr.node import __node__
+from scalarizr import node
 
 
-BEHAVIOUR = CNF_SECTION = config.BuiltinBehaviours.REDIS
-OPT_PERSISTENCE_TYPE = 'persistence_type'
+BEHAVIOUR = config.BuiltinBehaviours.REDIS
 STORAGE_PATH = '/mnt/redisstorage'
 
 
@@ -51,7 +50,7 @@ class RedisAPI(object):
             raise AssertionError('Number of ports must be equal to number of passwords')
         if num and ports and num != len(ports):
             raise AssertionError('When ports range is passed its length must be equal to num parameter')
-        if not self.is_replication_master:
+        if not __redis__[node.OPT_REPLICATION_MASTER]:
             if not passwords or not ports:
                 raise AssertionError('ports and passwords are required to launch processes on redis slave')
         available_ports = self.available_ports
@@ -71,25 +70,21 @@ class RedisAPI(object):
 
         return self._op_api.run('Launch Redis processes', do_launch_processes, async=async)
 
-
     @rpc.command_method
     def shutdown_processes(self, ports, remove_data=False, async=False):
         def do_shutdown_processes(op):
             return self._shutdown(ports, remove_data)
         return self._op_api.run('Shutdown Redis processes', do_shutdown_processes, async=async)
 
-
     @rpc.query_method
     def list_processes(self):
         return self.get_running_processes()
-
 
     def _launch(self, ports=None, passwords=None, op=None):
         log = op.logger if op else LOG
         ports = ports or []
         passwords = passwords or []
         log.debug('Launching redis processes on ports %s with passwords %s', ports, passwords)
-        is_replication_master = self.is_replication_master
 
         primary_ip = self.get_primary_ip()
         assert primary_ip is not None
@@ -99,18 +94,18 @@ class RedisAPI(object):
 
         for port, password in zip(ports, passwords or [None for port in ports]):
             log.info('Launch Redis %s on port %s', 
-                'Master' if is_replication_master else 'Slave', port)
+                'Master' if __redis__[node.OPT_REPLICATION_MASTER] else 'Slave', port)
 
             if iptables.enabled():
                 iptables.FIREWALL.ensure({
-                        "jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port
+                    "jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port
                 })
 
             redis_service.create_redis_conf_copy(port)
-            redis_process = redis_service.Redis(is_replication_master, self.persistence_type, port, password)
+            redis_process = redis_service.Redis(port, password)
 
             if not redis_process.service.running:
-                if is_replication_master:
+                if __redis__[node.OPT_REPLICATION_MASTER]:
                     current_password = redis_process.init_master(STORAGE_PATH)
                 else:
                     current_password = redis_process.init_slave(STORAGE_PATH, primary_ip, port)
@@ -121,23 +116,21 @@ class RedisAPI(object):
             else:
                 raise BaseException('Cannot launch redis on port %s: the process is already running' % port)
 
-        return (new_ports, new_passwords)
-
+        return new_ports, new_passwords
 
     def _shutdown(self, ports, remove_data=False, op=None):
         log = op.logger if op else LOG
-        is_replication_master = self.is_replication_master
         freed_ports = []
         for port in ports:
-            log.info('Shutdown Redis %s on port %s', 
-                    'Master' if is_replication_master else 'Slave', port)
+            log.info('Shutdown Redis %s on port %s' % (
+                'Master' if __redis__[node.OPT_REPLICATION_MASTER] else 'Slave', port))
 
             instance = redis_service.Redis(port=port)
             if instance.service.running:
                 password = instance.redis_conf.requirepass
                 instance.password = password
-                log.debug('Dumping redis data on disk using password %s from config file %s', 
-                        password, instance.redis_conf.path)
+                log.debug('Dumping redis data on disk using password %s from config file %s' % (
+                    password, instance.redis_conf.path))
                 instance.redis_cli.save()
                 log.debug('Stopping the process')
                 instance.service.stop()
@@ -147,16 +140,13 @@ class RedisAPI(object):
 
         return dict(ports=freed_ports)
 
-
     @property
     def busy_ports(self):
-        redis_service.get_busy_ports()
-
+        return redis_service.get_busy_ports()
 
     @property
     def available_ports(self):
-        redis_service.get_available_ports()
-
+        return redis_service.get_available_ports()
 
     def get_running_processes(self):
         processes = {}
@@ -168,8 +158,9 @@ class RedisAPI(object):
             if port == redis_service.__redis__['defaults']['port']:
                 args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
                 out = system2(args, silent=True)[0].split('\n')
+                default_path = __redis__['defaults']['redis.conf']
                 try:
-                    p = [x for x in out if x and __redis__['redis-server'] in x and __redis__['defaults']['redis.conf'] in x]
+                    p = [x for x in out if x and __redis__['redis-server'] in x and default_path in x]
                 except PopenError:
                     p = []
                 if p:
@@ -184,42 +175,25 @@ class RedisAPI(object):
             LOG.debug('Redis config %s has password %s', conf_path, password)
         return dict(ports=ports, passwords=passwords)
 
-
-    @property
-    def is_replication_master(self):
-        value = 0
-        if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, 'replication_master'):
-            value = self._cnf.rawini.get(CNF_SECTION, 'replication_master')
-        res = True if int(value) else False
-        LOG.debug('is_replication_master: %s', res)
-        return res
-
-
     @property
     def persistence_type(self):
-        value = 'snapshotting'
-        if self._cnf.rawini.has_section(CNF_SECTION) and self._cnf.rawini.has_option(CNF_SECTION, OPT_PERSISTENCE_TYPE):
-            value = self._cnf.rawini.get(CNF_SECTION, OPT_PERSISTENCE_TYPE)
-        LOG.debug('persistence_type: %s', value)
-        return value
-
+        return __redis__[node.OPT_PERSISTENCE_TYPE]
 
     def get_primary_ip(self):
         master_host = None
         LOG.info("Requesting master server")
         while not master_host:
             try:
-                master_host = list(host
-                        for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
-                        if host.replication_master)[0]
+                master_host = list(
+                    host for host in self._queryenv.list_roles(behaviour=BEHAVIOUR)[0].hosts
+                    if host.replication_master)[0]
             except IndexError:
-                LOG.debug("QueryEnv respond with no %s master. " % BEHAVIOUR +
-                                "Waiting %d seconds before the next attempt" % 5)
+                LOG.debug("QueryEnv responded with no %s master. " % BEHAVIOUR +
+                    "Waiting %d seconds before the next attempt" % 5)
                 time.sleep(5)
         host = master_host.internal_ip or master_host.external_ip
         LOG.debug('primary IP: %s', host)
         return host
-
 
     @rpc.command_method
     def reset_password(self, port=__redis__['defaults']['port'], new_password=None):
@@ -233,23 +207,22 @@ class RedisAPI(object):
         if redis_conf.slaveof:
             redis_conf.masterauth = new_password
 
-        redis_wrapper = redis_service.Redis(port=port)
+        redis_wrapper = redis_service.Redis(port=port, password=new_password)
         redis_wrapper.service.reload()
 
         if int(port) == __redis__['defaults']['port']:
-            __redis__['master_password'] = new_password
+            __redis__[node.OPT_MASTER_PASSWORD] = new_password
 
         return new_password
-
 
     @rpc.query_method
     def replication_status(self):
         ri = redis_service.RedisInstances()
 
-        if ri.master:
+        if __redis__[node.OPT_REPLICATION_MASTER]:
             masters = {}
             for port in ri.ports:
-                masters[port] = {'status':'up'}
+                masters[port] = {'status': 'up'}
             return {'masters': masters}
 
         slaves = {}
@@ -263,7 +236,6 @@ class RedisAPI(object):
             slaves[redis_process.port] = repl_data
 
         return {'slaves': slaves}
-
 
     @rpc.command_method
     def create_databundle(self, async=True):
@@ -280,20 +252,18 @@ class RedisAPI(object):
                 restore = backup_obj.run()
                 snap = restore.snapshot
 
-
                 used_size = int(system2(('df', '-P', '--block-size=M', STORAGE_PATH))[0].split('\n')[1].split()[2][:-1])
                 bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
 
                 # Notify scalr
                 msg_data = dict(
-                        db_type         = BEHAVIOUR,
-                        used_size       = '%.3f' % (float(used_size) / 1000,),
-                        status          = 'ok'
+                    db_type=BEHAVIOUR,
+                    used_size='%.3f' % (float(used_size) / 1000,),
+                    status='ok'
                 )
                 msg_data[BEHAVIOUR] = {'snapshot_config': dict(snap)}
 
-                __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, 
-                                        msg_data)
+                node.__node__.messaging.send(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
 
                 return restore
 
@@ -301,17 +271,16 @@ class RedisAPI(object):
                 LOG.exception(e)
 
                 # Notify Scalr about error
-                __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, 
-                                        dict(db_type=BEHAVIOUR,
-                                             status='error',
-                                             last_error= str(e)))
+                node.__node__.messaging.send(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
+                    db_type=BEHAVIOUR,
+                    status='error',
+                    last_error=str(e)))
 
         return self._op_api.run('redis.create-databundle', 
                                 func=do_databundle,
                                 func_kwds={},
                                 async=async,
                                 exclusive=True)  #?
-
 
     @rpc.command_method
     def create_backup(self, async=True):
@@ -327,10 +296,10 @@ class RedisAPI(object):
                 result = transfer.run()
                 result = transfer_result_to_backup_result(result)
 
-                __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT,
-                                        dict(db_type = BEHAVIOUR,
-                                             status = 'ok',
-                                             backup_parts = result))
+                node.__node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+                    db_type=BEHAVIOUR,
+                    status='ok',
+                    backup_parts=result))
 
                 return result  #?
 
@@ -338,10 +307,10 @@ class RedisAPI(object):
                 LOG.exception(e)
 
                 # Notify Scalr about error
-                __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT,
-                                        dict(db_type = BEHAVIOUR,
-                                             status = 'error',
-                                             last_error = str(e)))
+                node.__node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+                    db_type=BEHAVIOUR,
+                    status='error',
+                    last_error=str(e)))
 
         return self._op_api.run('redis.create-backup', 
                                 func=do_backup,
