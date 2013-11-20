@@ -175,7 +175,7 @@ class Ini(Store):
             self.ini.write(fp)
 
 
-class RedisIni(Store):
+class RedisIni(Ini):
 
     def __getitem__(self, key):
         try:
@@ -347,12 +347,8 @@ for behavior in ('mysql', 'mysql2', 'percona', 'mariadb'):
 node['redis'] = Compound({
     'volume,volume_config': Json(
         '%s/storage/%s.json' % (private_dir, 'redis'), 'scalarizr.storage2.volume'),
-    'replication_master,persistence_type,use_password,master_password': Ini(
+    'replication_master,persistence_type,use_password,master_password': RedisIni(
                     '%s/%s.ini' % (private_dir, 'redis'), 'redis')
-    #'%s,%s,%s,%s' % (
-    #    OPT_REPLICATION_MASTER, OPT_PERSISTENCE_TYPE, OPT_USE_PASSWORD, OPT_MASTER_PASSWORD
-    #): RedisIni(
-    #    '%s/%s.ini' % (private_dir, 'redis'), 'redis')
 })
 
 
