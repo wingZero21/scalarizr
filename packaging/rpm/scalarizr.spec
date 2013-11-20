@@ -549,9 +549,10 @@ pub_cnf_dir='/etc/scalr/public.d'
 priv_cnf_dir='/etc/scalr/private.d'
 
 /sbin/chkconfig --add scalarizr
-/sbin/chkconfig --add scalarizr_update
+/sbin/chkconfig --add scalr-upd-client
+/sbin/chkconfig --del scalarizr_update || :
 chmod +x /etc/init.d/scalarizr
-chmod +x /etc/init.d/scalarizr_update
+chmod +x /etc/init.d/scalr-upd-client
 
 cp /usr/share/scalr/szradm.bash_completion /etc/bash_completion.d/szradm
 
@@ -582,7 +583,7 @@ szr_version_file='/tmp/.szr-version'
 if [ $1 = 0 ]; then
 	/sbin/service scalarizr stop > /dev/null 2>&1 || :
 	/sbin/chkconfig --del scalarizr
-	/sbin/chkconfig --del scalarizr_update
+	/sbin/chkconfig --del scalr-upd-client
 	grep $priv_cnf_dir /proc/mounts > /dev/null && umount $priv_cnf_dir || :
 fi
 
@@ -603,7 +604,7 @@ rm -f %{buildroot}/etc/scalr/private.d/*
 chmod 775 %{buildroot}/etc/scalr/private.d
 mkdir -p "%{buildroot}%{_initrddir}"
 cp "%{_sourcedir}/scalarizr.init" "%{buildroot}%{_initrddir}/scalarizr"
-cp "%{_sourcedir}/scalarizr_update.init" "%{buildroot}%{_initrddir}/scalarizr_update"
+cp "%{_sourcedir}/scalr-upd-client.init" "%{buildroot}%{_initrddir}/scalr-upd-client"
 
 
 %clean
@@ -614,7 +615,7 @@ rm -rf "$RPM_BUILD_ROOT"
 %defattr(-,root,root)
 /usr
 %config	           %{_initrddir}/scalarizr
-%config            %{_initrddir}/scalarizr_update
+%config            %{_initrddir}/scalr-upd-client
 %config(noreplace) %{_sysconfdir}/scalr/public.d/*
 
 
