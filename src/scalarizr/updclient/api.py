@@ -108,7 +108,8 @@ class UpdClientAPI(object):
     scalr_id = scalr_version = None
     update_info = None
 
-    server = None
+    update_server = None
+    scalarizr = None
     queryenv = None
     pkgmgr = None
     daemon = None
@@ -126,12 +127,6 @@ class UpdClientAPI(object):
         self.pkgmgr = pkgmgr.package_mgr()
         self.daemon = Daemon('scalarizr')
         self._op_api = operation.OperationAPI()
-
-
-    def scalarizr_update_allowed(self):
-        # TODO: rewrite this using single api call
-        # scalarizr.operation.has_in_progress()
-        return True
 
 
     def bootstrap(self):
@@ -162,8 +157,10 @@ class UpdClientAPI(object):
         self.queryenv = queryenv.QueryEnvService(*args, 
                         api_version=self.queryenv.get_latest_version())
 
-        self.server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
+        self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
                         server_id=self.server_id)
+
+        self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file)
 
         if not serial_matches:
             self.update(force=True, reporting=False)
@@ -233,7 +230,7 @@ class UpdClientAPI(object):
                     raise UpdateError(msg)
                         
                 if not force:
-                    if not self.scalarizr_update_allowed():
+                    if self.scalarizr.operation.has_in_progress():
                         msg = ('Update denied ({0}={1}), '
                                 'cause Scalarizr is performing log-term operation').format(
                                 self.package, self.update_info['version'])
@@ -241,7 +238,7 @@ class UpdClientAPI(object):
                 
                     if self.is_client_mode:
                         try:
-                            ok = self.server.update_allowed(**self.update_info)
+                            ok = self.update_server.update_allowed(**self.update_info)
                         except urllib2.URLError:
                             raise UpdateError('Update server is down for maintenance')
                         if not ok:
@@ -295,7 +292,7 @@ class UpdClientAPI(object):
         if not ok:
             self.update_info['error'] = str(sys.exc_info()[1])
                 
-        self.server.report(**self.update_info)   
+        self.update_server.report(**self.update_info)   
 
 
     @rpc.command_method

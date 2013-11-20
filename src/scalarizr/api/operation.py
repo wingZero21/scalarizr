@@ -43,6 +43,10 @@ class OperationAPI(object):
     def cancel(self, operation_id=None):
         self.get(operation_id).cancel()
 
+    @rpc.query_method
+    def has_in_progress(self):
+        return bool(self.find(status='in-progress'))
+
     def create(self, name, func, **kwds):
         op = Operation(name, func, **kwds)
         self._ops[op.operation_id] = op
