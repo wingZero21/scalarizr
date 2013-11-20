@@ -40,14 +40,15 @@ class ApacheHandler(Handler):
     def __init__(self):
         Handler.__init__(self)
 
-        self.api = apache.ApacheAPI()
-
-        self.preset_provider = ApachePresetProvider()
-        preset_service.services[BEHAVIOUR] = self.preset_provider
         self._initial_preset = None
         self._initial_v_hosts = []
 
         self._queryenv = bus.queryenv_service
+        self.api = apache.ApacheAPI()
+
+        self.preset_provider = ApachePresetProvider()
+        preset_service.services[BEHAVIOUR] = self.preset_provider
+
 
         bus.on(init=self.on_init)
         bus.define_events("apache_rpaf_reload")
@@ -107,11 +108,8 @@ class ApacheHandler(Handler):
     def on_start(self):
         if __node__["state"] == ScalarizrState.RUNNING:
             self._reconfigure_mod_rpaf()
+            self.api.reload_service()
 
-            if self.api.service.running:
-                self.api.reload_service()
-            else:
-                self.api.start_service()
 
     def on_before_reboot_finish(self, *args, **kwargs):
         self.api.reload_virtual_hosts()

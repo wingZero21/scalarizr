@@ -477,7 +477,14 @@ class ApacheAPI(object):
 
     @rpc.command_method
     def reload_service(self, reason=None):
-        self.service.reload(reason)
+        try:
+            self.service.reload(reason)
+        except initdv2.InitdError, e:
+            if "not running" in e.message:
+                LOG.info("Apache service is not running. Doing start instead of reload.")
+                self.service.start()
+            else:
+                raise
 
     @rpc.command_method
     def configtest(self):
@@ -1093,15 +1100,6 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
                 pid_file = "/var/run/apache2.pid"
         return pid_file
 
-    def reload(self, reason=None):
-        LOG.info("Reloading apache: %s" % str(reason) if reason else '')
-        if self.running:
-            out, err, retcode = system2(__apache__["apachectl"] + " graceful", shell=True)
-            if retcode > 0:
-                raise initdv2.InitdError("Cannot reload apache: %s" % err)
-        else:
-            raise InitdError("Service '%s' is not running" % self.name, InitdError.NOT_RUNNING)
-
     def status(self):
         status = initdv2.ParametrizedInitScript.status(self)
         # If "running" and socks were passed
@@ -1143,11 +1141,10 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
             initdv2.ParametrizedInitScript.stop(self)
 
     def restart(self, reason=None):
-        LOG.info("Restarting apache: %s" % str(reason) if reason else '')
-
         if not self._main_process_started():
             self.start()
         else:
+            LOG.info("Restarting apache: %s" % str(reason) if reason else '')
             initdv2.ParametrizedInitScript.restart(self)
         if self.pid_file:
             try:
@@ -1159,6 +1156,15 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
             except:
                 raise initdv2.InitdError("Cannot start Apache: pid file %s hasn`t been created" % self.pid_file)
         time.sleep(0.5)
+
+    def reload(self, reason=None):
+        if self.running:
+            LOG.info("Reloading apache: %s" % str(reason) if reason else '')
+            out, err, retcode = system2(__apache__["apachectl"] + " graceful", shell=True)
+            if retcode > 0:
+                raise initdv2.InitdError("Cannot reload apache: %s" % err)
+        else:
+            raise InitdError("Service '%s' is not running" % self.name, InitdError.NOT_RUNNING)
 
     @staticmethod
     def _main_process_started():
