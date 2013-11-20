@@ -384,7 +384,7 @@ class Script(object):
             command = ['cmd.exe', '/C', self.exec_path]
         else:
             command = []
-            if self.run_as:
+            if self.run_as and self.run_as is not 'root':
                 command = ['sudo', '-u', self.run_as]
             command += [self.exec_path]
 
