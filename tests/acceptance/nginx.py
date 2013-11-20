@@ -8,6 +8,7 @@ from threading import Thread
 from mock import patch
 import os
 from shutil import copyfile
+from scalarizr.util import initdv2
 
 
 from lettuce import step
@@ -150,7 +151,6 @@ def unpatch_nginx_conf(feature):
 
 @before.each_feature
 def patch_node(feature):
-    open('/etc/nginx/tetetetets.include', 'w').close()
     patcher = patch.object(nginx, 
                            '__node__',
                            new={'nginx': {'binary_path': '/usr/sbin/nginx',
@@ -226,6 +226,17 @@ def given_i_have_a_server(step):
 
 @step(u'When I add proxy')
 def when_i_add_proxy(step):
+    templates = [{'content': '''server {
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+client_max_body_size 10m;
+client_body_buffer_size 128k;
+proxy_buffering on;
+proxy_connect_timeout 15;
+proxy_intercept_errors on;
+}''',
+                  'server': True}]
     world.api.make_proxy(hostname='uty.com',
                          backends=world.destinations,
                          port=world.port,
@@ -233,6 +244,7 @@ def when_i_add_proxy(step):
                          ssl=world.ssl,
                          ssl_port=world.ssl_port,
                          ssl_certificate_id=world.ssl_cert_id,
+                         templates=templates,
                          backend_port=world.backend_port,
                          backend_ip_hash=world.backend_ip_hash,
                          backend_max_fails=world.backend_max_fails,
@@ -626,10 +638,76 @@ def and_i_expect_sb_and_rb_servers_are_backup_in_backend(step):
 def and_i_expect_sd_and_rd_servers_are_down_in_backend(step):
     # as previous steps checks that serponses list don't have responses from
     # down destinations, we simply pass this step
-
     clear_nginx_includes()
     create_api()
     
 
+###############################################################################
+# Scenario 10
 
 
+@step(u'Given I have proxy to server')
+def given_i_have_proxy_to_server(step):
+    given_i_have_a_server(step)
+    when_i_add_proxy(step)
+
+
+@step(u'When I reconfigure proxy to another server')
+def when_i_reconfigure_proxy_to_another_server(step):
+    world.expected_response2 = 'hi there'
+    world.server2 = Server(8001, world.expected_response2)
+    world.server2.serve_forever()
+    world.destinations = [{'host': 'localhost', 'port': '8001'}]
+
+    proxies = [dict(hostname='uty.com',
+                         backends=world.destinations,
+                         port=world.port)]
+    world.api.reconfigure(proxies)
+    time.sleep(1)
+
+
+@step(u'Then I expect proxying to another server')
+def then_i_expect_proxying_to_another_server(step):
+    response = get_responses(1)[0]
+
+    clear_nginx_includes()
+    create_api()
+
+    assert response == world.expected_response2, response
+
+
+###############################################################################
+# Scenario 11
+
+
+@step(u'When I reconfigure proxy with bad configuration')
+def when_i_reconfigure_proxy_with_bad_configuration(step):
+    world.expected_response2 = 'hi there'
+    world.server = Server(8001, world.expected_response2)
+    world.server.serve_forever()
+    world.destinations = [{'host': 'localhost', 'port': '::::'}]
+
+    bad_proxies = [dict(hostname='uty.com',
+                         backends=world.destinations,
+                         port=world.port)]
+    try:
+        world.api.reconfigure(bad_proxies)
+    except initdv2.InitdError, e:
+        world.exception_thrown = True
+    else:
+        world.exception_thrown = False
+
+
+@step(u'Then I expect exception to be thrown')
+def then_i_expect_exception_to_be_thrown(step):
+    assert world.exception_thrown, 'No exception has been thrown'
+
+
+@step(u'And proxy should remain unchanged')
+def and_proxy_should_remain_unchanged(step):
+    response = get_responses(1)[0]
+
+    clear_nginx_includes()
+    create_api()
+
+    assert response == world.expected_response, response

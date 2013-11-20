@@ -12,6 +12,7 @@ import logging
 
 from scalarizr import handlers
 from scalarizr.api import service as preset_service
+from scalarizr.api import redis as redis_api
 
 from scalarizr import config, storage2
 from scalarizr.node import __node__
@@ -28,19 +29,19 @@ from scalarizr.handlers import build_tags
 from scalarizr import node
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
+BEHAVIOUR = SERVICE_NAME = CNF_SECTION = redis_api.BEHAVIOUR
 
 __redis__ = redis.__redis__
 
-STORAGE_PATH                            = '/mnt/redisstorage'
+STORAGE_PATH                            = redis_api.STORAGE_PATH
 STORAGE_VOLUME_CNF                      = 'redis.json'
-STORAGE_SNAPSHOT_CNF            = 'redis-snap.json'
+STORAGE_SNAPSHOT_CNF                    = 'redis-snap.json'
 
-OPT_PERSISTENCE_TYPE            = 'persistence_type'
+OPT_PERSISTENCE_TYPE                    = redis_api.OPT_PERSISTENCE_TYPE
 OPT_MASTER_PASSWORD                     = "master_password"
 OPT_VOLUME_CNF                          = 'volume_config'
 OPT_SNAPSHOT_CNF                        = 'snapshot_config'
-OPT_USE_PASSWORD            = 'use_password'
+OPT_USE_PASSWORD                        = 'use_password'
 
 REDIS_CNF_PATH                          = 'cnf_path'
 UBUNTU_CONFIG_PATH                      = '/etc/redis/redis.conf'
@@ -138,6 +139,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def __init__(self):
+        self._redis_api = redis_api.RedisAPI()
         self.preset_provider = redis.RedisPresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
 
@@ -379,32 +381,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def on_DbMsr_CreateDataBundle(self, message):
-        try:
-            bus.fire('before_%s_data_bundle' % BEHAVIOUR)
-            # Creating snapshot
-            snap = self._create_snapshot()
-            used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-            bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
-
-            # Notify scalr
-            msg_data = dict(
-                    db_type         = BEHAVIOUR,
-                    used_size       = '%.3f' % (float(used_size) / 1000,),
-                    status          = 'ok'
-            )
-            msg_data[BEHAVIOUR] = {'snapshot_config': dict(snap)}
-
-            self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
-
-        except (Exception, BaseException), e:
-            LOG.exception(e)
-
-            # Notify Scalr about error
-            self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
-                    db_type         = BEHAVIOUR,
-                    status          ='error',
-                    last_error      = str(e)
-            ))
+        self._redis_api.create_databundle()
 
 
     def on_DbMsr_PromoteToMaster(self, message):
@@ -501,34 +478,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def on_DbMsr_CreateBackup(self, message):
-        try:
-            # Flush redis data on disk before creating backup
-            LOG.info("Dumping Redis data on disk")
-            self.redis_instances.save_all()
-            dbs = [r.db_path for r in self.redis_instances]
-
-            cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
-            LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-            transfer = LargeTransfer(dbs, cloud_storage_path)
-            result = transfer.run()
-            result = handlers.transfer_result_to_backup_result(result)
-
-            # Notify Scalr
-            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                    db_type = BEHAVIOUR,
-                    status = 'ok',
-                    backup_parts = result
-            ))
-
-        except (Exception, BaseException), e:
-            LOG.exception(e)
-
-            # Notify Scalr about error
-            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                    db_type = BEHAVIOUR,
-                    status = 'error',
-                    last_error = str(e)
-            ))
+        self._redis_api.create_backup()
 
 
     def _init_master(self, message):
@@ -547,7 +497,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                                                         __redis__['restore'].type == 'snap_redis':
             __redis__['restore'].run()
         else:
-            if node.__node__['platform'] == 'idcf':
+            if node.__node__['platform'].name == 'idcf':
                 if __redis__['volume'].id:
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __redis__['volume'].snap = __redis__['volume'].snapshot()

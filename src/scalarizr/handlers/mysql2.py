@@ -31,6 +31,8 @@ from scalarizr.services import backup
 from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
 from scalarizr.api import service as preset_service
+from scalarizr.api import mysql as mysql_api
+from scalarizr.api import operation as operation_api
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
@@ -259,8 +261,10 @@ class MysqlHandler(DBMSRHandler):
                 'slave_promote_to_master'
         )
 
-        self._current_data_bundle = None
-        self._current_backup = None
+        self._mysql_api = mysql_api.MySQLAPI()
+        self._op_api = operation_api.OperationAPI()
+        self._backup_id = None
+        self._data_bundle_id = None
         self.on_reload()
 
 
@@ -472,119 +476,27 @@ class MysqlHandler(DBMSRHandler):
 
     def on_DbMsr_CreateBackup(self, message):
         LOG.debug("on_DbMsr_CreateBackup")
-
-        def do_backup():
-            try:
-                cloud_storage_path = self._platform.scalrfs.backups('mysql')
-                #? compressor?
-                bak = mysql2_svc.MySQLDumpBackup(cloudfs_dir=cloud_storage_path)
-
-                self._current_backup = bak
-                try:
-                    result = bak.run()
-                finally:
-                    self._current_backup = None
-
-                # Notify Scalr
-                self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                        db_type = __mysql__['behavior'],
-                        status = 'ok',
-                        backup_parts = result
-                ))
-
-            except (Exception, BaseException), e:
-                LOG.exception(e)
-
-                # Notify Scalr about error
-                self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                        db_type = __mysql__['behavior'],
-                        status = 'error',
-                        last_error = str(e)
-                ))
-
-        LOG.debug("Starting backup_thread")
-        threading.Thread(target=do_backup, name="backup_thread").start()
+        self._backup_id = self._mysql_api.create_backup(
+                backup={'type': 'mysqldump'}, 
+                async=True)
 
 
     def on_DbMsr_CancelBackup(self, message):
         LOG.debug("on_DbMsr_CancelBackup")
-        bak = self._current_backup
-        if bak:
-            bak.kill()
-        else:
-            LOG.debug("No backup to cancel")
+        self._op_api.cancel(self._backup_id)
 
 
     def on_DbMsr_CreateDataBundle(self, message):
         LOG.debug("on_DbMsr_CreateDataBundle")
-
-        def do_backup():
-            try:
-                bus.fire('before_mysql_data_bundle')
-
-                backup_info = message.body.get(__mysql__['behavior'], {})
-
-                compat_prior_backup_restore = 'backup' not in backup_info
-                if compat_prior_backup_restore:
-                    bak = backup.backup(
-                                    type='snap_mysql',
-                                    volume=__mysql__['volume'],
-                                    description=self._data_bundle_description(),
-                                    tags=self.resource_tags())
-                else:
-                    bak = backup.backup(backup_info['backup'])
-
-                self._current_data_bundle = bak
-                try:
-                    restore = bak.run()
-                finally:
-                    self._current_data_bundle = None
-
-                if restore is None:
-                    #? op.error?
-                    #? 'canceled' msg to scalr?
-                    #WTF: Shouldn't Scalr be notified anyway?(Dima)
-                    return
-
-                # Notify scalr
-                msg_data = {
-                        'db_type': __mysql__['behavior'],
-                        'status': 'ok',
-                        __mysql__['behavior']: {}
-                }
-                if compat_prior_backup_restore:
-                    msg_data[__mysql__['behavior']].update({
-                            'snapshot_config': dict(restore.snapshot),
-                            'log_file': restore.log_file,
-                            'log_pos': restore.log_pos,
-                    })
-                else:
-                    msg_data[__mysql__['behavior']].update({
-                            'restore': dict(restore)
-                    })
-                self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
-
-            except (Exception, BaseException), e:
-                LOG.exception(e)
-
-                # Notify Scalr about error
-                self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
-                        db_type = __mysql__['behavior'],
-                        status          ='error',
-                        last_error      = str(e)
-                ))
-
-        LOG.debug("Starting backup_thread")
-        threading.Thread(target=do_backup, name="backup_thread").start()
+        backup = message.body.get(__mysql__.behavior, {}).get('backup', {})
+        self._data_bundle_id = self._mysql_api.create_backup(
+                backup=backup, 
+                async=True)
 
 
     def on_DbMsr_CancelDataBundle(self, message):
         LOG.debug("on_DbMsr_CancelDataBundle")
-        bak = self._current_data_bundle
-        if bak:
-            bak.kill()
-        else:
-            LOG.debug("No data bundle to cancel")
+        self._op_api.cancel(self._data_bundle_id)
 
 
     def on_DbMsr_PromoteToMaster(self, message):
@@ -606,7 +518,7 @@ class MysqlHandler(DBMSRHandler):
                                                     message.body.get('volume_config') and \
                                                     not mysql2.get('volume')
         new_vol = None
-        if __node__['platform'] == 'idcf':
+        if __node__['platform'].name == 'idcf':
             new_vol = None
         elif mysql2.get('volume_config'):
             new_vol = storage2.volume(mysql2.get('volume_config'))
@@ -686,7 +598,9 @@ class MysqlHandler(DBMSRHandler):
             else:
                 #self.mysql.my_cnf.read_only = False
                 self.mysql.my_cnf.delete_options(['mysqld/read_only'])
-                self.mysql.service.restart()
+                #self.mysql.service.restart()
+                self.mysql.service.stop()
+                self.mysql.service.start()
 
                 self.root_client.stop_slave()
                 self.root_client.reset_master()
@@ -779,7 +693,7 @@ class MysqlHandler(DBMSRHandler):
 
             LOG.debug("__mysql__['volume']: %s", __mysql__['volume'])
 
-            if __mysql__['volume'].type in ('eph', 'lvm') or __node__['platform'] == 'idcf':
+            if __mysql__['volume'].type in ('eph', 'lvm') or __node__['platform'].name == 'idcf':
                 if 'restore' in mysql2:
                     restore = backup.restore(**mysql2['restore'])
                 else:
@@ -799,7 +713,7 @@ class MysqlHandler(DBMSRHandler):
                                     restore.snapshot['id'], restore.log_file, restore.log_pos)
                     new_vol = restore.run()
                 else:
-                    if __node__['platform'] == 'idcf':
+                    if __node__['platform'].name == 'idcf':
                         self.mysql.service.stop('Detaching old Slave volume')
                         old_vol = dict(__mysql__['volume'])
                         old_vol = storage2.volume(old_vol)
@@ -812,7 +726,7 @@ class MysqlHandler(DBMSRHandler):
 
                 self.mysql.service.start()
 
-                if __node__['platform'] == 'idcf' and old_vol:
+                if __node__['platform'].name == 'idcf' and old_vol:
                     LOG.info('Destroying old Slave volume')
                     old_vol.destroy(remove_disks=True)
             else:
@@ -937,7 +851,7 @@ class MysqlHandler(DBMSRHandler):
                         __mysql__['restore'].type == 'snap_mysql':
             __mysql__['restore'].run()
         else:
-            if __node__['platform'] == 'idcf':
+            if __node__['platform'].name == 'idcf':
                 if __mysql__['volume'].id:
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __mysql__['volume'].snap = __mysql__['volume'].snapshot()
@@ -991,11 +905,20 @@ class MysqlHandler(DBMSRHandler):
                             restorecon = software.which('restorecon')
                             linux.system('%s -R -v %s' % (restorecon, __mysql__['storage_dir']), shell=True)
                 except:
-                   LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
+                    LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
 
             linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
-            coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+            if __mysql__['behavior'] == 'percona' and linux.os.debian_family:
+                self.mysql.service.start()
+                debian_cnf = metaconf.Configuration('mysql')
+                debian_cnf.read(__mysql__['debian.cnf'])
+                sql = ("GRANT ALL PRIVILEGES ON *.* "
+                        "TO 'debian-sys-maint'@'localhost' "
+                        "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
+                linux.system(['mysql', '-u', 'root', '-e', sql])
+                self.mysql.service.stop()
 
+            coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
         if 'restore' in __mysql__ and \
                         __mysql__['restore'].type == 'xtrabackup':
             # XXX: when restoring data bundle on ephemeral storage, data dir should by empty

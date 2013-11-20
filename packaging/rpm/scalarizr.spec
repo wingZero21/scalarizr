@@ -56,9 +56,9 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr EC2 edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-boto >= 2.6.0
+Requires:       python26-boto >= 2.13.0
 %else
-Requires:       python-boto >= 2.6.0
+Requires:       python-boto >= 2.13.0
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr

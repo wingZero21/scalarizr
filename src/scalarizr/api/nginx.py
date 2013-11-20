@@ -10,6 +10,7 @@ from hashlib import sha1
 from scalarizr import rpc
 from scalarizr.bus import bus
 from scalarizr.libs import metaconf
+import scalarizr.libs.metaconf.providers
 from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
@@ -159,6 +160,7 @@ class NginxAPI(object):
 
         if not proxies_inc_dir:
             proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
+        self.proxies_inc_dir = proxies_inc_dir
         self.proxies_inc_path = os.path.join(proxies_inc_dir, 'proxies.include')
         self._load_proxies_inc()
 
@@ -228,8 +230,10 @@ class NginxAPI(object):
     def _clear_nginx_includes(self):
         _logger.debug('Clearing app-servers.include and proxies.include. '
                       'Old configs copied to .bak files.')
-        shutil.copyfile(self.app_inc_path, self.app_inc_path + '.bak')
-        shutil.copyfile(self.proxies_inc_path, self.proxies_inc_path + '.bak')
+        if os.path.exists(self.app_inc_path):
+            shutil.copyfile(self.app_inc_path, self.app_inc_path + '.bak')
+        if os.path.exists(self.proxies_inc_path):
+            shutil.copyfile(self.proxies_inc_path, self.proxies_inc_path + '.bak')
 
         with open(self.app_inc_path, 'w') as fp:
             fp.write('')
@@ -261,7 +265,7 @@ class NginxAPI(object):
         self.service.restart()
 
     @rpc.command_method
-    def recreate_proxying(self, proxy_list):
+    def recreate_proxying(self, proxy_list, reload_service=True):
         if not proxy_list:
             proxy_list = []
 
@@ -269,12 +273,75 @@ class NginxAPI(object):
         self._clear_nginx_includes()
         self.backend_table = {}
 
-        for proxy_parms in proxy_list:
-            if 'hostname' in proxy_parms:
-                proxy_parms['name'] = proxy_parms.pop('hostname')
-            self.add_proxy(reload_service=False, **proxy_parms)
+        try:
+            for proxy_parms in proxy_list:
+                if 'hostname' in proxy_parms:
+                    proxy_parms['name'] = proxy_parms.pop('hostname')
+                
+                self.add_proxy(reload_service=False, **proxy_parms)
+            if reload_service:
+                self._reload_service()
+        except:
+                raise BaseException('Syntax error in template for proxy %s' % proxy_parms['name'])
 
-        self._reload_service()
+    def _replace_string_in_file(self, file_path, s, new_s):
+        raw = None
+        with open(file_path, 'r') as fp:
+            raw = fp.read()
+            raw = raw.replace(s, new_s)
+        with open(file_path, 'w') as fp:
+            fp.write(raw)
+
+    @rpc.service_method
+    def reconfigure(self, proxy_list):
+        # TODO: much like recreate_proxying() but with specs described in
+        # https://scalr-labs.atlassian.net/browse/SCALARIZR-481?focusedCommentId=17428&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-17428
+        # saving backend configuration table
+        backend_table_bak = self.backend_table.copy()
+        try:
+            self.app_inc_path = self.app_inc_path + '.new'
+            self.proxies_inc_path = self.proxies_inc_path + '.new'
+            self.recreate_proxying(proxy_list, reload_service=False)
+
+            main_conf_path = self.proxies_inc_dir + '/nginx.conf'
+            self._replace_string_in_file(main_conf_path,
+                                         'proxies.include',
+                                         'proxies.include.new')
+            self._replace_string_in_file(main_conf_path,
+                                         'app-servers.include',
+                                         'app-servers.include.new')
+
+            self.service.configtest()
+        except:
+            os.remove(self.app_inc_path)
+            os.remove(self.proxies_inc_path)
+            self.backend_table = backend_table_bak
+            self._replace_string_in_file(main_conf_path,
+                                         'proxies.include.new',
+                                         'proxies.include')
+            self._replace_string_in_file(main_conf_path,
+                                         'app-servers.include.new',
+                                         'app-servers.include')
+            self.app_inc_path = self.app_inc_path[:-4]
+            self.proxies_inc_path = self.proxies_inc_path[:-4]
+            raise
+        else:
+            os.remove(self.app_inc_path[:-4])
+            os.remove(self.proxies_inc_path[:-4])
+            shutil.copyfile(self.app_inc_path, self.app_inc_path[:-4])
+            shutil.copyfile(self.proxies_inc_path, self.proxies_inc_path[:-4])
+            os.remove(self.app_inc_path)
+            os.remove(self.proxies_inc_path)
+            self._replace_string_in_file(main_conf_path,
+                                         'proxies.include.new',
+                                         'proxies.include')
+            self._replace_string_in_file(main_conf_path,
+                                         'app-servers.include.new',
+                                         'app-servers.include')
+            self._reload_service()
+            self.app_inc_path = self.app_inc_path[:-4]
+            self.proxies_inc_path = self.proxies_inc_path[:-4]
+        
 
     def get_role_servers(self, role_id=None, role_name=None):
         """ Method is used to get role servers from scalr """
@@ -331,10 +398,7 @@ class NginxAPI(object):
         """
         queryenv = bus.queryenv_service
         cert, key, cacert = queryenv.get_ssl_certificate(ssl_certificate_id)
-        return self.update_ssl_certificate(ssl_certificate_id,
-                                           cert,
-                                           key,
-                                           cacert)
+        return self.update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
 
     def _normalize_destinations(self, destinations):
         """
@@ -416,13 +480,39 @@ class NginxAPI(object):
 
         return grouped_destinations
 
+    def _group_templates(self, templates):
+        """
+        Groups list of temlate dictionaries with format:
+        ``{'content': 'raw nginx configuration here', 'location': '/admin',
+           'content': 'raw config 2', 'server': True,
+           ...}``
+        to dictionary of dictionaries, grouped by locations:
+        ``{'/admin': {'content': 'raw nginx configuration here'},
+           'server': {'content': 'raw config 2'},
+           ...}``
+        """
+        if not templates:
+            return {}
+
+        result = {}
+        for template in templates:
+            key = None
+            if _bool_from_scalr_str(template.get('server')):
+                key = 'server'
+            else:
+                key = template['location']
+            result[key] = {'content': template['content']}
+        return result
+
     def _add_backend(self,
                      name,
                      destinations,
                      port=None,
                      ip_hash=True,
+                     least_conn=False,
                      max_fails=None,
-                     fail_timeout=None):
+                     fail_timeout=None,
+                     weight=None):
         """
         Adds backend to app-servers config, but without writing it to file.
         """
@@ -434,8 +524,10 @@ class NginxAPI(object):
                                               destinations,
                                               port=port,
                                               ip_hash=ip_hash,
+                                              least_conn=least_conn,
                                               max_fails=max_fails,
-                                              fail_timeout=fail_timeout)
+                                              fail_timeout=fail_timeout,
+                                              weight=weight)
             self.app_servers_inc.append_conf(backend)
 
     def _make_backend_conf(self,
@@ -443,13 +535,17 @@ class NginxAPI(object):
                            destinations,
                            port=None,
                            ip_hash=True,
+                           least_conn=False,
                            max_fails=None,
-                           fail_timeout=None):
+                           fail_timeout=None,
+                           weight=None):
         """Returns config for one backend server"""
         config = metaconf.Configuration('nginx')
         config.add('upstream', name or 'backend')
         if ip_hash:
             config.add('upstream/ip_hash', '')
+        if least_conn:
+            config.add('upstream/least_conn', '')
 
         for dest in destinations:
             servers = dest['servers']
@@ -466,14 +562,18 @@ class NginxAPI(object):
 
                 _max_fails = dest.get('max_fails', max_fails)
                 if _max_fails:
-                    server = '%s %s' % (server, 'max_fails=%i' % _max_fails)
+                    server = '%s %s' % (server, 'max_fails=%s' % _max_fails)
 
                 _fail_timeout = dest.get('fail_timeout', fail_timeout)
                 if _fail_timeout:
-                    server = '%s %s' % (server, 'fail_timeout=%is' % _fail_timeout)
+                    server = '%s %s' % (server, 'fail_timeout=%ss' % _fail_timeout)
 
                 if 'down' in dest and dest['down']:
                     server = '%s %s' % (server, 'down')
+
+                _weight = dest.get('weight', weight)
+                if _weight:
+                    server = '%s %s' % (server, 'weight=%s' % _weight)
 
                 config.add('upstream/server', server)
 
@@ -514,8 +614,10 @@ class NginxAPI(object):
                       grouped_destinations,
                       port=None,
                       ip_hash=True,
+                      least_conn=False,
                       max_fails=None,
                       fail_timeout=None,
+                      weight=None,
                       hash_name=True):
         """
         Makes backend for each group of destinations and writes it to
@@ -538,24 +640,26 @@ class NginxAPI(object):
         locations_and_backends = ()
         # making backend configs for each group
         for backend_destinations in grouped_destinations:
-            # TODO: delete backends from initial config, that have similar name as new
             location = backend_destinations[0]['location']
 
             # Find role ids that will be used in backend
             role_ids = set([dest.get('id') for dest in backend_destinations])
             role_ids.discard(None)
 
-            if location.startswith('/'):
-                location = location[1:]
-
-            name = self._make_backend_name(hostname, location, role_ids, hash_name)
+            name = self._make_backend_name(
+                hostname,
+                location[1:] if location.startswith('/') else location,
+                role_ids,
+                hash_name)
 
             self._add_backend(name,
                               backend_destinations,
                               port=port,
                               ip_hash=ip_hash,
+                              least_conn=least_conn,
                               max_fails=max_fails,
-                              fail_timeout=fail_timeout)
+                              fail_timeout=fail_timeout,
+                              weight=weight)
 
             locations_and_backends += ((location or '/', name),)
 
@@ -563,7 +667,7 @@ class NginxAPI(object):
 
     def _is_redirector(self, conf, server_xpath):
         try:
-            _ = conf.get('%s/rewrite' % server_xpath)
+            conf.get('%s/rewrite' % server_xpath)
         except metaconf.NoPathError:
             return False
         else:
@@ -574,6 +678,8 @@ class NginxAPI(object):
         Makes config (metaconf.Configuration object) for server section of
         nginx config that is used to redirect http to https
         """
+        if not port:
+            port = '80'
         config = metaconf.Configuration('nginx')
         config.add('server', '')
 
@@ -591,7 +697,7 @@ class NginxAPI(object):
         config.add('server/if/rewrite', '^(.*)$ /noapp.html last')
         config.add('server/if/return', '302')
 
-    def _ssl_only_on_default(self):
+    def _is_ssl_on_default_only(self):
         out = system2(['nginx -v'], shell=True)[1]
         nginx_version_str = out.split('/')[1]
         nginx_version = nginx_version_str.split('.')
@@ -602,24 +708,29 @@ class NginxAPI(object):
             (' not' if not default_needed else ''))
         return default_needed
 
-    def _add_ssl_params(self, config, server_xpath, ssl_port, ssl_certificate_id, http):
-        default_needed = self._ssl_only_on_default()
+    def _add_ssl_params(self,
+                        config,
+                        server_xpath,
+                        ssl_port,
+                        ssl_certificate_id,
+                        http):
+        default_needed = self._is_ssl_on_default_only()
 
-        config.add('%s/listen' % server_xpath, '%s%s ssl' % ((ssl_port or '443'), 
-                                                             ' default' if default_needed else ''))
+        listen_val = '%s%s ssl' % ((ssl_port or '443'), ' default' if default_needed else '')
+        config.add('%s/listen' % server_xpath, listen_val)
+
         if not http:
             config.add('%s/ssl' % server_xpath, 'on')
         ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 
-        # TODO: move next hardcoded strings to some constants
-        config.add('%s/ssl_session_timeout' % server_xpath, '10m')
-        config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
-        config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
-        config.add('%s/ssl_ciphers' % server_xpath, 
-                   'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-        config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
+        # config.add('%s/ssl_session_timeout' % server_xpath, '10m')
+        # config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
+        # config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
+        # config.add('%s/ssl_ciphers' % server_xpath, 
+        #            'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
+        # config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
 
     def _make_server_conf(self,
                           hostname,
@@ -627,17 +738,37 @@ class NginxAPI(object):
                           port='80',
                           ssl=False,
                           ssl_port=None,
-                          ssl_certificate_id=None):
+                          ssl_certificate_id=None,
+                          grouped_templates=None):
         """
         Makes config (metaconf.Configuration object) for server section of
         nginx config
         """
+
+        if not grouped_templates:
+            grouped_templates = {}
+
         config = metaconf.Configuration('nginx')
+
+        server_wide_template = grouped_templates.get('server')
         config.add('server', '')
+        if server_wide_template:
+            # TODO: this is ugly. Find the way to read conf from string
+            temp_file = self.proxies_inc_dir + '/temalate.tmp'
+            with open(temp_file, 'w') as fp:
+                fp.write(server_wide_template['content'])
+            template_conf = metaconf.Configuration('nginx')
+            template_conf.read(temp_file)
+            config.insert_conf(template_conf, 'server')
+            os.remove(temp_file)
 
         if port:
             config.add('server/listen', str(port))
-        config.add('server/server_name', hostname)
+        try:
+            config.get('server/server_name')
+            config.set('server/server_name', hostname)
+        except:
+            config.add('server/server_name', hostname)
 
         # Configuring ssl
         if ssl:
@@ -645,24 +776,36 @@ class NginxAPI(object):
 
         self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
+        
+        # Next additions are moved to templates
+        # config.add('server/proxy_set_header', 'Host $host')
+        # config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
+        # config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
+        # config.add('server/client_max_body_size', '10m')
+        # config.add('server/client_body_buffer_size', '128k')
+        # config.add('server/proxy_buffering', 'on')
+        # config.add('server/proxy_connect_timeout', '15')
+        # config.add('server/proxy_intercept_errors', 'on')
 
         # Adding locations leading to defined backends
+
         for i, (location, backend_name) in enumerate(locations_and_backends):
             location_xpath = 'server/location'
             config.add(location_xpath, location)
 
             location_xpath = '%s[%i]' % (location_xpath, i + 1)
+
+            if grouped_templates.get(location):
+                temp_file = self.proxies_inc_dir + '/temalate.tmp'
+                # TODO: this is ugly. Find the way to read conf from string
+                with open(temp_file, 'w') as fp:
+                    fp.write(grouped_templates[location]['content'])
+                template_conf = metaconf.Configuration('nginx')
+                template_conf.read(temp_file)
+                config.insert_conf(template_conf, location_xpath)
+                os.remove(temp_file)
+
             config.add('%s/proxy_pass' % location_xpath, 'http://%s' % backend_name)
-            # TODO: move next hardcoded strings to some constants
-            config.add('%s/proxy_set_header' % location_xpath, 'Host $host')
-            config.add('%s/proxy_set_header' % location_xpath, 'X-Real-IP $remote_addr')
-            config.add('%s/proxy_set_header' % location_xpath,
-                       'X-Forwarded-For $proxy_add_x_forwarded_for')
-            config.add('%s/client_max_body_size' % location_xpath, '10m')
-            config.add('%s/client_body_buffer_size' % location_xpath, '128k')
-            config.add('%s/proxy_buffering' % location_xpath, 'on')
-            config.add('%s/proxy_connect_timeout' % location_xpath, '15')
-            config.add('%s/proxy_intercept_errors' % location_xpath, 'on')
 
             if location is '/':
                 config.add('%s/error_page' % location_xpath, '500 501 /500.html')
@@ -677,7 +820,8 @@ class NginxAPI(object):
                           http=True,
                           ssl=False,
                           ssl_port=None,
-                          ssl_certificate_id=None):
+                          ssl_certificate_id=None,
+                          grouped_templates=None):
         """
         Adds server to https config, but without writing it to file.
         """
@@ -692,7 +836,8 @@ class NginxAPI(object):
                                                port if http else None,
                                                ssl,
                                                ssl_port,
-                                               ssl_certificate_id)
+                                               ssl_certificate_id,
+                                               grouped_templates)
 
         self.proxies_inc.append_conf(server_config)
 
@@ -706,8 +851,11 @@ class NginxAPI(object):
                   ssl_certificate_id=None,
                   backend_port=None,
                   backend_ip_hash=False,
+                  backend_least_conn=False,
                   backend_max_fails=None,
                   backend_fail_timeout=None,
+                  backend_weight=None,
+                  templates=None,
                   reread_conf=True,
                   reload_service=True,
                   hash_backend_name=True,
@@ -716,15 +864,60 @@ class NginxAPI(object):
         """
         Adds proxy.
 
-        ``backends`` param is list of dictionaries which contains servers
+        All backend_* params are used for default values and can be overrided
+        by values given for certain backend in backends list
+
+        :param name: name for proxy. Used as hostname - server_name in nginx server section
+
+        :param backends: is list of dictionaries which contains servers
         and/or roles with params and inner naming in this module for such dicts
         is ``destinations``. So keep in mind that ``backend`` word in all other
         places of this module means nginx upstream config.
+
+        :param port: port for proxy to listen http
+
+        :param http: if False proxy will not listen http port
+
+        :param ssl: if True proxy will listen ssl port
+
+        :param ssl_port: port for proxy to listen https
+
+        :param ssl_certificate_id: scalr ssl certificate id. Will be fetched through queryenv
+
+        :param backend_port: default port for backend servers to be proxied on
+
+        :param backend_ip_hash: defines default presence of ip_hash in backend config
+
+        :param backend_least_conn: defines default presence of least_conn in backend config
+
+        :param backend_max_fails: default value of max_fails for servers in backends
+
+        :param backend_fail_timeout: default value (in secs) of fail_timeout for servers in backends
+
+        :param backend_weight: default value of weight for servers in backends
+
+        :param templates: list of template dictionaries.
+        Template dictionary consists of template content and location to be included in.
+        'server' key determines that template is used for all proxy-server config part,
+        not separate location.
+        E.g.: ``[{'content': <raw_config>, 'location': '/admin'},
+                 {'content': <another_raw>, 'server': True}]``
+
+        :param reread_conf: if True app_servers_inc and proxies_inc will be reloaded from files
+        before proxy addition
+
+        :param reload_service: if True service will be reloaded after proxy will be added
+
+        :param hash_backend_name: if True backend names will be hashed
+
+        :param write_proxies: if False changes will not be written in proxies_inc file.
+        This can be used if we only need to add backend.
         """
         # typecast is needed because scalr sends bool params as strings: '1' for True, '0' for False 
         ssl = _bool_from_scalr_str(ssl)
         http = _bool_from_scalr_str(http) if ssl else True
         backend_ip_hash = _bool_from_scalr_str(backend_ip_hash)
+        backend_least_conn = _bool_from_scalr_str(backend_least_conn)
         reread_conf = _bool_from_scalr_str(reread_conf)
         reload_service = _bool_from_scalr_str(reload_service)
         hash_backend_name = _bool_from_scalr_str(hash_backend_name)
@@ -749,11 +942,15 @@ class NginxAPI(object):
                                                     ip_hash=backend_ip_hash,
                                                     max_fails=backend_max_fails,
                                                     fail_timeout=backend_fail_timeout,
+                                                    least_conn=backend_least_conn,
+                                                    weight=backend_weight,
                                                     hash_name=hash_backend_name)
 
         for backend_destinations, (_, backend_name) \
             in zip(grouped_destinations, locations_and_backends):
             self.backend_table[backend_name] = backend_destinations
+
+        grouped_templates = self._group_templates(templates)
 
         self._add_nginx_server(name,
                                locations_and_backends,
@@ -761,7 +958,8 @@ class NginxAPI(object):
                                http=http,
                                ssl=ssl,
                                ssl_port=ssl_port,
-                               ssl_certificate_id=ssl_certificate_id)
+                               ssl_certificate_id=ssl_certificate_id,
+                               grouped_templates=grouped_templates)
 
         if port:
             _open_port(port)
@@ -841,6 +1039,9 @@ class NginxAPI(object):
     def make_proxy(self, hostname, **kwds):
         """
         RPC method for adding or updating proxy configuration.
+        Removes proxy with given hostname if exists and recreates it with given
+        parameters. If some exception occures, changes are reverted.
+        See add_proxy() for detailed kwds description.
         """
         _logger.debug('making proxy: %s' % hostname)
         try:
@@ -894,6 +1095,10 @@ class NginxAPI(object):
 
         if 'down' in server and _bool_from_scalr_str(server['down']):
             result = '%s %s' % (result, 'down')
+
+        _weight = server.get('weight')
+        if _weight:
+            result = '%s %s' % (result, 'weight=%s' % _weight)
 
         return result
 
@@ -988,6 +1193,7 @@ class NginxAPI(object):
         if reload_service:
             self._reload_service()
 
+    @rpc.command_method
     def add_server_to_role(self, 
                            server,
                            role_id,
@@ -1032,6 +1238,7 @@ class NginxAPI(object):
             if reload_service:
                 self._reload_service()
 
+    @rpc.command_method
     def remove_server_from_role(self,
                                 server,
                                 role_id,
@@ -1071,6 +1278,7 @@ class NginxAPI(object):
                 self._reload_service()
 
 
+    @rpc.command_method
     def remove_server_from_all_backends(self,
                                         server,
                                         update_conf=True,
@@ -1102,6 +1310,7 @@ class NginxAPI(object):
             if reload_service:
                 self._reload_service()
 
+    @rpc.command_method
     def enable_ssl(self,
                    hostname,
                    ssl_port=None,
@@ -1131,7 +1340,7 @@ class NginxAPI(object):
                     # trying get ssl param from config
                     # if it raises exception, then we need to set up ssl
                     # like in first time
-                    default_needed = self._ssl_only_on_default()
+                    default_needed = self._is_ssl_on_default_only()
                     ssl_listen_xpath = self.proxies_inc.xpath_of('%s/listen' % server_xpath,
                                                                  '*ssl*')
                     if http and not ssl_listen_xpath:
@@ -1154,6 +1363,7 @@ class NginxAPI(object):
             if reload_service:
                 self._reload_service()
 
+    @rpc.command_method
     def disable_ssl(self, hostname, update_conf=True, reload_service=True):
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
