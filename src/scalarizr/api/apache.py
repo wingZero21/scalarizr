@@ -347,6 +347,8 @@ class ApacheAPI(object):
         removed_vhosts = []
         applied_vhosts = []
 
+        LOG.info("Started reconfiguring Apache VirtualHosts.")
+
         for vh_data in vhosts:
 
             host, port = vh_data["hostname"], vh_data["port"]
@@ -581,6 +583,7 @@ class ApacheAPI(object):
         regardless of Scalr version.
         @return: list(dict(vhost_data))
         """
+        LOG.info("Fetching Apache VirtualHost configuration data from Scalr.")
         result = []
         scalr_version = bus.scalr_version or (4, 4, 0)
 
