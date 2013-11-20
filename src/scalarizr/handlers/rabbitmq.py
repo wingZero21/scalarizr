@@ -7,6 +7,7 @@ Created on Sep 7, 2011
 from __future__ import with_statement
 
 import os
+import re
 import sys
 import pwd
 import logging
@@ -32,6 +33,7 @@ DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq/mnesia'
 STORAGE_VOLUME_CNF = 'rabbitmq.json'
 RABBITMQ_MGMT_PLUGIN_NAME = 'rabbitmq_management'
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
+RABBITMQ_ENV_CFG_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
 
 
 
@@ -95,6 +97,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 
 
         elif 'running' == __node__['state']:
+            self._set_nodename_in_env()
             rabbitmq_vol = __rabbitmq__['volume']
 
             if not __rabbitmq__['volume'].mounted_to():
@@ -227,6 +230,26 @@ class RabbitMQHandler(ServiceCtlHandler):
             self.service.stop()
 
 
+    def _set_nodename_in_env(self):
+        node_name = rabbitmq_svc.NODE_HOSTNAME_TPL % __rabbitmq__['hostname']
+        os.environ.update(dict(RABBITMQ_NODENAME=node_name))
+
+        env_cfg = ''
+        if os.path.exists(RABBITMQ_ENV_CFG_PATH):
+            with open(RABBITMQ_ENV_CFG_PATH) as f:
+                env_cfg = f.read()
+
+        if 'RABBITMQ_NODENAME' in env_cfg:
+            env_cfg = re.sub(re.compile('^(RABBITMQ_NODENAME=(?!%s).*)$' % node_name, re.M), '#\g<0>', env_cfg)
+        if not re.search(re.compile('^RABBITMQ_NODENAME=%s' % node_name, re.M), env_cfg):
+            env_cfg += '\nRABBITMQ_NODENAME=%s' % node_name
+
+        with open(RABBITMQ_ENV_CFG_PATH, 'w') as f:
+            f.write(env_cfg)
+
+
+
+
     def on_host_init_response(self, message):
         log = bus.init_op.logger
         log.info('Accept Scalr configuration')
@@ -256,6 +279,8 @@ class RabbitMQHandler(ServiceCtlHandler):
         rabbitmq_data['volume'].tags = self.rabbitmq_tags
 
         __rabbitmq__.update(rabbitmq_data)
+
+        self._set_nodename_in_env()
 
 
     def _is_storage_empty(self, storage_path):
