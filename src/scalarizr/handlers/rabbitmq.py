@@ -17,7 +17,7 @@ from scalarizr.messaging import Messages
 from scalarizr import storage2
 from scalarizr.handlers import HandlerError, ServiceCtlHandler, build_tags
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.util import system2, initdv2, software, dns, cryptotool
+from scalarizr.util import initdv2, software, dns, cryptotool
 from scalarizr.node import __node__
 import scalarizr.services.rabbitmq as rabbitmq_svc
 
@@ -33,7 +33,7 @@ STORAGE_VOLUME_CNF = 'rabbitmq.json'
 RABBITMQ_MGMT_PLUGIN_NAME = 'rabbitmq_management'
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
 
-RABBIT_HOSTNAME_TPL = 'rabbit-%s'
+
 
 
 class RabbitMQMessages:
@@ -203,7 +203,7 @@ class RabbitMQHandler(ServiceCtlHandler):
             return
 
         if message.local_ip != self.platform.get_private_ip():
-            hostname = RABBIT_HOSTNAME_TPL % message.server_index
+            hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % message.server_index
             self._logger.info("Adding %s as %s to hosts file", message.local_ip, hostname)
             dns.ScalrHosts.set(message.local_ip, hostname)
 
@@ -239,14 +239,16 @@ class RabbitMQHandler(ServiceCtlHandler):
         if not rabbitmq_data['password']:
             rabbitmq_data['password'] = cryptotool.pwgen(10)
 
-        hostname = RABBIT_HOSTNAME_TPL % int(message.server_index)
+        hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
         rabbitmq_data['server_index'] = message.server_index
         rabbitmq_data['hostname'] = hostname
 
         dns.ScalrHosts.set('127.0.0.1', hostname)
-        with open('/etc/hostname', 'w') as f:
-            f.write(hostname)
-        system2(('hostname', '-F', '/etc/hostname'))
+
+        # Use RABBITMQ_NODENAME instead of setting actual hostname
+        #with open('/etc/hostname', 'w') as f:
+        #    f.write(hostname)
+        #system2(('hostname', '-F', '/etc/hostname'))
 
         volume_config = rabbitmq_data.pop('volume_config')
         volume_config['mpoint'] = DEFAULT_STORAGE_PATH
@@ -354,7 +356,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
             for host in role.hosts:
                 ip = host.internal_ip
-                hostname = RABBIT_HOSTNAME_TPL % host.index
+                hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % host.index
                 nodes.append((hostname, ip))
         return nodes
 
@@ -362,4 +364,4 @@ class RabbitMQHandler(ServiceCtlHandler):
     @property
     def hostname(self):
         server_index = __rabbitmq__['server_index']
-        return RABBIT_HOSTNAME_TPL % server_index
+        return rabbitmq_svc.RABBIT_HOSTNAME_TPL % server_index

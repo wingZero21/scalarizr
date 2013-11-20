@@ -27,6 +27,7 @@ COOKIE_PATH = '/var/lib/rabbitmq/.erlang.cookie'
 RABBITMQ_ENV_CNF_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
 SCALR_USERNAME = 'scalr'
 NODE_HOSTNAME_TPL = 'rabbit@%s'
+RABBIT_HOSTNAME_TPL = 'rabbit-%s'
 
 class NodeTypes:
     RAM = 'ram'
@@ -82,8 +83,12 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
     reload = restart
 
     def start(self):
+        hostname = RABBIT_HOSTNAME_TPL % __rabbitmq__['server_index']
+        nodename = NODE_HOSTNAME_TPL % hostname
+
         env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid',
-                    'RABBITMQ_MNESIA_BASE': '/var/lib/rabbitmq/mnesia'}
+               'RABBITMQ_MNESIA_BASE': '/var/lib/rabbitmq/mnesia',
+               'RABBITMQ_NODENAME': nodename}
 
         run_detached(RABBITMQ_SERVER, args=['-detached'], env=env)
         initdv2.wait_sock(self.socks[0])
