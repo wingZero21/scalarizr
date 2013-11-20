@@ -178,8 +178,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
-        self._insert_iptables_rules()
-
         if __node__['state'] == 'running':
             # Fix to enable access outside farm when use_passwords=True
             # if self.use_passwords:
@@ -228,7 +226,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def _insert_iptables_rules(self):
-        if self.use_passwords and iptables.enabled():
+        if iptables.enabled():
             ports = "{0}:{1}".format(
                         __redis__['ports_range'][0], 
                         __redis__['ports_range'][-1])
@@ -312,6 +310,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         if self.use_passwords:
             self.security_off()
+        else:
+            self._insert_iptables_rules()
 
 
     def on_before_host_up(self, message):
