@@ -252,7 +252,10 @@ class PostgreSql(BaseService):
         self.postgresql_conf.listen_addresses = '*'
         self.postgresql_conf.wal_level = 'hot_standby'
         self.postgresql_conf.max_wal_senders = 5
-        self.postgresql_conf.wal_keep_segments = 32
+
+        wks = self.postgresql_conf.wal_keep_segments
+        if not wks or int(wks) < 32:
+            self.postgresql_conf.wal_keep_segments = 32  # [TTM-8]
 
         if disttool.is_ubuntu() and disttool.version_info() == (12, 4) and '9.1' == self.version:
             #SEE: https://bugs.launchpad.net/ubuntu/+source/postgresql-9.1/+bug/1018307
