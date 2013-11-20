@@ -309,38 +309,43 @@ class ApacheAPI(object):
         @param reload: indicates if immediate service reload is needed
         @return: None
         """
-        backup_list = []
+        LOG.info("Removing Apache VirtualHosts: %s" % str(vhosts))
+
+        removed_vhosts = []
+
         for signature in vhosts:
             v_host_path = get_virtual_host_path(*signature)
-            assert os.path.exists(v_host_path)
-            backup_list.add(v_host_path)
+
+            if not os.path.exists(v_host_path):
+                raise ApacheError('Cannot remove %s: %s does not exist.' % (
+                    str(signature), v_host_path))
 
             with BackupManager(v_host_path):
                 os.remove(v_host_path)
-                LOG.info("Removed VirtualHost %s:%s" % signature)
+                removed_vhosts.add(v_host_path)
+                LOG.info("VirtualHost %s:%s removed." % signature)
 
         if reload:
             try:
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore(backup_list)
+                BackupManager.restore(removed_vhosts)
                 raise
             else:
-                BackupManager.free(backup_list)
-                self.reload_service()
+                BackupManager.free(removed_vhosts)
+                self.reload_service('%s VirtualHosts removed.' % len(vhosts))
 
     @rpc.command_method
-    def reconfigure(self, vhosts):
+    def reconfigure(self, vhosts, reload=True):
         """
         Deploys multiple VirtualHosts and removes odds.
         @param vhosts: list(dict(vhost_data),)
         @return: list, paths to reconfigured VirtualHosts
         """
-        applied_vhosts = []
         new_vhosts = []
-        backup_list = []
-        reload = False
+        removed_vhosts = []
+        applied_vhosts = []
 
         for vh_data in vhosts:
 
@@ -349,7 +354,7 @@ class ApacheAPI(object):
 
             with BackupManager(v_host_path):
                 if os.path.exists(v_host_path):
-                    backup_list.append(v_host_path)
+                    removed_vhosts.append(v_host_path)
                     os.remove(v_host_path)
 
                 path = self.create_vhost(
@@ -362,43 +367,31 @@ class ApacheAPI(object):
                 )
                 applied_vhosts.append(path)
 
-                if path in backup_list:
-                    with open(path) as fp:
-                        new_body = fp.read()
-                        try:
-                            old_body = BackupManager.backup[path].copy()
-                        except (AttributeError, IndexError):
-                            old_body = None
-                    if old_body != new_body:
-                        reload = True
-                else:
+                if path not in removed_vhosts:
                     new_vhosts.append(path)
-                    reload = True
 
         #cleanup
-        vhosts_dir = __apache__["vhosts_dir"]
-        for fname in os.listdir(vhosts_dir):
-            old_vhost_path = os.path.join(vhosts_dir, fname)
+        for fname in os.listdir(__apache__["vhosts_dir"]):
+            old_vhost_path = os.path.join(__apache__["vhosts_dir"], fname)
 
             if old_vhost_path not in applied_vhosts:
                 with BackupManager(old_vhost_path):
-                    backup_list.append(old_vhost_path)
+                    removed_vhosts.append(old_vhost_path)
                     os.remove(old_vhost_path)
-                LOG.info("Removed old vhost file %s" % old_vhost_path)
-                reload = True
+                LOG.info("Removed old VirtualHost file %s" % old_vhost_path)
 
         if reload:
             try:
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore(new_vhosts + backup_list)
+                BackupManager.restore(new_vhosts + removed_vhosts)
                 raise
             else:
-                BackupManager.free(new_vhosts + backup_list)
-                self.reload_service()
+                self.reload_service("Applying new apache configuration.")
+                BackupManager.free(new_vhosts + removed_vhosts)
         else:
-            LOG.info("No changes were made in apache configuration.")
+            LOG.info("Apache configuration changed without service reload.")
 
         return applied_vhosts
 
@@ -494,7 +487,6 @@ class ApacheAPI(object):
         """
         Configures apache service
         """
-        self.stop_service("Configuring Apache Web Server")
 
         self._open_ports([80, 443])
 
@@ -569,7 +561,7 @@ class ApacheAPI(object):
         @return: list(virtual_host_path,)
         """
         vh_data = self._fetch_virtual_hosts()
-        return self.reconfigure(vh_data)
+        return self.reconfigure(vh_data, reload=True)
 
     def rename_old_virtual_hosts(self):
         vhosts_dir = __apache__["vhosts_dir"]
