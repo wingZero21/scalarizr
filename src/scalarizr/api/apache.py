@@ -484,6 +484,7 @@ class ApacheAPI(object):
         except initdv2.InitdError, e:
             if "not running" in e.message:
                 LOG.info("Apache service is not running. Doing start instead of reload.")
+                LOG.info(reason)
                 self.service.start()
             else:
                 raise
