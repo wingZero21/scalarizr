@@ -47,7 +47,7 @@ class MySQLAPI(object):
             finally:
                 self._mysql_init.start()
 
-        return self._op_api.run('mysql.grow-volume', do_grow, async=async)
+        return self._op_api.run('mysql.grow-volume', do_grow, exclusive=True, async=async)
 
 
     def _check_invalid(self, param, name, type_):
