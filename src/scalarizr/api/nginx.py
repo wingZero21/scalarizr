@@ -506,7 +506,7 @@ class NginxAPI(object):
         if hash_name:
             name = sha1(name).hexdigest()
         name = '%s%s__%s' % (name, 
-                             ('_' + location.replace('/', '_')).rstrip('_'),
+                             (location.replace('/', '_')).rstrip('_'),
                              role_namepart)
         name = name.rstrip('_')
 
@@ -547,9 +547,6 @@ class NginxAPI(object):
             # Find role ids that will be used in backend
             role_ids = set([dest.get('id') for dest in backend_destinations])
             role_ids.discard(None)
-
-            if location.startswith('/'):
-                location = location[1:]
 
             name = self._make_backend_name(hostname, location, role_ids, hash_name)
 
