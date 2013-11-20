@@ -64,8 +64,6 @@ class CinderWrapper(OpenstackServiceWrapper):
             auth_url=self.auth_url,
             region_name=self.region_name          
         ))
-        if self.auth_plugin:
-            kwargs['auth_plugin'] = self.auth_plugin
         return cinder_client.Client(self.user,
                                     self.password,
                                     self.tenant,

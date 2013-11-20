@@ -7,6 +7,7 @@ Created on Sep 7, 2011
 from __future__ import with_statement
 
 import os
+import re
 import sys
 import pwd
 import logging
@@ -17,7 +18,7 @@ from scalarizr.messaging import Messages
 from scalarizr import storage2
 from scalarizr.handlers import HandlerError, ServiceCtlHandler, build_tags
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.util import system2, initdv2, software, dns, cryptotool
+from scalarizr.util import initdv2, software, dns, cryptotool
 from scalarizr.node import __node__
 import scalarizr.services.rabbitmq as rabbitmq_svc
 
@@ -25,15 +26,16 @@ import scalarizr.services.rabbitmq as rabbitmq_svc
 __rabbitmq__ = __node__['rabbitmq']
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.RABBITMQ
 OPT_VOLUME_CNF = 'volume_config'
 OPT_SNAPSHOT_CNF = 'snapshot_config'
 DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq/mnesia'
 STORAGE_VOLUME_CNF = 'rabbitmq.json'
 RABBITMQ_MGMT_PLUGIN_NAME = 'rabbitmq_management'
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
+RABBITMQ_ENV_CFG_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
 
-RABBIT_HOSTNAME_TPL = 'rabbit-%s'
+
 
 
 class RabbitMQMessages:
@@ -95,6 +97,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 
 
         elif 'running' == __node__['state']:
+            self._set_nodename_in_env()
             rabbitmq_vol = __rabbitmq__['volume']
 
             if not __rabbitmq__['volume'].mounted_to():
@@ -203,7 +206,7 @@ class RabbitMQHandler(ServiceCtlHandler):
             return
 
         if message.local_ip != self.platform.get_private_ip():
-            hostname = RABBIT_HOSTNAME_TPL % message.server_index
+            hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % message.server_index
             self._logger.info("Adding %s as %s to hosts file", message.local_ip, hostname)
             dns.ScalrHosts.set(message.local_ip, hostname)
 
@@ -227,6 +230,26 @@ class RabbitMQHandler(ServiceCtlHandler):
             self.service.stop()
 
 
+    def _set_nodename_in_env(self):
+        node_name = rabbitmq_svc.NODE_HOSTNAME_TPL % __rabbitmq__['hostname']
+        os.environ.update(dict(RABBITMQ_NODENAME=node_name))
+
+        env_cfg = ''
+        if os.path.exists(RABBITMQ_ENV_CFG_PATH):
+            with open(RABBITMQ_ENV_CFG_PATH) as f:
+                env_cfg = f.read()
+
+        if 'RABBITMQ_NODENAME' in env_cfg:
+            env_cfg = re.sub(re.compile('^(RABBITMQ_NODENAME=(?!%s).*)$' % node_name, re.M), '#\g<0>', env_cfg)
+        if not re.search(re.compile('^RABBITMQ_NODENAME=%s' % node_name, re.M), env_cfg):
+            env_cfg += '\nRABBITMQ_NODENAME=%s' % node_name
+
+        with open(RABBITMQ_ENV_CFG_PATH, 'w') as f:
+            f.write(env_cfg)
+
+
+
+
     def on_host_init_response(self, message):
         log = bus.init_op.logger
         log.info('Accept Scalr configuration')
@@ -239,14 +262,16 @@ class RabbitMQHandler(ServiceCtlHandler):
         if not rabbitmq_data['password']:
             rabbitmq_data['password'] = cryptotool.pwgen(10)
 
-        hostname = RABBIT_HOSTNAME_TPL % int(message.server_index)
+        hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
         rabbitmq_data['server_index'] = message.server_index
         rabbitmq_data['hostname'] = hostname
 
         dns.ScalrHosts.set('127.0.0.1', hostname)
-        with open('/etc/hostname', 'w') as f:
-            f.write(hostname)
-        system2(('hostname', '-F', '/etc/hostname'))
+
+        # Use RABBITMQ_NODENAME instead of setting actual hostname
+        #with open('/etc/hostname', 'w') as f:
+        #    f.write(hostname)
+        #system2(('hostname', '-F', '/etc/hostname'))
 
         volume_config = rabbitmq_data.pop('volume_config')
         volume_config['mpoint'] = DEFAULT_STORAGE_PATH
@@ -254,6 +279,8 @@ class RabbitMQHandler(ServiceCtlHandler):
         rabbitmq_data['volume'].tags = self.rabbitmq_tags
 
         __rabbitmq__.update(rabbitmq_data)
+
+        self._set_nodename_in_env()
 
 
     def _is_storage_empty(self, storage_path):
@@ -354,7 +381,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
             for host in role.hosts:
                 ip = host.internal_ip
-                hostname = RABBIT_HOSTNAME_TPL % host.index
+                hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % host.index
                 nodes.append((hostname, ip))
         return nodes
 
@@ -362,4 +389,4 @@ class RabbitMQHandler(ServiceCtlHandler):
     @property
     def hostname(self):
         server_index = __rabbitmq__['server_index']
-        return RABBIT_HOSTNAME_TPL % server_index
+        return rabbitmq_svc.RABBIT_HOSTNAME_TPL % server_index

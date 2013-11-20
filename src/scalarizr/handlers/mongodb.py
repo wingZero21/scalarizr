@@ -59,7 +59,7 @@ from scalarizr.api import mongodb as mongodb_api
 __mongodb__ = __node__['mongodb']
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MONGODB
 
 STORAGE_VOLUME_CNF              = 'mongodb.json'
 STORAGE_SNAPSHOT_CNF    = 'mongodb-snap.json'

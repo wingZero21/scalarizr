@@ -16,6 +16,11 @@ private_dir = base_dir + '/private.d'
 public_dir = base_dir + '/public.d'
 storage_dir = private_dir + '/storage'
 
+OPT_PERSISTENCE_TYPE = 'persistence_type'
+OPT_USE_PASSWORD = 'use_password'
+OPT_REPLICATION_MASTER = 'replication_master'
+OPT_MASTER_PASSWORD = 'master_password'
+
 
 class Store(object):
 
@@ -170,6 +175,27 @@ class Ini(Store):
             self.ini.write(fp)
 
 
+class RedisIni(Store):
+
+    def __getitem__(self, key):
+        try:
+            value = super(RedisIni, self).__getitem__(key)
+            if key in (OPT_USE_PASSWORD, OPT_REPLICATION_MASTER,):
+                if value in (None, ''):
+                    value = True
+                else:
+                    value = bool(int(value))
+        except KeyError:
+            if OPT_PERSISTENCE_TYPE == key:
+                value = 'snapshotting'
+                self.__setitem__(key, value)
+            elif OPT_MASTER_PASSWORD == key:
+                value = None
+            else:
+                raise
+        return value
+
+
 class IniOption(Ini):
     def __init__(self, filenames, section, option, 
                     getfilter=None, setfilter=None):
@@ -319,10 +345,14 @@ for behavior in ('mysql', 'mysql2', 'percona', 'mariadb'):
     })
 
 node['redis'] = Compound({
-        'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'redis'),
-                 'scalarizr.storage2.volume'),
-        'replication_master,persistence_type,use_password,master_password': Ini(
-                '%s/%s.ini' % (private_dir, 'redis'), 'redis')
+    'volume,volume_config': Json(
+        '%s/storage/%s.json' % (private_dir, 'redis'), 'scalarizr.storage2.volume'),
+    'replication_master,persistence_type,use_password,master_password': Ini(
+                    '%s/%s.ini' % (private_dir, 'redis'), 'redis')
+    #'%s,%s,%s,%s' % (
+    #    OPT_REPLICATION_MASTER, OPT_PERSISTENCE_TYPE, OPT_USE_PASSWORD, OPT_MASTER_PASSWORD
+    #): RedisIni(
+    #    '%s/%s.ini' % (private_dir, 'redis'), 'redis')
 })
 
 
