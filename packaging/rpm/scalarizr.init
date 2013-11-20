@@ -2,10 +2,10 @@
 #
 # scalarizr - this script starts and stops the scalarizr daemon
 #
-# chkconfig:   2345 85 15
+# chkconfig:   2345 - 15
 # description:  Scalarizr is a part of Scalr project
 # processname: scalarizr
-# config:      /etc/scalarizr/config.ini
+# config:      /etc/scalr/config.ini
 # config:      /etc/sysconfig/scalarizr
 # pidfile:     /var/run/scalarizr.pid
 
@@ -96,7 +96,7 @@ killproc() {
 # Check that networking is up.
 [ "$NETWORKING" = "no" ] && exit 0
 
-scalarizr="/usr/local/bin/scalarizr"
+scalarizr="/usr/bin/scalarizr"
 prog=$(basename $scalarizr)
 
 SCALARIZR_CONF_DIR="/etc/scalr"
@@ -131,7 +131,7 @@ stop() {
     echo
     [ $retval -eq 0 ] && rm -f $lockfile
 
-	__zomby_pids=$(ps aux | grep '/usr/local/bin/scalarizr' | awk '{ print $2 }')
+	__zomby_pids=$(ps aux | grep 'bin/scalarizr' | awk '{ print $2 }')
 	if [ "$__zomby_pids" ]; then
 		for __zomby_pid in $__zomby_pids; do
 			kill -9 $__zomby_pid || :

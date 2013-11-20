@@ -17,7 +17,7 @@
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
 DAEMON=/usr/bin/python # Introduce the server's location here
-SCALARIZR_BIN=/usr/local/bin/scalarizr
+SCALARIZR_BIN=/usr/bin/scalarizr
 NAME="scalarizr"           # Introduce the short server's name here
 DESC="Scalarizr"           # Introduce a short description here
 LOGDIR=/var/log/scalarizr  # Log directory to use
@@ -146,7 +146,7 @@ stop_server() {
 	    rm -f $PIDFILE
         fi
 
-		__zomby_pids=$(ps aux | grep '/usr/local/bin/scalarizr' | awk '{ print $2 }')
+		__zomby_pids=$(ps aux | grep 'bin/scalarizr' | awk '{ print $2 }')
 		if [ "$__zomby_pids" ]; then
 			for __zomby_pid in $__zomby_pids; do
 				kill -9 $__zomby_pid || :
