@@ -19,7 +19,6 @@ Priority: extra
 Depends: ${shlibs:Depends}, 
          ${misc:Depends}, 
          ${python:Depends},
-         scalr-upd-client,
          python-m2crypto (= 0.20.1-1ubuntu5) | python-m2crypto (>= 0.20),
          python-pysnmp4 (>= 4.1.12a), 
          python-pysnmp4-mibs (>= 0.0.5a), 

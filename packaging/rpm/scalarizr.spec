@@ -37,7 +37,6 @@ Requires:       python-prettytable PyYAML
 Requires:		python-pymysql
 Requires:		python-pychef
 %endif
-Requires:		scalr-upd-client
 Requires:		which
 Requires:		e2fsprogs
 Requires:       rsync >= 2.6.8
