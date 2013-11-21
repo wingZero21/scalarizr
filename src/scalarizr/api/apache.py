@@ -1169,9 +1169,15 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
     def reload(self, reason=None):
         if self.running:
             LOG.info("Reloading apache: %s" % str(reason) if reason else '')
-            out, err, retcode = system2(__apache__["apachectl"] + " graceful", shell=True)
-            if retcode > 0:
-                raise initdv2.InitdError("Cannot reload apache: %s" % err)
+            try:
+                out, err, retcode = system2(__apache__["apachectl"] + " graceful", shell=True)
+                if retcode > 0:
+                    raise initdv2.InitdError("Cannot reload apache: %s" % err)
+            except PopenError, e:
+                if "Syntax error" in e.message:
+                    raise InitdError(e)
+                else:
+                    raise
         else:
             raise InitdError("Service '%s' is not running" % self.name, InitdError.NOT_RUNNING)
 
