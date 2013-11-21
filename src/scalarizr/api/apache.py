@@ -213,9 +213,14 @@ class ApacheAPI(object):
             LOG.info("Skipping VirtualHost %s: No changes found." % v_host)
             return v_host_path
 
-        with BackupManager(v_host_path):
+        if reload:
+            with BackupManager(v_host_path):
+                with open(v_host_path, "w") as fp:
+                    fp.write(v_host.body)
+        else:
             with open(v_host_path, "w") as fp:
                 fp.write(v_host.body)
+
         LOG.info("VirtualHost %s saved to %s" % (v_host, v_host_path))
 
         self._open_ports([port])
