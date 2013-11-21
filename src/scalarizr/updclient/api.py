@@ -96,6 +96,40 @@ class Daemon(object):
             return not self.ctl('status')[2] 
 
 
+def norm_user_data(data):
+    data['server_id'] = data['serverid']
+    return data
+
+
+def system_uuid():
+    if linux.os.windows_family:
+        wmi = win32com.client.GetObject('winmgmts:')
+        result = wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS')
+        uuid = result.SerialNumber
+        if not uuid:
+            LOG.debug('WMI returns empty UUID')
+    else:
+        uuid = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
+        if not uuid:
+            LOG.debug('dmidecide returns empty UUID')
+
+    if not uuid:
+        try:
+            meta = metadata.meta()
+        except:
+            LOG.debug("Failed to init metadata (in system_uuid() method): %s", sys.exc_info()[1])
+        else:
+            if meta.platform == 'ec2':
+                uuid = meta['instance-id']
+            elif meta.platform == 'gce':
+                uuid = meta['id']
+            else:
+                LOG.debug("Don't know how to get instance-id on '%s' platform", meta.platform)
+    if not uuid:
+        LOG.debug('System UUID not detected')
+        uuid = '00000000-0000-0000-0000-000000000000'
+    return uuid
+
 
 class UpdClientAPI(object):
 
@@ -130,23 +164,29 @@ class UpdClientAPI(object):
 
 
     def bootstrap(self):
-        serial_number = self.serial_number()
-        serial_matches = False
+        system_id = system_uuid()
+        system_matches = False
         if os.path.exists(self.updatelock_file):
+            LOG.debug('Checking %s', self.updatelock_file)
             with open(self.updatelock_file) as fp:
                 updatelock = json.load(fp)
-            serial_matches = updatelock['serial_number'] == serial_number
-            if not serial_matches:
+            system_matches = updatelock['system_uuid'] == system_id
+            if not system_matches:
+                LOG.debug('Serial number in lock file and machine one not matched: %s != %s', 
+                        updatelock['system_uuid'], system_id)
                 os.unlink(self.updatelock_file)
 
-        if serial_matches:
+        if system_matches:
             self.__dict__.update(updatelock)
         else:
             meta = metadata.meta(timeout=60)
             user_data = meta.user_data()
+            norm_user_data(user_data)
             self.__dict__.update(user_data)
             self.package = 'scalarizr-' + self.platform
-            os.makedirs(os.path.dirname(self.crypto_file))
+            crypto_dir = os.path.dirname(self.crypto_file)
+            if not os.path.exists(crypto_dir):
+                os.makedirs(crypto_dir)
             with open(self.crypto_file, 'w+') as fp:
                 fp.write(user_data['szr_key'])
 
@@ -162,39 +202,11 @@ class UpdClientAPI(object):
 
         self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file)
 
-        if not serial_matches:
+        if not system_matches:
             self.update(force=True, reporting=False)
         self.daemon.start()
 
 
-    def serial_number(self):
-        if linux.os.windows_family:
-            wmi = win32com.client.GetObject('winmgmts:')
-            result = wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS')
-            uuid = result.SerialNumber
-            if not uuid:
-                LOG.debug('WMI returns empty UUID')
-        else:
-            uuid = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
-            if not uuid:
-                LOG.debug('dmidecide returns empty UUID')
-
-        if not uuid:
-            try:
-                meta = metadata.meta()
-            except:
-                LOG.debug("Failed to init metadata (in serial_number() method): %s", sys.exc_info()[1])
-            else:
-                if meta.platform == 'ec2':
-                    uuid = meta['meta-data/instance-id']
-                elif meta.platform == 'gce':
-                    uuid = meta['id']
-                else:
-                    LOG.debug("Don't know how to get instance-id on '%s' platform", meta.platform)
-        if not uuid:
-            LOG.debug('System UUID not detected')
-            uuid = '00000000-0000-0000-0000-000000000000'
-        return uuid
 
 
     def sync(self):
@@ -349,9 +361,9 @@ class UpdClientAPI(object):
 
         content = binascii.a2b_base64(content)
 
-        dir = os.path.dirname(name)
-        if makedirs and not os.path.exists(dir):
-            os.makedirs(dir)
+        directory = os.path.dirname(name)
+        if makedirs and not os.path.exists(directory):
+            os.makedirs(directory)
         
         tmpname = '%s.tmp' % name
         try:

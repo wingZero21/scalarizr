@@ -50,7 +50,9 @@ class UrlMeta(Meta):
     socket_timeout = 5
 
     def __getitem__(self, rel):
-        url = os.path.abspath(self.base_url + '/' + rel)
+        result = list(urlparse.urlparse(self.base_url))
+        result[2] = os.path.normpath(result[2] + '/' + rel)
+        url = urlparse.urlunparse(result)
         try:
             return urllib2.urlopen(url, timeout=self.socket_timeout).read().strip()
         except urllib2.HTTPError, e:
@@ -71,6 +73,7 @@ class UrlMeta(Meta):
         try:
             pr = urlparse.urlparse(self.base_url)
             socket.gethostbyname(pr.hostname)
+            return True
         except:
             return False
 
@@ -161,6 +164,6 @@ def meta(timeout=None):
         if timeout:
             time.sleep(1)
 
-    msg = "meta-data provider not found. We've those ones: {0}".format(pvds)
+    msg = "meta-data provider not found. We've tried those ones: {0}".format(pvds)
     raise NoProviderError(msg)
 
