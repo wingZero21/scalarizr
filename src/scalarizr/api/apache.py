@@ -24,11 +24,10 @@ from scalarizr import linux
 from telnetlib import Telnet
 from scalarizr.bus import bus
 from scalarizr.node import __node__
-from scalarizr.util import initdv2
-from scalarizr.util import system2
 from scalarizr.util.initdv2 import InitdError
+from scalarizr.util import system2, initdv2
+from scalarizr.util import wait_until, dynimp, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
-from scalarizr.util import wait_until, dynimp
 from scalarizr.libs.metaconf import Configuration, NoPathError
 
 
@@ -1124,9 +1123,15 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         args = __apache__["apachectl"] + " configtest"
         if path:
             args += "-f %s" % path
-        out = system2(args, shell=True)[1]
-        if "error" in out.lower():
-            raise initdv2.InitdError("Configuration isn`t valid: %s" % out)
+        try:
+            out = system2(args, shell=True)[1]
+            if "error" in out.lower():
+                raise initdv2.InitdError("Invalid Apache configuration: %s" % out)
+        except PopenError, e:
+            if "Syntax error" in e.message:
+                raise InitdError(e)
+            else:
+                raise
 
     def start(self):
         if not self._main_process_started() and not self.running:
