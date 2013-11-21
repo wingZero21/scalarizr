@@ -822,7 +822,17 @@ class BackupManager(object):
     def __exit__(self, type, value, traceback):
         after = self._get_content()
         if self.before != after:
+
+            if self.before and after:
+                LOG.debug("BackupManager noticed changes in %s" % self.path)
+            elif not self.before:
+                LOG.debug("BackupManager noticed creation of %s" % self.path)
+            elif not after:
+                LOG.debug("BackupManager noticed that %s has been removed" % self.path)
+
             BackupManager.backup[self.path] = self.before
+        else:
+            LOG.debug("BackupManager: %s has not been changed." % self.path)
 
     @classmethod
     def restore(cls, paths):
@@ -836,16 +846,16 @@ class BackupManager(object):
                 data = cls.backup[path]
                 if not data and os.path.exists(path):
                     os.remove(path)
-                    LOG.debug("%s removed to restore its previous state")
+                    LOG.debug("BackupManager: %s removed to restore its previous state")
                 else:
                     text, st_uid, st_gid, st_mode = data
                     with open(path, "w") as fp:
                         fp.write(text)
                     os.chown(path, st_uid, st_gid)
                     os.chmod(path, st_mode)
-                    LOG.debug("%s restored to its previous state")
+                    LOG.debug("BackupManager: %s restored to its previous state")
             else:
-                LOG.debug("Cannot restore %s: file wasn`t changed")
+                LOG.debug("BackupManager: Nothing to restore %s: file wasn`t changed")
             cls.free(path)
 
     @classmethod
@@ -857,6 +867,7 @@ class BackupManager(object):
 
         for path in paths:
             if path in cls.backup:
+                LOG.debug("BackupManager: Removing %s from backup storage." % path)
                 del cls.backup[path]
 
 
