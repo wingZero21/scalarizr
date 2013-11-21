@@ -199,11 +199,12 @@ class UpdClient(util.Server):
         timeout = 60
         for _ in range(0, timeout):
             try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.connect(('win.scalr.net', 80))
-                break
+                sock = socket.create_connection(('win.scalr.net', 80), timeout=5)
             except:
                 time.sleep(1)
+            else:
+                sock.close()
+                return
         msg = 'Network is not available. timeout {0} seconds was reached'.format(60)
         raise Exception(msg)
 

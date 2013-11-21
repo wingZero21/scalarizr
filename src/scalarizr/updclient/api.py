@@ -171,9 +171,30 @@ class UpdClientAPI(object):
         if linux.os.windows_family:
             wmi = win32com.client.GetObject('winmgmts:')
             result = wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS')
-            return result.SerialNumber
+            uuid = result.SerialNumber
+            if not uuid:
+                LOG.debug('WMI returns empty UUID')
         else:
-            return linux.system('dmidecode | grep UUID', shell=True)[0].strip().split(' ')[-1]
+            uuid = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
+            if not uuid:
+                LOG.debug('dmidecide returns empty UUID')
+
+        if not uuid:
+            try:
+                meta = metadata.meta()
+            except:
+                LOG.debug("Failed to init metadata (in serial_number() method): %s", sys.exc_info()[1])
+            else:
+                if meta.platform == 'ec2':
+                    uuid = meta['meta-data/instance-id']
+                elif meta.platform == 'gce':
+                    uuid = meta['id']
+                else:
+                    LOG.debug("Don't know how to get instance-id on '%s' platform", meta.platform)
+        if not uuid:
+            LOG.debug('System UUID not detected')
+            uuid = '00000000-0000-0000-0000-000000000000'
+        return uuid
 
 
     def sync(self):

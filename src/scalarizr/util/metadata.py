@@ -29,6 +29,7 @@ def parse_user_data(data):
 
 
 class Meta(object):
+    platform = None
     def __getitem__(self, name):
         raise NotImplementedError()
 
@@ -96,11 +97,13 @@ class FileMeta(Meta):
 
 
 class Ec2Meta(UrlMeta):
+    platform = 'ec2'
     base_url = 'http://169.254.169.254/latest/meta-data'
     user_data_rel = '../user-data'
 
 
 class CloudStackMeta(UrlMeta):
+    platform = 'cloudstack'
 
     def __init__(self, router_host=None, 
             leases_pattern='/var/lib/dhc*/dhclient*.leases'):
@@ -126,6 +129,7 @@ class CloudStackMeta(UrlMeta):
 
 
 class OpenStackMeta(UrlMeta):
+    platform = 'openstack'
     user_data_rel = 'meta'
 
     def __init__(self, meta_data_url='http://169.254.169.254/openstack/latest/meta_data.json'):
@@ -141,6 +145,7 @@ class OpenStackMeta(UrlMeta):
 
 
 class GceMeta(UrlMeta):
+    platform = 'gce'
     base_url = 'http://metadata/computeMetadata/v1beta1/instance'
     user_data_rel = 'attributes/scalr'
 
