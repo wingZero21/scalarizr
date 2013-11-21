@@ -1144,10 +1144,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
             if "error" in out.lower():
                 raise initdv2.InitdError("Invalid Apache configuration: %s" % out)
         except PopenError, e:
-            if "Syntax error" in e.message:
-                raise InitdError(e)
-            else:
-                raise
+            raise InitdError(e)
 
     def start(self):
         if not self._main_process_started() and not self.running:
@@ -1190,10 +1187,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
                 if retcode > 0:
                     raise initdv2.InitdError("Cannot reload apache: %s" % err)
             except PopenError, e:
-                if "Syntax error" in e.message:
-                    raise InitdError(e)
-                else:
-                    raise
+                raise InitdError(e)
         else:
             raise InitdError("Service '%s' is not running" % self.name, InitdError.NOT_RUNNING)
 
