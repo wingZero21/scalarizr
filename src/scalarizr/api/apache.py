@@ -382,8 +382,8 @@ class ApacheAPI(object):
 
             if old_vhost_path not in applied_vhosts:
                 with BackupManager(old_vhost_path):
-                    removed_vhosts.append(old_vhost_path)
                     os.remove(old_vhost_path)
+                    removed_vhosts.append(old_vhost_path)
                 LOG.info("Removed old VirtualHost file %s" % old_vhost_path)
 
         if reload:
@@ -395,10 +395,10 @@ class ApacheAPI(object):
                 raise
             else:
                 self.reload_service("Applying new apache configuration.")
-                BackupManager.free(new_vhosts + removed_vhosts)
         else:
             LOG.info("Apache configuration changed without service reload.")
 
+        BackupManager.free(new_vhosts + removed_vhosts)
         return applied_vhosts
 
     @rpc.query_method
