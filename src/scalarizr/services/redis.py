@@ -17,7 +17,7 @@ from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, Pres
 from scalarizr.util import disttool, cryptotool, firstmatched
 from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
-from scalarizr.libs.metaconf import Configuration, NoPathError
+from scalarizr.libs.metaconf import NoPathError
 
 
 __redis__ = node.__node__['redis']
@@ -85,7 +85,6 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
     def _processes(self):
         return [p for p in get_redis_processes() if p == __redis__['defaults']['redis.conf']]
 
-
     def status(self):
         return initdv2.Status.RUNNING if self._processes else initdv2.Status.NOT_RUNNING
 
@@ -124,11 +123,9 @@ class Redisd(object):
         self.port = port or self.redis_conf.port
         self.cli = RedisCLI(self.redis_conf.requirepass, self.port)
 
-
     @classmethod
     def find(cls, config_obj=None, port=None):
         return cls(config_obj.path, port)
-
 
     def start(self):
         try:
@@ -141,13 +138,14 @@ class Redisd(object):
                     snap_dst = os.path.join(base_dir, get_snap_db_filename(__redis__['defaults']['port']))
                     if os.path.exists(snap_src) and not os.path.exists(snap_dst):
                         shutil.move(snap_src, snap_dst)
-                        self.redis_conf.dbfilename = snap_dst
+                        if 'snapshotting' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+                            self.redis_conf.dbfilename = snap_dst
                     aof_src = os.path.join(base_dir, __redis__['aof_filename'])
                     aof_dst = os.path.join(base_dir, get_aof_db_filename(__redis__['defaults']['port']))
                     if os.path.exists(aof_src) and not os.path.exists(aof_dst):
                         shutil.move(aof_src, aof_dst)
-                        self.redis_conf.appendfilename = aof_dst
-
+                        if 'aof' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+                            self.redis_conf.appendfilename = aof_dst
 
                 LOG.debug('Starting %s on port %s' % (__redis__['redis-server'], self.port))
                 system2('%s %s -s %s -c "%s %s"' % (
@@ -164,13 +162,11 @@ class Redisd(object):
             LOG.error('Unable to start redis process: %s' % e)
             raise initdv2.InitdError(e)
 
-
     def stop(self, reason=None):
         if self.running:
             LOG.info('Stopping redis server on port %s (pid %s). Reason: %s' % (self.port, self.pid, reason))
             os.kill(int(self.pid), signal.SIGTERM)
             wait_until(lambda: not self.running)
-
 
     def restart(self, reason=None, force=True):
         #force parameter is needed
@@ -179,10 +175,8 @@ class Redisd(object):
             self.stop()
         self.start()
 
-
     def reload(self, reason=None):
         self.restart()
-
 
     @property
     def running(self):
@@ -193,7 +187,6 @@ class Redisd(object):
             elif config_path == __redis__['defaults']['redis.conf'] and int(self.port) == __redis__['defaults']['port']:
                 process_matches = True
         return process_matches
-
 
     @property
     def pid(self):
@@ -223,39 +216,31 @@ class RedisInstances(object):
     def __init__(self):
         self.instances = []
 
-
     @property
     def ports(self):
         return [instance.port for instance in self.instances]
-
 
     @property
     def passwords(self):
         return [instance.password for instance in self.instances]
 
-
     def __iter__(self):
         return iter(self.instances)
-
 
     def get_processes(self):
         return [instance.service for instance in self.instances]
 
-
     def get_config_files(self):
         return [instance.redis_conf.path for instance in self.instances]
 
-
     def get_default_process(self):
         return self.get_instance(port=__redis__['defaults']['port']).service
-
 
     def get_instance(self, port=None):
         for instance in self.instances:
             if instance.port == port:
                 return instance
         raise ServiceError('Redis instance with port %s not found' % port)
-
 
     def init_processes(self, num, ports=None, passwords=None):
         ports = ports or []
@@ -295,41 +280,34 @@ class RedisInstances(object):
                 self.instances.append(redis_process)
         LOG.debug('Total of redis processes: %d' % len(self.instances))
 
-
     def kill_processes(self, ports=[], remove_data=False):
         for instance in self.instances:
             if instance.port in ports:
                 instance.service.stop()
-                if remove_data and os.path.exists(instance.db_path):
+                if remove_data and instance.db_path and os.path.exists(instance.db_path):
                     os.remove(instance.db_path)
                 self.instances.remove(instance)
-
 
     def start(self):
         for redis in self.instances:
             redis.service.start()
 
-
     def stop(self, reason = None):
         for redis in self.instances:
             redis.service.stop(reason)
-
 
     def restart(self, reason = None):
         for redis in self.instances:
             redis.service.restart(reason)
 
-
     def reload(self, reason = None):
         for redis in self.instances:
             redis.service.reload(reason)
-
 
     def save_all(self):
         for redis in self.instances:
             if redis.service.running:
                 redis.redis_cli.save()
-
 
     def init_as_masters(self, mpoint):
         passwords = []
@@ -338,8 +316,7 @@ class RedisInstances(object):
             redis.init_master(mpoint)
             passwords.append(redis.password)
             ports.append(redis.port)
-        return (ports, passwords)
-
+        return ports, passwords
 
     def init_as_slaves(self, mpoint, primary_ip):
         passwords = []
@@ -348,13 +325,12 @@ class RedisInstances(object):
             passwords.append(redis.password)
             ports.append(redis.port)
             redis.init_slave(mpoint, primary_ip, redis.port)
-        return (ports, passwords)
+        return ports, passwords
 
-
-    def wait_for_sync(self,link_timeout=None,sync_timeout=None):
+    def wait_for_sync(self, link_timeout=None, sync_timeout=None):
         #consider using threads
         for redis in self.instances:
-            redis.wait_for_sync(link_timeout,sync_timeout)
+            redis.wait_for_sync(link_timeout, sync_timeout)
 
 
 class Redis(BaseService):
@@ -368,7 +344,6 @@ class Redis(BaseService):
         self.port = port
         self.password = password
 
-
     def init_master(self, mpoint):
         self.service.stop('Configuring master. Moving Redis db files')
         self.init_service(mpoint)
@@ -377,7 +352,6 @@ class Redis(BaseService):
         self.service.start()
         return self.current_password
 
-
     def init_slave(self, mpoint, primary_ip, primary_port):
         self.service.stop('Configuring slave')
         self.init_service(mpoint)
@@ -385,14 +359,12 @@ class Redis(BaseService):
         self.service.start()
         return self.current_password
 
-
     def wait_for_sync(self,link_timeout=None,sync_timeout=None):
         LOG.info('Waiting for link with master')
         wait_until(lambda: self.redis_cli.master_link_status == 'up', sleep=3, timeout=link_timeout)
         LOG.info('Waiting for sync with master to complete')
         wait_until(lambda: not self.redis_cli.master_sync_in_progress, sleep=10, timeout=sync_timeout)
         LOG.info('Sync with master completed')
-
 
     def change_primary(self, primary_ip, primary_port):
         '''
@@ -407,23 +379,27 @@ class Redis(BaseService):
         self.redis_conf.masterauth = self.password
         self.redis_conf.slaveof = (primary_ip, primary_port)
 
-
     def init_service(self, mpoint):
-        move_files = not self.working_directory.is_initialized(mpoint)
-        self.working_directory.move_to(mpoint, move_files)
+        if __redis__[node.OPT_PERSISTENCE_TYPE] != 'nopersistence':
+            move_files = not self.working_directory.is_initialized(mpoint)
+            self.working_directory.move_to(mpoint, move_files)
+
         self.redis_conf.requirepass = self.password
         self.redis_conf.daemonize = True
         self.redis_conf.dir = mpoint
         self.redis_conf.bind = None
         self.redis_conf.port = self.port
-        self.redis_conf.dbfilename = get_snap_db_filename(self.port)
-        self.redis_conf.appendfilename = get_aof_db_filename(self.port)
         self.redis_conf.pidfile = get_pidfile(self.port)
 
         persistence_type = __redis__[node.OPT_PERSISTENCE_TYPE]
         if persistence_type == 'snapshotting':
             self.redis_conf.appendonly = False
+            self.redis_conf.dbfilename = get_snap_db_filename(self.port)
+            self.redis_conf.appendfilename = None
         elif persistence_type == 'aof':
+            aof_path = get_aof_db_filename(self.port)
+            self.redis_conf.appendfilename = aof_path
+            self.redis_conf.dbfilename = None
             self.redis_conf.appendonly = True
             self.redis_conf.save = {}
         elif persistence_type == 'nopersistence':
@@ -432,49 +408,42 @@ class Redis(BaseService):
             assert not self.redis_conf.save
         LOG.debug('Persistence type is set to %s' % persistence_type)
 
-
     @property
     def current_password(self):
         return self.redis_conf.requirepass
 
-
     @property
     def db_path(self):
-        fname = self.redis_conf.dbfilename if not self.redis_conf.appendonly else self.redis_conf.appendfilename
-        return os.path.join(self.redis_conf.dir, fname)
-
+        if 'snapshotting' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+            return os.path.join(self.redis_conf.dir, self.redis_conf.dbfilename)
+        elif 'aof' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+            return os.path.join(self.redis_conf.dir, self.redis_conf.appendfilename)
+        else:
+            return None
 
     def _get_redis_conf(self):
         return self._get('redis_conf', RedisConf.find, __redis__['config_dir'], self.port)
 
-
     def _set_redis_conf(self, obj):
         self._set('redis_conf', obj)
-
 
     def _get_redis_cli(self):
         return self._get('redis_cli', RedisCLI.find, self.redis_conf)
 
-
     def _set_redis_cli(self, obj):
         self._set('redis_cli', obj)
-
 
     def _get_working_directory(self):
         return self._get('working_directory', WorkingDirectory.find, self.redis_conf)
 
-
     def _set_working_directory(self, obj):
         self._set('working_directory', obj)
-
 
     def _get_service(self):
         return self._get('service', Redisd.find, self.redis_conf, self.port)
 
-
     def _set_service(self, obj):
         self._set('service', obj)
-
 
     service = property(_get_service, _set_service)
     working_directory = property(_get_working_directory, _set_working_directory)
@@ -497,10 +466,14 @@ class WorkingDirectory(object):
         if not dir:
             dir = __redis__['defaults']['dir']
 
-        db_fname = redis_conf.appendfilename if redis_conf.appendonly else redis_conf.dbfilename
-        if not db_fname:
+        if 'snapshotting' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+            db_fname = redis_conf.dbfilename
+        elif 'aof' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+            db_fname = redis_conf.appendfilename
+        else:
             db_fname = cls.default_db_fname
-        return cls(os.path.join(dir,db_fname))
+
+        return cls(os.path.join(dir, db_fname))
 
 
     def move_to(self, dst, move_files=True):

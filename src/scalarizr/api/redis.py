@@ -135,7 +135,7 @@ class RedisAPI(object):
                 log.debug('Stopping the process')
                 instance.service.stop()
                 freed_ports.append(port)
-            if remove_data and os.path.exists(instance.db_path):
+            if remove_data and instance.db_path and os.path.exists(instance.db_path):
                 os.remove(instance.db_path)
 
         return dict(ports=freed_ports)
@@ -288,7 +288,7 @@ class RedisAPI(object):
         def do_backup(op):
             try:
                 self.redis_instances.save_all()
-                dbs = [r.db_path for r in self.redis_instances]
+                dbs = [r.db_path for r in self.redis_instances if r.db_path]
 
                 cloud_storage_path = bus.platform.scalrfs.backups(BEHAVIOUR)  #? __node__.platform
                 LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
