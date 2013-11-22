@@ -166,10 +166,6 @@ class BaseConfig(object):
 
     def get_numeric_option(self, option):
         value = self.get(option)
-        try:
-            assert value is None or value.isdigit()
-        except AssertionError:
-            raise ValueError('%s must be a number (got %s instead)' % (option, type(value)))
         return value if value is None else int(value)
 
 
