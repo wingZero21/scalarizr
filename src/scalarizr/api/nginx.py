@@ -603,7 +603,7 @@ class NginxAPI(object):
         if hash_name:
             name = sha1(name).hexdigest()
         name = '%s%s__%s' % (name, 
-                             ('_' + location.replace('/', '_')).rstrip('_'),
+                             (location.replace('/', '_')).rstrip('_'),
                              role_namepart)
         name = name.rstrip('_')
 
@@ -646,11 +646,7 @@ class NginxAPI(object):
             role_ids = set([dest.get('id') for dest in backend_destinations])
             role_ids.discard(None)
 
-            name = self._make_backend_name(
-                hostname,
-                location[1:] if location.startswith('/') else location,
-                role_ids,
-                hash_name)
+            name = self._make_backend_name(hostname, location, role_ids, hash_name)
 
             self._add_backend(name,
                               backend_destinations,
