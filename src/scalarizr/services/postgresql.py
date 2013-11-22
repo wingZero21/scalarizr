@@ -873,7 +873,7 @@ class PostgresqlConf(BasePGConfig):
     ssl_renegotiation_limit = property(_get_ssl_renegotiation_limit, _set_ssl_renegotiation_limit)
 
     max_wal_senders_default = 5
-    wal_keep_segments_default = 32
+    wal_keep_segments_default = 0
 
 
     
