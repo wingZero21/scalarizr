@@ -297,6 +297,9 @@ class Architectures:
 
 
 if linux.os.windows_family:
+    from scalarizr.util import coinitialized
+
+    @coinitialized
     def net_interfaces():
         wmi = win32com.client.GetObject('winmgmts:')
         wql = "SELECT IPAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = 'True'"

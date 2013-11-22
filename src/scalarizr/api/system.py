@@ -18,7 +18,6 @@ import time
 import signal
 import binascii
 import weakref
-import functools
 import subprocess as subps
 
 from multiprocessing import pool
@@ -27,7 +26,7 @@ from scalarizr import rpc, linux
 from scalarizr.bus import bus
 from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
-from scalarizr.util import kill_childs
+from scalarizr.util import kill_childs, coinitialized
 from scalarizr.queryenv import ScalingMetric
 from scalarizr.handlers.script_executor import logs_dir
 
@@ -527,19 +526,7 @@ def _get_log(logfile, maxsize=max_log_size):
 
 
 if linux.os.windows_family:
-
-    import pythoncom
     from win32com import client
-
-    def coinitialized(fn):
-        @functools.wraps(fn)
-        def decorator(*args, **kwargs):
-            pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
-            try:
-                return fn(*args, **kwargs)
-            finally:
-                pythoncom.CoUninitialize()
-        return decorator
 
 
     class WindowsSystemAPI(SystemAPI):
