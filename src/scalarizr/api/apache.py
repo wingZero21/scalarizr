@@ -836,6 +836,7 @@ class BackupManager(object):
 
     @classmethod
     def restore(cls, paths):
+        LOG.debug("BackupManager: Restoring files: %s" % ",".join(paths))
         try:
             paths = iter(paths)
         except TypeError:
@@ -855,8 +856,9 @@ class BackupManager(object):
                     os.chmod(path, st_mode)
                     LOG.debug("BackupManager: %s restored to its previous state")
             else:
-                LOG.debug("BackupManager: Nothing to restore %s: file wasn`t changed")
+                LOG.debug("BackupManager: Cannot restore %s: file wasn`t changed")
             cls.free(path)
+        LOG.info("BackupManager restored files: %s" % ",".join(paths))
 
     @classmethod
     def free(cls, paths):
