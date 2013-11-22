@@ -26,7 +26,7 @@ from scalarizr import rpc, linux
 from scalarizr.bus import bus
 from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
-from scalarizr.util import kill_childs, coinitialized
+from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
 from scalarizr.handlers.script_executor import logs_dir
 
@@ -527,6 +527,7 @@ def _get_log(logfile, maxsize=max_log_size):
 
 if linux.os.windows_family:
     from win32com import client
+    from scalarizr.util import coinitialized
 
 
     class WindowsSystemAPI(SystemAPI):
