@@ -138,13 +138,13 @@ class Redisd(object):
                     snap_dst = os.path.join(base_dir, get_snap_db_filename(__redis__['defaults']['port']))
                     if os.path.exists(snap_src) and not os.path.exists(snap_dst):
                         shutil.move(snap_src, snap_dst)
-                        if 'snapshotting' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+                        if 'snapshotting' == __redis__["persistence_type"]:
                             self.redis_conf.dbfilename = snap_dst
                     aof_src = os.path.join(base_dir, __redis__['aof_filename'])
                     aof_dst = os.path.join(base_dir, get_aof_db_filename(__redis__['defaults']['port']))
                     if os.path.exists(aof_src) and not os.path.exists(aof_dst):
                         shutil.move(aof_src, aof_dst)
-                        if 'aof' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+                        if 'aof' == __redis__["persistence_type"]:
                             self.redis_conf.appendfilename = aof_dst
 
                 LOG.debug('Starting %s on port %s' % (__redis__['redis-server'], self.port))
@@ -245,7 +245,7 @@ class RedisInstances(object):
     def init_processes(self, num, ports=None, passwords=None):
         ports = ports or []
         passwords = passwords or []
-        if not __redis__[node.OPT_USE_PASSWORD]:
+        if not __redis__["use_password"]:
             # Ignoring passwords from HostInitResponse if use_password=0
             passwords = [None for password in passwords]
         if len(ports) < num:
@@ -260,7 +260,7 @@ class RedisInstances(object):
 
         if len(passwords) < len(ports):
             diff = len(ports) - len(passwords)
-            if __redis__[node.OPT_USE_PASSWORD]:
+            if __redis__["use_password"]:
                 LOG.debug("Generating %s additional passwords for ports %s" % (diff, ports[-diff:]))
                 additional_passwords= [cryptotool.pwgen(20) for port in ports[-diff:]]
                 LOG.debug("Generated passwords: %s" % str(additional_passwords))
@@ -380,7 +380,7 @@ class Redis(BaseService):
         self.redis_conf.slaveof = (primary_ip, primary_port)
 
     def init_service(self, mpoint):
-        if __redis__[node.OPT_PERSISTENCE_TYPE] != 'nopersistence':
+        if __redis__["persistence_type"] != 'nopersistence':
             move_files = not self.working_directory.is_initialized(mpoint)
             self.working_directory.move_to(mpoint, move_files)
 
@@ -391,7 +391,7 @@ class Redis(BaseService):
         self.redis_conf.port = self.port
         self.redis_conf.pidfile = get_pidfile(self.port)
 
-        persistence_type = __redis__[node.OPT_PERSISTENCE_TYPE]
+        persistence_type = __redis__["persistence_type"]
         if persistence_type == 'snapshotting':
             self.redis_conf.appendonly = False
             self.redis_conf.dbfilename = get_snap_db_filename(self.port)
@@ -414,9 +414,9 @@ class Redis(BaseService):
 
     @property
     def db_path(self):
-        if 'snapshotting' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+        if 'snapshotting' == __redis__["persistence_type"]:
             return os.path.join(self.redis_conf.dir, self.redis_conf.dbfilename)
-        elif 'aof' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+        elif 'aof' == __redis__["persistence_type"]:
             return os.path.join(self.redis_conf.dir, self.redis_conf.appendfilename)
         else:
             return None
@@ -466,9 +466,9 @@ class WorkingDirectory(object):
         if not dir:
             dir = __redis__['defaults']['dir']
 
-        if 'snapshotting' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+        if 'snapshotting' == __redis__["persistence_type"]:
             db_fname = redis_conf.dbfilename
-        elif 'aof' == __redis__[node.OPT_PERSISTENCE_TYPE]:
+        elif 'aof' == __redis__["persistence_type"]:
             db_fname = redis_conf.appendfilename
         else:
             db_fname = cls.default_db_fname

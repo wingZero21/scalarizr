@@ -50,13 +50,12 @@ class RedisAPI(object):
             raise AssertionError('Number of ports must be equal to number of passwords')
         if num and ports and num != len(ports):
             raise AssertionError('When ports range is passed its length must be equal to num parameter')
-        if not __redis__[node.OPT_REPLICATION_MASTER]:
+        if not __redis__["replication_master"]:
             if not passwords or not ports:
                 raise AssertionError('ports and passwords are required to launch processes on redis slave')
         available_ports = self.available_ports
         if num > len(available_ports):
             raise AssertionError('Cannot launch %s new processes: Ports available: %s' % (num, str(available_ports)))
-
         if ports:
             for port in ports:
                 if port not in available_ports:
@@ -94,7 +93,7 @@ class RedisAPI(object):
 
         for port, password in zip(ports, passwords or [None for port in ports]):
             log.info('Launch Redis %s on port %s', 
-                'Master' if __redis__[node.OPT_REPLICATION_MASTER] else 'Slave', port)
+                'Master' if __redis__["replication_master"] else 'Slave', port)
 
             if iptables.enabled():
                 iptables.FIREWALL.ensure({
@@ -105,7 +104,7 @@ class RedisAPI(object):
             redis_process = redis_service.Redis(port, password)
 
             if not redis_process.service.running:
-                if __redis__[node.OPT_REPLICATION_MASTER]:
+                if __redis__["replication_master"]:
                     current_password = redis_process.init_master(STORAGE_PATH)
                 else:
                     current_password = redis_process.init_slave(STORAGE_PATH, primary_ip, port)
@@ -123,7 +122,7 @@ class RedisAPI(object):
         freed_ports = []
         for port in ports:
             log.info('Shutdown Redis %s on port %s' % (
-                'Master' if __redis__[node.OPT_REPLICATION_MASTER] else 'Slave', port))
+                'Master' if __redis__["replication_master"] else 'Slave', port))
 
             instance = redis_service.Redis(port=port)
             if instance.service.running:
@@ -177,7 +176,7 @@ class RedisAPI(object):
 
     @property
     def persistence_type(self):
-        return __redis__[node.OPT_PERSISTENCE_TYPE]
+        return __redis__["persistence_type"]
 
     def get_primary_ip(self):
         master_host = None
@@ -211,7 +210,7 @@ class RedisAPI(object):
         redis_wrapper.service.reload()
 
         if int(port) == __redis__['defaults']['port']:
-            __redis__[node.OPT_MASTER_PASSWORD] = new_password
+            __redis__["master_password"] = new_password
 
         return new_password
 
@@ -219,7 +218,7 @@ class RedisAPI(object):
     def replication_status(self):
         ri = redis_service.RedisInstances()
 
-        if __redis__[node.OPT_REPLICATION_MASTER]:
+        if __redis__["replication_master"]:
             masters = {}
             for port in ri.ports:
                 masters[port] = {'status': 'up'}

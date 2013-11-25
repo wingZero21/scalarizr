@@ -73,7 +73,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
     @property
     def is_replication_master(self):
-        return __redis__[node.OPT_REPLICATION_MASTER]
+        return __redis__["replication_master"]
 
 
     @property
@@ -85,14 +85,14 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
     @property
     def persistence_type(self):
         try:
-            value = __redis__[node.OPT_PERSISTENCE_TYPE]
+            value = __redis__["persistence_type"]
         except KeyError:
             value = None
 
         if not value:
             value = 'snapshotting'
-            __redis__[node.OPT_PERSISTENCE_TYPE] = value
-        LOG.debug('Got %s : %s' % (node.OPT_PERSISTENCE_TYPE, value))
+            __redis__["persistence_type"] = value
+        LOG.debug('Got persistence_type : %s' % value)
 
         return value
 
@@ -129,9 +129,12 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         self.preset_provider = redis.RedisPresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
 
-        handlers.FarmSecurityMixin.__init__(self,
-                ["{0}:{1}".format(__redis__['ports_range'][0], __redis__['ports_range'][-1])])
+        from_port = __redis__['ports_range'][0]
+        to_port = __redis__['ports_range'][-1]
+        handlers.FarmSecurityMixin.__init__(self, ["{0}:{1}".format(from_port, to_port)])
+
         ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
+
         bus.on("init", self.on_init)
         bus.define_events(
                 'before_%s_data_bundle' % BEHAVIOUR,
@@ -265,7 +268,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         XXX: following line enables support for old scalr installations
         use_password shoud be set by postinstall script for old servers
         '''
-        redis_data[node.OPT_USE_PASSWORD] = redis_data.get(node.OPT_USE_PASSWORD, '1')
+        redis_data["use_password"] = redis_data.get("use_password", '1')
 
         ports = []
         passwords = []
@@ -496,8 +499,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         msg_data = dict()
         msg_data.update({
-            node.OPT_REPLICATION_MASTER: '1',
-            node.OPT_MASTER_PASSWORD: password,
+            "replication_master": '1',
+            "master_password": password,
         })
 
         log.info('Collect HostUp data')
@@ -510,15 +513,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
     @property
     def use_passwords(self):
-        return __redis__[node.OPT_USE_PASSWORD]
+        return __redis__["use_password"]
 
 
     def get_main_password(self):
-        password = __redis__[node.OPT_MASTER_PASSWORD]
+        password = __redis__["master_password"]
 
         if self.use_passwords and not password:
             password = cryptotool.pwgen(20)
-            __redis__[node.OPT_MASTER_PASSWORD] = password
+            __redis__["master_password"] = password
 
         return password
 
@@ -593,5 +596,5 @@ class RedisCnfController(CnfController):
 
 
     def _after_apply_preset(self):
-        cli = redis.RedisCLI(__redis__[node.OPT_MASTER_PASSWORD])
+        cli = redis.RedisCLI(__redis__["master_password"])
         cli.bgsave()
