@@ -721,8 +721,8 @@ class RedisConf(BaseRedisConfig):
     requirepass = property(_get_requirepass, _set_requirepass)
     appendonly = property(_get_appendonly, _set_appendonly)
     dbfilename = property(_get_dbfilename, _set_dbfilename)
-    dbfilename_default = __redis__['db_filename']
-    appendfilename_default = __redis__['aof_filename']
+    #dbfilename_default = __redis__['db_filename']
+    #appendfilename_default = __redis__['aof_filename']
     port_default = __redis__['defaults']['port']
 
 
