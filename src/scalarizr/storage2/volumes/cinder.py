@@ -232,7 +232,7 @@ class CinderVolume(base.Volume):
         with self.attach_lock:
             for _ in xrange(5):
                 LOG.debug('Attaching Cinder volume %s', volume_id)
-                taken_before = self.taken_devices()
+                taken_before = base.taken_devices()
                 attachment = self._nova.volumes.create_server_volume(server_id, volume_id, None)
 
                 #waiting for attaching transitional state
@@ -251,13 +251,13 @@ class CinderVolume(base.Volume):
                     raise storage2.StorageError(msg)
 
             if not linux.os.windows_family:
-                util.wait_until(lambda: self.taken_devices() > taken_before,
+                util.wait_until(lambda: base.taken_devices() > taken_before,
                         start_text='Checking that volume %s is available in OS' % volume_id,
                         timeout=30,
                         sleep=1,
                         error_text='Volume %s attached but not available in OS' % volume_id)
 
-                devices = list(self.taken_devices() - taken_before)
+                devices = list(base.taken_devices() - taken_before)
                 if len(devices) > 1:
                     msg = "While polling for attached device, got multiple new devices: %s. " \
                         "Don't know which one to select".format(devices)
