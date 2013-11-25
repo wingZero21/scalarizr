@@ -444,12 +444,6 @@ class Redis(BaseService):
     def _set_redis_cli(self, obj):
         self._set('redis_cli', obj)
 
-    def _get_working_directory(self):
-        return self._get('working_directory', WorkingDirectory.find, self.redis_conf)
-
-    def _set_working_directory(self, obj):
-        self._set('working_directory', obj)
-
     def _get_service(self):
         return self._get('service', Redisd.find, self.redis_conf, self.port)
 
@@ -457,7 +451,6 @@ class Redis(BaseService):
         self._set('service', obj)
 
     service = property(_get_service, _set_service)
-    working_directory = property(_get_working_directory, _set_working_directory)
     redis_conf = property(_get_redis_conf, _set_redis_conf)
     redis_cli = property(_get_redis_cli, _set_redis_cli)
 
