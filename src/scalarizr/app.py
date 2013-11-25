@@ -43,6 +43,7 @@ import threading, socket, signal
 from optparse import OptionParser
 from urlparse import urlparse, urlunparse
 import urllib
+import urllib2
 import pprint
 import select
 import wsgiref.simple_server
@@ -565,8 +566,11 @@ def main():
             do_keygen()
             sys.exit()
 
-        service = WindowsService() if 'Windows' == linux.os['family'] else Service()
-        service.start()
+        if not linux.os.windows_family:
+            svs = Service()
+            svs.start()
+        # On windows service will be started by services framework
+
             
     except (BaseException, Exception), e:
         if isinstance(e, SystemExit):
@@ -1118,6 +1122,7 @@ if 'Windows' == linux.os['family']:
 
             else:
                 # Normal start
+                main()
                 super(WindowsService, self).start()
 
 

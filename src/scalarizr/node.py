@@ -10,16 +10,16 @@ try:
 except ImportError:
     import simplejson as json 
 
+from scalarizr import linux
 
-base_dir = '/etc/scalr'
+
+if linux.os.windows_family:
+    base_dir = r'C:\Program Files\Scalarizr\etc'
+else:
+    base_dir = '/etc/scalr'
 private_dir = base_dir + '/private.d'
 public_dir = base_dir + '/public.d'
 storage_dir = private_dir + '/storage'
-
-OPT_PERSISTENCE_TYPE = 'persistence_type'
-OPT_USE_PASSWORD = 'use_password'
-OPT_REPLICATION_MASTER = 'replication_master'
-OPT_MASTER_PASSWORD = 'master_password'
 
 
 class Store(object):
@@ -180,16 +180,16 @@ class RedisIni(Ini):
     def __getitem__(self, key):
         try:
             value = super(RedisIni, self).__getitem__(key)
-            if key in (OPT_USE_PASSWORD, OPT_REPLICATION_MASTER,):
+            if key in ('use_password', 'replication_master',):
                 if value in (None, ''):
                     value = True
                 else:
                     value = bool(int(value))
         except KeyError:
-            if OPT_PERSISTENCE_TYPE == key:
+            if 'persistence_type' == key:
                 value = 'snapshotting'
                 self.__setitem__(key, value)
-            elif OPT_MASTER_PASSWORD == key:
+            elif 'master_password' == key:
                 value = None
             else:
                 raise
