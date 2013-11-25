@@ -698,12 +698,13 @@ class VirtualHost(BasicApacheConfiguration):
     def use_certificate(self, cert_path, key_path, chain_path=None):
 
         try:
-            assert self._cnf.get(".//SSLCertificateFile")
-            assert self._cnf.get(".//SSLCertificateKeyFile")
+            self._cnf.get(".//SSLCertificateFile")
+            self._cnf.get(".//SSLCertificateKeyFile")
         except NoPathError, e:
-            raise ApacheError("Cannot apply SSL certificate %s. Error: %s. Check VirtualHost configuration: %s" % (
-                (cert_path, key_path, chain_path), e, self.body
+            LOG.error("Cannot apply SSL certificate %s. Error: %s. Check VirtualHost configuration: %s" % (
+                (cert_path, key_path, chain_path), e.message, self.body
             ))
+            raise ApacheError(e)
 
         self._cnf.set(".//SSLCertificateFile", cert_path)
         self._cnf.set(".//SSLCertificateKeyFile", key_path)
