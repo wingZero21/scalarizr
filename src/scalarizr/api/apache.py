@@ -699,10 +699,10 @@ class VirtualHost(BasicApacheConfiguration):
 
         try:
             assert self._cnf.get(".//SSLCertificateFile")
-            assert self._cnf.set(".//SSLCertificateKeyFile", key_path)
-        except (NoPathError, AssertionError), e:
+            assert self._cnf.get(".//SSLCertificateKeyFile")
+        except NoPathError, e:
             raise ApacheError("Cannot apply SSL certificate %s. Error: %s. Check VirtualHost configuration: %s" % (
-                (cert_path, key_path, chain_path), e.message, self.body
+                (cert_path, key_path, chain_path), e, self.body
             ))
 
         self._cnf.set(".//SSLCertificateFile", cert_path)
