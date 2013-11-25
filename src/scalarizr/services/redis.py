@@ -367,21 +367,31 @@ class Redis(BaseService):
         LOG.info('Sync with master completed')
 
     def change_primary(self, primary_ip, primary_port):
-        '''
-        Currently redis slaves cannot use existing data to catch master
+        """
+        Currently redis slaves cannot use existing data to catch up with master
         Instead they create another db file while performing full sync
         Wchich may potentially cause free space problem on redis storage
         And broke whole initializing process.
-        So scalarizr removing all existing data on initializing slave
+        So scalarizr removes all existing data on initializing slave
         to free as much storage space as possible.
-        '''
-        self.working_directory.empty()
+        """
+        aof_fname = self.redis_conf.appendfilename
+        rdb_fname = self.redis_conf.dbfilename
+        for fname in os.listdir(__redis__['storage_dir']):
+            if fname in (aof_fname, rdb_fname):
+                path = os.path.join(__redis__['storage_dir'], fname)
+                os.remove(path)
+                LOG.info("Old db file removed: %s" % path)
+
         self.redis_conf.masterauth = self.password
         self.redis_conf.slaveof = (primary_ip, primary_port)
 
     def init_service(self, mpoint):
-        move_files = not self.working_directory.is_initialized(mpoint)
-        self.working_directory.move_to(mpoint, move_files)
+        if not os.path.exists(mpoint):
+            os.makedirs(mpoint)
+            LOG.debug('Created directory structure for redis db files: %s' % mpoint)
+
+        chown_r(mpoint, __redis__['defaults']['user'])
 
         self.redis_conf.requirepass = self.password
         self.redis_conf.daemonize = True
@@ -450,72 +460,6 @@ class Redis(BaseService):
     working_directory = property(_get_working_directory, _set_working_directory)
     redis_conf = property(_get_redis_conf, _set_redis_conf)
     redis_cli = property(_get_redis_cli, _set_redis_cli)
-
-
-class WorkingDirectory(object):
-
-    default_db_fname = __redis__['db_filename']
-
-    def __init__(self, db_path=None, user = "redis"):
-        self.db_path = db_path
-        self.user = user
-
-
-    @classmethod
-    def find(cls, redis_conf):
-        dir = redis_conf.dir
-        if not dir:
-            dir = __redis__['defaults']['dir']
-
-        if 'snapshotting' == __redis__["persistence_type"]:
-            db_fname = redis_conf.dbfilename
-        elif 'aof' == __redis__["persistence_type"]:
-            db_fname = redis_conf.appendfilename
-        else:
-            db_fname = cls.default_db_fname
-
-        return cls(os.path.join(dir, db_fname))
-
-
-    def move_to(self, dst, move_files=True):
-        new_db_path = os.path.join(dst, os.path.basename(self.db_path))
-
-        if not os.path.exists(dst):
-            LOG.debug('Creating directory structure for redis db files: %s' % dst)
-            os.makedirs(dst)
-
-        if move_files and os.path.exists(os.path.dirname(self.db_path)) and os.path.isfile(self.db_path):
-            LOG.debug("copying db file %s into %s" % (os.path.dirname(self.db_path), dst))
-            shutil.copyfile(self.db_path, new_db_path)
-
-        LOG.debug("changing directory owner to %s" % self.user)
-        chown_r(dst, self.user)
-        self.db_path = new_db_path
-        return new_db_path
-
-
-    def is_initialized(self, path):
-        # are the redis db files already in place?
-        if os.path.exists(path):
-            fnames = os.listdir(path)
-            return os.path.basename(self.db_path) in fnames
-        return False
-
-
-    def empty(self):
-        LOG.info('Emptying redis database dir %s' % os.path.dirname(self.db_path))
-        try:
-            for fname in os.listdir(os.path.dirname(self.db_path)):
-                if fname.endswith('.rdb') or fname.startswith('appendonly'):
-                    path = os.path.join(os.path.dirname(self.db_path), fname)
-                    if os.path.isfile(path):
-                        LOG.debug('Deleting redis db file %s' % path)
-                        os.remove(path)
-                    elif os.path.islink(path):
-                        LOG.debug('Deleting link to redis db file %s' % path)
-                        os.unlink(path)
-        except OSError, e:
-            LOG.error('Cannot empty %s: %s' % (os.path.dirname(self.db_path), e))
 
 
 class BaseRedisConfig(BaseConfig):
