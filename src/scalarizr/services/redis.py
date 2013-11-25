@@ -380,9 +380,8 @@ class Redis(BaseService):
         self.redis_conf.slaveof = (primary_ip, primary_port)
 
     def init_service(self, mpoint):
-        if __redis__["persistence_type"] != 'nopersistence':
-            move_files = not self.working_directory.is_initialized(mpoint)
-            self.working_directory.move_to(mpoint, move_files)
+        move_files = not self.working_directory.is_initialized(mpoint)
+        self.working_directory.move_to(mpoint, move_files)
 
         self.redis_conf.requirepass = self.password
         self.redis_conf.daemonize = True
@@ -398,12 +397,14 @@ class Redis(BaseService):
             self.redis_conf.appendfilename = None
         elif persistence_type == 'aof':
             aof_path = get_aof_db_filename(self.port)
+            self.redis_conf.appendonly = True
             self.redis_conf.appendfilename = aof_path
             self.redis_conf.dbfilename = None
-            self.redis_conf.appendonly = True
             self.redis_conf.save = {}
         elif persistence_type == 'nopersistence':
+            self.redis_conf.dbfilename = None
             self.redis_conf.appendonly = False
+            self.redis_conf.appendfsync = 'no'
             self.redis_conf.save = {}
             assert not self.redis_conf.save
         LOG.debug('Persistence type is set to %s' % persistence_type)
@@ -708,6 +709,14 @@ class RedisConf(BaseRedisConfig):
         self.set('daemonize', 'yes' if yes else 'no')
 
 
+    def _get_appendfsync(self):
+        return self.get('appendfsync')
+
+
+    def _set_appendfsync(self, value):
+        self.set('appendfsync', value)
+
+
     daemonize = property(_get_daemonize, _set_daemonize)
     appendfilename = property(_get_appendfilename, _set_appendfilename)
     pidfile = property(_get_pidfile, _set_pidfile)
@@ -721,6 +730,7 @@ class RedisConf(BaseRedisConfig):
     requirepass = property(_get_requirepass, _set_requirepass)
     appendonly = property(_get_appendonly, _set_appendonly)
     dbfilename = property(_get_dbfilename, _set_dbfilename)
+    appendfsync = property(_get_appendfsync, _set_appendfsync)
     #dbfilename_default = __redis__['db_filename']
     #appendfilename_default = __redis__['aof_filename']
     port_default = __redis__['defaults']['port']
