@@ -137,36 +137,46 @@ class ApacheAPI(object):
         #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
         v_host_path = get_virtual_host_path(hostname, port)
-        assert not os.path.exists(v_host_path)
 
-        v_host = VirtualHost(template)
+        if os.path.exists(v_host_path):
+            raise ApacheError("Cannot create VirtualHost %s:%s: %s already exists." % (
+                hostname, port, v_host_path
+            ))
 
         if ssl:
             ssl_certificate = SSLCertificate(ssl_certificate_id)
-
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
 
-            v_host.use_certificate(
-                ssl_certificate.cert_path,
-                ssl_certificate.key_path,
-                ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
-            )
-            LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, v_host))
+        try:
+            v_host = VirtualHost(template)
 
-            #Compatibility with old apache handler
-            if self.mod_ssl.is_system_certificate_used():
-                self.mod_ssl.set_default_certificate(ssl_certificate)
+            document_root_paths = v_host.document_root_paths
+            clog_path = os.path.dirname(v_host.custom_log_path)
+            errlog_path = os.path.dirname(v_host.error_log_path)
+            name = str(v_host)
 
-        assert int(port) == int(v_host.port)
-        assert hostname == v_host.server_name
+            if ssl:
+                v_host.use_certificate(
+                    ssl_certificate.cert_path,
+                    ssl_certificate.key_path,
+                    ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
+                )
+                LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, name))
 
-        for directory in v_host.document_root_paths:
+                #Compatibility with old apache handler
+                if self.mod_ssl.is_system_certificate_used():
+                    self.mod_ssl.set_default_certificate(ssl_certificate)
+
+        except NoPathError, e:
+            raise ApacheError(e)
+
+        for directory in document_root_paths:
             docroot_parent_path = os.path.dirname(directory)
 
             if not os.path.exists(docroot_parent_path):
                 os.makedirs(docroot_parent_path, 0755)
-                LOG.info("Created parent directory of document root %s for %s" % (directory, v_host))
+                LOG.info("Created parent directory of document root %s for %s" % (directory, name))
 
             if not os.path.exists(directory) or not os.listdir(directory):
                 shutil.copytree(os.path.join(bus.share_path, "apache/html"), directory)
@@ -186,7 +196,6 @@ class ApacheAPI(object):
                 LOG.debug("Document root %s already exists." % directory)
 
         try:
-            clog_path = os.path.dirname(v_host.custom_log_path)
             if not os.path.exists(clog_path):
                 os.makedirs(clog_path, 0755)
                 LOG.info("Created CustomLog directory for VirtualHost %s:%s: %s" % (
@@ -195,10 +204,9 @@ class ApacheAPI(object):
                     clog_path,
                 ))
         except NoPathError:
-            LOG.info("CustomLog directive not found in %s" % v_host)
+            LOG.info("CustomLog directive not found in %s" % name)
 
         try:
-            errlog_path = os.path.dirname(v_host.error_log_path)
             if not os.path.exists(errlog_path):
                 os.makedirs(errlog_path, 0755)
                 LOG.info("Created ErrorLog directory for VirtualHost %s:%s: %s" % (
@@ -207,11 +215,7 @@ class ApacheAPI(object):
                     errlog_path,
                 ))
         except NoPathError:
-            LOG.debug("ErrorLog directive not found in %s" % v_host)
-
-        if os.path.exists(v_host_path) and open(v_host_path).read() == v_host.body:
-            LOG.info("Skipping VirtualHost %s: No changes found." % v_host)
-            return v_host_path
+            LOG.debug("ErrorLog directive not found in %s" % name)
 
         if reload:
             with BackupManager(v_host_path):
@@ -221,7 +225,7 @@ class ApacheAPI(object):
             with open(v_host_path, "w") as fp:
                 fp.write(v_host.body)
 
-        LOG.info("VirtualHost %s saved to %s" % (v_host, v_host_path))
+        LOG.info("VirtualHost %s saved to %s" % (name, v_host_path))
 
         self._open_ports([port])
 
@@ -692,7 +696,14 @@ class VirtualHost(BasicApacheConfiguration):
         return doc_roots
 
     def use_certificate(self, cert_path, key_path, chain_path=None):
-        assert self._cnf.get(".//SSLCertificateFile")
+
+        try:
+            assert self._cnf.get(".//SSLCertificateFile")
+            assert self._cnf.set(".//SSLCertificateKeyFile", key_path)
+        except (NoPathError, AssertionError), e:
+            raise ApacheError("Cannot apply SSL certificate %s. Error: %s. Check VirtualHost configuration: %s" % (
+                (cert_path, key_path, chain_path), e.message, self.body
+            ))
 
         self._cnf.set(".//SSLCertificateFile", cert_path)
         self._cnf.set(".//SSLCertificateKeyFile", key_path)
@@ -821,7 +832,24 @@ class BackupManager(object):
 
     def __exit__(self, type, value, traceback):
         after = self._get_content()
-        if self.before != after:
+
+        if traceback:
+            errlog = "Exception was caught within BackupManager context.\n"
+            errlog += "File %s has been changed to: %s.\nRestoring it to: %s" % (
+                self.path,
+                after,
+                self.before
+            )
+            LOG.error(errlog)
+
+            self.restore(self.path)
+
+            LOG.info("BackupManager: Due to error '%s' %s was changed to it's previous state." % (
+                value.message, self.path
+            ))
+            raise
+
+        elif self.before != after:
 
             if self.before and after:
                 LOG.debug("BackupManager noticed changes in %s" % self.path)
