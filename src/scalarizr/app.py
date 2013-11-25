@@ -504,8 +504,62 @@ def do_keygen():
     from scalarizr.util import cryptotool
     print cryptotool.keygen()    
 
+def _pre_main():
+    optparser = bus.optparser = OptionParser()
+    optparser.add_option('-v', '--version', dest='version', action='store_true',
+            help='Show version information')
+    optparser.add_option('-c', '--etc-path', dest='etc_path',
+            help='Configuration directory path')
+    optparser.add_option('-l', dest='debug', action='store_true', default=False,
+            help='Enable debug log')
+    optparser.add_option('-n', '--configure', dest='configure', action="store_true", default=False, 
+            help="Configure Scalarizr in the interactive mode by default. " 
+            + "Use '-y -o' to configure Scalarizr non-interactively")
+    optparser.add_option("-k", "--gen-key", dest="gen_key", action="store_true", default=False,
+            help='Generate crypto key')
+    optparser.add_option('-t', dest='validate_cnf', action='store_true', default=False,
+            help='Validate configuration')
+    optparser.add_option('-m', '--import', dest="import_server", action="store_true", default=False, 
+            help='Import service into Scalr')
+    optparser.add_option('-y', dest="yesall", action="store_true", default=False,
+            help='Answer "yes" to all questions')
+    optparser.add_option('-o', dest='cnf', action='append',
+            help='Runtime .ini option key=value')
+
+    if linux.os['family'] != 'Windows':
+        optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
+                                           help='Daemonize process')
+    else:
+        optparser.add_option("--install-win-services", dest="install_win_services", action="store_true",
+                             default=False, help='Install scalarizr as windows service')
+        optparser.add_option("--uninstall-win-services", dest="uninstall_win_services", action="store_true",
+                             default=False, help='Uninstall scalarizr windows service')
+
+    if ('cloud-location=' in sys.argv or 'region=' in sys.argv) and 'platform=ec2' in sys.argv:
+        region = urllib2.urlopen('http://169.254.169.254/latest/meta-data/placement/availability-zone').read().strip()[:-1]
+        try:
+            sys.argv[sys.argv.index('region=')] += region
+        except ValueError:
+            sys.argv += ['-o', 'region=' + region]        
+    
+    optparser.parse_args()
+    
+    # Daemonize process
+    if linux.os['family'] != 'Windows' and optparser.values.daemonize:
+        daemonize()
+
+    if optparser.values.version:
+        # Report scalarizr version
+        print 'Scalarizr %s' % __version__
+        sys.exit()
+
+    elif optparser.values.gen_key:
+        # Generate key-pair
+        do_keygen()
+        sys.exit()
 
 def main():
+
     try:
         logger = logging.getLogger(__name__)
     except (BaseException, Exception), e:
@@ -513,64 +567,9 @@ def main():
         sys.exit(1)
             
     try:
-        optparser = bus.optparser = OptionParser()
-        optparser.add_option('-v', '--version', dest='version', action='store_true',
-                help='Show version information')
-        optparser.add_option('-c', '--etc-path', dest='etc_path',
-                help='Configuration directory path')
-        optparser.add_option('-l', dest='debug', action='store_true', default=False,
-                help='Enable debug log')
-        optparser.add_option('-n', '--configure', dest='configure', action="store_true", default=False, 
-                help="Configure Scalarizr in the interactive mode by default. " 
-                + "Use '-y -o' to configure Scalarizr non-interactively")
-        optparser.add_option("-k", "--gen-key", dest="gen_key", action="store_true", default=False,
-                help='Generate crypto key')
-        optparser.add_option('-t', dest='validate_cnf', action='store_true', default=False,
-                help='Validate configuration')
-        optparser.add_option('-m', '--import', dest="import_server", action="store_true", default=False, 
-                help='Import service into Scalr')
-        optparser.add_option('-y', dest="yesall", action="store_true", default=False,
-                help='Answer "yes" to all questions')
-        optparser.add_option('-o', dest='cnf', action='append',
-                help='Runtime .ini option key=value')
-
-        if linux.os['family'] != 'Windows':
-            optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
-                                               help='Daemonize process')
-        else:
-            optparser.add_option("--install-win-services", dest="install_win_services", action="store_true",
-                                 default=False, help='Install scalarizr as windows service')
-            optparser.add_option("--uninstall-win-services", dest="uninstall_win_services", action="store_true",
-                                 default=False, help='Uninstall scalarizr windows service')
-
-        if ('cloud-location=' in sys.argv or 'region=' in sys.argv) and 'platform=ec2' in sys.argv:
-            region = urllib2.urlopen('http://169.254.169.254/latest/meta-data/placement/availability-zone').read().strip()[:-1]
-            try:
-                sys.argv[sys.argv.index('region=')] += region
-            except ValueError:
-                sys.argv += ['-o', 'region=' + region]        
-        
-        optparser.parse_args()
-        
-        # Daemonize process
-        if linux.os['family'] != 'Windows' and optparser.values.daemonize:
-            daemonize()
-
-        if optparser.values.version:
-            # Report scalarizr version
-            print 'Scalarizr %s' % __version__
-            sys.exit()
-
-        elif optparser.values.gen_key:
-            # Generate key-pair
-            do_keygen()
-            sys.exit()
-
-        if not linux.os.windows_family:
-            svs = Service()
-            svs.start()
-        # On windows service will be started by services framework
-
+        _pre_main()
+        svs = WindowsService() if linux.os.windows_family else Service()
+        svs.start()
             
     except (BaseException, Exception), e:
         if isinstance(e, SystemExit):
@@ -1122,7 +1121,7 @@ if 'Windows' == linux.os['family']:
 
             else:
                 # Normal start
-                main()
+                _pre_main()
                 super(WindowsService, self).start()
 
 
