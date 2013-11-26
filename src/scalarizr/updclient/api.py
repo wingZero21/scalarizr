@@ -33,6 +33,9 @@ DATE_FORMAT = '%a %d %b %Y %H:%M:%S UTC'
 class UpdateError(Exception):
     pass
 
+class NoSystemUUID(Exception):
+    pass
+
 
 class Daemon(object):
     def __init__(self, name):
@@ -127,7 +130,7 @@ def system_uuid():
                 LOG.debug("Don't know how to get instance-id on '%s' platform", meta.platform)
     if not uuid:
         LOG.debug('System UUID not detected')
-        uuid = '00000000-0000-0000-0000-000000000000'
+        raise NoSystemUUID()
     return uuid
 
 
@@ -137,8 +140,15 @@ class UpdClientAPI(object):
     client_mode = 'client'
     api_port = 8008
     server_url = 'http://update.scalr.net/'
+    repository = 'latest'
+    if linux.os.windows_family:
+        repo_url = 'http://win.scalr.net'
+    elif linux.os.linux_family in ('RedHat', 'Oracle'):
+        repo_url = 'http://rpm.scalr.net/rpm/rhel/$releasever/$basearch'
+    else:
+        repo_url = 'http://apt.scalr.net/debian scalr/'
 
-    server_id = platform = repository = queryenv_url = repo_url = None
+    server_id = platform = queryenv_url = None
     scalr_id = scalr_version = None
     update_info = None
 
@@ -149,32 +159,41 @@ class UpdClientAPI(object):
     daemon = None
 
     if linux.os.windows_family:
-        etc_path = r'C:\Program Files\Scalarizr\etc'
+        _etc_path = r'C:\Program Files\Scalarizr\etc'
     else:
-        etc_path = '/etc/scalr'
-    private_path = os.path.join(etc_path, 'private.d')
-    updatelock_file = os.path.join(private_path, '.update.lock')
-    crypto_file = os.path.join(private_path, 'keys', 'default')
+        _etc_path = '/etc/scalr'
+    _private_path = os.path.join(_etc_path, 'private.d')
+    lock_file = os.path.join(_private_path, '.update.lock')
+    crypto_file = os.path.join(_private_path, 'keys', 'default')
+    del _etc_path, _private_path
 
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
         self.pkgmgr = pkgmgr.package_mgr()
         self.daemon = Daemon('scalarizr')
-        self._op_api = operation.OperationAPI()
+        self.op_api = operation.OperationAPI()
+        self.update_info = {}
 
 
     def bootstrap(self):
-        system_id = system_uuid()
+        try:
+            system_id = system_uuid()
+        except:
+            # This will force updclient to perform check updates each startup, 
+            # this is the optimal behavior cause that's ensure latest available package
+            system_id = str(uuid.uuid4())
         system_matches = False
-        if os.path.exists(self.updatelock_file):
-            LOG.debug('Checking %s', self.updatelock_file)
-            with open(self.updatelock_file) as fp:
+        if os.path.exists(self.lock_file):
+            LOG.debug('Checking %s', self.lock_file)
+            with open(self.lock_file) as fp:
                 updatelock = json.load(fp)
             system_matches = updatelock['system_uuid'] == system_id
             if not system_matches:
                 LOG.debug('Serial number in lock file and machine one not matched: %s != %s', 
                         updatelock['system_uuid'], system_id)
-                os.unlink(self.updatelock_file)
+                os.unlink(self.lock_file)
+            else:
+                LOG.debug('Serial number in lock file matches machine one')
 
         if system_matches:
             self.__dict__.update(updatelock)
@@ -183,13 +202,23 @@ class UpdClientAPI(object):
             user_data = meta.user_data()
             norm_user_data(user_data)
             self.__dict__.update(user_data)
-            self.package = 'scalarizr-' + self.platform
             crypto_dir = os.path.dirname(self.crypto_file)
             if not os.path.exists(crypto_dir):
                 os.makedirs(crypto_dir)
             with open(self.crypto_file, 'w+') as fp:
                 fp.write(user_data['szr_key'])
 
+        if not linux.os.windows_family:
+            self.package = 'scalarizr-' + self.platform
+        self._init_services()
+
+        if not system_matches:
+            pkgmgr.removed(self.package)
+            self.update(force=True, reporting=False)
+        self.daemon.start()
+
+
+    def _init_services(self):
         args = (self.queryenv_url, 
                 self.server_id, 
                 self.crypto_file)
@@ -200,26 +229,20 @@ class UpdClientAPI(object):
         self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
                         server_id=self.server_id)
 
-        self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file)
-
-        if not system_matches:
-            self.update(force=True, reporting=False)
-        self.daemon.start()
-
-
+        self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file)  
 
 
     def sync(self):
         globs = self.queryenv.get_global_config()['params']
-        self.__dict__.update(dict((key[7:].replace('.', '_')) 
+        self.__dict__.update((key[7:].replace('.', '_'), value) 
                     for key, value in globs.items() 
-                    if key.startswith('update.')))
+                    if key.startswith('update.'))
         if linux.os.windows_family:
-            self.repo_url = globs['update.win.repo_url']
+            self.repo_url = globs.get('update.win.repo_url', self.repo_url)
         elif linux.os.linux_family in ('RedHat', 'Oracle'):
-            self.repo_url = globs['update.rpm.repo_url']
+            self.repo_url = globs.get('update.rpm.repo_url', self.repo_url)
         else:
-            self.repo_url = globs['update.deb.repo_url']
+            self.repo_url = globs.get('update.deb.repo_url', self.repo_url)
         self.scalr_id = globs['scalr.id']
         self.scalr_version = globs['scalr.version']
         
@@ -239,11 +262,11 @@ class UpdClientAPI(object):
 
 
     @rpc.command_method
-    def update(self, force=True, reporting=True, async=False, **kwds):
+    def update(self, force=False, reporting=True, async=False, **kwds):
+        if not self.is_client_mode:
+            reporting = False
 
         def do_update(op):
-            if not self.is_client_mode:
-                reporting = False
             self.sync()
             self.update_info = {
                 'repository': self.repository,
@@ -256,19 +279,20 @@ class UpdClientAPI(object):
                 'error': None
             }
             try:
-                self.update_info['version'] = self.pkgmgr.info(self.package)['candidate']
+                pkginfo = self.pkgmgr.info(self.package)
 
-                if not self.update_info['version']:
+                if not pkginfo['candidate']:
                     msg = 'No new version available ({0})'.format(self.package)
                     raise UpdateError(msg)
-                        
+                self.update_info['version'] = pkginfo['candidate']
+
                 if not force:
                     if self.scalarizr.operation.has_in_progress():
                         msg = ('Update denied ({0}={1}), '
                                 'cause Scalarizr is performing log-term operation').format(
                                 self.package, self.update_info['version'])
                         raise UpdateError(msg)
-                
+            
                     if self.is_client_mode:
                         try:
                             ok = self.update_server.update_allowed(**self.update_info)
@@ -279,7 +303,7 @@ class UpdClientAPI(object):
                                     'later version. Blocking all upgrades until Scalr support '
                                     'overrides.').format(self.package, self.update_info['version'])
                             raise UpdateError(msg)
-                
+
                 try:
                     op.logger.info('Installing {0}={1}'.format(
                             self.package, self.update_info['version']))
@@ -295,7 +319,7 @@ class UpdClientAPI(object):
                             msg = 'Restart failed ({0})'.format(self.daemon.name)
                             raise UpdateError(msg)
 
-                    with open(self.updatelock_file, 'w') as fp:
+                    with open(self.lock_file, 'w') as fp:
                         json.dump(self.update_info, fp)
 
                     if reporting:
@@ -314,7 +338,7 @@ class UpdClientAPI(object):
                 else:
                     raise
 
-        return self._op_api.run('scalarizr.update', do_update, exclusive=True, async=async)
+        return self.op_api.run('scalarizr.update', do_update, exclusive=True, async=async)
 
     
     def report(self, ok):

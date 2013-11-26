@@ -14,6 +14,7 @@ import urllib
 import subprocess
 import shutil
 import tempfile
+import distutils.version
 
 from scalarizr import linux, util
 from scalarizr.linux import coreutils
@@ -100,6 +101,10 @@ class PackageMgr(object):
         ''' List enabled repositories '''
         raise NotImplementedError()
 
+    def version_cmp(self, name_1, name_2):
+        ''' Compares 2 package versions '''
+        raise NotImplementedError()
+
 
 class AptPackageMgr(PackageMgr):
     def apt_get_command(self, command, **kwds):
@@ -184,6 +189,13 @@ class AptPackageMgr(PackageMgr):
         names = [os.path.basename(os.path.splitext(f)[0]) for f in files]
         return names
 
+    def version_cmp(self, name_1, name_2):
+        if name_1 == name_2:
+            return 0
+        return_code = linux.system(('/usr/bin/dpkg', '--compare-versions', str(name_1), '>', str(name_2)), 
+                    raise_exc=False)[2]
+        return 1 if not returncode else -1
+
 class AptRepository(Repository):
     filename_tpl = '/etc/apt/sources.list.d/scalr-{name}.list'
     config_tpl = '{url}'
@@ -259,10 +271,6 @@ class YumPackageMgr(PackageMgr):
         return linux.system((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None, command.split())) + exclude), **kwds)
 
 
-    def rpm_ver_cmp(self, v1, v2):
-        return cmp(RpmVersion(v1), RpmVersion(v2))
-
-
     def yum_list(self, name):
         out = self.yum_command('list --showduplicates %s' % name)[0].strip()
 
@@ -327,6 +335,9 @@ class YumPackageMgr(PackageMgr):
             if m:
                 ret.append(m.group(1))
         return map(string.lower, ret)
+
+    def version_cmp(self, name_1, name_2):
+        return cmp(RpmVersion(v1), RpmVersion(v2))
 
 
 class YumRepository(Repository):
@@ -470,6 +481,10 @@ if linux.os.windows_family:
                 'installed': installed,
                 'candidate': candidate
             }
+
+        def version_cmp(self, name_1, name_2):
+            return cmp(distutils.version.LooseVersion(name_1), 
+                distutils.version.LooseVersion(name_2))
 
 
     class WinRepository(Repository):

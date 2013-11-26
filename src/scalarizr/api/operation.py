@@ -149,7 +149,7 @@ class Operation(object):
     def _in_progress(self):
         self.status = 'in-progress'
         self.started_at = time.time() 
-        try:
+        try: 
             self._completed(self.func(self, *self.func_args, **self.func_kwds))
             if self.canceled:
                 raise Exception('User canceled')

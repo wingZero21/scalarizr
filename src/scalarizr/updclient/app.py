@@ -8,6 +8,7 @@ import SocketServer
 import logging
 import optparse
 import os
+import re
 import select
 import signal
 import socket
@@ -82,7 +83,9 @@ class UpdClient(util.Server):
             optparse.Option('-P', '--pid-file', default=self.pid_file, help='file to store PID in'),
             optparse.Option('-l', '--log-file', default=self.log_file, help='log file'),
             optparse.Option('-v', '--verbose', action='store_true', default=False, 
-                            help='verbose logging')
+                            help='verbose logging'),
+            optparse.Option('--system-uuid', action='store_true', default=False, 
+                            help='get system uuid')
         ))
         self.api = update_api.UpdClientAPI()       
 
@@ -120,6 +123,14 @@ class UpdClient(util.Server):
     def do_start(self):
         opts = self.optparser.parse_args()[0]
         self.__dict__.update(vars(opts))
+
+        if self.system_uuid:
+            try:
+                print update_api.system_uuid()
+                sys.exit()
+            except update_api.NoSystemUUID:
+                print "System UUID not detected"
+                sys.exit(1)
         
         if self.daemonize:
             util.daemonize()
