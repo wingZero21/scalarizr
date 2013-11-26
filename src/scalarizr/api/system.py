@@ -536,8 +536,21 @@ if linux.os.windows_family:
     from win32com import client
     from scalarizr.util import coinitialized
 
-
     class WindowsSystemAPI(SystemAPI):
+
+        @coinitialized
+        @rpc.command_method
+        def set_hostname(self, hostname=None):
+            # Can't change hostname without reboot or knowing administrator password
+            # Probably a way: http://timnew.github.io/blog/2012/04/13/powershell-script-to-rename-computer-without-reboot/
+            raise NotImplementedError('Not available on windows platform')
+
+        @coinitialized
+        @rpc.query_method
+        def get_hostname(self):
+            wmi = client.GetObject('winmgmts:')
+            for computer in wmi.InstancesOf('Win32_ComputerSystem'):
+                return computer.Name
 
         @coinitialized
         @rpc.query_method
