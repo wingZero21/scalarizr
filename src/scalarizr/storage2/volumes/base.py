@@ -23,7 +23,7 @@ class Base(bases.ConfigDriven):
                             **kwds):
         super(Base, self).__init__(
                         version=version, type=type,
-                        id=id, tags=tags or {}, **kwds)
+                        id=str(id), tags=tags or {}, **kwds)
         self.error_messages.update({
                 'restore_unsupported': 'Restores from snapshot not supported '
                                                                 'by this volume type: %s',
