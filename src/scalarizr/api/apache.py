@@ -136,6 +136,7 @@ class ApacheAPI(object):
         """
         #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
+        name = "%s:%s" % (hostname, port)
         v_host_path = get_virtual_host_path(hostname, port)
 
         if os.path.exists(v_host_path):
@@ -150,11 +151,7 @@ class ApacheAPI(object):
 
         try:
             v_host = VirtualHost(template)
-
             document_root_paths = v_host.document_root_paths
-            clog_path = os.path.dirname(v_host.custom_log_path)
-            errlog_path = os.path.dirname(v_host.error_log_path)
-            name = str(v_host)
 
             if ssl:
                 v_host.use_certificate(
@@ -196,6 +193,7 @@ class ApacheAPI(object):
                 LOG.debug("Document root %s already exists." % directory)
 
         try:
+            clog_path = os.path.dirname(v_host.custom_log_path)
             if not os.path.exists(clog_path):
                 os.makedirs(clog_path, 0755)
                 LOG.info("Created CustomLog directory for VirtualHost %s:%s: %s" % (
@@ -204,9 +202,10 @@ class ApacheAPI(object):
                     clog_path,
                 ))
         except NoPathError:
-            LOG.info("CustomLog directive not found in %s" % name)
+            LOG.debug("CustomLog directive not found in %s" % name)
 
         try:
+            errlog_path = os.path.dirname(v_host.error_log_path)
             if not os.path.exists(errlog_path):
                 os.makedirs(errlog_path, 0755)
                 LOG.info("Created ErrorLog directory for VirtualHost %s:%s: %s" % (
