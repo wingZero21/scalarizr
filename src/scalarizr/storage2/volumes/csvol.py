@@ -148,6 +148,7 @@ class CSVolume(base.Volume):
                     except:
                         if 'Expected list, got null' in str(sys.exc_info()[1]):
                             raise storage2.VolumeNotExistsError(self.id)
+                        raise
                     else:
                         if len(vol_list) == 0:
                             raise storage2.VolumeNotExistsError(self.id)
