@@ -29,7 +29,7 @@ from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import system2, initdv2
 from scalarizr.util import wait_until, dynimp, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
-from scalarizr.libs.metaconf import Configuration, NoPathError
+from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 
 
 LOG = logging.getLogger(__name__)
@@ -625,7 +625,11 @@ class BasicApacheConfiguration(object):
 
     def __init__(self, body):
         config = Configuration("apache")
-        config.reads(str(body))
+        try:
+            config.reads(str(body))
+        except ParseError:
+            LOG.error("MetaConf failed to parse Apache VirtualHost body: \n%s" % body)
+            raise
         self._cnf = config
 
     @property
