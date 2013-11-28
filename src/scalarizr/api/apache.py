@@ -10,6 +10,7 @@ import os
 import re
 import pwd
 import time
+import uuid
 import shutil
 import logging
 import urllib2
@@ -137,34 +138,26 @@ class ApacheAPI(object):
         #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
         name = "%s:%s" % (hostname, port)
-        v_host_path = get_virtual_host_path(hostname, port)
-
-        if os.path.exists(v_host_path):
-            raise ApacheError("Cannot create VirtualHost %s:%s: %s already exists." % (
-                hostname, port, v_host_path
-            ))
+        v_host = VirtualHost(template)
 
         if ssl:
             ssl_certificate = SSLCertificate(ssl_certificate_id)
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
 
-        v_host = VirtualHost(template)
-        document_root_paths = v_host.document_root_paths
-
-        if ssl:
             v_host.use_certificate(
                 ssl_certificate.cert_path,
                 ssl_certificate.key_path,
                 ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
             )
+
             LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, name))
 
             #Compatibility with old apache handler
             if self.mod_ssl.is_system_certificate_used():
                 self.mod_ssl.set_default_certificate(ssl_certificate)
 
-        for directory in document_root_paths:
+        for directory in v_host.document_root_paths:
             docroot_parent_path = os.path.dirname(directory)
 
             if not os.path.exists(docroot_parent_path):
@@ -212,15 +205,18 @@ class ApacheAPI(object):
         except NoPathError:
             LOG.debug("Directive 'ErrorLog' not found in %s" % name)
 
-        if reload:
-            with BackupManager(v_host_path):
-                with open(v_host_path, "w") as fp:
-                    fp.write(v_host.body)
-        else:
+        v_host_changed = True
+        v_host_path = get_virtual_host_path(hostname, port)
+        if os.path.exists(v_host_path):
+            with open(v_host_path, "r") as old_v_host:
+                if old_v_host.read() == v_host.body:
+                    v_host_changed = False
+        if v_host_changed:
             with open(v_host_path, "w") as fp:
                 fp.write(v_host.body)
-
-        LOG.info("VirtualHost %s saved to %s" % (name, v_host_path))
+            LOG.info("VirtualHost %s saved to %s" % (name, v_host_path))
+        else:
+            LOG.info("VirtualHost %s (%s) has no changes." % (name, v_host_path))
 
         if allow_port:
             self._open_ports([port])
@@ -230,11 +226,8 @@ class ApacheAPI(object):
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore([v_host_path, ])
                 raise
-
             else:
-                BackupManager.free([v_host_path, ])
                 self.reload_service("Applying Apache VirtualHost %s" % name)
         else:
             LOG.info("Apache VirtualHost %s has been applied without service restart." % name)
@@ -342,6 +335,9 @@ class ApacheAPI(object):
                 BackupManager.free([removed_vhosts, ])
                 self.reload_service('%s VirtualHosts removed.' % len(vhosts))
 
+    def generate_backup_id(self):
+        return uuid.uuid4()
+
     @rpc.command_method
     def reconfigure(self, vhosts, reload=True, rollback_on_error=True):
         """
@@ -350,13 +346,13 @@ class ApacheAPI(object):
         @return: list, paths to reconfigured VirtualHosts
         """
         ports = []
-        new_vhosts = []
-        removed_vhosts = []
         applied_vhosts = []
+        backup_id = self.generate_backup_id()
 
         LOG.info("Started reconfiguring Apache VirtualHosts.")
 
-        try:
+        with BackupManager(id, os.listdir(__apache__["vhosts_dir"]), rollback_on_error):
+
             for virtual_host_data in vhosts:
 
                 hostname = virtual_host_data["hostname"]
@@ -364,36 +360,20 @@ class ApacheAPI(object):
                 template = virtual_host_data["template"]
                 ssl = virtual_host_data["ssl"]
                 cert_id = virtual_host_data["ssl_certificate_id"]
-
                 v_host_path = get_virtual_host_path(hostname, port)
                 ports.append(port)
 
-                with BackupManager(v_host_path, rollback_on_error):
-                    if os.path.exists(v_host_path):
-                        os.remove(v_host_path)
-                        removed_vhosts.append(v_host_path)
-                    path = self.create_vhost(hostname, port, template, ssl, cert_id, allow_port=False, reload=False)
-
+                path = self.create_vhost(hostname, port, template, ssl, cert_id, allow_port=False, reload=False)
                 applied_vhosts.append(path)
-
-                if path not in removed_vhosts:
-                    new_vhosts.append(path)
 
             #cleanup
             for fname in os.listdir(__apache__["vhosts_dir"]):
                 old_vhost_path = os.path.join(__apache__["vhosts_dir"], fname)
-
                 if old_vhost_path not in applied_vhosts:
-                    with BackupManager(old_vhost_path, rollback_on_error):
-                        os.remove(old_vhost_path)
-                    removed_vhosts.append(old_vhost_path)
+                    os.remove(old_vhost_path)
                     LOG.info("Removed old VirtualHost file %s" % old_vhost_path)
 
-            self._open_ports(set(ports))  # consolidated ports for single request
-        except:
-            if rollback_on_error:
-                BackupManager.restore(new_vhosts + removed_vhosts)
-            raise
+        self._open_ports(set(ports))  # consolidated ports for single request
 
         if reload:
             try:
@@ -401,14 +381,14 @@ class ApacheAPI(object):
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
                 if rollback_on_error:
-                    BackupManager.restore(new_vhosts + removed_vhosts)
+                    BackupManager.restore_backup(backup_id)
                 raise
             else:
                 self.reload_service("Applying new apache configuration.")
         else:
             LOG.info("Apache configuration has been changed without service reload.")
 
-        BackupManager.free(new_vhosts + removed_vhosts)
+        BackupManager.remove_backup(id)
         return applied_vhosts
 
     @rpc.query_method
