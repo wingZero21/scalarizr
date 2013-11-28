@@ -207,8 +207,11 @@ class UpdClientAPI(object):
             crypto_dir = os.path.dirname(self.crypto_file)
             if not os.path.exists(crypto_dir):
                 os.makedirs(crypto_dir)
-            with open(self.crypto_file, 'w+') as fp:
-                fp.write(user_data['szr_key'])
+            try:
+                self._init_queryenv()
+            except queryenv.InvalidSignatureError:             
+                with open(self.crypto_file, 'w+') as fp:
+                    fp.write(user_data['szr_key'])
 
         if not linux.os.windows_family:
             self.package = 'scalarizr-' + self.platform
@@ -329,7 +332,7 @@ class UpdClientAPI(object):
                         self.update_info['phase'] = 'start'
                         self.daemon.start()
                         if not bootstrap:
-                            time.sleep(1)  # wait a second to start
+                            time.sleep(2)  # wait a second to start
                             if not self.daemon.running:
                                 msg = 'Restart failed ({0})'.format(self.daemon.name)
                                 raise UpdateError(msg)
