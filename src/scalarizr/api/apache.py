@@ -350,8 +350,6 @@ class ApacheAPI(object):
                 template = virtual_host_data["template"]
                 ssl = virtual_host_data["ssl"]
                 cert_id = virtual_host_data["ssl_certificate_id"]
-                v_host_path = get_virtual_host_path(hostname, port)
-
                 path = self.create_vhost(hostname, port, template, ssl, cert_id, allow_port=False, reload=False)
                 applied_vhosts.append(path)
                 ports.append(port)
@@ -803,7 +801,7 @@ class BackupManager(object):
         for path in set(list_files):
             with open(path, "r") as fp:
                 self.data[path] = fp.read()
-        LOG.debug("BackupManager %s created snapshot of %s" % (self.id, list_files)
+        LOG.debug("BackupManager %s created snapshot of %s" % (self.id, list_files))
 
     def restore(self):
         for path, body in self.data.items():
