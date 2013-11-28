@@ -48,7 +48,7 @@ class ApacheHandler(Handler):
 
         self.preset_provider = ApachePresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
-        self.op_log = bus.init_op.logger
+
 
 
         bus.on(init=self.on_init)
@@ -93,12 +93,13 @@ class ApacheHandler(Handler):
                 self._initial_preset = apache_data["preset"]
 
     def on_before_host_up(self, message):
+        op_log = bus.init_op.logger
         self.api.stop_service("Configuring Apache Web Server")
         self.api.init_service()
         self._reconfigure_mod_rpaf()
 
         if self._initial_v_hosts:
-            self.op_log.info("Configuring VirtualHosts.")
+            op_log.info("Configuring VirtualHosts.")
             LOG.debug("VirtualHosts to configure: %s" % self._initial_v_hosts)
 
             applied_vhosts = self.api.reconfigure(self._initial_v_hosts, reload=False, rollback_on_error=False)
@@ -109,7 +110,7 @@ class ApacheHandler(Handler):
                     len(self._initial_v_hosts),
                 ))
 
-            self.op_log.info("%s Virtual Hosts configured." % len(applied_vhosts))
+            op_log.info("%s Virtual Hosts configured." % len(applied_vhosts))
 
         self.api.start_service()
 
