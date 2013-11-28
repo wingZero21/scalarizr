@@ -122,7 +122,7 @@ class ApacheAPI(object):
         self._query_env = bus.queryenv_service
 
     @rpc.command_method
-    def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True):
+    def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True, allow_port=False):
         """
         Creates Name-Based Apache VirtualHost
 
@@ -222,7 +222,8 @@ class ApacheAPI(object):
 
         LOG.info("VirtualHost %s saved to %s" % (name, v_host_path))
 
-        self._open_ports([port])
+        if allow_port:
+            self._open_ports([port])
 
         if reload:
             try:
@@ -346,6 +347,7 @@ class ApacheAPI(object):
         @param vhosts: list(dict(vhost_data),)
         @return: list, paths to reconfigured VirtualHosts
         """
+        ports = []
         new_vhosts = []
         removed_vhosts = []
         applied_vhosts = []
@@ -362,12 +364,13 @@ class ApacheAPI(object):
                 cert_id = virtual_host_data["ssl_certificate_id"]
 
                 v_host_path = get_virtual_host_path(hostname, port)
+                ports.append(port)
 
                 with BackupManager(v_host_path, rollback_on_error):
                     if os.path.exists(v_host_path):
                         os.remove(v_host_path)
                         removed_vhosts.append(v_host_path)
-                    path = self.create_vhost(hostname, port, template, ssl, cert_id, reload=False)
+                    path = self.create_vhost(hostname, port, template, ssl, cert_id, allow_ports=False, reload=False)
 
                 applied_vhosts.append(path)
 
@@ -383,6 +386,8 @@ class ApacheAPI(object):
                         os.remove(old_vhost_path)
                     removed_vhosts.append(old_vhost_path)
                     LOG.info("Removed old VirtualHost file %s" % old_vhost_path)
+
+            self._open_ports(set(ports))
         except:
             if rollback_on_error:
                 BackupManager.restore(new_vhosts + removed_vhosts)
@@ -628,13 +633,13 @@ class ApacheAPI(object):
 
     def _open_ports(self, ports):
         if iptables.enabled():
-            LOG.info("Ensuring ports %s are allowed in IPtables" % str(ports))
             rules = []
             for port in ports:
                 if port not in self.current_open_ports:
-                    rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
                     self.current_open_ports.append(port)
+                    rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
             if rules:
+                LOG.info("Ensuring ports %s are allowed in IPtables" % str(ports))
                 iptables.FIREWALL.ensure(rules)
         else:
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
@@ -857,7 +862,7 @@ class BackupManager(object):
             BackupManager.backup[self.path] = self.before
 
         else:
-            LOG.debug("BackupManager: %s has not been changed." % self.path)
+            LOG.debug("BackupManager: No changes in %s." % self.path)
 
     @classmethod
     def restore(cls, paths):
