@@ -124,7 +124,7 @@ class UpdClient(util.Server):
         opts = self.optparser.parse_args()[0]
         self.__dict__.update(vars(opts))
 
-        if self.system_uuid:
+        if self.__dict__.get('system_uuid'):
             try:
                 print update_api.system_uuid()
                 sys.exit()

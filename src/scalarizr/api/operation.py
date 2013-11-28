@@ -115,7 +115,7 @@ class _LogHandler(logging.Handler):
 class Operation(object):
 
     def __init__(self, name, func, func_args=None, func_kwds=None, 
-                cancel_func=None, exclusive=False):
+                cancel_func=None, exclusive=False, notification=True):
         self.operation_id = str(uuid.uuid4())
         self.name = name
         ops = OperationAPI().find(name, status='in-progress', exclusive=True)
@@ -126,6 +126,7 @@ class Operation(object):
         self.func_args = list(func_args or [])
         self.func_kwds = dict(func_kwds or {})
         self.cancel_func = cancel_func
+        self.notification = notification
         self.status = 'new'
         self.result = None
         self.logs = []
@@ -157,7 +158,8 @@ class Operation(object):
             self._failed()
         finally:
             self.finished_at = time.time()
-            __node__['messaging'].send('OperationResult', body=self.serialize())
+            if self.notification:
+                __node__['messaging'].send('OperationResult', body=self.serialize())
 
     def run(self):
         self._in_progress()

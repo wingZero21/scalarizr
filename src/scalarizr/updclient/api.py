@@ -14,10 +14,13 @@ import os
 import re
 import binascii
 import shutil
+import uuid
 
 from scalarizr import linux, queryenv, rpc
+from scalarizr.bus import bus
 from scalarizr.util import metadata
 from scalarizr.linux import pkgmgr
+from scalarizr.messaging import p2p as messaging
 from scalarizr.api import operation
 from scalarizr.api.binding import jsonrpc_http
 
@@ -101,37 +104,37 @@ class Daemon(object):
 
 def norm_user_data(data):
     data['server_id'] = data['serverid']
+    data['messaging_url'] = data['p2p_producer_endpoint']
     return data
 
 
 def system_uuid():
     if linux.os.windows_family:
         wmi = win32com.client.GetObject('winmgmts:')
-        result = wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS')
-        uuid = result.SerialNumber
-        if not uuid:
+        ret = wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS').SerialNumber
+        if not ret:
             LOG.debug('WMI returns empty UUID')
     else:
-        uuid = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
-        if not uuid:
+        ret = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
+        if not ret:
             LOG.debug('dmidecide returns empty UUID')
 
-    if not uuid:
+    if not ret:
         try:
             meta = metadata.meta()
         except:
             LOG.debug("Failed to init metadata (in system_uuid() method): %s", sys.exc_info()[1])
         else:
             if meta.platform == 'ec2':
-                uuid = meta['instance-id']
+                ret = meta['instance-id']
             elif meta.platform == 'gce':
-                uuid = meta['id']
+                ret = meta['id']
             else:
                 LOG.debug("Don't know how to get instance-id on '%s' platform", meta.platform)
-    if not uuid:
+    if not ret:
         LOG.debug('System UUID not detected')
         raise NoSystemUUID()
-    return uuid
+    return ret
 
 
 class UpdClientAPI(object):
@@ -148,7 +151,7 @@ class UpdClientAPI(object):
     else:
         repo_url = 'http://apt.scalr.net/debian scalr/'
 
-    server_id = platform = queryenv_url = None
+    server_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
     update_info = None
 
@@ -163,7 +166,7 @@ class UpdClientAPI(object):
     else:
         _etc_path = '/etc/scalr'
     _private_path = os.path.join(_etc_path, 'private.d')
-    lock_file = os.path.join(_private_path, '.update.lock')
+    lock_file = os.path.join(_private_path, 'update.lock')
     crypto_file = os.path.join(_private_path, 'keys', 'default')
     del _etc_path, _private_path
 
@@ -214,7 +217,7 @@ class UpdClientAPI(object):
 
         if not system_matches:
             pkgmgr.removed(self.package)
-            self.update(force=True, reporting=False)
+            self.update(bootstrap=True)
         self.daemon.start()
 
 
@@ -226,8 +229,15 @@ class UpdClientAPI(object):
         self.queryenv = queryenv.QueryEnvService(*args, 
                         api_version=self.queryenv.get_latest_version())
 
-        self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
-                        server_id=self.server_id)
+        bus.messaging_service = messaging.P2pMessageService(
+                server_id=self.server_id,
+                crypto_key_path=self.crypto_file,
+                producer_url=self.messaging_url,
+                producer_retries_progression='1,2,5,10,20,30,60')
+
+        if self.is_client_mode:
+            self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
+                            server_id=self.server_id)
 
         self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file)  
 
@@ -262,9 +272,12 @@ class UpdClientAPI(object):
 
 
     @rpc.command_method
-    def update(self, force=False, reporting=True, async=False, **kwds):
-        if not self.is_client_mode:
-            reporting = False
+    def update(self, force=False, bootstrap=False, async=False, **kwds):
+        if bootstrap:
+            async = False
+            force = True
+        notification = not bootstrap
+        reporting = self.is_client_mode and not bootstrap
 
         def do_update(op):
             self.sync()
@@ -314,22 +327,25 @@ class UpdClientAPI(object):
                     if not self.daemon.running:
                         self.update_info['phase'] = 'start'
                         self.daemon.start()
-                        time.sleep(1)  # wait a second to start
-                        if not self.daemon.running:
-                            msg = 'Restart failed ({0})'.format(self.daemon.name)
-                            raise UpdateError(msg)
-
+                        if not bootstrap:
+                            time.sleep(1)  # wait a second to start
+                            if not self.daemon.running:
+                                msg = 'Restart failed ({0})'.format(self.daemon.name)
+                                raise UpdateError(msg)
                     with open(self.lock_file, 'w') as fp:
                         json.dump(self.update_info, fp)
 
+                    if bootstrap:
+                        sys.exit()
                     if reporting:
                         self.report(True)
-
                     op.logger.info('Done')
                 except:
                     if reporting:
                         self.report(False)
                     raise
+            except SystemExit:
+                pass
             except:
                 e = sys.exc_info()[1]
                 self.update_info['error'] = str(e)
@@ -338,7 +354,8 @@ class UpdClientAPI(object):
                 else:
                     raise
 
-        return self.op_api.run('scalarizr.update', do_update, exclusive=True, async=async)
+        return self.op_api.run('scalarizr.update', do_update, async=async, 
+                    exclusive=True, notification=notification)
 
     
     def report(self, ok):

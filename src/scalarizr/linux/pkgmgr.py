@@ -30,6 +30,7 @@ class Repository(object):
     def __init__(self, name, url):
         kwds = {
             'name': name,
+            'url': url,
             'arch': linux.os['arch']
         }
         self.name = name
@@ -198,7 +199,7 @@ class AptPackageMgr(PackageMgr):
 
 class AptRepository(Repository):
     filename_tpl = '/etc/apt/sources.list.d/scalr-{name}.list'
-    config_tpl = '{url}'
+    config_tpl = 'deb {url}'
 
 
 class RpmVersion(object):
