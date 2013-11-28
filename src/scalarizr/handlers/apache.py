@@ -48,6 +48,7 @@ class ApacheHandler(Handler):
 
         self.preset_provider = ApachePresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
+        self.op_log = bus.init_op.logger
 
 
         bus.on(init=self.on_init)
@@ -97,9 +98,10 @@ class ApacheHandler(Handler):
         self._reconfigure_mod_rpaf()
 
         if self._initial_v_hosts:
-            LOG.debug("Configuring VirtualHosts: %s" % self._initial_v_hosts)
+            self.op_log.info("Configuring VirtualHosts.")
+            LOG.debug("VirtualHosts to configure: %s" % self._initial_v_hosts)
             applied_vhosts = self.api.reconfigure(self._initial_v_hosts, reload=False, rollback_on_error=False)
-            LOG.info("%s Virtual Hosts configured." % len(applied_vhosts))
+            self.op_log.info("%s Virtual Hosts configured." % len(applied_vhosts))
 
         self.api.start_service()
 
