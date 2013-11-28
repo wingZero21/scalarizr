@@ -233,11 +233,11 @@ class ApacheAPI(object):
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore(v_host_path)
+                BackupManager.restore([v_host_path, ])
                 raise
 
             else:
-                BackupManager.free(v_host_path)
+                BackupManager.free([v_host_path, ])
                 self.reload_service()
 
         return v_host_path
@@ -302,10 +302,10 @@ class ApacheAPI(object):
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore([old_path, new_path])
+                BackupManager.restore([old_path, new_path, ])
                 raise
             else:
-                BackupManager.free(old_path)
+                BackupManager.free([old_path, ])
                 self.reload_service()
 
     @rpc.command_method
@@ -337,10 +337,10 @@ class ApacheAPI(object):
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore(removed_vhosts)
+                BackupManager.restore([removed_vhosts, ])
                 raise
             else:
-                BackupManager.free(removed_vhosts)
+                BackupManager.free([removed_vhosts, ])
                 self.reload_service('%s VirtualHosts removed.' % len(vhosts))
 
     @rpc.command_method
@@ -842,7 +842,7 @@ class BackupManager(object):
             )
             LOG.error(errlog)
 
-            self.restore(self.path)
+            self.restore([self.path, ])
 
             LOG.info("BackupManager: Due to error '%s' %s was changed to it's previous state." % (
                 value.message, self.path
@@ -865,10 +865,8 @@ class BackupManager(object):
     @classmethod
     def restore(cls, paths):
         LOG.debug("BackupManager: Restoring files: %s" % ",".join(paths))
-        try:
-            paths = iter(paths)
-        except TypeError:
-            paths = [paths, ]
+
+        assert iter(paths)
 
         for path in paths:
             if path in cls.backup:
@@ -885,15 +883,12 @@ class BackupManager(object):
                     LOG.debug("BackupManager: %s restored to its previous state")
             else:
                 LOG.debug("BackupManager: Cannot restore %s: file wasn`t changed")
-            cls.free(path)
+            cls.free([path, ])
         LOG.info("BackupManager restored files: %s" % ",".join(paths))
 
     @classmethod
     def free(cls, paths):
-        try:
-            paths = iter(paths)
-        except TypeError:
-            paths = [paths, ]
+        assert iter(paths)
 
         for path in paths:
             if path in cls.backup:
