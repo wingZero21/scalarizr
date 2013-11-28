@@ -138,6 +138,8 @@ class ApacheAPI(object):
         #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
         name = "%s:%s" % (hostname, port)
+        LOG.info("Creating Apache VirtualHost %s" % name)
+        
         v_host = VirtualHost(template)
 
         if ssl:
