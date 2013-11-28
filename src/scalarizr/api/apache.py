@@ -139,7 +139,7 @@ class ApacheAPI(object):
 
         name = "%s:%s" % (hostname, port)
         LOG.info("Creating Apache VirtualHost %s" % name)
-        
+
         v_host = VirtualHost(template)
 
         if ssl:
@@ -216,9 +216,9 @@ class ApacheAPI(object):
         if v_host_changed:
             with open(v_host_path, "w") as fp:
                 fp.write(v_host.body)
-            LOG.info("VirtualHost %s saved to %s" % (name, v_host_path))
+            LOG.info("VirtualHost %s configuration saved to %s" % (name, v_host_path))
         else:
-            LOG.info("VirtualHost %s (%s) has no changes." % (name, v_host_path))
+            LOG.info("VirtualHost %s configuration (%s) has no changes." % (name, v_host_path))
 
         if allow_port:
             self._open_ports([port])
