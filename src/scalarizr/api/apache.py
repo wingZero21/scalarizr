@@ -370,7 +370,7 @@ class ApacheAPI(object):
                     if os.path.exists(v_host_path):
                         os.remove(v_host_path)
                         removed_vhosts.append(v_host_path)
-                    path = self.create_vhost(hostname, port, template, ssl, cert_id, allow_ports=False, reload=False)
+                    path = self.create_vhost(hostname, port, template, ssl, cert_id, allow_port=False, reload=False)
 
                 applied_vhosts.append(path)
 
@@ -387,7 +387,7 @@ class ApacheAPI(object):
                     removed_vhosts.append(old_vhost_path)
                     LOG.info("Removed old VirtualHost file %s" % old_vhost_path)
 
-            self._open_ports(set(ports))
+            self._open_ports(set(ports))  # consolidated ports for single request
         except:
             if rollback_on_error:
                 BackupManager.restore(new_vhosts + removed_vhosts)
