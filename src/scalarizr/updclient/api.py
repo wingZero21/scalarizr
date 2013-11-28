@@ -219,14 +219,16 @@ class UpdClientAPI(object):
             self.update(bootstrap=True)
         self.daemon.start()
 
-
-    def _init_services(self):
+    def _init_queryenv(self):
         args = (self.queryenv_url, 
                 self.server_id, 
                 self.crypto_file)
         self.queryenv = queryenv.QueryEnvService(*args)
         self.queryenv = queryenv.QueryEnvService(*args, 
-                        api_version=self.queryenv.get_latest_version())
+                        api_version=self.queryenv.get_latest_version())        
+
+    def _init_services(self):
+        self._init_queryenv()
 
         bus.messaging_service = messaging.P2pMessageService(
                 server_id=self.server_id,

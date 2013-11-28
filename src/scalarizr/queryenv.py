@@ -25,6 +25,9 @@ else:
 class QueryEnvError(Exception):
     pass
 
+class InvalidSignatureError(QueryEnvError):
+    pass
+
 class QueryEnvService(object):
     _logger = None
 
@@ -88,7 +91,10 @@ class QueryEnvService(object):
             	e = sys.exc_info()[1]
                 if isinstance(e, urllib2.HTTPError):
                     resp_body = e.read() if e.fp is not None else ""
-                    self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, resp_body or e.msg, msg_wait)
+                    msg = resp_body or e.msg
+                    self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, msg, msg_wait)
+                    if "Signature doesn't match" in msg:
+                        raise InvalidSignatureError(msg)
                 else:
                     self._logger.warn('QueryEnv failed. %s. %s', e, msg_wait)
                 self._logger.warn('Sleep %s seconds before next attempt...', wait_seconds)
