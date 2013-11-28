@@ -213,6 +213,7 @@ class ApacheAPI(object):
             with open(v_host_path, "r") as old_v_host:
                 if old_v_host.read() == v_host.body:
                     v_host_changed = False
+
         if v_host_changed:
             with open(v_host_path, "w") as fp:
                 fp.write(v_host.body)
@@ -629,9 +630,9 @@ class BasicApacheConfiguration(object):
         config = Configuration("apache")
         try:
             config.reads(str(body))
-        except ParseError:
+        except ParseError, e:
             LOG.error("MetaConf failed to parse Apache VirtualHost body: \n%s" % body)
-            raise
+            e._err = body + "\n" + e._err
         self._cnf = config
 
     @property
