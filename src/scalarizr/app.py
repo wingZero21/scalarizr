@@ -326,13 +326,6 @@ def _init_platform():
         logger.debug('Enable RedHat subscription')
         urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
 
-    if cnf.state != ScalarizrState.RUNNING and not linux.os.windows_family:
-        try:
-            pkgmgr.updatedb()
-        except:
-            logger.warn('Failed to update package manager database: %s', 
-                    sys.exc_info()[1], exc_info=sys.exc_info())
-
     if httplib2_loaded:
         ca_url = 'http://curl.haxx.se/ca/cacert.pem'
         ca_path = bus.share_path + '/cacert.pem'

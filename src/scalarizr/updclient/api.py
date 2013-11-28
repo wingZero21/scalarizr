@@ -44,17 +44,16 @@ class Daemon(object):
     def __init__(self, name):
         self.name = name
         if linux.os.name == 'Ubuntu' and linux.os.release >= (10, 4):
-            self.init_script = 'service %s' % self.name
+            self.init_script = ['service', self.name]
         else:
-            self.init_script = '/etc/init.d/%s' % self.name
+            self.init_script = ['/etc/init.d/' + self.name]
     
     if linux.os.windows_family:
         def ctl(self, command):
-            return linux.system('sc %s "%s"' % (command, self.name), 
-                        shell=True)
+            return linux.system(('sc', command, self.name))
     else:
         def ctl(self, command):
-            return linux.system('%s %s' % (self.init_script, command), 
+            return linux.system(self.init_script + [command], 
                     close_fds=True, preexec_fn=os.setsid)
     
     def restart(self):
