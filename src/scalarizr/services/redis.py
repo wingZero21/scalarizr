@@ -412,7 +412,7 @@ class Redis(BaseService):
             self.redis_conf.dbfilename = None
             self.redis_conf.save = {}
         elif persistence_type == 'nopersistence':
-            self.redis_conf.dbfilename = None
+            self.redis_conf.dbfilename = get_snap_db_filename(self.port)
             self.redis_conf.appendonly = False
             self.redis_conf.appendfsync = 'no'
             self.redis_conf.save = {}
