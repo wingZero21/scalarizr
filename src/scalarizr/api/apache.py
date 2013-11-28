@@ -875,16 +875,16 @@ class BackupManager(object):
                 data = cls.backup[path]
                 if not data and os.path.exists(path):
                     os.remove(path)
-                    LOG.debug("BackupManager: %s removed to restore its previous state")
+                    LOG.debug("BackupManager: %s removed to restore its previous state." % path)
                 else:
                     text, st_uid, st_gid, st_mode = data
                     with open(path, "w") as fp:
                         fp.write(text)
                     os.chown(path, st_uid, st_gid)
                     os.chmod(path, st_mode)
-                    LOG.debug("BackupManager: %s restored to its previous state")
+                    LOG.debug("BackupManager: %s restored to its previous state." % path)
             else:
-                LOG.debug("BackupManager: Cannot restore %s: file wasn`t changed")
+                LOG.debug("BackupManager: Cannot restore %s: no changes in file." % path)
             cls.free([path, ])
         LOG.info("BackupManager restored files: %s" % ",".join(paths))
 
