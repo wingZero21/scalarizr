@@ -235,7 +235,9 @@ class ApacheAPI(object):
 
             else:
                 BackupManager.free([v_host_path, ])
-                self.reload_service()
+                self.reload_service("Applying Apache VirtualHost %s" % name)
+        else:
+            LOG.info("Apache VirtualHost %s has been applied without service restart." % name)
 
         return v_host_path
 
@@ -863,7 +865,7 @@ class BackupManager(object):
             BackupManager.backup[self.path] = self.before
 
         else:
-            LOG.debug("BackupManager: No changes in %s." % self.path)
+            LOG.debug("BackupManager's caught no changes in %s." % self.path)
 
     @classmethod
     def restore(cls, paths):
