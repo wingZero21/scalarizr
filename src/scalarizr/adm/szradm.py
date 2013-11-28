@@ -1,21 +1,14 @@
 #!/usr/bin/python
 import sys
 import os
-import re
 import imp
-import inspect
 import time
 import resource
 
-from docopt import docopt
+from scalarizr.adm import command as command_module
 
 
 __dir__ = os.path.dirname(__file__)
-
-
-def camel_to_underscore(name):
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
 def find_modules(directory):
@@ -40,87 +33,7 @@ def find_modules(directory):
             yield module
 
 
-class Command(object):
-    """Class that represents scalarizr command"""
-
-    # list or generator of Command subclasses, that will be used as subcommands
-    subcommands = []
-
-    def __init__(self):
-        super(Command, self).__init__()
-
-    def __call__(self):
-        raise NotImplementedError('You need to define __call__ method')
-
-    def help(self):
-        return self.__doc__
-
-    def run_subcommand(self, subcommand, args):
-        """
-        Searches subcommand in self.subcommands and launches it with given args.
-        If no subcommand found - raises exception.
-        """
-        for sub_cmd_def in self.subcommands:
-            name = Command.class_to_command_name(sub_cmd_def)
-
-            if name == subcommand:
-                sub_cmd = None
-                kwds = {}
-                if inspect.isclass(sub_cmd_def):
-                    sub_cmd = sub_cmd_def()
-                    kwds = sub_cmd.parse_args(args)
-                else:
-                    sub_cmd = sub_cmd_def
-                    kwds = self.parse_args(args, sub_cmd.__doc__)
-                    kwds['self'] = self
-                return sub_cmd(**kwds)
-
-        raise BaseException('Unknown subcommand: %s' % subcommand)
-
-    def parse_args(self, args, doc=None):
-        """
-        Parses list of command-line args using self.__doc__ and translates
-        them to keyword dictionary which can be used to call self.
-        """
-        if not doc:
-            doc = self.__doc__
-        arguments = docopt(doc, argv=args, options_first=True)
-        kwds = self.docopt_args_to_kwds(arguments)
-        return kwds
-
-    def docopt_args_to_kwds(self, arguments):
-        result = {}
-        for k, v in arguments.items():
-            new_k = k.lstrip('-').replace('-', '_')
-            new_k = new_k.replace('<', '').replace('>', '')
-            result[new_k] = v
-        return result
-
-    @classmethod
-    def command(cls, function):
-        """Decorator that makes new Command class inheritor from function"""
-        if inspect.ismethod(function):
-            function.command = True
-            return function
-
-        call = lambda self, *args, **kwds: function(*args, **kwds)
-        attrs = {'__call__': call, '__doc__': function.__doc__}
-        command_class = type(function.__name__, (cls,), attrs)
-        return command_class
-
-    @classmethod
-    def class_to_command_name(cls, c):
-        """
-        Returns command name from given class or class name. 
-        (type or str) -> str
-        """
-        class_name = c
-        if inspect.isclass(c) or inspect.isfunction(c):
-            class_name = c.__name__
-        return camel_to_underscore(class_name).replace('_', '-')
-
-
-class Szradm(Command):
+class Szradm(command_module.Command):
     """
     Szradm is scalarizr administration tool.
 
@@ -140,10 +53,24 @@ class Szradm(Command):
     def __call__(self, command=None, version=False, help=False, args=[]):
         try:
             return self.run_subcommand(command, args)
-        except BaseException:
-            print "Unknown command."
-            print self.__doc__
-            raise
+
+        except command_module.UnknownCommand, e:
+            # print "Unknown command."
+            call_str = 'szradm ' + command + ' ' + ' '.join(args)
+            # call_str = 'szradm ' + ' '.join(reversed(e.traceback[1:]))
+            # point_str = ' ' * call_str.find(e.command_name) + '^'
+            # call_str += ' ' + e.traceback[0]
+            # print call_str + '\n' + point_str
+            # usage = command_module.get_section('usage', self.__doc__)[0]
+            message = '\n'.join((call_str, e.message, e.usage))
+            exc = command_module.UnknownCommand(message)
+            raise exc
+
+        except command_module.InvalidCall, e:
+            call_str = 'szradm ' + command + ' ' + ' '.join(args)
+            message = '\n'.join((call_str, e.message, e.usage))
+            exc = command_module.InvalidCall(message)
+            raise exc
 
     def find_commands(self, directory=None):
         """
@@ -164,10 +91,11 @@ class Szradm(Command):
 
 
 def main(argv):
-    arguments = docopt(Szradm.__doc__, argv=argv[1:], options_first=True)
     szradm = Szradm()
-    szradm_kwds = szradm.docopt_args_to_kwds(arguments)
-
+    try:
+        szradm_kwds = command_module.parse_command_line(argv[1:], szradm.__doc__)
+    except SystemExit:
+        raise SystemExit(szradm.traceback())
     return szradm(**szradm_kwds)
 
 

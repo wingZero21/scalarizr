@@ -1,4 +1,4 @@
-from scalarizr.adm.szradm import Command
+from scalarizr.adm.command import Command
 from scalarizr.util import system2
 
 
@@ -45,7 +45,6 @@ class ClsCmd(Command):
             return self.run_subcommand(command, args)
 
 
-@Command.command
 def status():
     """
     Status is the command for getting system basic info.
