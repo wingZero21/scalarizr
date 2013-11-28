@@ -415,3 +415,4 @@ class UpdClientAPI(object):
             if os.path.exists(tmpname):
                 os.remove(tmpname)
             raise
+
