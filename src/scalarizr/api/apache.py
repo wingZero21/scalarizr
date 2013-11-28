@@ -149,24 +149,20 @@ class ApacheAPI(object):
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
 
-        try:
-            v_host = VirtualHost(template)
-            document_root_paths = v_host.document_root_paths
+        v_host = VirtualHost(template)
+        document_root_paths = v_host.document_root_paths
 
-            if ssl:
-                v_host.use_certificate(
-                    ssl_certificate.cert_path,
-                    ssl_certificate.key_path,
-                    ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
-                )
-                LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, name))
+        if ssl:
+            v_host.use_certificate(
+                ssl_certificate.cert_path,
+                ssl_certificate.key_path,
+                ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
+            )
+            LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, name))
 
-                #Compatibility with old apache handler
-                if self.mod_ssl.is_system_certificate_used():
-                    self.mod_ssl.set_default_certificate(ssl_certificate)
-
-        except NoPathError, e:
-            raise ApacheError(e)
+            #Compatibility with old apache handler
+            if self.mod_ssl.is_system_certificate_used():
+                self.mod_ssl.set_default_certificate(ssl_certificate)
 
         for directory in document_root_paths:
             docroot_parent_path = os.path.dirname(directory)
@@ -344,7 +340,7 @@ class ApacheAPI(object):
                 self.reload_service('%s VirtualHosts removed.' % len(vhosts))
 
     @rpc.command_method
-    def reconfigure(self, vhosts, reload=True):
+    def reconfigure(self, vhosts, reload=True, rollback_on_error=True):
         """
         Deploys multiple VirtualHosts and removes odds.
         @param vhosts: list(dict(vhost_data),)
@@ -356,45 +352,49 @@ class ApacheAPI(object):
 
         LOG.info("Started reconfiguring Apache VirtualHosts.")
 
-        for vh_data in vhosts:
+        try:
+            for virtual_host_data in vhosts:
 
-            host, port = vh_data["hostname"], vh_data["port"]
-            v_host_path = get_virtual_host_path(host, port)
+                hostname = virtual_host_data["hostname"]
+                port = virtual_host_data["port"]
+                template = virtual_host_data["template"]
+                ssl = virtual_host_data["ssl"]
+                cert_id = virtual_host_data["ssl_certificate_id"]
 
-            with BackupManager(v_host_path):
-                if os.path.exists(v_host_path):
-                    removed_vhosts.append(v_host_path)
-                    os.remove(v_host_path)
+                v_host_path = get_virtual_host_path(hostname, port)
 
-                path = self.create_vhost(
-                    vh_data["hostname"],
-                    vh_data["port"],
-                    vh_data["template"],
-                    vh_data["ssl"],
-                    vh_data["ssl_certificate_id"],
-                    reload=False
-                )
+                with BackupManager(v_host_path, rollback_on_error):
+                    if os.path.exists(v_host_path):
+                        os.remove(v_host_path)
+                        removed_vhosts.append(v_host_path)
+                    path = self.create_vhost(hostname, port, template, ssl, cert_id, reload=False)
+
                 applied_vhosts.append(path)
 
                 if path not in removed_vhosts:
                     new_vhosts.append(path)
 
-        #cleanup
-        for fname in os.listdir(__apache__["vhosts_dir"]):
-            old_vhost_path = os.path.join(__apache__["vhosts_dir"], fname)
+            #cleanup
+            for fname in os.listdir(__apache__["vhosts_dir"]):
+                old_vhost_path = os.path.join(__apache__["vhosts_dir"], fname)
 
-            if old_vhost_path not in applied_vhosts:
-                with BackupManager(old_vhost_path):
-                    os.remove(old_vhost_path)
+                if old_vhost_path not in applied_vhosts:
+                    with BackupManager(old_vhost_path, rollback_on_error):
+                        os.remove(old_vhost_path)
                     removed_vhosts.append(old_vhost_path)
-                LOG.info("Removed old VirtualHost file %s" % old_vhost_path)
+                    LOG.info("Removed old VirtualHost file %s" % old_vhost_path)
+        except:
+            if rollback_on_error:
+                BackupManager.restore(new_vhosts + removed_vhosts)
+            raise
 
         if reload:
             try:
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore(new_vhosts + removed_vhosts)
+                if rollback_on_error:
+                    BackupManager.restore(new_vhosts + removed_vhosts)
                 raise
             else:
                 self.reload_service("Applying new apache configuration.")
@@ -578,7 +578,7 @@ class ApacheAPI(object):
         @return: list(virtual_host_path,)
         """
         vh_data = self._fetch_virtual_hosts()
-        return self.reconfigure(vh_data, reload=True)
+        return self.reconfigure(vh_data, reload=True, rollback_on_error=True)
 
     def rename_old_virtual_hosts(self):
         vhosts_dir = __apache__["vhosts_dir"]
@@ -816,9 +816,10 @@ class BackupManager(object):
     before = None
     backup = {}
 
-    def __init__(self, path):
+    def __init__(self, path, rollback_on_error=True):
         self.path = path
         self.before = None
+        self.rollback_on_error = rollback_on_error
 
     def _get_content(self):
         if os.path.exists(self.path):
@@ -835,30 +836,26 @@ class BackupManager(object):
 
         if traceback:
             errlog = "Exception was caught within BackupManager context.\n"
-            errlog += "File %s has been changed to: %s.\nRestoring it to: %s" % (
-                self.path,
-                after,
-                self.before
-            )
+            errlog += "%s has been changed to: %s." % (self.path, after)
             LOG.error(errlog)
 
-            self.restore([self.path, ])
-
-            LOG.info("BackupManager: Due to error '%s' %s was changed to it's previous state." % (
-                value.message, self.path
-            ))
+            if self.rollback_on_error:
+                LOG.error("Restoring %s to: %s" % (self.path, self.before))
+                self.restore([self.path, ])
+                LOG.info("BackupManager: Due to error '%s' %s was changed to it's previous state." % (
+                    value, self.path
+                ))
             raise
 
         elif self.before != after:
-
             if self.before and after:
                 LOG.debug("BackupManager noticed changes in %s" % self.path)
             elif not self.before:
                 LOG.debug("BackupManager noticed creation of %s" % self.path)
             elif not after:
                 LOG.debug("BackupManager noticed that %s has been removed" % self.path)
-
             BackupManager.backup[self.path] = self.before
+
         else:
             LOG.debug("BackupManager: %s has not been changed." % self.path)
 

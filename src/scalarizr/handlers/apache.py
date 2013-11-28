@@ -98,7 +98,7 @@ class ApacheHandler(Handler):
 
         if self._initial_v_hosts:
             LOG.debug("Configuring VirtualHosts: %s" % self._initial_v_hosts)
-            applied_vhosts = self.api.reconfigure(self._initial_v_hosts, reload=False)
+            applied_vhosts = self.api.reconfigure(self._initial_v_hosts, reload=False, rollback_on_error=False)
             LOG.info("%s Virtual Hosts configured." % len(applied_vhosts))
 
         self.api.start_service()
