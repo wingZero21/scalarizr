@@ -623,7 +623,6 @@ class ApacheAPI(object):
 
 class BasicApacheConfiguration(object):
 
-    #body = None
     _cnf = None
 
     def __init__(self, body):
