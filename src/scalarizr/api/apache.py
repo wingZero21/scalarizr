@@ -198,7 +198,7 @@ class ApacheAPI(object):
                     clog_path,
                 ))
         except NoPathError:
-            LOG.debug("CustomLog directive not found in %s" % name)
+            LOG.debug("Directive 'CustomLog' not found in %s" % name)
 
         try:
             errlog_path = os.path.dirname(v_host.error_log_path)
@@ -210,7 +210,7 @@ class ApacheAPI(object):
                     errlog_path,
                 ))
         except NoPathError:
-            LOG.debug("ErrorLog directive not found in %s" % name)
+            LOG.debug("Directive 'ErrorLog' not found in %s" % name)
 
         if reload:
             with BackupManager(v_host_path):
@@ -847,9 +847,10 @@ class BackupManager(object):
             if self.rollback_on_error:
                 LOG.error("Restoring %s to: %s" % (self.path, self.before))
                 self.restore([self.path, ])
-                LOG.info("BackupManager: Due to error '%s' %s was changed to it's previous state." % (
+                LOG.info("BackupManager: Due to error '%s' %s was changed to its previous state." % (
                     value, self.path
                 ))
+
             raise
 
         elif self.before != after:
@@ -866,7 +867,7 @@ class BackupManager(object):
 
     @classmethod
     def restore(cls, paths):
-        LOG.debug("BackupManager: Restoring files: %s" % ",".join(paths))
+        LOG.debug("BackupManager started process of restoring files: %s" % ",".join(paths))
 
         assert iter(paths)
 
@@ -884,7 +885,7 @@ class BackupManager(object):
                     os.chmod(path, st_mode)
                     LOG.debug("BackupManager: %s restored to its previous state." % path)
             else:
-                LOG.debug("BackupManager: Cannot restore %s: no changes in file." % path)
+                LOG.debug("BackupManager: No need to restore %s: file has not been chaned." % path)
             cls.free([path, ])
         LOG.info("BackupManager restored files: %s" % ",".join(paths))
 
