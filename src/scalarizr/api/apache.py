@@ -633,6 +633,7 @@ class BasicApacheConfiguration(object):
         except ParseError, e:
             LOG.error("MetaConf failed to parse Apache VirtualHost body: \n%s" % body)
             e._err = body + "\n" + e._err
+            raise
         self._cnf = config
 
     @property
