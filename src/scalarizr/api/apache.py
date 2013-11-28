@@ -230,7 +230,7 @@ class ApacheAPI(object):
             else:
                 self.reload_service("Applying Apache VirtualHost %s" % name)
         else:
-            LOG.info("Apache VirtualHost %s has been applied without service restart." % name)
+            LOG.info("Apache VirtualHost %s has been applied without service reload." % name)
 
         return v_host_path
 
