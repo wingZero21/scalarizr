@@ -404,7 +404,7 @@ class ApacheAPI(object):
             else:
                 self.reload_service("Applying new apache configuration.")
         else:
-            LOG.info("Apache configuration changed without service reload.")
+            LOG.info("Apache configuration has been changed without service reload.")
 
         BackupManager.free(new_vhosts + removed_vhosts)
         return applied_vhosts
@@ -931,7 +931,7 @@ class SSLCertificate(object):
         """
         Fetches SSL Certificate from Scalr and dumps data on disk.
         """
-        LOG.info("Retrieving ssl cert %s from Scalr." % self.id or "'default'")
+        LOG.info("Retrieving SSL certificate %s from Scalr." % self.id or "'default'")
         query_env = bus.queryenv_service
         cert_data = query_env.get_ssl_certificate(self.id)
         authority = cert_data[2] if len(cert_data) > 2 else None
