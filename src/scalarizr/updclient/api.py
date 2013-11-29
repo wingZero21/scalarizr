@@ -206,9 +206,12 @@ class UpdClientAPI(object):
             crypto_dir = os.path.dirname(self.crypto_file)
             if not os.path.exists(crypto_dir):
                 os.makedirs(crypto_dir)
-            try:
-                self._init_queryenv()
-            except queryenv.InvalidSignatureError:             
+            if os.path.exists(self.crypto_file):  
+                try:
+                    self._init_queryenv()
+                except queryenv.InvalidSignatureError:
+                    pass
+            if not self.queryenv:
                 with open(self.crypto_file, 'w+') as fp:
                     fp.write(user_data['szr_key'])
 
@@ -219,7 +222,7 @@ class UpdClientAPI(object):
         if not system_matches:
             pkgmgr.removed(self.package)
             if linux.os.debian_family:
-                linux.system('apt-get autoremove', shell=True)
+                self.pkgmgr.apt_get_command('autoremove')
             elif linux.os.family in ('RedHat', 'Oracle'):
                 pkgmgr.remove('scalarizr-base', purge=True)
             self.update(bootstrap=True)
