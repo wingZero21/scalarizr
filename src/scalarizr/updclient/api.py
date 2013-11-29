@@ -150,7 +150,7 @@ class UpdClientAPI(object):
     else:
         repo_url = 'http://apt.scalr.net/debian scalr/'
 
-    server_id = platform = queryenv_url = messaging_url = None
+    server_id = system_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
     update_info = None
 
@@ -179,21 +179,20 @@ class UpdClientAPI(object):
 
     def bootstrap(self):
         try:
-            system_id = system_uuid()
+            self.system_id = system_uuid()
         except:
             # This will force updclient to perform check updates each startup, 
             # this is the optimal behavior cause that's ensure latest available package
-            system_id = str(uuid.uuid4())
+            self.system_id = str(uuid.uuid4())
         system_matches = False
         if os.path.exists(self.lock_file):
             LOG.debug('Checking %s', self.lock_file)
             with open(self.lock_file) as fp:
                 updatelock = json.load(fp)
-            system_matches = updatelock['system_uuid'] == system_id
+            system_matches = updatelock['system_id'] == self.system_id
             if not system_matches:
-                LOG.debug('Serial number in lock file and machine one not matched: %s != %s', 
-                        updatelock['system_uuid'], system_id)
-                os.unlink(self.lock_file)
+                LOG.debug('System ID in lock file and machine one not matched: %s != %s', 
+                        updatelock['system_id'], self.system_id)
             else:
                 LOG.debug('Serial number in lock file matches machine one')
 
@@ -219,6 +218,10 @@ class UpdClientAPI(object):
 
         if not system_matches:
             pkgmgr.removed(self.package)
+            if linux.os.debian_family:
+                linux.system('apt-get autoremove', shell=True)
+            elif linux.os.family in ('RedHat', 'Oracle'):
+                pkgmgr.remove('scalarizr-base', purge=True)
             self.update(bootstrap=True)
         self.daemon.start()
 
@@ -253,7 +256,7 @@ class UpdClientAPI(object):
                     if key.startswith('update.'))
         if linux.os.windows_family:
             self.repo_url = globs.get('update.win.repo_url', self.repo_url)
-        elif linux.os.linux_family in ('RedHat', 'Oracle'):
+        elif linux.os.family in ('RedHat', 'Oracle'):
             self.repo_url = globs.get('update.rpm.repo_url', self.repo_url)
         else:
             self.repo_url = globs.get('update.deb.repo_url', self.repo_url)
@@ -286,10 +289,17 @@ class UpdClientAPI(object):
         def do_update(op):
             self.sync()
             self.update_info = {
-                'repository': self.repository,
-                'package': self.package,
+                # object state
+                'server_id': self.server_id,
+                'system_id': self.system_id,
+                'platform': self.platform,
+                'queryenv_url': self.queryenv_url,
+                'messaging_url': self.messaging_url,
                 'scalr_id': self.scalr_id,
                 'scalr_version': self.scalr_version,
+                # update info
+                'repository': self.repository,
+                'package': self.package,
                 'executed_at': time.strftime(DATE_FORMAT, time.gmtime()),
                 'dist': '{name} {release} {codename}'.format(**linux.os),
                 'phase': None,
