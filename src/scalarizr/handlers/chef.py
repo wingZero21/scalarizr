@@ -289,7 +289,10 @@ class ChefHandler(Handler):
                     self._logger.error('Chef-solo bootstrap failed', exc_info=sys.exc_info())
                     raise
                 finally:
-                    shutil.rmtree(temp_dir)
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except:
+                        pass
 
             else:
                 raise HandlerError('Neither chef server not cookbook url were specified')
