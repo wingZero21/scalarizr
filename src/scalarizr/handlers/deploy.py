@@ -321,6 +321,9 @@ class HttpSource(Source):
                     unar += [tmpdst, '-C', workdir]
                 
                 elif mime[0] == 'application/zip':
+                    if not linux.which('unzip'):
+                        log.info('Installing unzip de-archiver')
+                        pkgmgr.installed('unzip')
                     unar = ['unzip', tmpdst, '-d', workdir]
                 else:
                     raise UndefinedSourceError('Unexpected archive format %s' % str(mime))                        
