@@ -256,7 +256,7 @@ class GitSource(Source):
                     out, err, ret_code = system2(('git', 'pull'), env=env, cwd=workdir)
             else:
                 log.info('Checkout from %s', self.url)
-                out, err, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
+                out, err, ret_code = system2(('git', 'clone', '--recursive', self.url, workdir), env=env)
 
             if ret_code:
                 raise Exception('Git failed to clone repository. %s' % out)
