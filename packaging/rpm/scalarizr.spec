@@ -62,6 +62,7 @@ Requires:       python-boto >= 2.13.0
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Obsoletes:      scalarizr < 0.7
+Obsoletes:      scalr-upd-client
 Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack

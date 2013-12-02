@@ -32,6 +32,8 @@ Depends: ${shlibs:Depends},
 Provides: ${python:Provides}
 Replaces: scalarizr (<< 0.7)
 Breaks: scalarizr (<< 0.7)
+Replaces: scalr-upd-client
+Breaks: scalr-upd-client
 Description: Scalarizr agent common files
  Scalarizr base components common for all cloud platforms.
 
