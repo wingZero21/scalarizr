@@ -46,31 +46,25 @@ class Szradm(command_module.Command):
       -v, --version     Show version.
     """
 
-    def __init__(self):
+    def __init__(self, commands_dir=None):
         super(Szradm, self).__init__()
-        self.subcommands = self.find_commands()
+        self.subcommands = self.find_commands(commands_dir)
 
     def __call__(self, command=None, version=False, help=False, args=[]):
         try:
             return self.run_subcommand(command, args)
 
-        except command_module.UnknownCommand, e:
-            # print "Unknown command."
+        except (command_module.UnknownCommand, command_module.InvalidCall) e:
             call_str = 'szradm ' + command + ' ' + ' '.join(args)
-            # call_str = 'szradm ' + ' '.join(reversed(e.traceback[1:]))
-            # point_str = ' ' * call_str.find(e.command_name) + '^'
-            # call_str += ' ' + e.traceback[0]
-            # print call_str + '\n' + point_str
-            # usage = command_module.get_section('usage', self.__doc__)[0]
             message = '\n'.join((call_str, e.message, e.usage))
-            exc = command_module.UnknownCommand(message)
-            raise exc
+            raise e.__class__(message)
 
-        except command_module.InvalidCall, e:
+        except Exception, e:
+            # except-section for user-defined exceptions, semantic errors, etc.
             call_str = 'szradm ' + command + ' ' + ' '.join(args)
-            message = '\n'.join((call_str, e.message, e.usage))
-            exc = command_module.InvalidCall(message)
-            raise exc
+            message = '\n'.join((call_str, e.message))
+            raise Exception(message)
+
 
     def find_commands(self, directory=None):
         """
@@ -84,14 +78,12 @@ class Szradm(command_module.Command):
             # 'commands' is name of attr that defines list of provided top-level szradm commands.
             # Subcommands should not be included
             if hasattr(module, 'commands'):
-                # print module
                 for cmd in module.commands:
-                    # print cmd
                     yield cmd
 
 
 def main(argv):
-    szradm = Szradm()
+    szradm = Szradm(os.path.join(__dir__, 'commands'))
     try:
         szradm_kwds = command_module.parse_command_line(argv[1:], szradm.__doc__)
     except SystemExit:
@@ -100,6 +92,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    start_time = time.time()
     main(sys.argv)
-    print time.time() - start_time, "seconds"
