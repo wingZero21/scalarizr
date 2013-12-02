@@ -169,7 +169,7 @@ class ApacheAPITest(unittest.TestCase):
             print sv1.ssl_chain_path
 
         v1 = apache.VirtualHost(simple_template)
-        with self.assertRaises(NoPathError):
+        with self.assertRaises(apache.ApacheError):
             v1.use_certificate(default_certificate.cert_path, default_certificate.key_path)
 
     def _test_virtual_host_lifecycle(self):

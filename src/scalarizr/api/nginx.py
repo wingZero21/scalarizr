@@ -603,7 +603,7 @@ class NginxAPI(object):
         if hash_name:
             name = sha1(name).hexdigest()
         name = '%s%s__%s' % (name, 
-                             ('_' + location.replace('/', '_')).rstrip('_'),
+                             (location.replace('/', '_')).rstrip('_'),
                              role_namepart)
         name = name.rstrip('_')
 
@@ -646,11 +646,7 @@ class NginxAPI(object):
             role_ids = set([dest.get('id') for dest in backend_destinations])
             role_ids.discard(None)
 
-            name = self._make_backend_name(
-                hostname,
-                location[1:] if location.startswith('/') else location,
-                role_ids,
-                hash_name)
+            name = self._make_backend_name(hostname, location, role_ids, hash_name)
 
             self._add_backend(name,
                               backend_destinations,
@@ -697,16 +693,20 @@ class NginxAPI(object):
         config.add('server/if/rewrite', '^(.*)$ /noapp.html last')
         config.add('server/if/return', '302')
 
-    def _is_ssl_on_default_only(self):
+    def _old_style_ssl_on(self):
+        """
+        Returns True if nginx version is lesser than 0.8.21.
+        ssl parameter in listen directive back than can be set only on default server,
+        but multiple ssl servers could be set by ssl directive:
+        `ssl on;` not `listen 443 ssl;`
+        """
         out = system2(['nginx -v'], shell=True)[1]
         nginx_version_str = out.split('/')[1]
         nginx_version = nginx_version_str.split('.')
         # 0.8.21 version of nginx where default param for https listen is not needed
-        default_needed = nginx_version < ['0', '8', '21']
+        old_nginx = nginx_version < ['0', '8', '21']
         _logger.debug('nginx version is: %s' % nginx_version_str)
-        _logger.debug('default param for listen is%s needed' % 
-            (' not' if not default_needed else ''))
-        return default_needed
+        return old_nginx
 
     def _add_ssl_params(self,
                         config,
@@ -714,12 +714,12 @@ class NginxAPI(object):
                         ssl_port,
                         ssl_certificate_id,
                         http):
-        default_needed = self._is_ssl_on_default_only()
+        old_style_ssl = self._old_style_ssl_on()
 
-        listen_val = '%s%s ssl' % ((ssl_port or '443'), ' default' if default_needed else '')
+        listen_val = '%s%s' % ((ssl_port or '443'), ' ssl' if not old_style_ssl else '')
         config.add('%s/listen' % server_xpath, listen_val)
 
-        if not http:
+        if old_style_ssl:
             config.add('%s/ssl' % server_xpath, 'on')
         ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
@@ -821,11 +821,12 @@ class NginxAPI(object):
                           ssl=False,
                           ssl_port=None,
                           ssl_certificate_id=None,
-                          grouped_templates=None):
+                          grouped_templates=None,
+                          redirector=True):
         """
         Adds server to https config, but without writing it to file.
         """
-        if not http:
+        if redirector:
             redirector_conf = self._make_redirector_conf(hostname,
                                                          port,
                                                          ssl_port)
@@ -952,14 +953,27 @@ class NginxAPI(object):
 
         grouped_templates = self._group_templates(templates)
 
+        # If it's an old nginx and proxy should work through ssl,
+        # we need to make two different servers for http and https listening
+        two_servers_are_needed = ssl and self._old_style_ssl_on()
+        # making server that listens https
         self._add_nginx_server(name,
                                locations_and_backends,
                                port=port,
-                               http=http,
+                               http=http and not two_servers_are_needed,
                                ssl=ssl,
                                ssl_port=ssl_port,
                                ssl_certificate_id=ssl_certificate_id,
-                               grouped_templates=grouped_templates)
+                               grouped_templates=grouped_templates,
+                               redirector=not http)
+        # making server that listens http
+        if two_servers_are_needed and http:
+            self._add_nginx_server(name,
+                                   locations_and_backends,
+                                   port=port,
+                                   http=http,
+                                   grouped_templates=grouped_templates,
+                                   redirector=False)
 
         if port:
             _open_port(port)
@@ -1340,7 +1354,7 @@ class NginxAPI(object):
                     # trying get ssl param from config
                     # if it raises exception, then we need to set up ssl
                     # like in first time
-                    default_needed = self._is_ssl_on_default_only()
+                    default_needed = self._old_style_ssl_on()
                     ssl_listen_xpath = self.proxies_inc.xpath_of('%s/listen' % server_xpath,
                                                                  '*ssl*')
                     if http and not ssl_listen_xpath:

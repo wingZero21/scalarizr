@@ -40,14 +40,15 @@ class ApacheHandler(Handler):
     def __init__(self):
         Handler.__init__(self)
 
-        self.api = apache.ApacheAPI()
-
-        self.preset_provider = ApachePresetProvider()
-        preset_service.services[BEHAVIOUR] = self.preset_provider
         self._initial_preset = None
         self._initial_v_hosts = []
 
         self._queryenv = bus.queryenv_service
+        self.api = apache.ApacheAPI()
+
+        self.preset_provider = ApachePresetProvider()
+        preset_service.services[BEHAVIOUR] = self.preset_provider
+
 
         bus.on(init=self.on_init)
         bus.define_events("apache_rpaf_reload")
@@ -91,25 +92,24 @@ class ApacheHandler(Handler):
                 self._initial_preset = apache_data["preset"]
 
     def on_before_host_up(self, message):
+        self.api.stop_service("Configuring Apache Web Server")
         self.api.init_service()
-        self.api.start_service()
+        self._reconfigure_mod_rpaf()
 
         if self._initial_v_hosts:
             LOG.debug("Configuring VirtualHosts: %s" % self._initial_v_hosts)
-            applied_vhosts = self.api.reconfigure(self._initial_v_hosts)
+            applied_vhosts = self.api.reconfigure(self._initial_v_hosts, reload=False)
             LOG.info("%s Virtual Hosts configured." % len(applied_vhosts))
 
-        self._rpaf_reload()
+        self.api.start_service()
 
         bus.fire("service_configured", service_name=SERVICE_NAME, preset=self._initial_preset)
 
     def on_start(self):
         if __node__["state"] == ScalarizrState.RUNNING:
-            try:
-                self._rpaf_reload()
-            except initdv2.InitdError, e:
-                if "not running" in str(e) and not self.api.service.running:
-                    self.api.start_service()
+            self._reconfigure_mod_rpaf()
+            self.api.reload_service()
+
 
     def on_before_reboot_finish(self, *args, **kwargs):
         self.api.reload_virtual_hosts()
@@ -142,7 +142,7 @@ class ApacheHandler(Handler):
 
             self.api.reload_service("Applying new RPAF proxy IPs list")
 
-    def _rpaf_reload(self):
+    def _reconfigure_mod_rpaf(self):
         lb_hosts = []
 
         for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
@@ -160,9 +160,6 @@ class ApacheHandler(Handler):
 
         with open(mod_rpaf_path, "w") as fp:
             fp.write(mod_rpaf.body)
-
-        self.api.reload_service("Applying new RPAF proxy IPs list")
-        bus.fire("apache_rpaf_reload")
 
     on_BeforeHostTerminate = on_HostDown
 
