@@ -10,6 +10,7 @@ import os
 import re
 import pwd
 import time
+import uuid
 import shutil
 import logging
 import urllib2
@@ -28,7 +29,7 @@ from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import system2, initdv2
 from scalarizr.util import wait_until, dynimp, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
-from scalarizr.libs.metaconf import Configuration, NoPathError
+from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 
 
 LOG = logging.getLogger(__name__)
@@ -122,7 +123,7 @@ class ApacheAPI(object):
         self._query_env = bus.queryenv_service
 
     @rpc.command_method
-    def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True):
+    def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True, allow_port=False):
         """
         Creates Name-Based Apache VirtualHost
 
@@ -137,38 +138,28 @@ class ApacheAPI(object):
         #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
         name = "%s:%s" % (hostname, port)
-        v_host_path = get_virtual_host_path(hostname, port)
+        LOG.info("Creating Apache VirtualHost %s" % name)
 
-        if os.path.exists(v_host_path):
-            raise ApacheError("Cannot create VirtualHost %s:%s: %s already exists." % (
-                hostname, port, v_host_path
-            ))
+        v_host = VirtualHost(template)
 
         if ssl:
             ssl_certificate = SSLCertificate(ssl_certificate_id)
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
 
-        try:
-            v_host = VirtualHost(template)
-            document_root_paths = v_host.document_root_paths
+            v_host.use_certificate(
+                ssl_certificate.cert_path,
+                ssl_certificate.key_path,
+                ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
+            )
 
-            if ssl:
-                v_host.use_certificate(
-                    ssl_certificate.cert_path,
-                    ssl_certificate.key_path,
-                    ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
-                )
-                LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, name))
+            LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, name))
 
-                #Compatibility with old apache handler
-                if self.mod_ssl.is_system_certificate_used():
-                    self.mod_ssl.set_default_certificate(ssl_certificate)
+            #Compatibility with old apache handler
+            if self.mod_ssl.is_system_certificate_used():
+                self.mod_ssl.set_default_certificate(ssl_certificate)
 
-        except NoPathError, e:
-            raise ApacheError(e)
-
-        for directory in document_root_paths:
+        for directory in v_host.document_root_paths:
             docroot_parent_path = os.path.dirname(directory)
 
             if not os.path.exists(docroot_parent_path):
@@ -202,7 +193,7 @@ class ApacheAPI(object):
                     clog_path,
                 ))
         except NoPathError:
-            LOG.debug("CustomLog directive not found in %s" % name)
+            LOG.debug("Directive 'CustomLog' not found in %s" % name)
 
         try:
             errlog_path = os.path.dirname(v_host.error_log_path)
@@ -214,31 +205,35 @@ class ApacheAPI(object):
                     errlog_path,
                 ))
         except NoPathError:
-            LOG.debug("ErrorLog directive not found in %s" % name)
+            LOG.debug("Directive 'ErrorLog' not found in %s" % name)
 
-        if reload:
-            with BackupManager(v_host_path):
-                with open(v_host_path, "w") as fp:
-                    fp.write(v_host.body)
-        else:
+        v_host_changed = True
+        v_host_path = get_virtual_host_path(hostname, port)
+        if os.path.exists(v_host_path):
+            with open(v_host_path, "r") as old_v_host:
+                if old_v_host.read() == v_host.body:
+                    v_host_changed = False
+
+        if v_host_changed:
             with open(v_host_path, "w") as fp:
                 fp.write(v_host.body)
+            LOG.info("VirtualHost %s configuration saved to %s" % (name, v_host_path))
+        else:
+            LOG.info("VirtualHost %s configuration (%s) has no changes." % (name, v_host_path))
 
-        LOG.info("VirtualHost %s saved to %s" % (name, v_host_path))
-
-        self._open_ports([port])
+        if allow_port:
+            self._open_ports([port])
 
         if reload:
             try:
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore(v_host_path)
                 raise
-
             else:
-                BackupManager.free(v_host_path)
-                self.reload_service()
+                self.reload_service("Applying Apache VirtualHost %s" % name)
+        else:
+            LOG.info("Apache VirtualHost %s has been applied without service reload." % name)
 
         return v_host_path
 
@@ -267,34 +262,28 @@ class ApacheAPI(object):
 
         old_hostname, old_port = signature
         old_path = get_virtual_host_path(old_hostname, old_port)
+        old_body = open(old_path, "r").read() if os.path.exists(old_path) else None
 
-        if not os.path.exists(old_path):
-            raise ApacheError("Cannot update VirtualHost %s:%s: %s not found." % (
-                old_hostname,
-                old_port,
-                old_path
-            ))
-
-        old_body = open(old_path, "r").read()
-        template = template or old_body
-        v_host = VirtualHost(template)
-
+        v_host = VirtualHost(template or old_body)
         if hostname:
             v_host.server_name = hostname
-
         if port:
             v_host.port = port
-
         if ssl and ssl_certificate_id:
             ssl_certificate = SSLCertificate(ssl_certificate_id)
-            ssl_certificate.ensure()
+            if not ssl_certificate.exists():
+                ssl_certificate.ensure()
             v_host.use_certificate(ssl_certificate)
 
-        new_path = get_virtual_host_path(hostname or old_hostname, port or old_port)
-        with BackupManager(new_path):
-            if old_path != new_path:
-                os.remove(old_body)
-            with open(new_path, "w") as fp:
+        path = get_virtual_host_path(hostname or old_hostname, port or old_port)
+
+        if old_path != path:
+            os.remove(old_path)
+            v_host_changed = True
+        elif old_body != v_host.body:
+            v_host_changed = True
+        if v_host_changed:
+            with open(path, "w") as fp:
                 fp.write(v_host.body)
 
         if reload:
@@ -302,10 +291,8 @@ class ApacheAPI(object):
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore([old_path, new_path])
                 raise
             else:
-                BackupManager.free(old_path)
                 self.reload_service()
 
     @rpc.command_method
@@ -318,90 +305,84 @@ class ApacheAPI(object):
         """
         LOG.info("Removing Apache VirtualHosts: %s" % str(vhosts))
 
-        removed_vhosts = []
-
         for signature in vhosts:
             v_host_path = get_virtual_host_path(*signature)
 
-            if not os.path.exists(v_host_path):
-                raise ApacheError('Cannot remove %s: %s does not exist.' % (
-                    str(signature), v_host_path))
-
-            with BackupManager(v_host_path):
+            if os.path.exists(v_host_path):
                 os.remove(v_host_path)
-                removed_vhosts.add(v_host_path)
                 LOG.info("VirtualHost %s:%s removed." % signature)
+            else:
+                LOG.warning("Cannot remove %s: %s does not exist." % (
+                    str(signature), v_host_path))
 
         if reload:
             try:
                 self.configtest()
             except initdv2.InitdError, e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore(removed_vhosts)
                 raise
             else:
-                BackupManager.free(removed_vhosts)
                 self.reload_service('%s VirtualHosts removed.' % len(vhosts))
 
+
     @rpc.command_method
-    def reconfigure(self, vhosts, reload=True):
+    def reconfigure(self, vhosts, reload=True, rollback_on_error=True):
         """
         Deploys multiple VirtualHosts and removes odds.
         @param vhosts: list(dict(vhost_data),)
         @return: list, paths to reconfigured VirtualHosts
         """
-        new_vhosts = []
-        removed_vhosts = []
+        ports = []
         applied_vhosts = []
 
+        old_files = []
         LOG.info("Started reconfiguring Apache VirtualHosts.")
 
-        for vh_data in vhosts:
+        bm = BackupManager()
+        if rollback_on_error:
+            for fname in os.listdir(__apache__["vhosts_dir"]):
+                if fname.endswith(__apache__["vhost_extension"]):
+                    old_files.append(os.path.join(__apache__["vhosts_dir"], fname))
+            bm.add(old_files)
 
-            host, port = vh_data["hostname"], vh_data["port"]
-            v_host_path = get_virtual_host_path(host, port)
+        try:
+            for virtual_host_data in vhosts:
 
-            with BackupManager(v_host_path):
-                if os.path.exists(v_host_path):
-                    removed_vhosts.append(v_host_path)
-                    os.remove(v_host_path)
-
-                path = self.create_vhost(
-                    vh_data["hostname"],
-                    vh_data["port"],
-                    vh_data["template"],
-                    vh_data["ssl"],
-                    vh_data["ssl_certificate_id"],
-                    reload=False
-                )
+                hostname = virtual_host_data["hostname"]
+                port = virtual_host_data["port"]
+                template = virtual_host_data["template"]
+                ssl = virtual_host_data["ssl"]
+                cert_id = virtual_host_data["ssl_certificate_id"]
+                path = self.create_vhost(hostname, port, template, ssl, cert_id, allow_port=False, reload=False)
                 applied_vhosts.append(path)
+                ports.append(port)
 
-                if path not in removed_vhosts:
-                    new_vhosts.append(path)
-
-        #cleanup
-        for fname in os.listdir(__apache__["vhosts_dir"]):
-            old_vhost_path = os.path.join(__apache__["vhosts_dir"], fname)
-
-            if old_vhost_path not in applied_vhosts:
-                with BackupManager(old_vhost_path):
+            #cleanup
+            for fname in os.listdir(__apache__["vhosts_dir"]):
+                old_vhost_path = os.path.join(__apache__["vhosts_dir"], fname)
+                if old_vhost_path not in applied_vhosts:
                     os.remove(old_vhost_path)
-                    removed_vhosts.append(old_vhost_path)
-                LOG.info("Removed old VirtualHost file %s" % old_vhost_path)
+                    LOG.info("Removed old VirtualHost file %s" % old_vhost_path)
+        except:
+            if rollback_on_error:
+                bm.restore()
+            raise
+
+        self._open_ports(set(ports))  # consolidated ports for single request
 
         if reload:
             try:
                 self.configtest()
-            except initdv2.InitdError, e:
+            except (BaseException, Exception), e:
                 LOG.error("ConfigTest failed with error: '%s'." % str(e))
-                BackupManager.restore(new_vhosts + removed_vhosts)
+                if rollback_on_error:
+                    bm.restore()
                 raise
             else:
                 self.reload_service("Applying new apache configuration.")
         else:
-            LOG.info("Apache configuration changed without service reload.")
+            LOG.info("Apache configuration has been changed without service reload.")
 
-        BackupManager.free(new_vhosts + removed_vhosts)
         return applied_vhosts
 
     @rpc.query_method
@@ -578,7 +559,7 @@ class ApacheAPI(object):
         @return: list(virtual_host_path,)
         """
         vh_data = self._fetch_virtual_hosts()
-        return self.reconfigure(vh_data, reload=True)
+        return self.reconfigure(vh_data, reload=True, rollback_on_error=True)
 
     def rename_old_virtual_hosts(self):
         vhosts_dir = __apache__["vhosts_dir"]
@@ -628,13 +609,13 @@ class ApacheAPI(object):
 
     def _open_ports(self, ports):
         if iptables.enabled():
-            LOG.info("Ensuring ports %s are allowed in IPtables" % str(ports))
             rules = []
             for port in ports:
                 if port not in self.current_open_ports:
-                    rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
                     self.current_open_ports.append(port)
+                    rules.append({"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(port)})
             if rules:
+                LOG.info("Ensuring ports %s are allowed in IPtables" % str(ports))
                 iptables.FIREWALL.ensure(rules)
         else:
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
@@ -642,12 +623,16 @@ class ApacheAPI(object):
 
 class BasicApacheConfiguration(object):
 
-    #body = None
     _cnf = None
 
     def __init__(self, body):
         config = Configuration("apache")
-        config.reads(str(body))
+        try:
+            config.reads(str(body))
+        except ParseError, e:
+            LOG.error("MetaConf failed to parse Apache VirtualHost body: \n%s" % body)
+            e._err = body + "\n" + e._err
+            raise
         self._cnf = config
 
     @property
@@ -812,93 +797,29 @@ class ApacheConfigManager(object):
 
 class BackupManager(object):
 
-    path = None
-    before = None
-    backup = {}
+    id = None
+    data = None
 
-    def __init__(self, path):
-        self.path = path
-        self.before = None
+    def __init__(self):
+        self.id = uuid.uuid4()
+        self.data = {}
 
-    def _get_content(self):
-        if os.path.exists(self.path):
-            with open(self.path, "r") as fp:
-                text = fp.read()
-            st = os.stat(self.path)
-            return text, st.st_uid, st.st_gid, st.st_mode
+    def add(self, list_files):
+        for path in set(list_files):
+            with open(path, "r") as fp:
+                self.data[path] = fp.read()
+        LOG.debug("BackupManager %s created snapshot of %s" % (self.id, list_files))
 
-    def __enter__(self):
-        self.before = self._get_content()
-
-    def __exit__(self, type, value, traceback):
-        after = self._get_content()
-
-        if traceback:
-            errlog = "Exception was caught within BackupManager context.\n"
-            errlog += "File %s has been changed to: %s.\nRestoring it to: %s" % (
-                self.path,
-                after,
-                self.before
-            )
-            LOG.error(errlog)
-
-            self.restore(self.path)
-
-            LOG.info("BackupManager: Due to error '%s' %s was changed to it's previous state." % (
-                value.message, self.path
-            ))
-            raise
-
-        elif self.before != after:
-
-            if self.before and after:
-                LOG.debug("BackupManager noticed changes in %s" % self.path)
-            elif not self.before:
-                LOG.debug("BackupManager noticed creation of %s" % self.path)
-            elif not after:
-                LOG.debug("BackupManager noticed that %s has been removed" % self.path)
-
-            BackupManager.backup[self.path] = self.before
-        else:
-            LOG.debug("BackupManager: %s has not been changed." % self.path)
-
-    @classmethod
-    def restore(cls, paths):
-        LOG.debug("BackupManager: Restoring files: %s" % ",".join(paths))
-        try:
-            paths = iter(paths)
-        except TypeError:
-            paths = [paths, ]
-
-        for path in paths:
-            if path in cls.backup:
-                data = cls.backup[path]
-                if not data and os.path.exists(path):
-                    os.remove(path)
-                    LOG.debug("BackupManager: %s removed to restore its previous state")
-                else:
-                    text, st_uid, st_gid, st_mode = data
-                    with open(path, "w") as fp:
-                        fp.write(text)
-                    os.chown(path, st_uid, st_gid)
-                    os.chmod(path, st_mode)
-                    LOG.debug("BackupManager: %s restored to its previous state")
+    def restore(self):
+        for path, body in self.data.items():
+            with open(path, "r") as fp:
+                new_body = fp.read()
+            if body == new_body:
+                LOG.debug("BackupManager %s did not detect changes in %s. Restore skipped." % (self.id, path))
             else:
-                LOG.debug("BackupManager: Cannot restore %s: file wasn`t changed")
-            cls.free(path)
-        LOG.info("BackupManager restored files: %s" % ",".join(paths))
-
-    @classmethod
-    def free(cls, paths):
-        try:
-            paths = iter(paths)
-        except TypeError:
-            paths = [paths, ]
-
-        for path in paths:
-            if path in cls.backup:
-                LOG.debug("BackupManager: Removing %s from backup storage." % path)
-                del cls.backup[path]
+                with open(path, "w") as fp:
+                    fp.write(body)
+                    LOG.info("BackupManager %s restored %s from backup." % (self.id, path))
 
 
 class SSLCertificate(object):
@@ -934,7 +855,7 @@ class SSLCertificate(object):
         """
         Fetches SSL Certificate from Scalr and dumps data on disk.
         """
-        LOG.info("Retrieving ssl cert %s from Scalr." % self.id or "'default'")
+        LOG.info("Retrieving SSL certificate %s from Scalr." % self.id or "'default'")
         query_env = bus.queryenv_service
         cert_data = query_env.get_ssl_certificate(self.id)
         authority = cert_data[2] if len(cert_data) > 2 else None

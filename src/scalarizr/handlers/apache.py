@@ -50,6 +50,7 @@ class ApacheHandler(Handler):
         preset_service.services[BEHAVIOUR] = self.preset_provider
 
 
+
         bus.on(init=self.on_init)
         bus.define_events("apache_rpaf_reload")
 
@@ -92,14 +93,24 @@ class ApacheHandler(Handler):
                 self._initial_preset = apache_data["preset"]
 
     def on_before_host_up(self, message):
+        op_log = bus.init_op.logger
         self.api.stop_service("Configuring Apache Web Server")
         self.api.init_service()
         self._reconfigure_mod_rpaf()
 
         if self._initial_v_hosts:
-            LOG.debug("Configuring VirtualHosts: %s" % self._initial_v_hosts)
-            applied_vhosts = self.api.reconfigure(self._initial_v_hosts, reload=False)
-            LOG.info("%s Virtual Hosts configured." % len(applied_vhosts))
+            op_log.info("Configuring VirtualHosts.")
+            LOG.debug("VirtualHosts to configure: %s" % self._initial_v_hosts)
+
+            applied_vhosts = self.api.reconfigure(self._initial_v_hosts, reload=False, rollback_on_error=False)
+
+            if len(applied_vhosts) != len(self._initial_v_hosts):
+                raise apache.ApacheError("%s Apache VirtualHosts were assigned to server but only %s were applied." % (
+                    len(applied_vhosts),
+                    len(self._initial_v_hosts),
+                ))
+
+            op_log.info("%s Virtual Hosts configured." % len(applied_vhosts))
 
         self.api.start_service()
 

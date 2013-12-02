@@ -166,7 +166,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
             shutil.rmtree(rebundle_dir)
 
         try:
-            goog_image_name = self._role_name.lower().replace('_', '-')
+            goog_image_name = self._role_name.lower().replace('_', '-') + '-' + str(int(time.time()))
             LOG.info('Registering new image %s' % goog_image_name)
             # TODO: check duplicate names
             compute = pl.new_compute_client()
