@@ -208,8 +208,6 @@ class ChefHandler(Handler):
             return
 
         log = bus.init_op.logger if bus.init_op else LOG
-
-
         try:
             # Create client configuration
             if self._chef_data.get('server_url'):
@@ -255,7 +253,6 @@ class ChefHandler(Handler):
                 cookbook_url = self._chef_data['cookbook_url']
                 temp_dir = tempfile.mkdtemp()
                 try:
-                    # TODO: detect src_type
                     try:
                         src_type = self._chef_data['cookbook_url_type']
                     except KeyError:
@@ -280,11 +277,21 @@ class ChefHandler(Handler):
                     with open(attrs_path, 'w') as f:
                         json.dump(self._with_json_attributes, f)
 
-                    system2([self._chef_solo_bin, '-c', chef_solo_cfg_path, '-j', attrs_path],
-                            close_fds=not linux.os.windows_family,
-                            log_level=logging.INFO,
-                            preexec_fn=not linux.os.windows_family and os.setsid or None,
-                            env=self._environ_variables)
+                    try:
+                        system2([self._chef_solo_bin, '-c', chef_solo_cfg_path, '-j', attrs_path],
+                                close_fds=not linux.os.windows_family,
+                                log_level=logging.INFO,
+                                preexec_fn=not linux.os.windows_family and os.setsid or None,
+                                env=self._environ_variables)
+                    except:
+                        e_type, e, tb = sys.exc_info()
+                        if cookbook_path:
+                            chef_stacktrace_path = os.path.join(cookbook_path, 'chef-stacktrace.out')
+                            if os.path.exists(chef_stacktrace_path):
+                                with open(chef_stacktrace_path) as f:
+                                    e = e_type(str(e) + '\nChef traceback:\n' + f.read())
+                        raise e_type, e, tb
+
                 except:
                     self._logger.error('Chef-solo bootstrap failed', exc_info=sys.exc_info())
                     raise
