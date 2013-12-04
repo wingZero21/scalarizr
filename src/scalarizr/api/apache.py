@@ -498,15 +498,16 @@ class ApacheAPI(object):
 
         if linux.os.debian_family:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
+            if os.path.exists(mod_rpaf_path):
 
-            with open(mod_rpaf_path, "r") as fp:
-                body = fp.read()
+                with open(mod_rpaf_path, "r") as fp:
+                    body = fp.read()
 
-            mod_rpaf = ModRPAF(body)
-            mod_rpaf.fix_module()
+                mod_rpaf = ModRPAF(body)
+                mod_rpaf.fix_module()
 
-            with open(mod_rpaf_path, "w") as fp:
-                fp.write(mod_rpaf.body)
+                with open(mod_rpaf_path, "w") as fp:
+                    fp.write(mod_rpaf.body)
 
         ModRPAF.ensure_permissions()
 
@@ -774,8 +775,12 @@ class ModRPAF(BasicApacheConfiguration):
 
     @staticmethod
     def ensure_permissions():
-        st = os.stat(__apache__["httpd.conf"])
-        os.chown(__apache__["mod_rpaf_path"], st.st_uid, st.st_gid)
+        httpd_conf_path = __apache__["httpd.conf"]
+        mod_rpaf_path = __apache__["mod_rpaf_path"]
+
+        if os.path.exists(httpd_conf_path) and os.path.exists(mod_rpaf_path):
+            st = os.stat(httpd_conf_path)
+            os.chown(mod_rpaf_path, st.st_uid, st.st_gid)
 
 
 class ApacheConfigManager(object):
