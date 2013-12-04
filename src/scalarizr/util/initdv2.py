@@ -6,13 +6,18 @@ Created on Aug 29, 2010
 @author: spike
 '''
 import socket
+import string
 import os
 import time
 import re
 from threading import local
+import logging
 
+from scalarizr import linux
 from scalarizr.util import system2, PopenError
 
+
+LOG = logging.getLogger(__name__)
 
 _services  = dict()
 _instances = dict()
@@ -233,6 +238,71 @@ class ParametrizedInitScript(InitScript):
             delattr(self.local, status_attr)
             if reason_attr:
                 delattr(self.local, reason_attr)
+
+
+class Daemon(object):
+    '''
+    Alternate implementation (from updclient project)
+    TODO: we should merge Daemon and ParametrizedInitScript classes and update clients code
+    '''
+    def __init__(self, name):
+        self.name = name
+        if linux.os.name == 'Ubuntu' and linux.os.release >= (10, 4):
+            self.init_script = ['service', self.name]
+        else:
+            self.init_script = ['/etc/init.d/' + self.name]
+    
+    if linux.os.windows_family:
+        def ctl(self, command):
+            return linux.system(('sc', command, self.name))
+    else:
+        def ctl(self, command):
+            return linux.system(self.init_script + [command], 
+                    close_fds=True, preexec_fn=os.setsid)
+    
+    def restart(self):
+        LOG.info('Restarting %s', self.name)
+        if linux.os.windows_family:
+            self.ctl('stop')
+            time.sleep(1)
+            self.ctl('start')
+        else:
+            self.ctl('restart')
+    
+    def forcerestart(self):
+        LOG.info('Forcefully restarting %s', self.name)
+        self.ctl('stop')
+        try:
+            out = linux.system('ps -C %s --noheaders -o pid' % self.name)[0]
+            for pid in out.strip().splitlines():
+                LOG.debug('Killing process %s', pid)
+                os.kill(pid, 9)
+        finally:
+            self.ctl('start')
+    
+    def condrestart(self):
+        LOG.info('Conditional restarting %s', self.name)
+        self.ctl('condrestart')
+    
+    def start(self):
+        LOG.info('Starting %s', self.name)
+        self.ctl('start')
+    
+    def stop(self):
+        LOG.info('Stopping %s', self.name)
+        self.ctl('stop')
+    
+    @property
+    def running(self):
+        if linux.os.windows_family:
+            out = self.ctl('query')[0]
+            lines = filter(None, map(string.strip, out.splitlines()))
+            for line in lines:
+                name, value = map(string.strip, line.split(':', 1))
+                if name.lower() == 'state':
+                    return value.lower().endswith('running')
+        else:
+            return not self.ctl('status')[2] 
 
 
 

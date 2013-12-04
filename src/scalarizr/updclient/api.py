@@ -13,16 +13,18 @@ import sys
 import os
 import re
 import binascii
+import threading
 import shutil
 import uuid
 
 from scalarizr import linux, queryenv, rpc
 from scalarizr.bus import bus
-from scalarizr.util import metadata
+from scalarizr.util import metadata, initdv2
 from scalarizr.linux import pkgmgr
 from scalarizr.messaging import p2p as messaging
 from scalarizr.api import operation
 from scalarizr.api.binding import jsonrpc_http
+
 
 if linux.os.windows_family:
     import win32com
@@ -38,67 +40,6 @@ class UpdateError(Exception):
 
 class NoSystemUUID(Exception):
     pass
-
-
-class Daemon(object):
-    def __init__(self, name):
-        self.name = name
-        if linux.os.name == 'Ubuntu' and linux.os.release >= (10, 4):
-            self.init_script = ['service', self.name]
-        else:
-            self.init_script = ['/etc/init.d/' + self.name]
-    
-    if linux.os.windows_family:
-        def ctl(self, command):
-            return linux.system(('sc', command, self.name))
-    else:
-        def ctl(self, command):
-            return linux.system(self.init_script + [command], 
-                    close_fds=True, preexec_fn=os.setsid)
-    
-    def restart(self):
-        LOG.info('Restarting %s', self.name)
-        if linux.os.windows_family:
-            self.ctl('stop')
-            time.sleep(1)
-            self.ctl('start')
-        else:
-            self.ctl('restart')
-    
-    def forcerestart(self):
-        LOG.info('Forcefully restarting %s', self.name)
-        self.ctl('stop')
-        try:
-            out = linux.system('ps -C %s --noheaders -o pid' % self.name)[0]
-            for pid in out.strip().splitlines():
-                LOG.debug('Killing process %s', pid)
-                os.kill(pid, 9)
-        finally:
-            self.ctl('start')
-    
-    def condrestart(self):
-        LOG.info('Conditional restarting %s', self.name)
-        self.ctl('condrestart')
-    
-    def start(self):
-        LOG.info('Starting %s', self.name)
-        self.ctl('start')
-    
-    def stop(self):
-        LOG.info('Stopping %s', self.name)
-        self.ctl('stop')
-    
-    @property
-    def running(self):
-        if linux.os.windows_family:
-            out = self.ctl('query')[0]
-            lines = filter(None, map(string.strip, out.splitlines()))
-            for line in lines:
-                name, value = map(string.strip, line.split(':', 1))
-                if name.lower() == 'state':
-                    return value.lower().endswith('running')
-        else:
-            return not self.ctl('status')[2] 
 
 
 def norm_user_data(data):
@@ -141,6 +82,7 @@ class UpdClientAPI(object):
     package = 'scalarizr'
     client_mode = 'client'
     api_port = 8008
+    talk_timeout = 60
     server_url = 'http://update.scalr.net/'
     repository = 'latest'
     if linux.os.windows_family:
@@ -152,13 +94,15 @@ class UpdClientAPI(object):
 
     server_id = system_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
-    update_info = None
+    update_status = None
 
     update_server = None
     scalarizr = None
     queryenv = None
     pkgmgr = None
     daemon = None
+
+    system_matches = False
 
     if linux.os.windows_family:
         _etc_path = r'C:\Program Files\Scalarizr\etc'
@@ -169,12 +113,55 @@ class UpdClientAPI(object):
     crypto_file = os.path.join(_private_path, 'keys', 'default')
     del _etc_path, _private_path
 
+    @property
+    def is_solo_mode(self):
+        return self.client_mode == 'solo'
+
+    @property
+    def is_client_mode(self):
+        return self.client_mode == 'client'
+
+    def update_state():
+        def fget(self):
+            return self.update_status['state']
+        def fset(self, value):
+            self.update_status['state'] = value
+        return locals()
+    update_state = property(**update_state())
+
+
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
         self.pkgmgr = pkgmgr.package_mgr()
-        self.daemon = Daemon('scalarizr')
+        self.daemon = initdv2.Daemon('scalarizr')
         self.op_api = operation.OperationAPI()
-        self.update_info = {}
+        self.update_status = {'state': 'unknown'}
+        self._talked = threading.Event()
+
+
+    def _init_queryenv(self):
+        args = (self.queryenv_url, 
+                self.server_id, 
+                self.crypto_file)
+        self.queryenv = queryenv.QueryEnvService(*args)
+        self.queryenv = queryenv.QueryEnvService(*args, 
+                        api_version=self.queryenv.get_latest_version())        
+
+
+    def _init_services(self):
+        self._init_queryenv()
+
+        bus.messaging_service = messaging.P2pMessageService(
+                server_id=self.server_id,
+                crypto_key_path=self.crypto_file,
+                producer_url=self.messaging_url,
+                producer_retries_progression='1,2,5,10,20,30,60')
+
+        if self.is_client_mode:
+            self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
+                            server_id=self.server_id)
+
+        self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file) 
 
 
     def bootstrap(self):
@@ -219,37 +206,23 @@ class UpdClientAPI(object):
             self.package = 'scalarizr-' + self.platform
         self._init_services()
 
-        if not system_matches:
-            pkgmgr.removed(self.package)
-            if linux.os.debian_family:
-                self.pkgmgr.apt_get_command('autoremove')
-            elif linux.os.family in ('RedHat', 'Oracle'):
-                pkgmgr.remove('scalarizr-base', purge=True)
+        self.system_matches = system_matches
+        if not self.system_matches:
             self.update(bootstrap=True)
-        self.daemon.start()
+        else:
+            if self.update_state == 'completed/wait-ack':
+                self.update_state = 'completed'
+            else:
+                self.update_state = 'noop'
 
-    def _init_queryenv(self):
-        args = (self.queryenv_url, 
-                self.server_id, 
-                self.crypto_file)
-        self.queryenv = queryenv.QueryEnvService(*args)
-        self.queryenv = queryenv.QueryEnvService(*args, 
-                        api_version=self.queryenv.get_latest_version())        
 
-    def _init_services(self):
-        self._init_queryenv()
-
-        bus.messaging_service = messaging.P2pMessageService(
-                server_id=self.server_id,
-                crypto_key_path=self.crypto_file,
-                producer_url=self.messaging_url,
-                producer_retries_progression='1,2,5,10,20,30,60')
-
-        if self.is_client_mode:
-            self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
-                            server_id=self.server_id)
-
-        self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file)  
+    def uninstall(self):
+        LOG.info('Ensuring current package uninstall')
+        pkgmgr.removed(self.package)
+        if not linux.os.windows_family:
+            pkgmgr.removed('scalarizr-base', purge=True)
+        if linux.os.debian_family:
+            self.pkgmgr.apt_get_command('autoremove')     
 
 
     def sync(self):
@@ -271,27 +244,16 @@ class UpdClientAPI(object):
         self.pkgmgr.updatedb()      
 
 
-    @property
-    def is_solo_mode(self):
-        return self.client_mode == 'solo'
-
-
-    @property
-    def is_client_mode(self):
-        return self.client_mode == 'client'
-
-
     @rpc.command_method
     def update(self, force=False, bootstrap=False, async=False, **kwds):
         if bootstrap:
-            async = False
             force = True
-        notification = not bootstrap
-        reporting = self.is_client_mode and not bootstrap
+        notifies = not bootstrap
+        reports = self.is_client_mode and not bootstrap
 
         def do_update(op):
             self.sync()
-            self.update_info = {
+            self.update_status = {
                 # object state
                 'server_id': self.server_id,
                 'system_id': self.system_id,
@@ -305,85 +267,83 @@ class UpdClientAPI(object):
                 'package': self.package,
                 'executed_at': time.strftime(DATE_FORMAT, time.gmtime()),
                 'dist': '{name} {release} {codename}'.format(**linux.os),
-                'phase': None,
+                'state': 'in-progress/prepare',
                 'error': None
             }
             try:
+                if bootstrap:
+                    self.update_state = 'in-progress/uninstall'
+                    self.uninstall()
+
                 pkginfo = self.pkgmgr.info(self.package)
 
                 if not pkginfo['candidate']:
                     msg = 'No new version available ({0})'.format(self.package)
                     raise UpdateError(msg)
-                self.update_info['version'] = pkginfo['candidate']
+                self.update_status['version'] = pkginfo['candidate']
 
                 if not force:
+                    self.update_state = 'in-progress/check-allowed'
                     if self.scalarizr.operation.has_in_progress():
                         msg = ('Update denied ({0}={1}), '
                                 'cause Scalarizr is performing log-term operation').format(
-                                self.package, self.update_info['version'])
+                                self.package, self.update_status['version'])
                         raise UpdateError(msg)
             
                     if self.is_client_mode:
                         try:
-                            ok = self.update_server.update_allowed(**self.update_info)
+                            ok = self.update_server.update_allowed(**self.update_status)
                         except urllib2.URLError:
                             raise UpdateError('Update server is down for maintenance')
                         if not ok:
                             msg = ('Update denied ({0}={1}), possible issues detected in '
                                     'later version. Blocking all upgrades until Scalr support '
-                                    'overrides.').format(self.package, self.update_info['version'])
+                                    'overrides.').format(self.package, self.update_status['version'])
                             raise UpdateError(msg)
 
                 try:
+                    self.update_state = 'in-progress/install'
                     op.logger.info('Installing {0}={1}'.format(
-                            self.package, self.update_info['version']))
+                            self.package, self.update_status['version']))
+                    self.pkgmgr.install(self.package, self.update_status['version'])
 
-                    self.update_info['phase'] = 'install'
-                    self.pkgmgr.install(self.package, self.update_info['version'])
+                    self.update_state = 'completed/wait-ack'
+                    self.save_lock()
 
                     if not self.daemon.running:
-                        self.update_info['phase'] = 'start'
                         self.daemon.start()
-                        if not bootstrap:
-                            time.sleep(2)  # wait a second to start
-                            if not self.daemon.running:
-                                msg = 'Restart failed ({0})'.format(self.daemon.name)
-                                raise UpdateError(msg)
-                    with open(self.lock_file, 'w') as fp:
-                        json.dump(self.update_info, fp)
 
-                    if bootstrap:
-                        sys.exit()
-                    if reporting:
+                    if reports:
                         self.report(True)
                     op.logger.info('Done')
                 except:
-                    if reporting:
+                    if reports:
                         self.report(False)
                     raise
-            except SystemExit:
-                pass
             except:
                 e = sys.exc_info()[1]
-                self.update_info['error'] = str(e)
+                self.update_status['error'] = str(e)
                 if isinstance(e, UpdateError):
                     op.logger.warn(str(e))
                 else:
                     raise
 
         return self.op_api.run('scalarizr.update', do_update, async=async, 
-                    exclusive=True, notification=notification)
+                    exclusive=True, notifies=notifies)
 
-    
+    def save_lock(self):
+        with open(self.lock_file, 'w') as fp:
+            json.dump(self.update_status, fp)     
+
     def report(self, ok):
         if not self.is_client_mode:
             LOG.debug('Reporting is not enabled in {0} mode'.format(self.client_mode))
 
-        self.update_info['ok'] = ok
+        self.update_status['ok'] = ok
         if not ok:
-            self.update_info['error'] = str(sys.exc_info()[1])
+            self.update_status['error'] = str(sys.exc_info()[1])
                 
-        self.update_server.report(**self.update_info)   
+        self.update_server.report(**self.update_status)   
 
 
     @rpc.command_method
@@ -396,7 +356,7 @@ class UpdClientAPI(object):
     @rpc.query_method
     def status(self):
         status = self.pkgmgr.info(self.package)
-        status.update(self.update_info)
+        status.update(self.update_status)
         status['candidate'] = status['candidate'] or status['installed']
         status['service_status'] = 'running' if self.daemon.running else 'stopped'
         return status

@@ -146,6 +146,7 @@ class UpdClient(util.Server):
                 f.write(str(os.getpid()))
             self._wait_network()
             self._start_api()
+            self.api.bootstrap()
         except:
             self.do_stop()
             LOG.exception('Detailed exception information below:')
@@ -178,9 +179,6 @@ class UpdClient(util.Server):
 
     
     def _start_api(self):
-        LOG.debug('Bootstraping')
-        self.api.bootstrap()
-
         LOG.debug('Starting API on port %s', self.api.api_port)
         try:
             wsgi_app = jsonrpc_http.WsgiApplication(
@@ -204,7 +202,9 @@ class UpdClient(util.Server):
                     LOG.exception('API thread died unexpectedly')           
 
             self.api_thread = threading.Thread(target=serve)
-            self.api_thread.start()     
+            self.api_thread.start()  
+
+
 
     def _wait_network(self):
         timeout = 60

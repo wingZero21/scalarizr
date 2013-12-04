@@ -16,12 +16,17 @@ CRYPTO_FILE = SANDBOX_DIR + '/private.d/keys/default'
 SYSTEM_UUID = '00000000-1111-2222-3333-000000000000'
 
 
+class Thread(mock.Mock):
+	def start(self):
+		return self.target()
+
+
 @mock.patch.multiple(upd_api, 
 		queryenv=mock.DEFAULT, 
 		metadata=mock.DEFAULT, 
 		pkgmgr=mock.DEFAULT, 
 		operation=mock.DEFAULT, 
-		Daemon=mock.DEFAULT,
+		initdv2=mock.DEFAULT,
 		system_uuid=mock.Mock(return_value=SYSTEM_UUID))
 class TestUpdClientAPI(object):
 
@@ -63,7 +68,7 @@ class TestUpdClientAPI(object):
 	}
 
 	LOCK_FILE_1 = {
-		'system_uuid': SYSTEM_UUID,
+		'system_id': SYSTEM_UUID,
 		'package': 'scalarizr-ec2',
 		'version': '0.21.26',
 		'platform': USER_DATA['platform'],
@@ -72,7 +77,7 @@ class TestUpdClientAPI(object):
 	}
 
 	LOCK_FILE_2 = {
-		'system_uuid': 'd3775aa7-b17b-483b-9618-9acfb00f31be'
+		'system_id': 'd3775aa7-b17b-483b-9618-9acfb00f31be'
 	}
 
 	def setup(self):
@@ -86,12 +91,15 @@ class TestUpdClientAPI(object):
 			shutil.rmtree(SANDBOX_DIR)
 
 
-	def setup_bootstrap(self, metadata=None, queryenv=None, lock_file_data=None, mock_update=True):
+	def setup_bootstrap(self, metadata=None, queryenv=None, lock_file_data=None, mock_update=True, 
+				mock_uninstall=False):
 		upd = upd_api.UpdClientAPI()
 		metadata.meta.return_value.user_data.return_value = self.USER_DATA.copy()
 		queryenv.QueryEnvService.return_value.get_latest_version.return_value = '2013-11-21'
 		if mock_update:
 			mock.patch.object(upd, 'update', mock.DEFAULT).start()
+		if mock_uninstall:
+			mock.patch.object(upd, 'uninstall', mock.DEFAULT).start()
 		if lock_file_data:
 			if not os.path.exists(os.path.dirname(LOCK_FILE)):
 				os.makedirs(os.path.dirname(LOCK_FILE))
@@ -102,13 +110,12 @@ class TestUpdClientAPI(object):
 	def assert_bootstrap_install(self, upd):
 		eq_(upd.server_id, self.USER_DATA['serverid'])
 		eq_(open(CRYPTO_FILE).read(), self.USER_DATA['szr_key'])
-		eq_(upd.update.mock_calls, [mock.call(force=True, reporting=False)])
+		eq_(upd.update.mock_calls, [mock.call(bootstrap=True)])
 
 
 	def assert_bootstrap_no_install(self, upd, metadata):
 		eq_(upd.server_id, self.LOCK_FILE_1['server_id'])
 		ok_(not metadata.mock_calls)
-		eq_(upd.daemon.mock_calls, [mock.call.start()])
 		eq_(upd.update.mock_calls, [])
 
 
@@ -131,19 +138,22 @@ class TestUpdClientAPI(object):
 					api_version='2013-11-21'
 				)
 				])
-		eq_(pkgmgr.removed.mock_calls, [mock.call(upd.package)])
+		ok_(not upd.system_matches)
 		
 
 	def test_bootstrap_after_restart_or_reboot(self, queryenv=None, metadata=None, **kwds):
 		upd = self.setup_bootstrap(metadata, queryenv, lock_file_data=self.LOCK_FILE_1)
 		upd.bootstrap()
 		self.assert_bootstrap_no_install(upd, metadata)
+		ok_(upd.system_matches)
 
 
 	def test_bootstrap_hardware_changed(self, queryenv=None, metadata=None, **kwds):
 		upd = self.setup_bootstrap(metadata, queryenv, lock_file_data=self.LOCK_FILE_2)
 		upd.bootstrap()
 		self.assert_bootstrap_install(upd)
+		ok_(not upd.system_matches)
+
 
 	def setup_sync(self, queryenv=None, metadata=None, **kwds):
 		queryenv.QueryEnvService.return_value.get_global_config.return_value = {
@@ -167,7 +177,7 @@ class TestUpdClientAPI(object):
 
 
 	def test_update(self, queryenv=None, metadata=None, **kwds):
-		upd = self.setup_sync(queryenv, metadata, mock_update=False)
+		upd = self.setup_sync(queryenv, metadata, mock_update=False, mock_uninstall=True)
 		candidate = '0.21.32'
 		def run(*args, **kwds):
 			return args[1](mock.Mock())
@@ -179,7 +189,8 @@ class TestUpdClientAPI(object):
 
 		upd.update()
 
-		upd.scalarizr.operation.has_in_progress.assert_has_calls(mock.call())
+		ok_(not upd.uninstall.called)
+		ok_(upd.scalarizr.operation.has_in_progress.called)
 		eq_(upd.pkgmgr.install.mock_calls, [mock.call(upd.package, candidate)])
 		with open(LOCK_FILE) as fp:
 			lock_data = json.load(fp)

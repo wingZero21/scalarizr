@@ -45,6 +45,7 @@ from urlparse import urlparse, urlunparse
 import urllib
 import pprint
 import select
+import urllib2
 import wsgiref.simple_server
 import SocketServer
 
@@ -164,13 +165,11 @@ class ScalarizrInitScript(initdv2.ParametrizedInitScript):
         )
 
 
-class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
+class ScalrUpdClientScript(initdv2.Daemon):
     def __init__(self):
-        initdv2.ParametrizedInitScript.__init__(self, 
-            'scalr-upd-client', 
-            '/etc/init.d/scalr-upd-client',
-            pid_file='/var/run/scalr-upd-client.pid'
-        )
+        name = 'ScalrUpdClient' if linux.os.windows_family else 'scalr-upd-client'
+        super(ScalrUpdClientScript, self).__init__(name)
+
 
 
 def _init():
@@ -700,7 +699,7 @@ class Service(object):
         # At first startup platform user-data should be applied
         if cnf.state == ScalarizrState.BOOTSTRAPPING:
             cnf.fire('apply_user_data', cnf)
-            self._start_update_client()
+            self._talk_with_updclient()
 
         # Check Scalr version
         if not bus.scalr_version:
@@ -925,22 +924,20 @@ class Service(object):
         ex = bus.periodical_executor
         ex.start()
 
-
-    def _start_update_client(self):
-        if linux.os['family'] == 'Windows':
-            try:
-                win32serviceutil.StartService('ScalrUpdClient')
-            except:
-                e = sys.exc_info()[1]
-                self._logger.warn('Could not start scalr update client service: %s' % e)
-
-        else:
-            upd = ScalrUpdClientScript()
-            if not upd.running:
-                try:
-                    upd.start()
-                except:
-                    self._logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
+    def _talk_with_updclient(self):
+        try:
+            upd = jsonrpc_http.HttpServiceProxy('http://localhost:8008', bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
+            upd_svs = ScalrUpdClientScript()
+            if not upd_svs.running:
+                upd_svs.start()
+            wait_until(lambda: upd.status()['state'] != 'unknown')
+            upd_state = upd.status()['state']
+            if upd_state.startswith('in-progress'):
+                sys.exit()
+            elif upd_state == 'completed/wait-ack':
+                upd_svs.restart()
+        except:
+            self._logger.warn('Failed to talk with scalr-upd-client: %s', sys.exc_info()[1])
 
 
     def _shutdown(self):
