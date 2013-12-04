@@ -151,6 +151,7 @@ _api_routes = {
     'service': 'scalarizr.api.service.ServiceAPI',
     'redis': 'scalarizr.api.redis.RedisAPI',
     'apache': 'scalarizr.api.apache.ApacheAPI',
+    'nginx': 'scalarizr.api.apache.NginxAPI',
     'mysql': 'scalarizr.api.mysql.MySQLAPI',
     'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
     'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI',
