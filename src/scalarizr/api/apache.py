@@ -1016,11 +1016,12 @@ class RedHatBasedModSSL(ModSSL):
         with ApacheConfigManager(__apache__["httpd.conf"]) as main_config:
             loaded_in_main = [module for module in main_config.get_list("LoadModule") if "mod_ssl.so" in module]
             if not loaded_in_main:
+                loaded_in_ssl = False
                 if os.path.exists(__apache__["ssl_conf_path"]):
                     loaded_in_ssl = [module for module in main_config.get_list("LoadModule") if "mod_ssl.so" in module]
-                    if not loaded_in_ssl:
-                        main_config.add("LoadModule", "ssl_module modules/mod_ssl.so")
-                        LOG.info("Default SSL virtualhost enabled.")
+                if not loaded_in_ssl:
+                    main_config.add("LoadModule", "ssl_module modules/mod_ssl.so")
+                    LOG.info("Default SSL virtualhost enabled.")
 
     def _set_name_virtual_host(self, ssl_port=443):
         ssl_conf_path = __apache__["ssl_conf_path"]
