@@ -996,8 +996,8 @@ class RedHatBasedModSSL(ModSSL):
     def _install_mod_ssl(self):
         if not os.path.exists(__apache__["mod_ssl_file"]):
             LOG.info("%s does not exist. Trying to install mod_ssl." % __apache__["mod_ssl_file"])
-            pm = pkgmgr.PackageMgr()
-            pm.install("mod_ssl")
+            pkgmgr.installed("mod_ssl")
+
 
     def _ensure_ssl_conf(self):
         ssl_conf_path = __apache__["ssl_conf_path"]
