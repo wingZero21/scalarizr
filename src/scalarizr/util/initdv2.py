@@ -253,12 +253,12 @@ class Daemon(object):
             self.init_script = ['/etc/init.d/' + self.name]
     
     if linux.os.windows_family:
-        def ctl(self, command):
-            return linux.system(('sc', command, self.name))
+        def ctl(self, command, raise_exc=True):
+            return linux.system(('sc', command, self.name), raise_exc=raise_exc)
     else:
-        def ctl(self, command):
+        def ctl(self, command, raise_exc=True):
             return linux.system(self.init_script + [command], 
-                    close_fds=True, preexec_fn=os.setsid)
+                    raise_exc=raise_exc, close_fds=True, preexec_fn=os.setsid)
     
     def restart(self):
         LOG.info('Restarting %s', self.name)
@@ -302,7 +302,7 @@ class Daemon(object):
                 if name.lower() == 'state':
                     return value.lower().endswith('running')
         else:
-            return not self.ctl('status')[2] 
+            return not self.ctl('status', raise_exc=False)[2] 
 
 
 

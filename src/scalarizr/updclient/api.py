@@ -185,6 +185,7 @@ class UpdClientAPI(object):
 
         if system_matches:
             self.__dict__.update(updatelock)
+            self.update_status = updatelock
         else:
             meta = metadata.meta(timeout=60)
             user_data = meta.user_data()
