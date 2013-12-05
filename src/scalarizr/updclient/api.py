@@ -6,6 +6,7 @@ Created on Jan 23, 2012
 
 import logging
 import urllib2
+import glob
 import json
 import time
 import sys
@@ -182,13 +183,13 @@ class UpdClientAPI(object):
                 win='http://buildbot.scalr-labs.com/win/{0}/'.format(norm_branch)
             )
             if not linux.os.windows_family:
-                devel_repo = pkgmgr.repository('branch', repo_url)
+                devel_repo = pkgmgr.repository('dev-scalr', repo_url)
                 # Pin repository
                 if linux.os.family == ('RedHat', 'Oracle'):
                     devel_repo.config += 'protected=1\n'
                 else:
                     if os.path.isdir('/etc/apt/preferences.d'):
-                        prefile = '/etc/apt/preferences.d/scalr'
+                        prefile = '/etc/apt/preferences.d/dev-scalr'
                     else:
                         prefile = '/etc/apt/preferences'
                     with open(prefile, 'w+') as fp:
@@ -197,8 +198,6 @@ class UpdClientAPI(object):
                             'Pin: release a={0}\n'
                             'Pin-Priority: 990\n'
                         ).format(norm_branch))
-
-                        open('/etc/apt/preferences.d/scalr', 'w+')
 
                 devel_repo.ensure()
             else:
@@ -260,10 +259,11 @@ class UpdClientAPI(object):
                 self.update_state = 'completed'
             else:
                 self.update_state = 'noop'
+            self.save_lock()
 
 
     def uninstall(self):
-        LOG.info('Uninstalling current package')
+        LOG.info('Uninstalling %s', self.package)
         pkgmgr.removed(self.package)
         if not linux.os.windows_family:
             pkgmgr.removed('scalarizr-base', purge=True)
@@ -284,8 +284,15 @@ class UpdClientAPI(object):
         self.scalr_id = globs['scalr.id']
         self.scalr_version = globs['scalr.version']
         
-        repo = pkgmgr.repository(self.repository, self.repo_url)
+        repo = pkgmgr.repository('scalr-{0}'.format(self.repository), self.repo_url)
+        # Delete previous repository 
+        for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr-*'):
+            if os.path.isfile(filename):
+                os.remove(filename)
+        # Ensure new repository
+        LOG.info('Creating repository at: %s', repo.filename)
         repo.ensure()
+        LOG.info('Updating packages cache')
         self.pkgmgr.updatedb()      
 
 

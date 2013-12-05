@@ -198,7 +198,7 @@ class AptPackageMgr(PackageMgr):
         return 1 if not returncode else -1
 
 class AptRepository(Repository):
-    filename_tpl = '/etc/apt/sources.list.d/scalr-{name}.list'
+    filename_tpl = '/etc/apt/sources.list.d/{name}.list'
     config_tpl = 'deb {url}'
 
 
@@ -342,10 +342,10 @@ class YumPackageMgr(PackageMgr):
 
 
 class YumRepository(Repository):
-    filename_tpl = '/etc/yum.repos.d/scalr-{name}.repo'
+    filename_tpl = '/etc/yum.repos.d/{name}.repo'
     config_tpl = (
-        '[scalr-{name}]\n'
-        'name=scalr-{name}\n'
+        '[{name}]\n'
+        'name={name}\n'
         'baseurl={url}\n'
         'enabled=1\n'
         'gpgcheck=0\n'
@@ -490,7 +490,7 @@ if linux.os.windows_family:
 
 
     class WinRepository(Repository):
-        filename_tpl = os.path.join(WinPackageMgr.SOURCES_DIR, 'scalr-{name}.winrepo')
+        filename_tpl = os.path.join(WinPackageMgr.SOURCES_DIR, '{name}.winrepo')
         config_tpl = '{url}'
 
 
