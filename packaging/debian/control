@@ -30,8 +30,8 @@ Depends: ${shlibs:Depends},
          python (<< 2.6) | python-pymysql,
          rsync (>= 2.6.8)
 Provides: ${python:Provides}
-Replaces: scalarizr (<< 0.7), scalr-upd-client
-Breaks: scalarizr (<< 0.7), scalr-upd-client
+Replaces: scalarizr (<< 0.7), scalr-upd-client, scalarizr-devtools
+Breaks: scalarizr (<< 0.7), scalr-upd-client, scalarizr-devtools
 Description: Scalarizr agent common files
  Scalarizr base components common for all cloud platforms.
 

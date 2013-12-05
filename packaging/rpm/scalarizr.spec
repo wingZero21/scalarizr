@@ -63,6 +63,7 @@ Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Obsoletes:      scalarizr < 0.7
 Obsoletes:      scalr-upd-client
+Obsoletes:      scalarizr-devtools
 Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
