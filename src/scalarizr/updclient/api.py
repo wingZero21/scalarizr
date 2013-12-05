@@ -128,8 +128,8 @@ class UpdClientAPI(object):
     def is_client_mode(self):
         return self.client_mode == 'client'
 
+    # pylint: disable=E0211, E0202
     def update_state():
-        # pylint: disable=E0211, E0202
         def fget(self):
             return self.update_status['state']
         def fset(self, value):
@@ -174,12 +174,35 @@ class UpdClientAPI(object):
 
     def _try_init_devel(self, user_data):
         if user_data.get('realrolename', '').endswith('-devel') and user_data.get('custom.scm_branch'):
+            LOG.info('Devel branch: %s', user_data['custom.scm_branch'])
             norm_branch = user_data['custom.scm_branch'].replace('/','-').replace('.','').strip()
-            self.repo_url = value_for_repository(
+            repo_url = value_for_repository(
                 deb='http://buildbot.scalr-labs.com/apt/debian {0}/'.format(norm_branch),
                 rpm='http://buildbot.scalr-labs.com/rpm/{0}/rhel/$releasever/$basearch'.format(norm_branch),
                 win='http://buildbot.scalr-labs.com/win/{0}/'.format(norm_branch)
             )
+            if not linux.os.windows_family:
+                devel_repo = pkgmgr.repository('branch', repo_url)
+                # Pin repository
+                if linux.os.family == ('RedHat', 'Oracle'):
+                    devel_repo.config += 'protected=1\n'
+                else:
+                    if os.path.isdir('/etc/apt/preferences.d'):
+                        prefile = '/etc/apt/preferences.d/scalr'
+                    else:
+                        prefile = '/etc/apt/preferences'
+                    with open(prefile, 'w+') as fp:
+                        fp.write((
+                            'Package: *\n'
+                            'Pin: release a={0}\n'
+                            'Pin-Priority: 990\n'
+                        ).format(norm_branch))
+
+                        open('/etc/apt/preferences.d/scalr', 'w+')
+
+                devel_repo.ensure()
+            else:
+                self.repo_url = repo_url
 
 
     def bootstrap(self):
@@ -240,7 +263,7 @@ class UpdClientAPI(object):
 
 
     def uninstall(self):
-        LOG.info('Ensuring current package uninstall')
+        LOG.info('Uninstalling current package')
         pkgmgr.removed(self.package)
         if not linux.os.windows_family:
             pkgmgr.removed('scalarizr-base', purge=True)

@@ -348,7 +348,8 @@ class YumRepository(Repository):
         'name=scalr-{name}\n'
         'baseurl={url}\n'
         'enabled=1\n'
-        'gpgcheck=0\n')
+        'gpgcheck=0\n'
+    )
 
 
 class RpmPackageMgr(PackageMgr):
