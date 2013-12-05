@@ -6,7 +6,6 @@ Created on Jan 23, 2012
 
 import logging
 import urllib2
-import string
 import json
 import time
 import sys
@@ -77,6 +76,15 @@ def system_uuid():
     return ret
 
 
+def value_for_repository(deb=None, rpm=None, win=None):
+    if linux.os.windows_family:
+        return win
+    elif linux.os.linux_family in ('RedHat', 'Oracle'):
+        return rpm
+    else:
+        return deb
+
+
 class UpdClientAPI(object):
 
     package = 'scalarizr'
@@ -85,12 +93,11 @@ class UpdClientAPI(object):
     talk_timeout = 60
     server_url = 'http://update.scalr.net/'
     repository = 'latest'
-    if linux.os.windows_family:
-        repo_url = 'http://win.scalr.net'
-    elif linux.os.linux_family in ('RedHat', 'Oracle'):
-        repo_url = 'http://rpm.scalr.net/rpm/rhel/$releasever/$basearch'
-    else:
-        repo_url = 'http://apt.scalr.net/debian scalr/'
+    repo_url = value_for_repository(
+        deb='http://apt.scalr.net/debian scalr/',
+        rpm='http://rpm.scalr.net/rpm/rhel/$releasever/$basearch',
+        win='http://win.scalr.net'
+    )
 
     server_id = system_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
@@ -122,6 +129,7 @@ class UpdClientAPI(object):
         return self.client_mode == 'client'
 
     def update_state():
+        # pylint: disable=E0211, E0202
         def fget(self):
             return self.update_status['state']
         def fset(self, value):
@@ -164,6 +172,16 @@ class UpdClientAPI(object):
         self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file) 
 
 
+    def _try_init_devel(self, user_data):
+        if user_data.get('realrolename', '').endswith('-devel') and user_data.get('custom.scm_branch'):
+            norm_branch = user_data['custom.scm_branch'].replace('/','-').replace('.','').strip()
+            self.repo_url = value_for_repository(
+                deb='http://buildbot.scalr-labs.com/apt/debian {0}/'.format(norm_branch),
+                rpm='http://buildbot.scalr-labs.com/rpm/{0}/rhel/$releasever/$basearch'.format(norm_branch),
+                win='http://buildbot.scalr-labs.com/win/{0}/'.format(norm_branch)
+            )
+
+
     def bootstrap(self):
         try:
             self.system_id = system_uuid()
@@ -190,7 +208,10 @@ class UpdClientAPI(object):
             meta = metadata.meta(timeout=60)
             user_data = meta.user_data()
             norm_user_data(user_data)
+
             self.__dict__.update(user_data)
+            self._try_init_devel(user_data)
+
             crypto_dir = os.path.dirname(self.crypto_file)
             if not os.path.exists(crypto_dir):
                 os.makedirs(crypto_dir)
@@ -202,6 +223,7 @@ class UpdClientAPI(object):
             if not self.queryenv:
                 with open(self.crypto_file, 'w+') as fp:
                     fp.write(user_data['szr_key'])
+
 
         if not linux.os.windows_family:
             self.package = 'scalarizr-' + self.platform
@@ -231,12 +253,11 @@ class UpdClientAPI(object):
         self.__dict__.update((key[7:].replace('.', '_'), value) 
                     for key, value in globs.items() 
                     if key.startswith('update.'))
-        if linux.os.windows_family:
-            self.repo_url = globs.get('update.win.repo_url', self.repo_url)
-        elif linux.os.family in ('RedHat', 'Oracle'):
-            self.repo_url = globs.get('update.rpm.repo_url', self.repo_url)
-        else:
-            self.repo_url = globs.get('update.deb.repo_url', self.repo_url)
+        self.repo_url = value_for_repository(
+            deb=globs.get('update.deb.repo_url'),
+            rpm=globs.get('update.rpm.repo_url'),
+            win=globs.get('update.win.repo_url')
+            ) or self.repo_url
         self.scalr_id = globs['scalr.id']
         self.scalr_version = globs['scalr.version']
         
