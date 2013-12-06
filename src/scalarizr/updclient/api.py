@@ -25,7 +25,7 @@ from scalarizr.api import operation
 from scalarizr.api.binding import jsonrpc_http
 
 
-if linux.os.windows_family:
+if linux.os.windows:
     import win32com
     import win32com.client
 
@@ -48,9 +48,9 @@ def norm_user_data(data):
 
 
 def value_for_repository(deb=None, rpm=None, win=None):
-    if linux.os.windows_family:
+    if linux.os.windows:
         return win
-    elif linux.os.linux_family in ('RedHat', 'Oracle'):
+    elif linux.os.redhat or linux.os.oracle:
         return rpm
     else:
         return deb
@@ -83,7 +83,7 @@ class UpdClientAPI(object):
 
     system_matches = False
 
-    if linux.os.windows_family:
+    if linux.os.windows:
         _etc_path = r'C:\Program Files\Scalarizr\etc'
     else:
         _etc_path = '/etc/scalr'
@@ -157,10 +157,10 @@ class UpdClientAPI(object):
                         norm_branch),
                 win='http://buildbot.scalr-labs.com/win/{0}/'.format(norm_branch)
             )
-            if not linux.os.windows_family:
+            if not linux.os.windows:
                 devel_repo = pkgmgr.repository('dev-scalr', repo_url)
                 # Pin repository
-                if linux.os.family in ('RedHat', 'Oracle'):
+                if linux.os.redhat or linux.os.oracle:
                     devel_repo.config += 'protected=1\n'
                 else:
                     if os.path.isdir('/etc/apt/preferences.d'):
@@ -179,7 +179,7 @@ class UpdClientAPI(object):
                 self.repo_url = repo_url
 
     def get_system_id(self):
-        if linux.os.windows_family:
+        if linux.os.windows:
             wmi = win32com.client.GetObject('winmgmts:')
             ret = wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS').SerialNumber
             if not ret:
@@ -243,7 +243,7 @@ class UpdClientAPI(object):
                     fp.write(user_data['szr_key'])
 
 
-        if not linux.os.windows_family:
+        if not linux.os.windows:
             self.package = 'scalarizr-' + self.platform
         self._init_services()
 
@@ -261,7 +261,7 @@ class UpdClientAPI(object):
     def uninstall(self):
         LOG.info('Uninstalling %s', self.package)
         pkgmgr.removed(self.package)
-        if not linux.os.windows_family:
+        if not linux.os.windows:
             pkgmgr.removed('scalarizr-base', purge=True)
         if linux.os.debian_family:
             self.pkgmgr.apt_get_command('autoremove')     
