@@ -201,12 +201,17 @@ class Configuration:
         for node in conf.etree.getroot():
             self.etree.find(self._cursect).append(node)
 
+    def insert_conf(self, conf, path):
+        self._init()
+        for node in conf.etree.getroot():
+            self.etree.find(path).append(node)
+
     def comment(self, path):
         """
         Comment part of the configuration (one option or subtree)
         """
         path = quote(path)
-        parent_els      = self._find_all(os.path.join(path,'..'))
+        parent_els = self._find_all(os.path.join(path,'..'))
         if not parent_els:
             return
 

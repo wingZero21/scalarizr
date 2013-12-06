@@ -9,10 +9,18 @@ import traceback
 from scalarizr import rpc
 from scalarizr.node import __node__
 from scalarizr.util import Singleton
-from scalarizr.messaging import Queues, Messages
 
 
 LOG = logging.getLogger(__name__)
+
+class OperationError(Exception):
+    pass
+
+class AlreadyInProgressError(OperationError):
+    pass
+
+class OperationNotFoundError(OperationError):
+    pass
 
 class OperationAPI(object):
 
@@ -31,19 +39,25 @@ class OperationAPI(object):
     def result(self, operation_id=None):
         return self.get(operation_id).serialize()
 
+    @rpc.command_method
+    def cancel(self, operation_id=None):
+        self.get(operation_id).cancel()
+
     def create(self, name, func, **kwds):
         op = Operation(name, func, **kwds)
         self._ops[op.operation_id] = op
         return op
 
     def get(self, operation_id):
-        # TODO: wrap KeyError
-        return self._ops[operation_id]
+        try:
+            return self._ops[operation_id]
+        except KeyError:
+            raise OperationNotFoundError("'{0}' not found" % operation_id)
 
     def remove(self, operation_id):
         del self._ops[operation_id]
 
-    def find(self, name=None, finished_before=None):
+    def find(self, name=None, finished_before=None, status=None, exclusive=None):
         if name:
             ret = [op for op in self._ops.values() if op.name == name]
         else:
@@ -52,9 +66,16 @@ class OperationAPI(object):
             now = time.time()
             ret = [op for op in ret 
                     if op.finished_at and now - op.finished_at > finished_before]
+        if status:
+            if status == 'finished':
+                ret = [op for op in ret if op.finished]
+            else:
+                ret = [op for op in ret if op.status == status]
+        if exclusive:
+            ret = [op for op in ret if op.exclusive]
         return ret
 
-    def run(self, name, func, async=False, **kwds):
+    def run(self, name, func, async=True, **kwds):
         op = self.create(name, func, **kwds)
         if async:
             return op.run_async()
@@ -89,17 +110,26 @@ class _LogHandler(logging.Handler):
 
 class Operation(object):
 
-    def __init__(self, name, func, **kwds):
+    def __init__(self, name, func, func_args=None, func_kwds=None, 
+                cancel_func=None, exclusive=False):
         self.operation_id = str(uuid.uuid4())
         self.name = name
+        ops = OperationAPI().find(name, status='in-progress', exclusive=True)
+        if ops:
+            msg = "'{0}' already in progress".format(name)
+            raise AlreadyInProgressError(msg, ops[0].operation_id)
         self.func = func
-        self.cancel_func = kwds.get('cancel_func')
-        self.status = kwds.get('status', 'new')
-        self.result = kwds.get('result')
-        self.logs = kwds.get('logs', [])
-        self.error = kwds.get('error')
+        self.func_args = list(func_args or [])
+        self.func_kwds = dict(func_kwds or {})
+        self.cancel_func = cancel_func
+        self.status = 'new'
+        self.result = None
+        self.logs = []
+        self.data = {}
+        self.error = None
         self.started_at = None
         self.finished_at = None
+        self.exclusive = exclusive
         self.async = False
         self.canceled = False
         self.thread = None
@@ -116,7 +146,7 @@ class Operation(object):
         self.status = 'in-progress'
         self.started_at = time.time() 
         try:
-            self._completed(self.func(self))
+            self._completed(self.func(self, *self.func_args, **self.func_kwds))
             if self.canceled:
                 raise Exception('User canceled')
         except:
@@ -129,7 +159,12 @@ class Operation(object):
         self._in_progress()
         return self.result
 
+    @property
+    def finished(self):
+        return self.status in ('failed', 'completed') 
+
     def run_async(self):
+        print 'run_async'
         self.thread = threading.Thread(
             name='Task {0}'.format(self.name), 
             target=self._in_progress

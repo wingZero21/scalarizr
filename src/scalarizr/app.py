@@ -43,6 +43,7 @@ import threading, socket, signal
 from optparse import OptionParser
 from urlparse import urlparse, urlunparse
 import urllib
+import urllib2
 import pprint
 import select
 import wsgiref.simple_server
@@ -143,15 +144,18 @@ _logging_configured = False
 
 
 _api_routes = {
-'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
-'sysinfo': 'scalarizr.api.system.SystemAPI',
-'system': 'scalarizr.api.system.SystemAPI',
-'storage': 'scalarizr.api.storage.StorageAPI',
-'service': 'scalarizr.api.service.ServiceAPI',
-'redis': 'scalarizr.api.redis.RedisAPI',
-'mysql': 'scalarizr.api.mysql.MySQLAPI',
-'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
-'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI'
+    'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
+    'sysinfo': 'scalarizr.api.system.SystemAPI',
+    'system': 'scalarizr.api.system.SystemAPI',
+    'storage': 'scalarizr.api.storage.StorageAPI',
+    'service': 'scalarizr.api.service.ServiceAPI',
+    'redis': 'scalarizr.api.redis.RedisAPI',
+    'apache': 'scalarizr.api.apache.ApacheAPI',
+    'nginx': 'scalarizr.api.apache.NginxAPI',
+    'mysql': 'scalarizr.api.mysql.MySQLAPI',
+    'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
+    'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI',
+    'operation': 'scalarizr.api.operation.OperationAPI'
 }
 
 
@@ -334,11 +338,7 @@ def _init_platform():
                     sys.exc_info()[1], exc_info=sys.exc_info())
 
     if httplib2_loaded:
-        ca_url = 'http://curl.haxx.se/ca/cacert.pem'
-        ca_path = bus.share_path + '/cacert.pem'
-        logger.debug('Fetch CA bundle from %s to %s', ca_url, ca_path)
-        urllib.urlretrieve(ca_url, ca_path)
-        httplib2.CA_CERTS = ca_path
+        httplib2.CA_CERTS = os.path.join(os.path.dirname(__file__), 'cacert.pem')
 
     # Initialize platform
     logger.debug("Initialize platform")
@@ -464,6 +464,11 @@ def _cleanup_after_rebundle():
             mysql_bhv = firstmatched(lambda x: x in node.__node__['behavior'], ('mysql', 'mysql2', 'percona'))
             vol = node.__node__[mysql_bhv]['volume']
             vol.destroy(force=True)
+
+    if os.path.exists('/etc/chef/client.pem'):
+        os.remove('/etc/chef/client.pem')
+    if os.path.exists('/etc/chef/client.rb'):
+        os.remove('/etc/chef/client.rb')
     
     # Reset private configuration
     priv_path = cnf.private_path()
@@ -501,8 +506,62 @@ def do_keygen():
     from scalarizr.util import cryptotool
     print cryptotool.keygen()    
 
+def _pre_main():
+    optparser = bus.optparser = OptionParser()
+    optparser.add_option('-v', '--version', dest='version', action='store_true',
+            help='Show version information')
+    optparser.add_option('-c', '--etc-path', dest='etc_path',
+            help='Configuration directory path')
+    optparser.add_option('-l', dest='debug', action='store_true', default=False,
+            help='Enable debug log')
+    optparser.add_option('-n', '--configure', dest='configure', action="store_true", default=False, 
+            help="Configure Scalarizr in the interactive mode by default. " 
+            + "Use '-y -o' to configure Scalarizr non-interactively")
+    optparser.add_option("-k", "--gen-key", dest="gen_key", action="store_true", default=False,
+            help='Generate crypto key')
+    optparser.add_option('-t', dest='validate_cnf', action='store_true', default=False,
+            help='Validate configuration')
+    optparser.add_option('-m', '--import', dest="import_server", action="store_true", default=False, 
+            help='Import service into Scalr')
+    optparser.add_option('-y', dest="yesall", action="store_true", default=False,
+            help='Answer "yes" to all questions')
+    optparser.add_option('-o', dest='cnf', action='append',
+            help='Runtime .ini option key=value')
+
+    if linux.os['family'] != 'Windows':
+        optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
+                                           help='Daemonize process')
+    else:
+        optparser.add_option("--install-win-services", dest="install_win_services", action="store_true",
+                             default=False, help='Install scalarizr as windows service')
+        optparser.add_option("--uninstall-win-services", dest="uninstall_win_services", action="store_true",
+                             default=False, help='Uninstall scalarizr windows service')
+
+    if ('cloud-location=' in sys.argv or 'region=' in sys.argv) and 'platform=ec2' in sys.argv:
+        region = urllib2.urlopen('http://169.254.169.254/latest/meta-data/placement/availability-zone').read().strip()[:-1]
+        try:
+            sys.argv[sys.argv.index('region=')] += region
+        except ValueError:
+            sys.argv += ['-o', 'region=' + region]        
+    
+    optparser.parse_args()
+    
+    # Daemonize process
+    if linux.os['family'] != 'Windows' and optparser.values.daemonize:
+        daemonize()
+
+    if optparser.values.version:
+        # Report scalarizr version
+        print 'Scalarizr %s' % __version__
+        sys.exit()
+
+    elif optparser.values.gen_key:
+        # Generate key-pair
+        do_keygen()
+        sys.exit()
 
 def main():
+
     try:
         logger = logging.getLogger(__name__)
     except (BaseException, Exception), e:
@@ -510,61 +569,9 @@ def main():
         sys.exit(1)
             
     try:
-        optparser = bus.optparser = OptionParser()
-        optparser.add_option('-v', '--version', dest='version', action='store_true',
-                help='Show version information')
-        optparser.add_option('-c', '--etc-path', dest='etc_path',
-                help='Configuration directory path')
-        optparser.add_option('-l', dest='debug', action='store_true', default=False,
-                help='Enable debug log')
-        optparser.add_option('-n', '--configure', dest='configure', action="store_true", default=False, 
-                help="Configure Scalarizr in the interactive mode by default. " 
-                + "Use '-y -o' to configure Scalarizr non-interactively")
-        optparser.add_option("-k", "--gen-key", dest="gen_key", action="store_true", default=False,
-                help='Generate crypto key')
-        optparser.add_option('-t', dest='validate_cnf', action='store_true', default=False,
-                help='Validate configuration')
-        optparser.add_option('-m', '--import', dest="import_server", action="store_true", default=False, 
-                help='Import service into Scalr')
-        optparser.add_option('-y', dest="yesall", action="store_true", default=False,
-                help='Answer "yes" to all questions')
-        optparser.add_option('-o', dest='cnf', action='append',
-                help='Runtime .ini option key=value')
-
-        if linux.os['family'] != 'Windows':
-            optparser.add_option("-z", dest="daemonize", action="store_true", default=False,
-                                               help='Daemonize process')
-        else:
-            optparser.add_option("--install-win-services", dest="install_win_services", action="store_true",
-                                 default=False, help='Install scalarizr as windows service')
-            optparser.add_option("--uninstall-win-services", dest="uninstall_win_services", action="store_true",
-                                 default=False, help='Uninstall scalarizr windows service')
-
-        if ('cloud-location=' in sys.argv or 'region=' in sys.argv) and 'platform=ec2' in sys.argv:
-            region = urllib2.urlopen('http://169.254.169.254/latest/meta-data/placement/availability-zone').read().strip()[:-1]
-            try:
-                sys.argv[sys.argv.index('region=')] += region
-            except ValueError:
-                sys.argv += ['-o', 'region=' + region]        
-        
-        optparser.parse_args()
-        
-        # Daemonize process
-        if linux.os['family'] != 'Windows' and optparser.values.daemonize:
-            daemonize()
-
-        if optparser.values.version:
-            # Report scalarizr version
-            print 'Scalarizr %s' % __version__
-            sys.exit()
-
-        elif optparser.values.gen_key:
-            # Generate key-pair
-            do_keygen()
-            sys.exit()
-
-        service = WindowsService() if 'Windows' == linux.os['family'] else Service()
-        service.start()
+        _pre_main()
+        svs = WindowsService() if linux.os.windows_family else Service()
+        svs.start()
             
     except (BaseException, Exception), e:
         if isinstance(e, SystemExit):
@@ -1116,6 +1123,7 @@ if 'Windows' == linux.os['family']:
 
             else:
                 # Normal start
+                _pre_main()
                 super(WindowsService, self).start()
 
 

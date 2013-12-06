@@ -8,7 +8,6 @@ import re
 import os
 import sys
 import time
-import glob
 import shutil
 import logging
 import functools
@@ -17,7 +16,6 @@ import resource
 
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import BaseConfig, BaseService, lazy
-from scalarizr.libs.metaconf import Configuration
 from scalarizr.util import disttool, system2, \
                                 PopenError, wait_until, initdv2, software, \
                                 firstmatched
@@ -38,12 +36,17 @@ CONFIG_SERVER_DEFAULT_PORT = 27019
 SERVICE_NAME = BuiltinBehaviours.MONGODB
 STORAGE_PATH = "/mnt/mongodb-storage"
 
-LOG_DIR = glob.glob('/var/log/mongo*')[0]
+DEFAULT_USER = 'mongodb' if disttool.is_debian_based() else 'mongod'
+LOG_DIR = '/var/log/mongodb'
+if not os.path.isdir(LOG_DIR):
+    os.makedirs(LOG_DIR)
+chown_r(LOG_DIR, DEFAULT_USER)
+
 LOG_PATH_DEFAULT = os.path.join(LOG_DIR, 'mongodb.shardsrv.log') 
 DEFAULT_UBUNTU_DB_PATH = '/var/lib/mongodb'
 DEFAULT_CENTOS_DB_PATH = '/var/lib/mongo'
 LOCK_FILE = 'mongod.lock'
-DEFAULT_USER = 'mongodb' if disttool.is_debian_based() else 'mongod'
+
 SCALR_USER = 'scalr'
 STORAGE_DATA_DIR = os.path.join(STORAGE_PATH, 'data')
 
@@ -914,7 +917,7 @@ class MongoCLI(object):
         '''
         try:
             self.connection.database_names()
-        except pymongo.errors.AutoReconnect, e:
+        except (pymongo.errors.AutoReconnect, pymongo.errors.ConnectionFailure), e:
             if "Connection refused" in str(e):
                 return False
         except pymongo.errors.OperationFailure, e:

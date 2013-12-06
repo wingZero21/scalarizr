@@ -59,7 +59,7 @@ from scalarizr.api import mongodb as mongodb_api
 __mongodb__ = __node__['mongodb']
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.MONGODB
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MONGODB
 
 STORAGE_VOLUME_CNF              = 'mongodb.json'
 STORAGE_SNAPSHOT_CNF    = 'mongodb-snap.json'
@@ -233,6 +233,7 @@ class MongoDBHandler(ServiceCtlHandler):
                     
         bus.on("host_init_response", self.on_host_init_response)
         bus.on("before_host_up", self.on_before_host_up)
+        bus.on("start", self.on_start)
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
         self._insert_iptables_rules()
         
@@ -257,6 +258,12 @@ class MongoDBHandler(ServiceCtlHandler):
                 self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
                 self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
                 self.mongodb.start_router(1)
+
+
+    def on_start(self):
+        logrotate_cfg_path = os.path.join(bus.share_path, 'mongodb/mongodb-logrotate')
+        if os.path.isdir('/etc/logrotate.d'):
+            shutil.copy(logrotate_cfg_path, '/etc/logrotate.d')
 
 
     def on_reload(self):
