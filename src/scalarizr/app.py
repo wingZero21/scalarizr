@@ -932,7 +932,12 @@ class Service(object):
             upd_svs = ScalrUpdClientScript()
             if not upd_svs.running:
                 upd_svs.start()
-            wait_until(lambda: upd.status()['state'] != 'unknown')
+            def upd_ready():
+                try:
+                    return upd.status()['state'] != 'unknown'
+                except:
+                    self._logger.debug('Failed to check updclient status: %s', sys.exc_info()[1])
+            wait_until(upd_ready, timeout=60, sleep=1)
             upd_state = upd.status()['state']
             if upd_state.startswith('in-progress'):
                 sys.exit()
