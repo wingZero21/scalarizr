@@ -50,7 +50,7 @@ def norm_user_data(data):
 def value_for_repository(deb=None, rpm=None, win=None):
     if linux.os.windows:
         return win
-    elif linux.os.redhat or linux.os.oracle:
+    elif linux.os.redhat_family or linux.os.oracle_family:
         return rpm
     else:
         return deb
@@ -160,7 +160,7 @@ class UpdClientAPI(object):
             if not linux.os.windows:
                 devel_repo = pkgmgr.repository('dev-scalr', repo_url)
                 # Pin repository
-                if linux.os.redhat or linux.os.oracle:
+                if linux.os.redhat_family or linux.os.oracle_family:
                     devel_repo.config += 'protected=1\n'
                 else:
                     if os.path.isdir('/etc/apt/preferences.d'):
