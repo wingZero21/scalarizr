@@ -160,7 +160,7 @@ class UpdClientAPI(object):
             if not linux.os.windows_family:
                 devel_repo = pkgmgr.repository('dev-scalr', repo_url)
                 # Pin repository
-                if linux.os.family == ('RedHat', 'Oracle'):
+                if linux.os.family in ('RedHat', 'Oracle'):
                     devel_repo.config += 'protected=1\n'
                 else:
                     if os.path.isdir('/etc/apt/preferences.d'):
