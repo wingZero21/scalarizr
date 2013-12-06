@@ -154,7 +154,7 @@ class GceMeta(UrlMeta):
 
 
 def meta(timeout=None):
-    pvds = (Ec2Meta(), OpenStackMeta(), GceMeta(), 
+    pvds = (Ec2Meta(), OpenStackMeta(), CloudStackMeta(), GceMeta(), 
                 FileMeta('/etc/.scalr-user-data'), 
                 FileMeta('/etc/scalr/private.d/.user-data'))
     for _ in range(0, timeout or 1):
