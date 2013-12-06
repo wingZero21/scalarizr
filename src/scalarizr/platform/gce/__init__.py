@@ -19,11 +19,7 @@ from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
 
 from scalarizr.platform import Platform
-from scalarizr.storage.transfer import Transfer
-from scalarizr.platform.gce.storage import GoogleCSTransferProvider
 
-
-Transfer.explore_provider(GoogleCSTransferProvider)
 
 COMPUTE_RW_SCOPE = ('https://www.googleapis.com/auth/compute', "https://www.googleapis.com/auth/compute.readonly")
 STORAGE_FULL_SCOPE = ("https://www.googleapis.com/auth/devstorage.full_control",
