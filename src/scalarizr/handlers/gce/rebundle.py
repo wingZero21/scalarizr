@@ -35,8 +35,8 @@ ROLEBUILDER_USER = 'scalr-rolesbuilder'
 
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
     exclude_dirs = set(['/tmp', '/proc', '/dev',
-                                       '/mnt' ,'/var/lib/google/per-instance',
-                                       '/sys', '/cdrom', '/media'])
+                        '/mnt' ,'/var/lib/google/per-instance',
+                        '/sys', '/cdrom', '/media'])
     exclude_files = ('/etc/ssh/.host_key_regenerated',
                                      '/lib/udev/rules.d/75-persistent-net-generator.rules')
 
@@ -94,10 +94,10 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
                         LOG.info('Copying root filesystem to image')
                         rsync('/', tmp_mount_dir, archive=True,
-                                                                          hard_links=True,
-                                                                          times=True,
-                                                                          sparse=True,
-                                                                          exclude=excludes)
+                                                  hard_links=True,
+                                                  times=True,
+                                                  sparse=True,
+                                                  exclude=excludes)
 
                         LOG.info('Cleanup image')
                         self._create_spec_devices(tmp_mount_dir)
@@ -165,40 +165,17 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
         finally:
             shutil.rmtree(rebundle_dir)
 
+        goog_image_name = self._role_name.lower().replace('_', '-') + '-' + str(int(time.time()))
         try:
-            goog_image_name = self._role_name.lower().replace('_', '-') + '-' + str(int(time.time()))
             LOG.info('Registering new image %s' % goog_image_name)
-            # TODO: check duplicate names
             compute = pl.new_compute_client()
 
-            # Getting this instance's kernel
-            instance_id = pl.get_instance_id()
-            zone = os.path.basename(pl.get_zone())
-            all_instances = compute.instances().list(project=proj_id, zone=zone, fields="items(kernel,id)").execute()['items']
-            try:
-                kernel = filter(lambda inst: inst['id'] == instance_id, all_instances)[0]['kernel']
-            except KeyError:
-                # Looks like this instance was started from image, getting kernel from image
-                try:
-                    current_image = pl.get_image()
-
-                    current_image_fq = current_image.split('/')
-                    current_img_project = current_image_fq[1]
-                    current_img_name = current_image_fq[3]
-                    current_img_obj = compute.images().get(project=current_img_project,
-                                                                    image=current_img_name).execute()
-                    kernel = current_img_obj['preferredKernel']
-                except:
-                    raise HandlerError('Could not obtain kernel for this instance')
-                
             image_url = 'http://storage.googleapis.com/%s/%s' % (tmp_bucket_name, arch_name)
 
             req_body = dict(
                     name=goog_image_name,
                     sourceType='RAW',
-                    preferredKernel=kernel,
                     rawDisk=dict(
-                            containerType='TAR',
                             source=image_url
                     )
             )

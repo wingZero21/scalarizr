@@ -137,8 +137,8 @@ class GoogleServiceManager(object):
 
 
 class GcePlatform(Platform):
-    compute_api_version = 'v1beta15'
-    metadata_url = 'http://metadata/computeMetadata/v1beta1/'
+    compute_api_version = 'v1'
+    metadata_url = 'http://metadata/computeMetadata/v1/'
     _metadata = None
 
     def __init__(self):
@@ -172,7 +172,8 @@ class GcePlatform(Platform):
 
         if not url in self._metadata:
             key_url = os.path.join(self.metadata_url, url)
-            resp = urllib2.urlopen(key_url)
+            req = urllib2.Request(key_url, headers={'X-Google-Metadata-Request': 'True'})
+            resp = urllib2.urlopen(req)
             self._metadata[key] = resp.read()
 
         return self._metadata[key]
