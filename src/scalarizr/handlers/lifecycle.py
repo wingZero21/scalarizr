@@ -11,6 +11,7 @@ import scalarizr.handlers
 from scalarizr.bus import bus
 from scalarizr import config, linux
 from scalarizr.api import operation
+from scalarizr.api import system as system_api
 from scalarizr import config, storage2
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState
@@ -51,6 +52,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         super(LifeCycleHandler, self).__init__()
         self._logger = logging.getLogger(__name__)
         self._op_api = operation.OperationAPI()
+        self._system_api = system_api.SystemAPI()
         
         bus.define_events(
             # Fires before HostInit message is sent
@@ -172,8 +174,11 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _assign_hostname(self):
         if not __node__.get('hostname'):
             return
-        self._logger.debug('Setting hostname to %s', __node__['hostname'])
-        linux.system('hostname ' + __node__['hostname'], shell=True)
+        __node__['hostname'] = __node__['hostname'].replace(' ', '')
+        try:
+            self._system_api.set_hostname(__node__['hostname'])
+        except NotImplementedError, e:
+            self._logger.debug(e)
 
 
     def on_start(self):
@@ -363,6 +368,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             bus.fire("host_init_response", message)
 
             hostup_msg = self.new_message(Messages.HOST_UP, broadcast=True)
+            hostup_msg.body['base'] = {
+                'hostname': self._system_api.get_hostname()
+            }
             bus.fire("before_host_up", hostup_msg)
             if bus.scalr_version >= (2, 2, 3):
                 self.send_message(Messages.BEFORE_HOST_UP, broadcast=True, wait_subhandler=True)

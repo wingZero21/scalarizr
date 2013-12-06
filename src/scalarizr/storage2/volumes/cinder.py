@@ -51,13 +51,13 @@ class CinderVolume(base.Volume):
     def _check_cinder_connection(self):
         if not self._cinder:
             self._cinder = __openstack__['new_cinder_connection']
-        assert self._cinder.has_connection, \
+        assert self._cinder.has_connection(), \
             self.error_messages['no_connection']
 
     def _check_nova_connection(self):
         if not self._nova:
             self._nova = __openstack__['new_nova_connection']
-        assert self._nova.has_connection, \
+        assert self._nova.has_connection(), \
             self.error_messages['no_connection']
 
     def __init__(self,
@@ -108,7 +108,7 @@ class CinderVolume(base.Volume):
         return srv_id
 
     def _ensure(self):
-        assert (self._cinder and self._cinder.has_connection) or self.id, \
+        assert (self._cinder and self._cinder.has_connection()) or self.id, \
             self.error_messages['no_id_or_conn']
 
         if self._cinder:
@@ -233,7 +233,7 @@ class CinderVolume(base.Volume):
             for _ in xrange(5):
                 LOG.debug('Attaching Cinder volume %s', volume_id)
                 taken_before = base.taken_devices()
-                self._nova.volumes.create_server_volume(server_id, volume_id, None)
+                attachment = self._nova.volumes.create_server_volume(server_id, volume_id, None)
 
                 #waiting for attaching transitional state
                 LOG.debug('Checking that Cinder volume %s is attached', volume_id)
@@ -242,7 +242,7 @@ class CinderVolume(base.Volume):
                     LOG.debug('Cinder volume %s attached', volume_id)
                     break
                 elif new_status == 'available':
-                    LOG.warn('Volume %s status changed to "available" instead of "in-use"')
+                    LOG.warn('Volume %s status changed to "available" instead of "in-use"', volume_id)
                     LOG.debug('Will try attach volume again after %d seconds', ops_delay)
                     continue
                 else:
@@ -250,18 +250,22 @@ class CinderVolume(base.Volume):
                             ' Cinder volume {1}'.format(new_status, volume_id)
                     raise storage2.StorageError(msg)
 
-            util.wait_until(lambda: base.taken_devices() > taken_before,
-                    start_text='Checking that volume %s is available in OS' % volume_id,
-                    timeout=30,
-                    sleep=1,
-                    error_text='Volume %s attached but not available in OS' % volume_id)
+            if not linux.os.windows_family:
+                util.wait_until(lambda: base.taken_devices() > taken_before,
+                        start_text='Checking that volume %s is available in OS' % volume_id,
+                        timeout=30,
+                        sleep=1,
+                        error_text='Volume %s attached but not available in OS' % volume_id)
 
-            devices = list(base.taken_devices() - taken_before)
-            if len(devices) > 1:
-                msg = "While polling for attached device, got multiple new devices: %s. " \
-                    "Don't know which one to select".format(devices)
-                raise Exception(msg)
-            return devices[0]
+                devices = list(base.taken_devices() - taken_before)
+                if len(devices) > 1:
+                    msg = "While polling for attached device, got multiple new devices: %s. " \
+                        "Don't know which one to select".format(devices)
+                    raise Exception(msg)
+                return devices[0]
+            else:
+                return attachment.device
+
 
     def _detach(self, force, **kwds):
         self._detach_volume()
@@ -386,7 +390,7 @@ class CinderSnapshot(base.Snapshot):
     }
 
     def _check_cinder_connection(self):
-        assert self._cinder.has_connection, \
+        assert self._cinder and self._cinder.has_connection(), \
             self.error_messages['no_connection']
 
     def __init__(self, **kwds):

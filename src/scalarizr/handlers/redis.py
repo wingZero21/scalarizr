@@ -12,6 +12,7 @@ import logging
 
 from scalarizr import handlers
 from scalarizr.api import service as preset_service
+from scalarizr.api import redis as redis_api
 
 from scalarizr import config, storage2
 from scalarizr.node import __node__
@@ -28,19 +29,16 @@ from scalarizr.handlers import build_tags
 from scalarizr import node
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.REDIS
+BEHAVIOUR = SERVICE_NAME = CNF_SECTION = redis_api.BEHAVIOUR
 
 __redis__ = redis.__redis__
 
-STORAGE_PATH                            = '/mnt/redisstorage'
+STORAGE_PATH                            = redis_api.STORAGE_PATH
 STORAGE_VOLUME_CNF                      = 'redis.json'
-STORAGE_SNAPSHOT_CNF            = 'redis-snap.json'
+STORAGE_SNAPSHOT_CNF                    = 'redis-snap.json'
 
-OPT_PERSISTENCE_TYPE            = 'persistence_type'
-OPT_MASTER_PASSWORD                     = "master_password"
 OPT_VOLUME_CNF                          = 'volume_config'
 OPT_SNAPSHOT_CNF                        = 'snapshot_config'
-OPT_USE_PASSWORD            = 'use_password'
 
 REDIS_CNF_PATH                          = 'cnf_path'
 UBUNTU_CONFIG_PATH                      = '/etc/redis/redis.conf'
@@ -71,21 +69,11 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
     ''' @type _cnf: scalarizr.config.ScalarizrCnf '''
 
     default_service = None
+    redis_instances = None
 
     @property
     def is_replication_master(self):
-        try:
-            value = __redis__['replication_master']
-        except KeyError:
-            value = None
-
-        if value in (None, ''):
-            value = 0
-            __redis__['replication_master'] = value
-        else:
-            LOG.debug('Got %s : %s' % ('replication_master', value))
-
-        return True if int(value) else False
+        return __redis__["replication_master"]
 
 
     @property
@@ -97,15 +85,14 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
     @property
     def persistence_type(self):
         try:
-            value = __redis__[OPT_PERSISTENCE_TYPE]
+            value = __redis__["persistence_type"]
         except KeyError:
             value = None
 
         if not value:
             value = 'snapshotting'
-            __redis__[OPT_PERSISTENCE_TYPE] = value
-        else:
-            LOG.debug('Got %s : %s' % (OPT_PERSISTENCE_TYPE, value))
+            __redis__["persistence_type"] = value
+        LOG.debug('Got persistence_type : %s' % value)
 
         return value
 
@@ -138,12 +125,16 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def __init__(self):
+        self._redis_api = redis_api.RedisAPI()
         self.preset_provider = redis.RedisPresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
 
-        handlers.FarmSecurityMixin.__init__(self,
-                ["{0}:{1}".format(__redis__['ports_range'][0], __redis__['ports_range'][-1])])
+        from_port = __redis__['ports_range'][0]
+        to_port = __redis__['ports_range'][-1]
+        handlers.FarmSecurityMixin.__init__(self, ["{0}:{1}".format(from_port, to_port)])
+
         ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
+
         bus.on("init", self.on_init)
         bus.define_events(
                 'before_%s_data_bundle' % BEHAVIOUR,
@@ -190,8 +181,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
-        self._insert_iptables_rules()
-
         if __node__['state'] == 'running':
             # Fix to enable access outside farm when use_passwords=True
             # if self.use_passwords:
@@ -216,8 +205,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                         passwords = redis_data['passwords']
                         num_processes = int(redis_data['num_processes'])
 
-            self.redis_instances = redis.RedisInstances(self.is_replication_master,
-                                    self.persistence_type, self.use_passwords)
+            self.redis_instances = redis.RedisInstances()
 
             self.redis_instances.init_processes(num_processes, ports, passwords)
             self.redis_instances.start()
@@ -241,7 +229,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def _insert_iptables_rules(self):
-        if self.use_passwords and iptables.enabled():
+        if iptables.enabled():
             ports = "{0}:{1}".format(
                         __redis__['ports_range'][0], 
                         __redis__['ports_range'][-1])
@@ -280,7 +268,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         XXX: following line enables support for old scalr installations
         use_password shoud be set by postinstall script for old servers
         '''
-        redis_data[OPT_USE_PASSWORD] = redis_data.get(OPT_USE_PASSWORD, '1')
+        redis_data["use_password"] = redis_data.get("use_password", '1')
 
         ports = []
         passwords = []
@@ -318,13 +306,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         if self.default_service.running:
             self.default_service.stop('Terminating default redis instance')
 
-        self.redis_instances = redis.RedisInstances(self.is_replication_master, self.persistence_type, self.use_passwords)
+        self.redis_instances = redis.RedisInstances()
         ports = ports or [__redis__['defaults']['port'],]
         passwords = passwords or [self.get_main_password(),]
         self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)
 
         if self.use_passwords:
             self.security_off()
+        else:
+            self._insert_iptables_rules()
 
 
     def on_before_host_up(self, message):
@@ -379,32 +369,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def on_DbMsr_CreateDataBundle(self, message):
-        try:
-            bus.fire('before_%s_data_bundle' % BEHAVIOUR)
-            # Creating snapshot
-            snap = self._create_snapshot()
-            used_size = int(system2(('df', '-P', '--block-size=M', self._storage_path))[0].split('\n')[1].split()[2][:-1])
-            bus.fire('%s_data_bundle' % BEHAVIOUR, snapshot_id=snap.id)
-
-            # Notify scalr
-            msg_data = dict(
-                    db_type         = BEHAVIOUR,
-                    used_size       = '%.3f' % (float(used_size) / 1000,),
-                    status          = 'ok'
-            )
-            msg_data[BEHAVIOUR] = {'snapshot_config': dict(snap)}
-
-            self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, msg_data)
-
-        except (Exception, BaseException), e:
-            LOG.exception(e)
-
-            # Notify Scalr about error
-            self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
-                    db_type         = BEHAVIOUR,
-                    status          ='error',
-                    last_error      = str(e)
-            ))
+        self._redis_api.create_databundle()
 
 
     def on_DbMsr_PromoteToMaster(self, message):
@@ -501,34 +466,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def on_DbMsr_CreateBackup(self, message):
-        try:
-            # Flush redis data on disk before creating backup
-            LOG.info("Dumping Redis data on disk")
-            self.redis_instances.save_all()
-            dbs = [r.db_path for r in self.redis_instances]
-
-            cloud_storage_path = self._platform.scalrfs.backups(BEHAVIOUR)
-            LOG.info("Uploading backup to cloud storage (%s)", cloud_storage_path)
-            transfer = LargeTransfer(dbs, cloud_storage_path)
-            result = transfer.run()
-            result = handlers.transfer_result_to_backup_result(result)
-
-            # Notify Scalr
-            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                    db_type = BEHAVIOUR,
-                    status = 'ok',
-                    backup_parts = result
-            ))
-
-        except (Exception, BaseException), e:
-            LOG.exception(e)
-
-            # Notify Scalr about error
-            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
-                    db_type = BEHAVIOUR,
-                    status = 'error',
-                    last_error = str(e)
-            ))
+        self._redis_api.create_backup()
 
 
     def _init_master(self, message):
@@ -543,11 +481,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         log.info('Create storage')
 
         # Plug storage
-        if 'restore' in __redis__ and \
-                                                        __redis__['restore'].type == 'snap_redis':
+        if 'restore' in __redis__ and __redis__['restore'].type == 'snap_redis':
             __redis__['restore'].run()
         else:
-            if node.__node__['platform'] == 'idcf':
+            if node.__node__['platform'].name == 'idcf':
                 if __redis__['volume'].id:
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __redis__['volume'].snap = __redis__['volume'].snapshot()
@@ -562,8 +499,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         msg_data = dict()
         msg_data.update({
-            'replication_master': '1',
-            OPT_MASTER_PASSWORD: password
+            "replication_master": '1',
+            "master_password": password,
         })
 
         log.info('Collect HostUp data')
@@ -576,27 +513,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
     @property
     def use_passwords(self):
-        try:
-            val = __redis__[OPT_USE_PASSWORD]
-        except KeyError:
-            val = None
-
-        if val in (None, ''):
-            val = 1
-            __redis__[OPT_USE_PASSWORD] = val
-
-        return True if int(val) else False
+        return __redis__["use_password"]
 
 
     def get_main_password(self):
-        try:
-            password = __redis__[OPT_MASTER_PASSWORD]
-        except KeyError:
-            password = None
+        password = __redis__["master_password"]
 
         if self.use_passwords and not password:
             password = cryptotool.pwgen(20)
-            __redis__[OPT_MASTER_PASSWORD] = password
+            __redis__["master_password"] = password
 
         return password
 
@@ -645,17 +570,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         message.db_type = BEHAVIOUR
 
 
-    def _update_config(self, data):
-    #XXX: I just don't like it
-        #ditching empty data
-        updates = dict()
-        for k, v in data.items():
-            if v:
-                updates[k] = v
-
-        self._cnf.update_ini(BEHAVIOUR, {CNF_SECTION: updates})
-
-
     def _create_snapshot(self):
         LOG.info("Creating Redis data bundle")
         backup_obj = backup.backup(type='snap_redis',
@@ -678,14 +592,9 @@ class RedisCnfController(CnfController):
 
 
     def get_main_password(self):
-        password = None
-        cnf = bus.cnf
-        if cnf.rawini.has_option(CNF_SECTION, OPT_MASTER_PASSWORD):
-            password = cnf.rawini.get(CNF_SECTION, OPT_MASTER_PASSWORD)
-        return password
+        return
 
 
     def _after_apply_preset(self):
-        password = self.get_main_password()
-        cli = redis.RedisCLI(password)
+        cli = redis.RedisCLI(__redis__["master_password"])
         cli.bgsave()

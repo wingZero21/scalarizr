@@ -1,5 +1,4 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 __author__ = 'Nick Demyanchuk'
 
@@ -72,10 +71,20 @@ class RaidVolume(base.Volume):
             mdadm_conf_path = '/etc/mdadm.conf' if os_detect.rhel_family else '/etc/mdadm/mdadm.conf'
             with open(mdadm_conf_path) as f:
                 mdadm_conf = f.read()
+            # TODO: augeas candidate
+            with open(mdadm_conf_path, 'w') as f:
+                if mdadm.version() >= (2, 6, 8):
+                    if 'AUTO' in mdadm_conf:
+                        mdadm_conf = re.sub(re.compile('^(AUTO\s+(?!-all).*)$', re.M), '#\g<0>', mdadm_conf)
+                    if not re.search(re.compile('^AUTO\s+-all\s*$', re.M), mdadm_conf):
+                        mdadm_conf += '\nAUTO -all'
 
-            if not 'AUTO -all' in mdadm_conf:
-                with open(mdadm_conf_path, 'w') as f:
-                    f.write(mdadm_conf + '\n' + 'AUTO -all')
+                if 'DEVICE' in mdadm_conf:
+                    mdadm_conf = re.sub(re.compile('^(DEVICE\s+(?!/dev/null).*)$', re.M), '#\g<0>', mdadm_conf)
+                if not re.search(re.compile('^DEVICE\s+/dev/null\s*$', re.M), mdadm_conf):
+                    mdadm_conf += '\nDEVICE /dev/null'
+
+                f.write(mdadm_conf)
         except:
             LOG.warning('Autoassembly was not disabled.', exc_info=sys.exc_info())
 
@@ -128,7 +137,7 @@ class RaidVolume(base.Volume):
         self._check_attr('vg')
         self._check_attr('disks')
 
-        assert int(self.level) in (0,1,5,10), 'Unknown raid level: %s' % self.level
+        assert int(self.level) in (0, 1, 5, 10), 'Unknown raid level: %s' % self.level
 
         # Making sure autoassembly is disabled before attaching disks
         self._disable_autoassembly()
