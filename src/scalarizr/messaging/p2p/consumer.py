@@ -103,12 +103,12 @@ class P2pMessageConsumer(MessageConsumer):
                                 h = HTMLParser.HTMLParser()
                                 rawmsg = h.unescape(rawmsg).encode('utf-8')
                         except:
-                            logger.debug('%s', sys.exc_info()[1], sys.exc_info()[2])
+                            logger.debug('Caught message parsing error', exc_info=sys.exc_info())
 
                 except (BaseException, Exception), e:
                     err = 'Message consumer protocol filter raises exception: %s' % str(e)
-                    logger.info(err)  # Downshift level, cause HTTP scanners do a lot of flood
-                    self.send_response(400, str(e))
+                    logger.exception(err)
+                    self.send_response(201, 'Created')
                     return
 
                 try:
@@ -134,7 +134,7 @@ class P2pMessageConsumer(MessageConsumer):
                 except (BaseException, Exception), e:
                     err = "Cannot decode message. error: %s; raw message: %s" % (str(e), rawmsg)
                     logger.exception(err)
-                    self.send_response(400, err)
+                    self.send_response(201, 'Created')
                     return
 
 

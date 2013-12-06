@@ -67,8 +67,12 @@ _raid_devices_re        = re.compile('Raid\s+Devices\s+:\s+(?P<count>\d+)')
 _total_devices_re       = re.compile('Total\s+Devices\s+:\s+(?P<count>\d+)')
 _state_re               = re.compile('State\s+:\s+(?P<state>.+)')
 _rebuild_re             = re.compile('Rebuild\s+Status\s+:\s+(?P<percent>\d+)%')
-_level_re                       = re.compile('Raid Level : (?P<level>.+)')
+_level_re               = re.compile('Raid Level : (?P<level>.+)')
 
+
+def version():
+    out = mdadm('misc', None, '--version')[1].strip()
+    return tuple(map(int, out.split('-')[1].strip()[1:].split('.')))
 
 def detail(md_device):
     """
