@@ -164,7 +164,7 @@ class BlockDeviceHandler(handlers.Handler):
                 act = raid_actions['take'].format(vol.id, 
                         len(vol.disks), 
                         vol.disks[0].type, 
-                        ', '.join(disk.id for disk in vol.disks))
+                        ', '.join(str(disk.id) for disk in vol.disks))
             else:
                 act = persistent_actions['take'].format(vol.id)
             acts.append(act)

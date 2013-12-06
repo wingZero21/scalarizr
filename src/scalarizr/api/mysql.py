@@ -47,7 +47,7 @@ class MySQLAPI(object):
             finally:
                 self._mysql_init.start()
 
-        return self._op_api.run('mysql.grow-volume', do_grow, async=async)
+        return self._op_api.run('mysql.grow-volume', do_grow, exclusive=True, async=async)
 
 
     def _check_invalid(self, param, name, type_):
@@ -108,13 +108,13 @@ class MySQLAPI(object):
     @rpc.command_method
     def create_backup(self, backup=None, async=True):
 
-        def do_backup(op, backup=None):
+        def do_backup(op, backup_conf=None):
             try:
                 backup = {
                     'type': 'mysqldump',
                     'cloudfs_dir': __node__.platform.scalrfs.backups('mysql')
                 }
-                backup.update(backup or {})
+                backup.update(backup_conf or {})
                 if backup['type'] == 'snap_mysql':
                     descrition = 'MySQL data bundle (farm: {0} role: {1})'.format(
                             __node__.farm_id, __node__.role_name)
@@ -144,7 +144,7 @@ class MySQLAPI(object):
                     data = {
                         'restore': dict(restore)
                     }
-                    if backup.type == 'snap_mysql':
+                    if backup["type"] == 'snap_mysql':
                         data.update({
                             'snapshot_config': dict(restore.snapshot),
                             'log_file': restore.log_file,
@@ -177,6 +177,6 @@ class MySQLAPI(object):
 
         return self._op_api.run('mysql.create-backup', 
                 func=do_backup, cancel_func=cancel_backup, 
-                func_kwds={'backup': backup},
+                func_kwds={'backup_conf': backup},
                 async=async, exclusive=True)
 

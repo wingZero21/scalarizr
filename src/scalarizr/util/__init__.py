@@ -14,6 +14,7 @@ import string
 import pkgutil
 import traceback
 import platform
+import functools
 
 
 from scalarizr.bus import bus
@@ -794,6 +795,7 @@ def init_logging(filename, verbose):
 
 if platform.uname()[0] == 'Windows':
     import _winreg as winreg
+    import pythoncom
     
     REG_KEY = 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Scalarizr'
 
@@ -806,3 +808,14 @@ if platform.uname()[0] == 'Windows':
             return winreg.QueryValueEx(hkey, value_name)[0]
         finally:
             winreg.CloseKey(hkey)
+
+
+    def coinitialized(fn):
+        @functools.wraps(fn)
+        def decorator(*args, **kwargs):
+            pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                pythoncom.CoUninitialize()
+        return decorator

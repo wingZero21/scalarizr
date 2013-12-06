@@ -97,22 +97,27 @@ class ScriptExecutor(Handler):
         ini = cnf.rawini
 
         # read exec_dir_prefix
+        '''
+        TODO: completely remove ini options 
         try:
             exec_dir_prefix = ini.get(self.name, 'exec_dir_prefix')
         except ConfigParser.Error:
             pass
         if linux.os['family'] == 'Windows':
             exec_dir_prefix = os.path.expandvars(exec_dir_prefix)
+        '''
         if not os.path.isabs(exec_dir_prefix):
             os.path.join(bus.base_path, exec_dir_prefix)
 
         # read logs_dir
+        '''
         try:
             logs_dir = ini.get(self.name, 'logs_dir')
         except ConfigParser.Error:
             pass
         if linux.os['family'] == 'Windows':
-            logs_dir = os.path.expandvars(logs_dir)    
+            logs_dir = os.path.expandvars(logs_dir)  
+        '''  
         if not os.path.exists(logs_dir):
             os.makedirs(logs_dir)
 
@@ -384,7 +389,7 @@ class Script(object):
             command = ['cmd.exe', '/C', self.exec_path]
         else:
             command = []
-            if self.run_as:
+            if self.run_as and self.run_as != 'root':
                 command = ['sudo', '-u', self.run_as]
             command += [self.exec_path]
 

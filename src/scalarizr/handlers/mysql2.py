@@ -489,6 +489,8 @@ class MysqlHandler(DBMSRHandler):
     def on_DbMsr_CreateDataBundle(self, message):
         LOG.debug("on_DbMsr_CreateDataBundle")
         backup = message.body.get(__mysql__.behavior, {}).get('backup', {})
+        if not backup:
+            backup = {"type": "snap_mysql"}
         self._data_bundle_id = self._mysql_api.create_backup(
                 backup=backup, 
                 async=True)

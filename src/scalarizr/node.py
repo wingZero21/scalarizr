@@ -10,8 +10,13 @@ try:
 except ImportError:
     import simplejson as json 
 
+from scalarizr import linux
 
-base_dir = '/etc/scalr'
+
+if linux.os.windows_family:
+    base_dir = r'C:\Program Files\Scalarizr\etc'
+else:
+    base_dir = '/etc/scalr'
 private_dir = base_dir + '/private.d'
 public_dir = base_dir + '/public.d'
 storage_dir = private_dir + '/storage'
@@ -170,6 +175,27 @@ class Ini(Store):
             self.ini.write(fp)
 
 
+class RedisIni(Ini):
+
+    def __getitem__(self, key):
+        try:
+            value = super(RedisIni, self).__getitem__(key)
+            if key in ('use_password', 'replication_master',):
+                if value in (None, ''):
+                    value = True
+                else:
+                    value = bool(int(value))
+        except KeyError:
+            if 'persistence_type' == key:
+                value = 'snapshotting'
+                self.__setitem__(key, value)
+            elif 'master_password' == key:
+                value = None
+            else:
+                raise
+        return value
+
+
 class IniOption(Ini):
     def __init__(self, filenames, section, option, 
                     getfilter=None, setfilter=None):
@@ -319,10 +345,10 @@ for behavior in ('mysql', 'mysql2', 'percona', 'mariadb'):
     })
 
 node['redis'] = Compound({
-        'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'redis'),
-                 'scalarizr.storage2.volume'),
-        'replication_master,persistence_type,use_password,master_password': Ini(
-                '%s/%s.ini' % (private_dir, 'redis'), 'redis')
+    'volume,volume_config': Json(
+        '%s/storage/%s.json' % (private_dir, 'redis'), 'scalarizr.storage2.volume'),
+    'replication_master,persistence_type,use_password,master_password': RedisIni(
+                    '%s/%s.ini' % (private_dir, 'redis'), 'redis')
 })
 
 
