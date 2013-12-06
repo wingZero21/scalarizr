@@ -27,6 +27,10 @@ class InvalidCall(SystemExit):
         self.usage = usage
 
 
+class RuntimeError(SystemExit):
+    pass
+
+
 class Command(object):
     """Class that represents scalarizr command"""
 
@@ -43,9 +47,13 @@ class Command(object):
     def help(self):
         doc = self.__doc__
         if not '--help' in self.__doc__:
-            match = re.search(r'usage:\s+', x, re.IGNORECASE | re.DOTALL)
-            # Insert --help usage line after match.end() with tabs      
-        return self.__doc__
+            match = re.search(r'usage:\s+', doc, re.IGNORECASE | re.DOTALL)
+            help_usage_index = match.end()
+            tab_str = match.group().split('\n')[1]
+            help_usage_string = get_command_name(self) + ' --help\n' + tab_str
+            doc = doc[:help_usage_index] + help_usage_string + doc[help_usage_index:]
+
+        return doc
 
     def run_subcommand(self, subcommand, args):
         """
@@ -102,13 +110,15 @@ def _docopt_out_to_kwds(arguments):
     return result
 
 
-def get_command_name(cls_or_func):
+def get_command_name(obj):
     """
     Returns command name from given class or class name. 
     (cls or func or str) -> str
     """
-    name = cls_or_func
-    if inspect.isclass(cls_or_func) or inspect.isfunction(cls_or_func):
-        name = cls_or_func.__name__
+    name = obj
+    if inspect.isclass(obj) or inspect.isfunction(obj):
+        name = obj.__name__
+    elif isinstance(obj, object):
+        name = obj.__class__.__name__
     return camel_to_underscore(name).replace('_', '-')
 

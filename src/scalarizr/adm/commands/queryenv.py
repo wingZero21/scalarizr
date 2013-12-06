@@ -74,8 +74,6 @@ class Queryenv(Command):
                 method,
                 kwds,
                 {'with_initializing': 'with_init'})
-        elif method == 'list-virtualhosts':
-            return self._run_queryenv_method(method, kwds)
         else:
             return self._run_queryenv_method(method, kwds)
 

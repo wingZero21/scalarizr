@@ -39,7 +39,6 @@ class Szradm(command_module.Command):
 
     Usage:
       szradm --version
-      szradm --help
       szradm <command> [<args>...]
 
     Options:
@@ -54,12 +53,12 @@ class Szradm(command_module.Command):
         try:
             return self.run_subcommand(command, args)
 
-        except (command_module.UnknownCommand, command_module.InvalidCall) e:
+        except (command_module.UnknownCommand, command_module.InvalidCall), e:
             call_str = 'szradm ' + command + ' ' + ' '.join(args)
             message = '\n'.join((call_str, e.message, e.usage))
             raise e.__class__(message)
 
-        except Exception, e:
+        except command_module.RuntimeError, e:
             # except-section for user-defined exceptions, semantic errors, etc.
             call_str = 'szradm ' + command + ' ' + ' '.join(args)
             message = '\n'.join((call_str, e.message))
@@ -84,10 +83,9 @@ class Szradm(command_module.Command):
 
 def main(argv):
     szradm = Szradm(os.path.join(__dir__, 'commands'))
-    try:
-        szradm_kwds = command_module.parse_command_line(argv[1:], szradm.__doc__)
-    except SystemExit:
-        raise SystemExit(szradm.traceback())
+    # If szradm called with no arguments - print help() and all/most used possible commands
+    szradm_kwds = command_module.parse_command_line(argv[1:], szradm.help())
+    # TODO: return exit codes which are dependent on exception thrown
     return szradm(**szradm_kwds)
 
 
