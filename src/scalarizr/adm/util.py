@@ -1,6 +1,7 @@
 
 import prettytable
 
+
 def make_table(data_rows, header=None):
     """Returns PrettyTable object applicable to print"""
     table = prettytable.PrettyTable()

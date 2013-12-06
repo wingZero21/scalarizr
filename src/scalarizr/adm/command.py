@@ -55,37 +55,43 @@ class Command(object):
 
         return doc
 
-    def run_subcommand(self, subcommand, args):
+    def _find_subcommand(self, subcommand):
         """
-        Searches subcommand in self.subcommands and launches it with given args.
+        Searches subcommand in self.subcommands.
         If no subcommand found - raises exception.
         """
-        for sub_cmd_definition in self.subcommands:
-            name = get_command_name(sub_cmd_definition)
-            aliases = sub_cmd_definition.aliases if hasattr(sub_cmd_definition, 'aliases') else []
-
-            if subcommand == name or subcommand in aliases:
-                # assuming that by default subcommand is simple function
-                sub_cmd = sub_cmd_definition
-                is_class = inspect.isclass(sub_cmd_definition)
-                sub_cmd_doc = sub_cmd.help() if is_class else sub_cmd.__doc__
-                try:
-                    kwds = parse_command_line(args, sub_cmd_doc)
-                except DocoptExit:
-                    usage = ''.join(get_section('usage', sub_cmd_doc))
-                    raise InvalidCall('%s: invalid call' % get_command_name(sub_cmd), subcommand, usage)
-
-                if inspect.isclass(sub_cmd_definition):
-                    sub_cmd = sub_cmd_definition()
-                elif 'self' in inspect.getargspec(sub_cmd_definition).args:
-                    kwds['self'] = self
-
-                return sub_cmd(**kwds)
+        for sub_cmd in self.subcommands:
+            name = get_command_name(sub_cmd)
+            if subcommand == name or subcommand in sub_cmd.aliases:
+                return sub_cmd
 
         usage = ''.join(get_section('usage', self.help()))
         raise UnknownCommand('%s: unknown subcommand %s' % (self._name, subcommand),
                              subcommand,
                              usage)
+
+    def run_subcommand(self, subcommand, args):
+        """
+        Launches subcommands with given args.
+        """
+        sub_cmd_definition = self._find_subcommand(subcommand)
+        is_class = inspect.isclass(sub_cmd_definition)
+        if is_class:
+            sub_cmd = sub_cmd_definition()
+            sub_cmd_doc = sub_cmd.help()
+        else:
+            sub_cmd = sub_cmd_definition
+            sub_cmd_doc = sub_cmd.__doc__
+
+        try:
+            kwds = parse_command_line(args, sub_cmd_doc)
+            if 'self' in inspect.getargspec(sub_cmd_definition).args:
+                kwds['self'] = self
+        except DocoptExit:
+            usage = ''.join(get_section('usage', sub_cmd_doc))
+            raise InvalidCall('%s: invalid call' % subcommand, subcommand, usage)
+
+        return sub_cmd(**kwds)
 
 
 def parse_command_line(argv, doc):
