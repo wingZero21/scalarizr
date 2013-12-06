@@ -13,7 +13,6 @@ import sys
 import os
 import re
 import binascii
-import threading
 import shutil
 import uuid
 
@@ -48,35 +47,6 @@ def norm_user_data(data):
     return data
 
 
-def system_uuid():
-    if linux.os.windows_family:
-        wmi = win32com.client.GetObject('winmgmts:')
-        ret = wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS').SerialNumber
-        if not ret:
-            LOG.debug('WMI returns empty UUID')
-    else:
-        ret = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
-        if not ret:
-            LOG.debug('dmidecide returns empty UUID')
-
-    if not ret:
-        try:
-            meta = metadata.meta()
-        except:
-            LOG.debug("Failed to init metadata (in system_uuid() method): %s", sys.exc_info()[1])
-        else:
-            if meta.platform == 'ec2':
-                ret = meta['instance-id']
-            elif meta.platform == 'gce':
-                ret = meta['id']
-            else:
-                LOG.debug("Don't know how to get instance-id on '%s' platform", meta.platform)
-    if not ret:
-        LOG.debug('System UUID not detected')
-        raise NoSystemUUID()
-    return ret
-
-
 def value_for_repository(deb=None, rpm=None, win=None):
     if linux.os.windows_family:
         return win
@@ -109,6 +79,7 @@ class UpdClientAPI(object):
     queryenv = None
     pkgmgr = None
     daemon = None
+    meta = None
 
     system_matches = False
 
@@ -129,8 +100,9 @@ class UpdClientAPI(object):
     def is_client_mode(self):
         return self.client_mode == 'client'
 
-    # pylint: disable=E0211, E0202
+
     def update_state():
+        # pylint: disable=E0211, E0202, W0612
         def fget(self):
             return self.update_status['state']
         def fset(self, value):
@@ -145,7 +117,7 @@ class UpdClientAPI(object):
         self.daemon = initdv2.Daemon('scalarizr')
         self.op_api = operation.OperationAPI()
         self.update_status = {'state': 'unknown'}
-        self._talked = threading.Event()
+        self.meta = metadata.meta()
 
 
     def _init_queryenv(self):
@@ -174,12 +146,15 @@ class UpdClientAPI(object):
 
 
     def _try_init_devel(self, user_data):
-        if user_data.get('realrolename', '').endswith('-devel') and user_data.get('custom.scm_branch'):
+        if user_data.get('realrolename', '').endswith('-devel') \
+                and user_data.get('env_id') == '3414' \
+                and user_data.get('custom.scm_branch'):
             LOG.info('Devel branch: %s', user_data['custom.scm_branch'])
             norm_branch = user_data['custom.scm_branch'].replace('/','-').replace('.','').strip()
             repo_url = value_for_repository(
                 deb='http://buildbot.scalr-labs.com/apt/debian {0}/'.format(norm_branch),
-                rpm='http://buildbot.scalr-labs.com/rpm/{0}/rhel/$releasever/$basearch'.format(norm_branch),
+                rpm='http://buildbot.scalr-labs.com/rpm/{0}/rhel/$releasever/$basearch'.format(
+                        norm_branch),
                 win='http://buildbot.scalr-labs.com/win/{0}/'.format(norm_branch)
             )
             if not linux.os.windows_family:
@@ -203,10 +178,32 @@ class UpdClientAPI(object):
             else:
                 self.repo_url = repo_url
 
+    def get_system_id(self):
+        if linux.os.windows_family:
+            wmi = win32com.client.GetObject('winmgmts:')
+            ret = wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS').SerialNumber
+            if not ret:
+                LOG.debug('WMI returns empty UUID')
+        else:
+            ret = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
+            if not ret:
+                LOG.debug('dmidecide returns empty UUID')
+
+        if not ret:
+            if self.meta.platform == 'ec2':
+                ret = self.meta['instance-id']
+            elif self.meta.platform == 'gce':
+                ret = self.meta['id']
+            else:
+                LOG.debug("Don't know how to get instance-id on '%s' platform", self.meta.platform)
+        if not ret:
+            LOG.debug('System UUID not detected')
+            raise NoSystemUUID()
+        return ret
 
     def bootstrap(self):
         try:
-            self.system_id = system_uuid()
+            self.system_id = self.get_system_id()
         except:
             # This will force updclient to perform check updates each startup, 
             # this is the optimal behavior cause that's ensure latest available package
@@ -227,8 +224,7 @@ class UpdClientAPI(object):
             self.__dict__.update(updatelock)
             self.update_status = updatelock
         else:
-            meta = metadata.meta(timeout=60)
-            user_data = meta.user_data()
+            user_data = self.meta.user_data()
             norm_user_data(user_data)
 
             self.__dict__.update(user_data)
@@ -298,6 +294,7 @@ class UpdClientAPI(object):
 
     @rpc.command_method
     def update(self, force=False, bootstrap=False, async=False, **kwds):
+        # pylint: disable=R0912
         if bootstrap:
             force = True
         notifies = not bootstrap
@@ -350,7 +347,8 @@ class UpdClientAPI(object):
                         if not ok:
                             msg = ('Update denied ({0}={1}), possible issues detected in '
                                     'later version. Blocking all upgrades until Scalr support '
-                                    'overrides.').format(self.package, self.update_status['version'])
+                                    'overrides.').format(
+                                    self.package, self.update_status['version'])
                             raise UpdateError(msg)
 
                 try:
@@ -426,7 +424,8 @@ class UpdClientAPI(object):
     
     @rpc.service_method
     def put_file(self, name=None, content=None, makedirs=False):
-        if not re.search(r'^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)\n?$', content):
+        if not re.search(r'^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{4}|'
+                        '[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)\n?$', content):
             raise ValueError('File content is not a valid BASE64 encoded string')
 
         content = binascii.a2b_base64(content)
