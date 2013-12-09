@@ -59,9 +59,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
             root_size = coreutils.statvfs('/')['size']
 
-            root_part_path = os.readlink('/dev/root')
+            root_part_path = os.path.realpath('/dev/root')
             root_part_sysblock_path = glob.glob('/sys/block/*/%s' % os.path.basename(root_part_path))[0]
             root_device = '/dev/%s' % os.path.basename(os.path.dirname(root_part_sysblock_path))
+
+            root_device_size = int(system(('fdisk', '-s', root_device))[0].strip()) * 1024
 
             try:
                 out = system(('parted', root_device, 'unit', 'B', 'print'), stdin='c')[0]
@@ -71,8 +73,12 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                 raise HandlerError('Failed to detect first patiotion start point: %s' % e)
 
             LOG.debug('Creating image file %s' % image_path)
-            with open(image_path, 'w') as f:
-                f.truncate(root_size + start_at)
+            with open(image_path, 'wb') as _:
+                pass
+
+            LOG.debug('Resizing image file to %s bytes' % root_device_size)
+            with open(image_path, 'wb') as f:
+                f.truncate(root_device_size)
 
             LOG.debug('Copy all info that is before first partition (starts at %s)' % start_at)
             block_size = 4096
@@ -89,10 +95,12 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                   'skip=%s' % (block_count * block_size), 'conv=notrunc', 'bs=1', 'count=%s' % remaining_bytes))
                 
             try:
+                LOG.debug('Removing first partition from disk image')
+                system(('parted', image_path, 'rm', '1'))
+
                 LOG.debug('Creating partition table on image')
-                # system(('parted', image_path, 'mklabel', 'msdos'))
                 system(('parted', image_path, 'mkpart', 'primary', 'ext2', str(start_at / (1024 * 1024)),
-                                                                           str(root_size / (1024 * 1024))))
+                                                                           str((root_size - start_at) / (1024 * 1024))))
 
                 # Map disk image
                 out = system(('kpartx', '-av', image_path))[0]
@@ -102,7 +110,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
                     LOG.info('Creating filesystem')
                     storage2.filesystem('ext4').mkfs(root_dev_name)
-                    dev_uuid = uuid.uuid4()
+                    dev_uuid = coreutils.blkid(root_part_path)['uuid']
                     system(('tune2fs', '-U', str(dev_uuid), root_dev_name))
 
                     mount.mount(root_dev_name, tmp_mount_dir)
