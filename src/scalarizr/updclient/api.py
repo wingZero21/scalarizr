@@ -286,7 +286,6 @@ class UpdClientAPI(object):
             if os.path.isfile(filename):
                 os.remove(filename)
         # Ensure new repository
-        LOG.info('Creating repository at: %s', repo.filename)
         repo.ensure()
         LOG.info('Updating packages cache')
         self.pkgmgr.updatedb()      

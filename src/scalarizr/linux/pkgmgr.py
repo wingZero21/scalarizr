@@ -40,6 +40,7 @@ class Repository(object):
 
     def ensure(self):
         assert self.filename and self.config
+        LOG.info('Creating repository at: %s', self.filename)
         with open(self.filename, 'w+') as fp:
             fp.write(self.config)
 
@@ -195,7 +196,7 @@ class AptPackageMgr(PackageMgr):
             return 0
         return_code = linux.system(('/usr/bin/dpkg', '--compare-versions', str(name_1), '>', str(name_2)), 
                     raise_exc=False)[2]
-        return 1 if not returncode else -1
+        return 1 if not return_code else -1
 
 class AptRepository(Repository):
     filename_tpl = '/etc/apt/sources.list.d/{name}.list'
@@ -338,7 +339,7 @@ class YumPackageMgr(PackageMgr):
         return map(string.lower, ret)
 
     def version_cmp(self, name_1, name_2):
-        return cmp(RpmVersion(v1), RpmVersion(v2))
+        return cmp(RpmVersion(name_1), RpmVersion(name_2))
 
 
 class YumRepository(Repository):
