@@ -583,6 +583,7 @@ def installed(name, version=None, updatedb=False):
 
     installed = mgr.info(name)['installed']
     if not installed:
+        LOG.info('Installing %s=%s', name, version)
         mgr.install(name, version)
 
 
@@ -599,6 +600,7 @@ def latest(name, updatedb=True):
     installed = info_dict['installed']
 
     if candidate or not installed:
+        LOG.info('Installing %s=%s', name, candidate)
         mgr.install(name, candidate)
 
 
@@ -609,4 +611,8 @@ def removed(name, purge=False):
     mgr = package_mgr()
     installed = mgr.info(name)['installed']
     if purge or installed:
+        if installed:
+            LOG.info('Uninstalling %s=%s', name, installed)
+        else:
+            LOG.info('Uninstalling %s', name)
         mgr.remove(name, purge)

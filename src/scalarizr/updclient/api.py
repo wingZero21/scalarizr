@@ -174,6 +174,8 @@ class UpdClientAPI(object):
                             'Pin-Priority: 990\n'
                         ).format(norm_branch))
 
+                # for RPM it's important to uninstall package before protect devel repository
+                self.uninstall() 
                 devel_repo.ensure()
             else:
                 self.repo_url = repo_url
@@ -259,7 +261,6 @@ class UpdClientAPI(object):
 
 
     def uninstall(self):
-        LOG.info('Uninstalling %s', self.package)
         pkgmgr.removed(self.package)
         if not linux.os.windows:
             pkgmgr.removed('scalarizr-base', purge=True)
@@ -318,7 +319,9 @@ class UpdClientAPI(object):
                 'state': 'in-progress/prepare',
                 'error': None
             }
+            old_pkgmgr_logger = pkgmgr.LOG
             try:
+                pkgmgr.LOG = op.logger
                 if bootstrap:
                     self.update_state = 'in-progress/uninstall'
                     self.uninstall()
@@ -352,8 +355,6 @@ class UpdClientAPI(object):
 
                 try:
                     self.update_state = 'in-progress/install'
-                    op.logger.info('Installing {0}={1}'.format(
-                            self.package, self.update_status['version']))
                     self.pkgmgr.install(self.package, self.update_status['version'])
 
                     self.update_state = 'completed/wait-ack'
@@ -376,6 +377,8 @@ class UpdClientAPI(object):
                     op.logger.warn(str(e))
                 else:
                     raise
+            finally:
+                pkgmgr.LOG = old_pkgmgr_logger
 
         return self.op_api.run('scalarizr.update', do_update, async=async, 
                     exclusive=True, notifies=notifies)
