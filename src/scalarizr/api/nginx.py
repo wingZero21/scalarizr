@@ -281,7 +281,7 @@ class NginxAPI(object):
 
             if reload_service:
                 self._reload_service()
-        except:
+        except initdv2.InitdError:
             raise Exception('Syntax error in template for proxy %s' % proxy_parms['name'])
 
     def _replace_string_in_file(self, file_path, s, new_s):
