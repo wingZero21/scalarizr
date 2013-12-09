@@ -7,6 +7,7 @@ import re
 import os
 import sys
 import uuid
+import glob
 import time
 import random
 import logging
@@ -36,7 +37,8 @@ ROLEBUILDER_USER = 'scalr-rolesbuilder'
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
     exclude_dirs = set(['/tmp', '/proc', '/dev',
                         '/mnt' ,'/var/lib/google/per-instance',
-                        '/sys', '/cdrom', '/media'])
+                        '/sys', '/cdrom', '/media', '/run', '/selinux', '/var/lock',
+                        '/var/log', '/var/run'])
     exclude_files = ('/etc/ssh/.host_key_regenerated',
                                      '/lib/udev/rules.d/75-persistent-net-generator.rules')
 
@@ -55,16 +57,43 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
             image_name      = 'disk.raw'
             image_path      = os.path.join(rebundle_dir, image_name)
 
+
             root_size = coreutils.statvfs('/')['size']
-            LOG.debug('Creating image file %s' % image_path)
-            with open(image_path, 'w') as f:
-                f.truncate(root_size + 1*1024)
+
+            root_part_path = os.readlink('/dev/root')
+            root_part_sysblock_path = glob.glob('/sys/block/*/%s' % os.path.basename(root_part_path))
+            root_device = '/dev/%s' % os.path.basename(os.path.dirname(root_part_sysblock_path))
 
             try:
+                out = system(('parted', root_device, 'unit', 'B', 'print'))[0]
+                start_at = int(re.search(re.compile('^\s*1\s+(\d+)B\s+', re.M), out).group(1))
+            except:
+                e = sys.exc_info()[1]
+                raise HandlerError('Failed to detect first patiotion start point: %s' % e)
 
+            LOG.debug('Creating image file %s' % image_path)
+            with open(image_path, 'w') as f:
+                f.truncate(root_size + start_at)
+
+            LOG.debug('Copy all info that is before first partition (starts at %s)' % start_at)
+            block_size = 4096
+            block_count = start_at / block_size
+
+            LOG.debug('Copying %s blocks of % bytes', block_count, block_size)
+            system(('dd', 'if=%s' % root_device, 'of=%s' % image_path, 'conv=notrunc',
+                                        'bs=%s' % block_size,'count=%s' % block_count))
+
+            remaining_bytes = start_at - (block_count * block_size)
+            if remaining_bytes:
+                LOG.debug('Copying remaining %s bytes' % remaining_bytes)
+                system(('dd', 'if=%s' % root_device, 'of=%s' % image_path, 'seek=%s' % (block_count * block_size),
+                  'skip=%s' % (block_count * block_size), 'conv=notrunc', 'bs=1', 'count=%s' % remaining_bytes))
+                
+            try:
                 LOG.debug('Creating partition table on image')
                 system(('parted', image_path, 'mklabel', 'msdos'))
-                system(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))))
+                system(('parted', image_path, 'mkpart', 'primary', 'ext2', str(start_at / (1024 * 1024)),
+                                                                           str(root_size / (1024 * 1024))))
 
                 # Map disk image
                 out = system(('kpartx', '-av', image_path))[0]
@@ -129,6 +158,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                     system(('kpartx', '-d', image_path))
 
                 LOG.info('Compressing image.')
+                # TODO: use digest as archive name
                 arch_name = '%s.tar.gz' % self._role_name.lower()
                 arch_path = os.path.join(rebundle_dir, arch_name)
 
