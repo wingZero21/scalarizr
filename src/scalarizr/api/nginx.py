@@ -725,12 +725,6 @@ class NginxAPI(object):
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 
-        # config.add('%s/ssl_session_timeout' % server_xpath, '10m')
-        # config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
-        # config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
-        # config.add('%s/ssl_ciphers' % server_xpath, 
-        #            'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-        # config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
 
     def _make_server_conf(self,
                           hostname,
@@ -761,6 +755,23 @@ class NginxAPI(object):
             template_conf.read(temp_file)
             config.insert_conf(template_conf, 'server')
             os.remove(temp_file)
+        else:
+            config.add('server/proxy_set_header', 'Host $host')
+            config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
+            config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
+            config.add('server/client_max_body_size', '10m')
+            config.add('server/client_body_buffer_size', '128k')
+            config.add('server/proxy_buffering', 'on')
+            config.add('server/proxy_connect_timeout', '15')
+            config.add('server/proxy_intercept_errors', 'on')
+            
+            # default SSL params
+            config.add('%s/ssl_session_timeout' % server_xpath, '10m')
+            config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
+            config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
+            config.add('%s/ssl_ciphers' % server_xpath, 
+                       'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
+            config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
 
         if port:
             config.add('server/listen', str(port))
@@ -777,15 +788,6 @@ class NginxAPI(object):
         self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
         
-        # Next additions are moved to templates
-        # config.add('server/proxy_set_header', 'Host $host')
-        # config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
-        # config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
-        # config.add('server/client_max_body_size', '10m')
-        # config.add('server/client_body_buffer_size', '128k')
-        # config.add('server/proxy_buffering', 'on')
-        # config.add('server/proxy_connect_timeout', '15')
-        # config.add('server/proxy_intercept_errors', 'on')
 
         # Adding locations leading to defined backends
 
