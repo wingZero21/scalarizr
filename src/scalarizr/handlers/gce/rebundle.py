@@ -57,15 +57,14 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
             image_name      = 'disk.raw'
             image_path      = os.path.join(rebundle_dir, image_name)
 
-
             root_size = coreutils.statvfs('/')['size']
 
             root_part_path = os.readlink('/dev/root')
-            root_part_sysblock_path = glob.glob('/sys/block/*/%s' % os.path.basename(root_part_path))
+            root_part_sysblock_path = glob.glob('/sys/block/*/%s' % os.path.basename(root_part_path))[0]
             root_device = '/dev/%s' % os.path.basename(os.path.dirname(root_part_sysblock_path))
 
             try:
-                out = system(('parted', root_device, 'unit', 'B', 'print'))[0]
+                out = system(('parted', root_device, 'unit', 'B', 'print'), stdin='c')[0]
                 start_at = int(re.search(re.compile('^\s*1\s+(\d+)B\s+', re.M), out).group(1))
             except:
                 e = sys.exc_info()[1]
@@ -91,7 +90,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                 
             try:
                 LOG.debug('Creating partition table on image')
-                system(('parted', image_path, 'mklabel', 'msdos'))
+                # system(('parted', image_path, 'mklabel', 'msdos'))
                 system(('parted', image_path, 'mkpart', 'primary', 'ext2', str(start_at / (1024 * 1024)),
                                                                            str(root_size / (1024 * 1024))))
 
