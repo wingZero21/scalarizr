@@ -499,11 +499,11 @@ explore('postgresql', postgresql_software_info)
 def check_software(required, installed=None, excluded=None):
     if installed == None:
         installed = pkgmgr.package_mgr().list()
-    conflicts = list(set(excluded or list()).intersection(set(installed)))
-    if conflicts:
-        msg = "Installed packages %s are conflict with %s" \
-                % (str(conflicts)[1:-1], str(required)[1:-1])
-        raise SoftwareError(msg)
+    for conflict in parse_requirements(excluded or []):
+        name = conflict.project_name
+        if name in installed and installed[name] in conflict:
+            msg = "Unallowed package '%s' is installed in system. Please remove it" % name
+            raise SoftwareError(msg)
     for requirement in parse_requirements(required):
         name = requirement.project_name
         if name not in installed:
