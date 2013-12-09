@@ -746,7 +746,7 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
-        if server_wide_template:
+        if server_wide_template or server_wide_template != 'dbg;':
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
             with open(temp_file, 'w') as fp:
@@ -764,7 +764,7 @@ class NginxAPI(object):
             config.add('server/proxy_buffering', 'on')
             config.add('server/proxy_connect_timeout', '15')
             config.add('server/proxy_intercept_errors', 'on')
-            
+
             # default SSL params
             config.add('%s/ssl_session_timeout' % server_xpath, '10m')
             config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
