@@ -5,6 +5,7 @@ Created on Dec 25, 2009
 @author: marat
 """
 
+import os
 import pwd
 import logging
 
@@ -128,49 +129,52 @@ class ApacheHandler(Handler):
     def on_HostUp(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
-            with open(mod_rpaf_path, "r") as fp:
-                mod_praf_body = fp.read()
+            if os.path.exists(mod_rpaf_path):
+                with open(mod_rpaf_path, "r") as fp:
+                    mod_praf_body = fp.read()
 
-            mod_rpaf = apache.ModRPAF(mod_praf_body)
-            mod_rpaf.add([message.local_ip])
+                mod_rpaf = apache.ModRPAF(mod_praf_body)
+                mod_rpaf.add([message.local_ip])
 
-            with open(mod_rpaf_path, "w") as fp:
-                fp.write(mod_rpaf.body)
+                with open(mod_rpaf_path, "w") as fp:
+                    fp.write(mod_rpaf.body)
 
-            self.api.reload_service("Applying new RPAF proxy IPs list")
+                self.api.reload_service("Applying new RPAF proxy IPs list")
 
     def on_HostDown(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
+            if os.path.exists(mod_rpaf_path):
+                with open(mod_rpaf_path, "r") as fp:
+                    mod_praf_body = fp.read()
+
+                mod_rpaf = apache.ModRPAF(mod_praf_body)
+                mod_rpaf.remove([message.local_ip])
+
+                with open(mod_rpaf_path, "w") as fp:
+                    fp.write(mod_rpaf.body)
+
+                self.api.reload_service("Applying new RPAF proxy IPs list")
+
+    def _reconfigure_mod_rpaf(self):
+        mod_rpaf_path = __apache__["mod_rpaf_path"]
+        if os.path.exists(mod_rpaf_path):
+            lb_hosts = []
+
+            for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
+                for host in role.hosts:
+                    lb_hosts.append(host.internal_ip)
+
+            lb_hosts = lb_hosts or ['127.0.0.1', ]
+
             with open(mod_rpaf_path, "r") as fp:
                 mod_praf_body = fp.read()
 
             mod_rpaf = apache.ModRPAF(mod_praf_body)
-            mod_rpaf.remove([message.local_ip])
+            mod_rpaf.update(lb_hosts)
 
             with open(mod_rpaf_path, "w") as fp:
                 fp.write(mod_rpaf.body)
-
-            self.api.reload_service("Applying new RPAF proxy IPs list")
-
-    def _reconfigure_mod_rpaf(self):
-        lb_hosts = []
-
-        for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
-            for host in role.hosts:
-                lb_hosts.append(host.internal_ip)
-
-        lb_hosts = lb_hosts or ['127.0.0.1', ]
-
-        mod_rpaf_path = __apache__["mod_rpaf_path"]
-        with open(mod_rpaf_path, "r") as fp:
-            mod_praf_body = fp.read()
-
-        mod_rpaf = apache.ModRPAF(mod_praf_body)
-        mod_rpaf.update(lb_hosts)
-
-        with open(mod_rpaf_path, "w") as fp:
-            fp.write(mod_rpaf.body)
 
     on_BeforeHostTerminate = on_HostDown
 

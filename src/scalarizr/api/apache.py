@@ -502,15 +502,16 @@ class ApacheAPI(object):
 
         if linux.os.debian_family:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
+            if os.path.exists(mod_rpaf_path):
 
-            with open(mod_rpaf_path, "r") as fp:
-                body = fp.read()
+                with open(mod_rpaf_path, "r") as fp:
+                    body = fp.read()
 
-            mod_rpaf = ModRPAF(body)
-            mod_rpaf.fix_module()
+                mod_rpaf = ModRPAF(body)
+                mod_rpaf.fix_module()
 
-            with open(mod_rpaf_path, "w") as fp:
-                fp.write(mod_rpaf.body)
+                with open(mod_rpaf_path, "w") as fp:
+                    fp.write(mod_rpaf.body)
 
         ModRPAF.ensure_permissions()
 
@@ -788,8 +789,12 @@ class ModRPAF(BasicApacheConfiguration):
 
     @staticmethod
     def ensure_permissions():
-        st = os.stat(__apache__["httpd.conf"])
-        os.chown(__apache__["mod_rpaf_path"], st.st_uid, st.st_gid)
+        httpd_conf_path = __apache__["httpd.conf"]
+        mod_rpaf_path = __apache__["mod_rpaf_path"]
+
+        if os.path.exists(httpd_conf_path) and os.path.exists(mod_rpaf_path):
+            st = os.stat(httpd_conf_path)
+            os.chown(mod_rpaf_path, st.st_uid, st.st_gid)
 
 
 class ApacheConfigManager(object):
@@ -1023,13 +1028,15 @@ class RedHatBasedModSSL(ModSSL):
 
     def _enable_mod_ssl(self):
         with ApacheConfigManager(__apache__["httpd.conf"]) as main_config:
-            loaded_in_main = [module for module in main_config.get_list("LoadModule") if "mod_ssl.so" in module]
+            loaded_in_main = [m for m in main_config.get_list("LoadModule") if "mod_ssl.so" in m]
             if not loaded_in_main:
+                loaded_in_ssl = False
                 if os.path.exists(__apache__["ssl_conf_path"]):
-                    loaded_in_ssl = [module for module in main_config.get_list("LoadModule") if "mod_ssl.so" in module]
-                    if not loaded_in_ssl:
-                        main_config.add("LoadModule", "ssl_module modules/mod_ssl.so")
-                        LOG.info("Default SSL virtualhost enabled.")
+                    with ApacheConfigManager(__apache__["ssl_conf_path"]) as ssl_config:
+                        loaded_in_ssl = [m for m in ssl_config.get_list("LoadModule") if "mod_ssl.so" in m]
+                if not loaded_in_ssl:
+                    main_config.add("LoadModule", "ssl_module modules/mod_ssl.so")
+                    LOG.info("Default SSL virtualhost enabled.")
 
     def _set_name_virtual_host(self, ssl_port=443):
         ssl_conf_path = __apache__["ssl_conf_path"]
