@@ -766,12 +766,12 @@ class NginxAPI(object):
             config.add('server/proxy_intercept_errors', 'on')
 
             # default SSL params
-            config.add('%s/ssl_session_timeout' % server_xpath, '10m')
-            config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
-            config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
-            config.add('%s/ssl_ciphers' % server_xpath, 
+            config.add('server/ssl_session_timeout', '10m')
+            config.add('server/ssl_session_cache', 'shared:SSL:10m')
+            config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
+            config.add('server/ssl_ciphers', 
                        'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-            config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
+            config.add('server/ssl_prefer_server_ciphers', 'on')
 
         if port:
             config.add('server/listen', str(port))
