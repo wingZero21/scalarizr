@@ -277,12 +277,12 @@ class NginxAPI(object):
             for proxy_parms in proxy_list:
                 if 'hostname' in proxy_parms:
                     proxy_parms['name'] = proxy_parms.pop('hostname')
-                
                 self.add_proxy(reload_service=False, **proxy_parms)
+
             if reload_service:
                 self._reload_service()
         except:
-                raise BaseException('Syntax error in template for proxy %s' % proxy_parms['name'])
+            raise Exception('Syntax error in template for proxy %s' % proxy_parms['name'])
 
     def _replace_string_in_file(self, file_path, s, new_s):
         raw = None
@@ -746,7 +746,7 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
-        if server_wide_template or server_wide_template != 'dbg;':
+        if server_wide_template or 'dbg' in server_wide_template:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
             with open(temp_file, 'w') as fp:
@@ -931,9 +931,9 @@ class NginxAPI(object):
 
         grouped_destinations = self._group_destinations(destinations)
         if not grouped_destinations:
-            raise BaseException('add_proxy() called with no destination list')
+            raise Exception('add_proxy() called with no destination list')
         if ssl_port == port and ssl_port != None:
-            raise BaseException("HTTP and HTTPS ports can't be the same")
+            raise Exception("HTTP and HTTPS ports can't be the same")
 
         if reread_conf:
             self._load_app_servers_inc()
