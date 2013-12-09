@@ -8,6 +8,7 @@ import time
 from hashlib import sha1
 
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.bus import bus
 from scalarizr.libs import metaconf
 import scalarizr.libs.metaconf.providers
@@ -15,6 +16,7 @@ from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
+from scalarizr.util import software
 from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
@@ -1411,3 +1413,11 @@ class NginxAPI(object):
                 self._save_proxies_inc()
             if reload_service:
                 self._reload_service()
+
+    @classmethod
+    def check_software(cls, installed=None):
+        if linux.os['family'].lower() in ['debian', 'redhat']:
+            return
+        else:
+            raise software.SoftwareError('Unsupported operating system')
+

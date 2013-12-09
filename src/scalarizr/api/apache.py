@@ -28,6 +28,8 @@ from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import system2, initdv2
 from scalarizr.util import wait_until, dynimp, PopenError
+from scalarizr.util import software
+from scalarizr.util import Singleton
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 
@@ -111,6 +113,8 @@ class ApacheError(BaseException):
 
 
 class ApacheAPI(object):
+
+    __metaclass__ = Singleton
 
     service = None
     mod_ssl = None
@@ -619,6 +623,16 @@ class ApacheAPI(object):
                 iptables.FIREWALL.ensure(rules)
         else:
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
+
+    @classmethod
+    def check_software(cls, installed=None):
+        os_name = linux.os['name'].lower()
+        if os_name in ['ubuntu', 'debian']:
+            software.check_software(['apache2>=2.2,<2.3'], installed)
+        elif os_name in ['centos', 'redhat', 'amazon']:
+            software.check_software(['httpd>=2.2,<2.3'], installed)
+        else:
+            raise software.SoftwareError('Unsupported operating system')
 
 
 class BasicApacheConfiguration(object):

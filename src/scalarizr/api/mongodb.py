@@ -12,8 +12,11 @@ import subprocess as subps
 
 from scalarizr import rpc
 from scalarizr import util
+from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.util.cryptotool import pwgen
+from scalarizr.util import software
+from scalarizr.util import Singleton
 from scalarizr.services import mongodb as mongo_svc
 
 
@@ -23,7 +26,6 @@ class _MMSAgent(object):
 
     .. _a link: http://www.10gen.com/products/mongodb-monitoring-service
     """
-
 
     url = 'https://mms.10gen.com/settings/10gen-mms-agent.tar.gz'
     install_dir = '/opt'
@@ -101,6 +103,7 @@ class MongoDBAPI:
     """
     MongoDB API class
     """
+    __metaclass__ = Singleton
 
     @rpc.command_method
     def reset_password(self):
@@ -159,3 +162,49 @@ class MongoDBAPI:
             error = str(e)
 
         return {'status':status, 'error':error}
+
+
+    @classmethod
+    def check_software(cls, installed=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '12':
+                software = ['mongodb-10gen>=2.0,<2.5']
+                alt_software = ['mongodb>=2.0,<2.5']
+            elif os_vers >= '10':
+                software = ['mongodb-10gen>=2.0,<2.1']
+                alt_software = ['mongodb>=2.0,<2.1']
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name == 'debian':
+            software = ['mongodb-10gen>=2.4,<2.5']
+            alt_software = ['mongodb>=2.4,<2.5']
+        elif os_name == 'centos':
+            if os_vers >= '6':
+                software = ['mongodb-10gen-server>=2.0,<2.5']
+                alt_software = ['mongodb-server>=2.0,<2.5']
+            elif os_vers >= '5':
+                software = ['mongodb-10gen-server>=2.0,<2.1']
+                alt_software = ['mongodb-server>=2.0,<2.1']
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name == 'redhat':
+            if os_vers >= '6':
+                software = ['mongodb-10gen-server>=2.4,<2.5']
+                alt_software = ['mongodb-server>=2.4,<2.5']
+            elif os_vers >= '5':
+                software = ['mongodb-10gen-server>=2.0,<2.1']
+                alt_software = ['mongodb-server>=2.0,<2.1']
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name == 'amazon':
+            software = ['mongodb-10gen-server>=2.4,<2.5']
+            alt_software = ['mongodb-server>=2.4,<2.5']
+        else:
+            raise software.SoftwareError('Unsupported operating system')
+        try:
+            software.check_software(software, installed)
+        except software.SoftwareError:
+            software.check_software(alt_software, installed)
+

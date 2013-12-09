@@ -16,12 +16,16 @@ from scalarizr.services import backup as backup_module
 from scalarizr.services import ServiceError
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.handlers import build_tags
+from scalarizr.util import software
+from scalarizr.util import Singleton
+from scalarizr import linux
 
 
 class MySQLAPI(object):
     """
     @xxx: reporting is a pain
     """
+    __metaclass__ = Singleton
 
     error_messages = {
         'empty': "'%s' can't be blank",
@@ -179,4 +183,51 @@ class MySQLAPI(object):
                 func=do_backup, cancel_func=cancel_backup, 
                 func_kwds={'backup_conf': backup},
                 async=async, exclusive=True)
+
+
+    @classmethod
+    def check_software(cls, installed=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '12':
+                software.check_software(['mysql-client>=5.5,<5.6'], installed)
+                software.check_software(['mysql-server>=5.5,<5.6'], installed, ['apparmor'])
+            elif os_vers >= '10':
+                software.check_software(['mysql-client>=5.1,<5.2'], installed)
+                software.check_software(['mysql-server>=5.1,<5.2'], installed, ['apparmor'])
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name == 'debian':
+            if os_vers >= '7':
+                software.check_software(['mysql-client>=5.5,<5.6'], installed)
+                software.check_software(['mysql-server>=5.5,<5.6'], installed, ['apparmor'])
+            elif os_vers >= '6':
+                software.check_software(['mysql-client>=5.1,<5.6'], installed)
+                software.check_software(['mysql-server>=5.1,<5.6'], installed, ['apparmor'])
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name == 'centos':
+            if os_vers >= '6':
+                software.check_software(['mysql>=5.1,<5.2'], installed)
+                software.check_software(['mysql-server>=5.1,<5.2'], installed)
+            elif os_vers >= '5':
+                software.check_software(['mysql>=5.0,<5.1'], installed)
+                software.check_software(['mysql-server>=5.0,<5.1'], installed)
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name == 'redhat':
+            if os_vers >= '6':
+                software.check_software(['mysql>=5.1,<5.2'], installed)
+                software.check_software(['mysql-server>=5.1,<5.2'], installed)
+            elif os_vers >= '5':
+                software.check_software(['mysql>=5.0,<5.1'], installed)
+                software.check_software(['mysql-server>=5.0,<5.1'], installed)
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name == 'amazon':
+            software.check_software(['mysql>=5.5,<5.6'], installed)
+            software.check_software(['mysql-server>=5.5,<5.6'], installed)
+        else:
+            raise software.SoftwareError('Unsupported operating system')
 

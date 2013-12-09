@@ -29,6 +29,7 @@ from scalarizr.linux import mount
 from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
 from scalarizr.handlers.script_executor import logs_dir
+from scalarizr.util import Singleton
 
 LOG = logging.getLogger(__name__)
 
@@ -100,6 +101,8 @@ class _ScalingMetricStrategy(object):
 
 
 class SystemAPI(object):
+
+    __metaclass__ = Singleton
 
     _HOSTNAME = '/etc/hostname'
     _DISKSTATS = '/proc/diskstats'

@@ -6,9 +6,12 @@ Created on Nov 25, 2011
 
 from scalarizr import rpc, storage2
 from scalarizr.api import operation
+from scalarizr.util import Singleton
 
 
 class StorageAPI(object):
+
+    __metaclass__ = Singleton
 
     error_messages = {
             'empty': "'%s' can't be blank",

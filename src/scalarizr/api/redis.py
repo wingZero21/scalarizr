@@ -12,6 +12,7 @@ import logging
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.linux import iptables
 from scalarizr.api import operation
 from scalarizr.util import system2, PopenError
@@ -22,6 +23,8 @@ from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr import node
+from scalarizr.util import software
+from scalarizr.util import Singleton
 
 
 BEHAVIOUR = config.BuiltinBehaviours.REDIS
@@ -32,6 +35,8 @@ LOG = logging.getLogger(__name__)
 
 
 class RedisAPI(object):
+
+    __metaclass__ = Singleton
 
     _cnf = None
     _queryenv = None
@@ -316,3 +321,26 @@ class RedisAPI(object):
                                 func_kwds={},
                                 async=async,
                                 exclusive=True)  #?
+
+    @classmethod
+    def check_software(cls, installed=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '12':
+                software.check_software(['redis-server>=2.2,<2.7'], installed)
+            elif os_vers >= '10':
+                software.check_software(['redis-server>=2.2,<2.3'], installed)
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name == 'debian':
+            software.check_software(['redis-server>=2.6,<2.7'], installed)
+        elif os_name == 'centos':
+            software.check_software(['redis>=2.4,<2.7'], installed, ['centalt-release'])
+        elif os_name == 'redhat':
+            software.check_software(['redis>=2.6,<2.7'], installed, ['centalt-release'])
+        elif os_name == 'amazon':
+            software.check_software(['redis>=2.6,<2.7'], installed, ['centalt-release'])
+        else:
+            raise software.SoftwareError('Unsupported operating system')
+

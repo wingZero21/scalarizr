@@ -42,6 +42,16 @@ class PackageMgr(object):
         '''
         raise NotImplementedError()
 
+    def list(self):
+        '''
+        Returns dict of installed packages
+        Example:
+                {
+                    'python':'2.6.7-ubuntu1',
+                }
+        '''
+        raise NotImplementedError()
+
     def updatedb(self):
         ''' Updates package manager internal database '''
         raise NotImplementedError()
@@ -128,6 +138,13 @@ class AptPackageMgr(PackageMgr):
         installed, candidate = self.apt_policy(name)
         return {'installed': installed,
                         'candidate': candidate if installed != candidate else None}
+
+    def list(self):
+        out, err, code = linux.system(('dpkg-query', '-W',), raise_exc=True)
+        if err:
+            raise Exception("'dpkg-query -W' command failed. Out: %s \nErrors: %s" % (out, err))
+        pkgs = dict([_.split() for _ in out.split('\n') if _])
+        return dict((k, v.split(':')[-1]) for k, v in pkgs.iteritems())
 
     def repos(self):
         files = glob.glob('/etc/apt/sources.list.d/*.list')
@@ -264,6 +281,16 @@ class YumPackageMgr(PackageMgr):
         installed, candidates = self.yum_list(name)
         return {'installed': installed,
                 'candidate': candidates[-1] if candidates else None}
+
+    def list(self):
+        out, err, code = linux.system(
+                ('rpm', '-qa', '--queryformat', '%{NAME} %{VERSION}\n',),
+                raise_exc=True
+                )
+        if err:
+            raise Exception("'rpm -qa' command failed. Out: %s \nErrors: %s" % (out, err))
+        pkgs = dict([_.split() for _ in out.split('\n') if _])
+        return pkgs
 
     def repos(self):
         ret = []

@@ -619,9 +619,9 @@ def import_class(import_str):
     except ImportError:
         pass
     else:
-        loader.load_module('')
+        m = loader.load_module('')
         try:
-            return getattr(sys.modules[mod_str], class_str)
+            return getattr(m, class_str)
         except (ValueError, AttributeError):
             pass
     raise exceptions.NotFound('Class %s cannot be found' % import_str)

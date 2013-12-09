@@ -12,7 +12,10 @@ from scalarizr.libs import validate
 from scalarizr.services import haproxy
 from scalarizr.linux import iptables
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.handlers import get_role_servers
+from scalarizr.util import software
+from scalarizr.util import Singleton
 
 import logging
 LOG = logging.getLogger(__name__)
@@ -46,6 +49,7 @@ class HAProxyAPI(object):
     """
     Placeholder
     """
+    __metaclass__ = Singleton
 
     def __init__(self, path=None):
         self.path_cfg = path
@@ -556,3 +560,11 @@ class HAProxyAPI(object):
                 #res.append(self.cfg.backends[bnd]['server'][srv_name]['host'])
         res = list(set(res))
         return res
+
+    @classmethod
+    def check_software(cls, installed=None):
+        if linux.os['family'].lower() in ['debian', 'redhat']:
+            software.check_software(['haproxy'], installed)
+        else:
+            raise software.SoftwareError('Unsupported operating system')
+

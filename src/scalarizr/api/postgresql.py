@@ -18,6 +18,7 @@ from scalarizr.util import PopenError, system2
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.services import postgresql as postgresql_svc
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.services import backup
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.handlers import DbMsrMessages, HandlerError
@@ -25,6 +26,8 @@ from scalarizr.api import operation
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services.postgresql import PSQL, PG_DUMP, SU_EXEC
 from scalarizr.storage2.cloudfs import LargeTransfer
+from scalarizr.util import software
+from scalarizr.util import Singleton
 
 
 LOG = logging.getLogger(__name__)
@@ -38,6 +41,8 @@ __postgresql__ = postgresql_svc.__postgresql__
 
 
 class PostgreSQLAPI(object):
+
+    __metaclass__ = Singleton
 
     replication_status_query = '''SELECT
     CASE WHEN pg_last_xlog_receive_location() = pg_last_xlog_replay_location()
@@ -256,4 +261,78 @@ class PostgreSQLAPI(object):
                                 func_kwds={},
                                 async=async,
                                 exclusive=True)
+
                             
+    @classmethod
+    def check_software(cls, installed=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '12':
+                software.check_software(
+                        ['postgresql>=9.1,<9.3', 'postgresql-client>=9.1,<9.3'],
+                        installed
+                        )
+            elif os_vers >= '10':
+                software.check_software(
+                        ['postgresql>=9.1,<9.2', 'postgresql-client>=9.1,<9.2'],
+                        installed
+                        )
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name == 'debian':
+            software.check_software(
+                    ['postgresql>=9.2,<9.3', 'postgresql-client>=9.2,<9.3'],
+                    installed
+                    )
+        elif os_name == 'centos':
+            if os_vers >= '6':
+                try:
+                    software.check_software(
+                            ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                            installed
+                            )
+                except software.SoftwareError:
+                    software.check_software(
+                            [
+                                'postgresql>=9.1,<9.3',
+                                'postgresql-server>=9.1,<9.3',
+                                'postgresql-devel>=9.1,<9.3'
+                                ],
+                            installed
+                            )
+            elif os_vers >= '5':
+                try:
+                    software.check_software(
+                            ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                            installed
+                            )
+                except software.SoftwareError:
+                    software.check_software(
+                            [
+                                'postgresql>=9.2,<9.3',
+                                'postgresql-server>=9.2,<9.3',
+                                'postgresql-devel>=9.2,<9.3'
+                                ],
+                            installed
+                            )
+            else:
+                raise software.SoftwareError('Unsupported version of operating system')
+        elif os_name in ['redhat', 'amazon']:
+            try:
+                software.check_software(
+                        ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                        installed
+                        )
+            except software.SoftwareError:
+                software.check_software(
+                        [
+                            'postgresql>=9.2,<9.3',
+                            'postgresql-server>=9.2,<9.3',
+                            'postgresql-devel>=9.2,<9.3'
+                            ],
+                        installed
+                        )
+        else:
+            raise software.SoftwareError('Unsupported operating system')
+

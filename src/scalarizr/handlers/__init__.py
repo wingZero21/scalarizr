@@ -1,12 +1,12 @@
 from __future__ import with_statement
 
-from scalarizr import config
+from scalarizr import config, util, linux, api, exceptions
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
-from scalarizr.linux import iptables
+from scalarizr.linux import iptables, pkgmgr
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 
 import os
@@ -105,53 +105,43 @@ class Handler(object):
 
 
     def get_ready_behaviours(self):
-        handlers = list()
-        info = software.system_info(verbose=True)
-        if 'software' in info:
-            Version = distutils.version.LooseVersion
-            for entry in info['software']:
-                if not ('name' in entry and 'version' in entry):
+        possible_behaviors = [
+            config.BuiltinBehaviours.APP,
+            config.BuiltinBehaviours.WWW,
+            config.BuiltinBehaviours.MYSQL, # ?
+            config.BuiltinBehaviours.MYSQL2,
+            config.BuiltinBehaviours.PERCONA,
+            config.BuiltinBehaviours.MARIADB,
+            config.BuiltinBehaviours.CASSANDRA,
+            config.BuiltinBehaviours.MEMCACHED,
+            config.BuiltinBehaviours.POSTGRESQL,
+            config.BuiltinBehaviours.RABBITMQ,
+            config.BuiltinBehaviours.REDIS,
+            config.BuiltinBehaviours.HAPROXY,
+            config.BuiltinBehaviours.MONGODB,
+            config.BuiltinBehaviours.CHEF,
+            config.BuiltinBehaviours.TOMCAT,
+            ]
+        ready_behaviors = list()
+        if linux.os['family'] != 'Windows':
+            installed_software = pkgmgr.package_mgr().list()
+            for behavior in possible_behaviors:
+                try:
+                    api_cls = util.import_class(api.api_routes[behavior])
+                    api_cls.check_software(installed_software)
+                    ready_behaviors.append(behavior)
+                except (exceptions.NotFound, software.SoftwareError) as e:
                     continue
-                name = entry['name']
-
-                version = Version(entry['version'])
-
-                str_ver = entry['string_version'] if 'string_version' in entry else ''
-                if name == 'nginx':
-                    handlers.append(config.BuiltinBehaviours.WWW)
-                elif name == 'chef':
-                    handlers.append(config.BuiltinBehaviours.CHEF)
-                elif name == 'memcached':
-                    handlers.append(config.BuiltinBehaviours.MEMCACHED)
-
-                elif name == 'postgresql' and Version('9.0') <= version < Version('9.3'):
-                    handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-                elif name == 'redis' and Version('2.2') <= version < Version('2.7'):
-                    handlers.append(config.BuiltinBehaviours.REDIS)
-                elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.2'):
-                    handlers.append(config.BuiltinBehaviours.RABBITMQ)
-                elif name == 'mongodb' and Version('2.0') <= version < Version('2.5'):
-                    handlers.append(config.BuiltinBehaviours.MONGODB)
-                elif name == 'apache' and Version('2.0') <= version < Version('2.3'):
-                    handlers.append(config.BuiltinBehaviours.APP)
-                elif name == 'haproxy' and Version('1.3') < version < Version('1.5'):
-                    handlers.append(config.BuiltinBehaviours.HAPROXY)
-                elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
-                    handlers.append(config.BuiltinBehaviours.MYSQL)
-                    if 'Percona' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.PERCONA)
-                    elif 'Maria' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.MARIADB)
-                    else:
-                        handlers.append(config.BuiltinBehaviours.MYSQL2)
-                elif name == 'tomcat':
-                    handlers.append(config.BuiltinBehaviours.TOMCAT)
-
-        return handlers
+                # TODO
+                # remove except
+                except:
+                    pass
+        return ready_behaviors
 
 
 class HandlerError(BaseException):
     pass
+
 
 class MessageListener:
     _accept_kwargs = {}

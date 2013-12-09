@@ -9,7 +9,7 @@ except ImportError:
 
 # Core
 from scalarizr import __version__
-from scalarizr import config, rpc, linux
+from scalarizr import config, rpc, linux, api
 from scalarizr import node
 from scalarizr.linux import coreutils
 
@@ -141,22 +141,6 @@ Next time when SNMP process should be forked
 '''
 
 _logging_configured = False
-
-
-_api_routes = {
-    'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
-    'sysinfo': 'scalarizr.api.system.SystemAPI',
-    'system': 'scalarizr.api.system.SystemAPI',
-    'storage': 'scalarizr.api.storage.StorageAPI',
-    'service': 'scalarizr.api.service.ServiceAPI',
-    'redis': 'scalarizr.api.redis.RedisAPI',
-    'apache': 'scalarizr.api.apache.ApacheAPI',
-    'nginx': 'scalarizr.api.apache.NginxAPI',
-    'mysql': 'scalarizr.api.mysql.MySQLAPI',
-    'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
-    'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI',
-    'operation': 'scalarizr.api.operation.OperationAPI'
-}
 
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
@@ -836,6 +820,24 @@ class Service(object):
         consumer = msg_service.get_consumer()
         consumer.listeners.append(MessageListener())
 
+        if linux.os['family'] != 'Windows':
+            installed_software = pkgmgr.package_mgr().list()
+            for behavior in node.__node__['behavior']:
+                try:
+                    api_cls = util.import_class(api.api_routes[behavior])
+                    api_cls.check_software(installed_software)
+                except exceptions.NotFound:
+                    continue
+                except software.SoftwareError as e:
+                    logger.error(e)
+                    node.__node__['messaging'].send(
+                            'OutOfTheService',
+                            body={
+                                'error':'Software error',
+                                'details':"'%s' behavior. %s" % (behavior, str(e))
+                                }
+                            )
+
         if not linux.os.windows_family:
             logger.debug('Schedule SNMP process')
             self._snmp_scheduled_start_time = time.time()
@@ -852,7 +854,7 @@ class Service(object):
             except socket.error:
                 pass
             STATE['global.api_port'] = api_port
-            api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes),
+            api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(api.api_routes),
                                                 cnf.key_path(cnf.DEFAULT_KEY))
             class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
                 pass
