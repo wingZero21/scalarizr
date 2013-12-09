@@ -246,7 +246,7 @@ class QueryEnvService(object):
         '''
         data = xml2dict(ET.XML(xml)) or {}
         glob_vars = data['variables']['values'] if 'variables' in data and data['variables'] else {}
-        glob_vars = dict((k, v.encode('utf-8') if v else '') for k, v in glob_vars.items() if k.startswith('SCALR'))
+        glob_vars = dict((k, v.encode('utf-8') if v else '') for k, v in glob_vars.items())
         return glob_vars
 
     def _read_get_global_config_response(self, xml):
