@@ -671,8 +671,8 @@ if linux.os.windows_family:
                 letter = disk.DeviceId[0].lower()
                 if letter in mpoints:
                     ret[letter] = dict(
-                        total=int(disk.Size),
-                        free=int(disk.FreeSpace)
+                        total=int(disk.Size) / 1024,  # Kb
+                        free=int(disk.FreeSpace) / 1024  # Kb
                     )
             return ret
 
