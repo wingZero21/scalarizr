@@ -875,7 +875,7 @@ def _add_apparmor_rules(directory):
                 LOG.error('Cannot restart apparmor. %s', e)
 
 
-def get_semanage(self):
+def get_semanage():
     if linux.os['family'] == 'RedHat':
         semanage = software.which('semanage')
         if not semanage:
