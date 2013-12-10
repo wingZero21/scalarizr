@@ -139,7 +139,7 @@ class MySQL(BaseService):
                                     system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
                                 else:
                                     semanage = get_semanage()
-                                    system2((semanage, 'fcontext', '-m', '-t', 'bin_t', '/usr/bin/rsync'))
+                                    system2((semanage, 'fcontext', '-a', '-t', 'bin_t', '/usr/bin/rsync'))
                                     system2((software.which('restorecon'), '-v', '/usr/bin/rsync'))
 
                         LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
