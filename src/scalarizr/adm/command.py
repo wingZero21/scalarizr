@@ -11,6 +11,14 @@ def camel_to_underscore(name):
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 
+def extended_doc(doc, usage_case):
+    """Returns doc extended with new usage case"""
+    match = re.search(r'usage:\s+', doc, re.IGNORECASE | re.DOTALL)
+    help_usage_index = match.end()
+    tab_str = match.group().split('\n')[1]
+    return doc[:help_usage_index] + usage_case + tab_str + doc[help_usage_index:]
+
+
 class UnknownCommand(SystemExit):
     
     def __init__(self, message, command_name=None, usage=None):
@@ -44,14 +52,18 @@ class Command(object):
     def __call__(self):
         raise NotImplementedError('You need to define __call__ method')
 
+    def list_subcommands(self):
+        """Returns list of possible subcommands"""
+        return [get_command_name(cmd) for cmd in self.subcommands]
+
     def help(self):
         doc = self.__doc__
-        if not '--help' in self.__doc__:
-            match = re.search(r'usage:\s+', doc, re.IGNORECASE | re.DOTALL)
-            help_usage_index = match.end()
-            tab_str = match.group().split('\n')[1]
-            help_usage_string = get_command_name(self) + ' --help\n' + tab_str
-            doc = doc[:help_usage_index] + help_usage_string + doc[help_usage_index:]
+        if not '--help' in doc:
+            help_usage_string = get_command_name(self) + ' --help\n'
+            doc = extended_doc(self.__doc__, help_usage_string)
+
+        subcommands_help = '\nSubcommands:\n' + '\n  '.join(self.list_subcommands())
+        doc = doc + subcommands_help
 
         return doc
 
@@ -66,7 +78,7 @@ class Command(object):
                 return sub_cmd
 
         usage = ''.join(get_section('usage', self.help()))
-        raise UnknownCommand('%s: unknown subcommand %s' % (self._name, subcommand),
+        raise UnknownCommand('%s: unknown subcommand %s' % (get_command_name(self), subcommand),
                              subcommand,
                              usage)
 
@@ -76,6 +88,7 @@ class Command(object):
         """
         sub_cmd_definition = self._find_subcommand(subcommand)
         is_class = inspect.isclass(sub_cmd_definition)
+
         if is_class:
             sub_cmd = sub_cmd_definition()
             sub_cmd_doc = sub_cmd.help()
@@ -91,7 +104,11 @@ class Command(object):
             usage = ''.join(get_section('usage', sub_cmd_doc))
             raise InvalidCall('%s: invalid call' % subcommand, subcommand, usage)
 
-        return sub_cmd(**kwds)
+        # TODO: maybe do this some other way
+        if 'help' in kwds:
+            print sub_cmd_doc
+        else:
+            return sub_cmd(**kwds)
 
 
 def parse_command_line(argv, doc):

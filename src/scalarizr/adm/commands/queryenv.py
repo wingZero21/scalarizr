@@ -64,7 +64,6 @@ class Queryenv(Command):
 
         return m(**filtered_kwds)
 
-
     def __call__(self, method=None, help=False, args=None, **kwds):
         if help:
             self.help()

@@ -38,6 +38,7 @@ class Szradm(command_module.Command):
     Szradm is scalarizr administration tool.
 
     Usage:
+      szradm --help
       szradm --version
       szradm <command> [<args>...]
 
@@ -45,25 +46,45 @@ class Szradm(command_module.Command):
       -v, --version     Show version.
     """
 
+    version = (0, 1)
+
+    def help(self):
+        """
+        Redefining this method because we don't need to print subcommands list
+        for szradm in here.
+        """
+        return self.__doc__
+
     def __init__(self, commands_dir=None):
         super(Szradm, self).__init__()
         self.subcommands = self.find_commands(commands_dir)
 
     def __call__(self, command=None, version=False, help=False, args=[]):
+        print 'ratseahrnstoeihrst'
+        if version:
+            print 'Szradm version: %s.%s' % self.version
+        if help:
+            print 'arstenharstohnedsatuhd'
+            print list(self.subcommands)
+            list_subcommands = [command_module.get_command_name(c) for c in self.subcommands]
+            print self.help() + '\n\nSubcommands:\n' + '\n  '.join(list_subcommands)
+
+        if not command:
+            return
+
         try:
             return self.run_subcommand(command, args)
 
         except (command_module.UnknownCommand, command_module.InvalidCall), e:
-            call_str = 'szradm ' + command + ' ' + ' '.join(args)
+            call_str = 'szradm %s %s' % (command, ' '.join(args))
             message = '\n'.join((call_str, e.message, e.usage))
             raise e.__class__(message)
 
         except command_module.RuntimeError, e:
             # except-section for user-defined exceptions, semantic errors, etc.
-            call_str = 'szradm ' + command + ' ' + ' '.join(args)
+            call_str = 'szradm %s %s' % (command, ' '.join(args))
             message = '\n'.join((call_str, e.message))
             raise Exception(message)
-
 
     def find_commands(self, directory=None):
         """
@@ -85,6 +106,7 @@ def main(argv):
     szradm = Szradm(os.path.join(__dir__, 'commands'))
     # If szradm called with no arguments - print help() and all/most used possible commands
     szradm_kwds = command_module.parse_command_line(argv[1:], szradm.help())
+    print '??'
     # TODO: return exit codes which are dependent on exception thrown
     return szradm(**szradm_kwds)
 
