@@ -60,14 +60,17 @@ class Szradm(command_module.Command):
         self.subcommands = self.find_commands(commands_dir)
 
     def __call__(self, command=None, version=False, help=False, args=[]):
-        print 'ratseahrnstoeihrst'
+
         if version:
             print 'Szradm version: %s.%s' % self.version
         if help:
-            print 'arstenharstohnedsatuhd'
-            print list(self.subcommands)
-            list_subcommands = [command_module.get_command_name(c) for c in self.subcommands]
-            print self.help() + '\n\nSubcommands:\n' + '\n  '.join(list_subcommands)
+            list_subcommands = list(self.subcommands)
+            sub_cmd_help_lines = []
+            for sub_cmd in list_subcommands:
+                sub_cmd_help_lines.append(command_module.get_command_name(sub_cmd))
+                if inspect.isclass(sub_cmd) and sub_cmd.subcommands:
+                    #TODO: rewrite this in single method that uses recursion
+            print self.help() + '\n\nSubcommands:\n  ' + '\n  '.join(list_subcommands)
 
         if not command:
             return
@@ -105,8 +108,9 @@ class Szradm(command_module.Command):
 def main(argv):
     szradm = Szradm(os.path.join(__dir__, 'commands'))
     # If szradm called with no arguments - print help() and all/most used possible commands
+
     szradm_kwds = command_module.parse_command_line(argv[1:], szradm.help())
-    print '??'
+
     # TODO: return exit codes which are dependent on exception thrown
     return szradm(**szradm_kwds)
 

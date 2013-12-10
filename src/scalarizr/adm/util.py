@@ -1,5 +1,6 @@
 
 import prettytable
+import itertools
 
 
 def make_table(data_rows, header=None):

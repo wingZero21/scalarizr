@@ -116,7 +116,7 @@ def parse_command_line(argv, doc):
     Parses list of command-line argv using doc and translates
     them to keyword dictionary which can be used to call Command instance.
     """
-    arguments = docopt(doc, argv=argv, options_first=True)
+    arguments = docopt(doc, argv=argv, options_first=True, help=False)
     kwds = _docopt_out_to_kwds(arguments)
     return kwds
 
