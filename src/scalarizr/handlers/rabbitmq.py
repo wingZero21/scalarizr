@@ -20,7 +20,9 @@ from scalarizr.handlers import HandlerError, ServiceCtlHandler, build_tags
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, software, dns, cryptotool
 from scalarizr.node import __node__
+from scalarizr.linux import iptables
 import scalarizr.services.rabbitmq as rabbitmq_svc
+
 
 
 __rabbitmq__ = __node__['rabbitmq']
@@ -81,6 +83,8 @@ class RabbitMQHandler(ServiceCtlHandler):
             bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
         bus.on("before_host_down", self.on_before_host_down)
 
+        self._insert_iptables_rules()
+
         if 'bootstrapping' == __node__['state']:
 
             self.cleanup_hosts_file('/')
@@ -120,6 +124,17 @@ class RabbitMQHandler(ServiceCtlHandler):
                                                            RabbitMQMessages.RABBITMQ_RECONFIGURE,
                                                            RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL,
                                                            RabbitMQMessages.INT_RABBITMQ_HOST_INIT)
+
+
+    def _insert_iptables_rules(self):
+        if iptables.enabled():
+            iptables.FIREWALL.ensure([
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '5672'},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '15672'},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '55672'},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'}
+            ])
+
 
     def cleanup_hosts_file(self, rootdir):
         """ Clean /etc/hosts file """
