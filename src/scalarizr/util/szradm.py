@@ -291,7 +291,7 @@ class GetHttpsCertificateCommand(Command):
         (cert, pkey, cacert)=result
         yield [cert, pkey, cacert]
 
-
+# DEPRECATED
 class ListRoleParamsCommand(Command):
     name = "list-role-params"
     method = "list_role_params"
@@ -333,7 +333,7 @@ class ListVirtualhostsCommand(Command):
         for d in result:
             yield [d.hostname, d.https, d.type, d.raw]
 
-
+# DEPRECATED
 class ListScriptsCommand(Command):
     name = "list-scripts"
     method = "list_scripts"

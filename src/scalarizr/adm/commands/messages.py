@@ -24,7 +24,7 @@ def _szr_string_representer(dumper, data):
         try:
             encoded_data = method(data, encoding)
             style = '|' if ('\n' in data or len(data) >= 128) else None
-            return self.represent_scalar(tag, encoded_data, style)
+            return dumper.represent_scalar(tag, encoded_data, style)
         except ValueError:
             if i == len(data_encodings) - 1:
                 raise
@@ -44,7 +44,7 @@ class ListMessages(Command):
       list-messages [--name=<name>]
 
     Options:
-      -n, --name
+      -n, --name=<name>  Message id
     """
     aliases = ['lm']
 

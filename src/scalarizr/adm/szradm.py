@@ -4,6 +4,7 @@ import os
 import imp
 import time
 import resource
+import inspect
 
 from scalarizr.adm import command as command_module
 
@@ -64,13 +65,8 @@ class Szradm(command_module.Command):
         if version:
             print 'Szradm version: %s.%s' % self.version
         if help:
-            list_subcommands = list(self.subcommands)
-            sub_cmd_help_lines = []
-            for sub_cmd in list_subcommands:
-                sub_cmd_help_lines.append(command_module.get_command_name(sub_cmd))
-                if inspect.isclass(sub_cmd) and sub_cmd.subcommands:
-                    #TODO: rewrite this in single method that uses recursion
-            print self.help() + '\n\nSubcommands:\n  ' + '\n  '.join(list_subcommands)
+            self.subcommands = list(self.subcommands)
+            print self.help() + self._command_help()
 
         if not command:
             return

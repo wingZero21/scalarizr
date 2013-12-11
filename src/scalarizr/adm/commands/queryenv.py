@@ -4,23 +4,20 @@ from scalarizr.adm.command import Command
 from scalarizr.util import system2
 
 
+def transpose(l):
+    return map(list, zip(*l))
+
+
 class Queryenv(Command):
     """
     queryenv command is used to launch queryenv methods.
 
     Usage:
-      queryenv --help
-      queryenv list-roles [--behaviour=<bhvr>] [--role-name=<rolename>] [--with-initializing]
-      queryenv list-virtualhosts [--name=<name>] [--https]
+      queryenv get-https-certificate
       queryenv get-latest-version
       queryenv list-ebs-mountpoints
-      queryenv get-https-certificate
-      queryenv list-role-params
-      queryenv list-scripts [--event=<event>] [--asynchronous] [--name=<name>]
-      queryenv <method> [<args>...]
-
-    General options:
-      -h, --help               Show version.
+      queryenv list-roles [--behaviour=<bhvr>] [--role-name=<rolename>] [--with-initializing]
+      queryenv list-virtualhosts [--name=<name>] [--https]
     
     Options for list-roles:
       -b, --behaviour=<bhvr>      Role behaviour.
@@ -40,6 +37,64 @@ class Queryenv(Command):
         if not hasattr(cls, '_queryenv'):
             cls._queryenv = new_queryenv()
         return cls._queryenv
+
+    def _display_get_https_certificate(self, out):
+        headers = ['cert', 'pkey', 'cacert']
+        print make_table(out, headers)
+
+    def _display_get_latest_version(self, out):
+        print make_table([out], ['version'])
+
+    def _display_list_ebs_mountpoints(self, out):
+        headers = ['name', 'dir', 'createfs', 'isarray', 'volume-id', 'device']
+        table_data = []
+        for d in out:
+            volume_params = [(v.volume_id, v.device) for v in d.volumes]
+            volumes, devices = transpose(volume_params)
+            table_data.append([d.name, d.dir, d.create_fs, d.is_array, volumes, devices])
+        print make_table(table_data, headers)
+
+    def _display_list_roles(self, out):
+        headers = ['behaviour',
+                   'name',
+                   'farm-role-id',
+                   'index',
+                   'internal-ip',
+                   'external-ip',
+                   'replication-master']
+        table_data = []
+        for d in out:
+            behaviour = ', '.join(d.behaviour)
+            for host in d.hosts:
+                table_data.append([behaviour, 
+                                   d.name,
+                                   d.farm_role_id,
+                                   str(host.index),
+                                   host.internal_ip,
+                                   host.external_ip,
+                                   str(host.replication_master)])
+        print make_table(table_data, headers)
+
+    def _display_list_virtualhosts(self, out):
+        headers = ['hostname', 'https', 'type', 'raw']
+        table_data = [[d.hostname, d.https, d.type, d.raw] for d in out]
+        print make_table(table_data, headers)
+
+    def _display_out(self, method, out):
+        all_display_methods = [m for m in dir(self) if m.startswith('_display')]
+        display_method = None
+        for m in all_display_methods:
+            if method.replace('-', '_') in m:
+                display_method = getattr(self, m)
+                break
+
+        if display_method:
+            display_method(self, out)
+        elif isinstance(out, list) and isinstance(out[0], list):
+            print make_table(out)
+        else:
+            print out
+
 
     def _run_queryenv_method(self, method, kwds, kwds_mapping=None):
         """
@@ -62,12 +117,9 @@ class Queryenv(Command):
             if arg_name in argnames:
                 filtered_kwds[arg_name] = v
 
-        return m(**filtered_kwds)
+        self._display_method_out(method, m(**filtered_kwds))
 
-    def __call__(self, method=None, help=False, args=None, **kwds):
-        if help:
-            self.help()
-            return
+    def __call__(self, method=None, **kwds):
         if method == 'list-roles':
             return self._run_queryenv_method(
                 method,

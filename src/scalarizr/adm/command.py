@@ -1,9 +1,14 @@
 import re
 import inspect
+from textwrap import dedent
 
 from docopt import docopt
 from docopt import DocoptExit
+from docopt import DocoptLanguageError
 from docopt import parse_section as get_section
+
+
+TAB_SIZE = 2
 
 
 def camel_to_underscore(name):
@@ -52,9 +57,12 @@ class Command(object):
     def __call__(self):
         raise NotImplementedError('You need to define __call__ method')
 
-    def list_subcommands(self):
-        """Returns list of possible subcommands"""
-        return [get_command_name(cmd) for cmd in self.subcommands]
+    def _command_help(self):
+        usages = '\n'.join((' '*TAB_SIZE*3) + get_command_name(c) for c in self.subcommands)
+        if usages:
+            return '\n%sSubcommands:\n%s' % (' '*TAB_SIZE*2, usages)
+        else:
+            return ''
 
     def help(self):
         doc = self.__doc__
@@ -62,8 +70,7 @@ class Command(object):
             help_usage_string = get_command_name(self) + ' --help\n'
             doc = extended_doc(self.__doc__, help_usage_string)
 
-        subcommands_help = '\nSubcommands:\n' + '\n  '.join(self.list_subcommands())
-        doc = doc + subcommands_help
+        doc = dedent(doc + self._command_help())
 
         return doc
 
@@ -74,7 +81,8 @@ class Command(object):
         """
         for sub_cmd in self.subcommands:
             name = get_command_name(sub_cmd)
-            if subcommand == name or subcommand in sub_cmd.aliases:
+            is_alias = hasattr(sub_cmd, 'aliases') and subcommand in sub_cmd.aliases
+            if subcommand == name or is_alias:
                 return sub_cmd
 
         usage = ''.join(get_section('usage', self.help()))
@@ -88,24 +96,26 @@ class Command(object):
         """
         sub_cmd_definition = self._find_subcommand(subcommand)
         is_class = inspect.isclass(sub_cmd_definition)
-
+        kwds = {}
         if is_class:
             sub_cmd = sub_cmd_definition()
             sub_cmd_doc = sub_cmd.help()
+            accepts_help = 'help' in inspect.getargspec(sub_cmd.__call__).args
         else:
             sub_cmd = sub_cmd_definition
             sub_cmd_doc = sub_cmd.__doc__
-
-        try:
-            kwds = parse_command_line(args, sub_cmd_doc)
-            if 'self' in inspect.getargspec(sub_cmd_definition).args:
+            spec_args = inspect.getargspec(sub_cmd_definition).args
+            accepts_help = 'help' in spec_args
+            if 'self' in spec_args:
                 kwds['self'] = self
-        except DocoptExit:
+        try:
+            kwds.update(parse_command_line(args, sub_cmd_doc))
+        except (DocoptExit, DocoptLanguageError), e:
             usage = ''.join(get_section('usage', sub_cmd_doc))
-            raise InvalidCall('%s: invalid call' % subcommand, subcommand, usage)
+            msg = '%s: invalid call.\n%s' % (subcommand, e.message)
+            raise InvalidCall(msg, subcommand, usage)
 
-        # TODO: maybe do this some other way
-        if 'help' in kwds:
+        if 'help' in kwds and not accepts_help:
             print sub_cmd_doc
         else:
             return sub_cmd(**kwds)
