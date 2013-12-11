@@ -123,7 +123,7 @@ class MySQLAPI(object):
                 backup.update(backup_conf or {})
 
                 if backup['type'] == 'snap_mysql':
-                    backup['descrition'].replace('backup', 'data bundle')
+                    backup['description'].replace('backup', 'data bundle')
                     backup['volume'] = __mysql__.volume
 
                 bak = op.data['bak'] = backup_module.backup(**backup)
@@ -160,7 +160,7 @@ class MySQLAPI(object):
                 # For Scalr < 4.5.0
                 c, e, t = sys.exc_info()
                 msg_name = 'DbMsr_CreateBackupResult' \
-                            if bak.type == 'mysqldump' else \
+                            if backup['type'] == 'mysqldump' else \
                             'DbMsr_CreateDataBundleResult'
                 __node__.messaging.send(msg_name, {
                     'db_type': __mysql__.behavior,

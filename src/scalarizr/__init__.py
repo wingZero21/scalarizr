@@ -3,6 +3,7 @@ import sys
 __version__ = open(os.path.join(os.path.dirname(__file__), 'version')).read().strip()
 
 
+'''
 class ScalarizrModule(object):
     def __getattr__(self, name):
         if name in globals():
@@ -16,3 +17,4 @@ class ScalarizrModule(object):
 
 
 sys.modules[__name__] = ScalarizrModule()
+'''
