@@ -1,6 +1,3 @@
-from __future__ import with_statement
-from __future__ import with_statement
-
 import sys
 import os
 import glob
@@ -44,56 +41,32 @@ def device2name(device):
     return device.replace('/xvd', '/sd')
 
 
-class FreeDeviceLetterMgr(object):
+def get_free_name():
+    # Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
+    s = 7 if linux.os['release'] and linux.os.redhat_family else 5
+    available = set(string.ascii_lowercase[s:16])        
 
-    def __init__(self):
-        # Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-        s = 7 if linux.os['release'] and linux.os['family'] == 'RedHat' else 5
-        self._all = list(string.ascii_lowercase[s:16])
-        self._acquired = set()
-        self._lock = threading.Lock()
-        self._local = threading.local()
+    conn = __node__['ec2']['connect_ec2']()
+    filters = {
+        'attachment.instance-id': __node__['ec2']['instance_id']
+    }
+    attached = list(vol.attach_data.device[-1]
+                for vol in conn.get_all_volumes(filters=filters))
+    dirty_detached = set()
+    if not linux.os.windows:
+        dirty_detached = __node__['ec2']['t1micro_detached_ebs'] or set()
+        dirty_detached = set(name[-1] for name in dirty_detached)
 
-
-    def __enter__(self):
-        if not linux.os.windows_family:
-            with self._lock:
-                detached = __node__['ec2']['t1micro_detached_ebs'] or list()
-                detached = set(name[-1] for name in detached)
-            letters = list(set(self._all) - self._acquired - detached)
-            for l in letters:
-                pattern = name2device('/dev/sd' + l) + '*'
-                if not glob.glob(pattern):
-                    with self._lock:
-                        if not l in self._acquired:
-                            self._acquired.add(l)
-                            self._local.letter = l
-                            return self
-            msg = 'No free letters for block device name remains'
-            raise storage2.StorageError(msg)
-        else:
-            conn = __node__['ec2']['connect_ec2']()
-            devices = list(vol.attach_data.device
-                        for vol in conn.get_all_volumes(filters={'attachment.instance-id': __node__['ec2']['instance_id']}))
-            acquired = list(device[-1] for device in devices)
-            avail = sorted(list(set(self._all) - set(acquired)))
-            try:
-                letter = avail[0]
-                self._local.letter = letter
-                self._acquired.add(letter)
-                return self
-            except IndexError:
-                msg = 'No free letters for block device name remains'
-                raise storage2.StorageError(msg)
-
-
-    def get(self):
-        return self._local.letter
-
-    def __exit__(self, *args):
-        if hasattr(self._local, 'letter'):
-            self._acquired.remove(self._local.letter)
-            del self._local.letter
+    try:
+        lets = sorted(list(available - attached - dirty_detached))
+        let = lets[0]
+    except IndexError:
+        msg = 'No free letters for block device name remains'
+        raise storage2.StorageError(msg)
+    else:
+        name = '/dev/sd' if not linux.os.windows else 'xvd'
+        name = name + let
+        return name
 
 
 class EbsMixin(object):
@@ -102,8 +75,8 @@ class EbsMixin(object):
 
     def __init__(self):
         self.error_messages.update({
-                'no_connection': 'EC2 connection should be available '
-                                                'to perform this operation'
+            'no_connection': 'EC2 connection should be available '
+                                'to perform this operation'
         })
 
 
@@ -156,7 +129,7 @@ class EbsMixin(object):
                 LOG.debug('Applying tags to EBS volume %s (tags: %s)', obj_id, tags)
                 ec2_conn.create_tags([obj_id], tags)
                 break
-            except boto.exception.EC2ResponseError,e:
+            except boto.exception.EC2ResponseError, e:
                 if e.errno == 400:
                     LOG.debug('Failed to apply tags. Retrying in 10s.')
                     time.sleep(10)
@@ -180,7 +153,6 @@ class EbsMixin(object):
 
 class EbsVolume(base.Volume, EbsMixin):
 
-    _free_device_letter_mgr = FreeDeviceLetterMgr()
     _global_timeout = 3600
 
     def __init__(self,
@@ -340,25 +312,20 @@ class EbsVolume(base.Volume, EbsMixin):
                     self._wait_attachment_state_change(ebs)
                 if ebs.attachment_state() == 'attached':
                     self._detach_volume(ebs)
-                with self._free_device_letter_mgr:
-                    name = '/dev/sd' if not linux.os.windows_family else 'xvd'
-                    name += self._free_device_letter_mgr.get()
-                    self._attach_volume(ebs, name)
+                device, name = self._attach_volume(ebs)
 
             else:
                 name = ebs.attach_data.device
+                device = name2device(name)
 
             self._config.update({
                     'id': ebs.id,
                     'name': name,
+                    'device': device,
                     'avail_zone': zone,
                     'size': size,
                     'snap': None
             })
-
-        if self.name:
-            self.device = name2device(self.name)
-
 
 
     def _snapshot(self, description, tags, **kwds):
@@ -429,35 +396,42 @@ class EbsVolume(base.Volume, EbsMixin):
         return snapshot
 
 
-    def _attach_volume(self, volume, device_name=None):
+    def _attach_volume(self, volume):
         ebs = self._ebs_volume(volume)
 
-        LOG.debug('Attaching EBS volume %s (device: %s)', ebs.id, device_name or 'auto')
-        ebs.attach(self._instance_id(), device_name or '')
-        LOG.debug('Checking that EBS volume %s is attached', ebs.id)
-        msg = "EBS volume %s wasn't attached. Timeout reached (%s seconds)" % (
-                        ebs.id, self._global_timeout)
-        util.wait_until(
-                lambda: ebs.update() and ebs.attachment_state() == 'attached',
-                logger=LOG, timeout=self._global_timeout,
-                error_text=msg
-        )
-        LOG.debug('EBS volume %s attached', ebs.id)
+        with self.attach_lock:
+            device_name = get_free_name()
+            taken_before = base.taken_devices()
+            volume_id = ebs.id
 
-        if not linux.os.windows_family:
-            device = name2device(device_name)
-            LOG.debug('EBS device name %s is mapped to %s in operation system',
-                            device_name, device)
-            LOG.debug('Checking that device %s is available', device)
-            msg = 'Device %s is not available in operation system. ' \
-                            'Timeout reached (%s seconds)' % (
-                            device, self._global_timeout)
+            LOG.debug('Attaching EBS volume %s (name: %s)', volume_id, device_name)
+            ebs.attach(self._instance_id(), device_name)
+            LOG.debug('Checking that EBS volume %s is attached', volume_id)
+            msg = "EBS volume %s wasn't attached. Timeout reached (%s seconds)" % (
+                            ebs.id, self._global_timeout)
             util.wait_until(
-                    lambda: os.access(device, os.F_OK | os.R_OK),
-                    sleep=1, logger=LOG, timeout=self._global_timeout,
+                    lambda: ebs.update() and ebs.attachment_state() == 'attached',
+                    logger=LOG, timeout=self._global_timeout,
                     error_text=msg
             )
-            LOG.debug('Device %s is available', device)
+            LOG.debug('EBS volume %s attached', volume_id)
+
+
+            if not linux.os.windows_family:
+                util.wait_until(lambda: base.taken_devices() > taken_before,
+                        start_text='Checking that volume %s is available in OS' % volume_id,
+                        timeout=30,
+                        sleep=1,
+                        error_text='Volume %s attached but not available in OS' % volume_id)
+
+                devices = list(base.taken_devices() - taken_before)
+                if len(devices) > 1:
+                    msg = "While polling for attached device, got multiple new devices: %s. " \
+                        "Don't know which one to select".format(devices)
+                    raise Exception(msg)
+                return devices[0], device_name
+            else:
+                return device_name, device_name
 
 
     def _detach_volume(self, volume, force=False):
