@@ -162,7 +162,10 @@ class UpdClientAPI(object):
                 devel_repo = pkgmgr.repository('dev-scalr', repo_url)
                 # Pin repository
                 if linux.os.redhat_family or linux.os.oracle_family:
-                    self.pkgmgr.installed('yum-plugin-priorities')
+                    pkg = 'yum-priorities' \
+                            if linux.os['release'] < (6, 0) else \
+                            'yum-plugin-priorities'
+                    self.pkgmgr.installed(pkg)
                     devel_repo.config += 'priority=10\n'
                 else:
                     if os.path.isdir('/etc/apt/preferences.d'):
