@@ -940,6 +940,7 @@ class Service(object):
             wait_until(upd_ready, timeout=60, sleep=1)
             upd_state = upd.status()['state']
             if upd_state.startswith('in-progress'):
+                self._logger.info('Stopped (UpdateClient upgrades Scalarizr)')
                 sys.exit()
             elif upd_state == 'completed/wait-ack':
                 upd_svs.restart()

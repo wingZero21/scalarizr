@@ -107,6 +107,45 @@ class PackageMgr(object):
         ''' Compares 2 package versions '''
         raise NotImplementedError()
 
+    def installed(self, name, version=None, updatedb=False):
+        '''
+        Ensure that package installed
+        '''
+        if updatedb:
+            self.updatedb()
+
+        installed = self.info(name)['installed']
+        if not installed:
+            LOG.info('Installing %s=%s', name, version)
+            self.install(name, version)
+
+    def latest(self, name, updatedb=True):
+        '''
+        Ensure that latest version of package installed
+        '''
+        if updatedb:
+            self.updatedb()
+
+        info_dict = self.info(name)
+        candidate = info_dict['candidate']
+        installed = info_dict['installed']
+
+        if candidate or not installed:
+            LOG.info('Installing %s=%s', name, candidate)
+            self.install(name, candidate)
+
+    def removed(self, name, purge=False):
+        '''
+        Ensure that package removed (purged)
+        '''
+        installed = self.info(name)['installed']
+        if purge or installed:
+            if installed:
+                LOG.info('Uninstalling %s=%s', name, installed)
+            else:
+                LOG.info('Uninstalling %s', name)
+            self.remove(name, purge)
+
 
 class AptPackageMgr(PackageMgr):
     def apt_get_command(self, command, **kwds):
@@ -564,55 +603,17 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
                                       '--recv', gpg_keyid),
                                      raise_exc=False)
 
+# Deprecated functions
 
 def updatedb():
-    '''
-    Sync packages databases
-    '''
-    mgr = package_mgr()
-    mgr.updatedb()
-
+    return package_mgr().updatedb()
 
 def installed(name, version=None, updatedb=False):
-    '''
-    Ensure that package installed
-    '''
-    mgr = package_mgr()
-    if updatedb:
-        mgr.updatedb()
-
-    installed = mgr.info(name)['installed']
-    if not installed:
-        LOG.info('Installing %s=%s', name, version)
-        mgr.install(name, version)
-
+    return package_mgr().installed(name, version, updatedb)
 
 def latest(name, updatedb=True):
-    '''
-    Ensure that latest version of package installed
-    '''
-    mgr = package_mgr()
-    if updatedb:
-        mgr.updatedb()
-
-    info_dict = mgr.info(name)
-    candidate = info_dict['candidate']
-    installed = info_dict['installed']
-
-    if candidate or not installed:
-        LOG.info('Installing %s=%s', name, candidate)
-        mgr.install(name, candidate)
-
+    return package_mgr().latest(name, updatedb)
 
 def removed(name, purge=False):
-    '''
-    Ensure that package removed (purged)
-    '''
-    mgr = package_mgr()
-    installed = mgr.info(name)['installed']
-    if purge or installed:
-        if installed:
-            LOG.info('Uninstalling %s=%s', name, installed)
-        else:
-            LOG.info('Uninstalling %s', name)
-        mgr.remove(name, purge)
+    return package_mgr().removed(name, purge)
+

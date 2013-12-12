@@ -162,7 +162,8 @@ class UpdClientAPI(object):
                 devel_repo = pkgmgr.repository('dev-scalr', repo_url)
                 # Pin repository
                 if linux.os.redhat_family or linux.os.oracle_family:
-                    devel_repo.config += 'protected=1\n'
+                    self.pkgmgr.installed('yum-plugin-priorities')
+                    devel_repo.config += 'priority=10\n'
                 else:
                     if os.path.isdir('/etc/apt/preferences.d'):
                         prefile = '/etc/apt/preferences.d/dev-scalr'
@@ -265,9 +266,9 @@ class UpdClientAPI(object):
 
 
     def uninstall(self):
-        pkgmgr.removed(self.package)
+        self.pkgmgr.removed(self.package)
         if not linux.os.windows:
-            pkgmgr.removed('scalarizr-base', purge=True)
+            self.pkgmgr.removed('scalarizr-base', purge=True)
         if linux.os.debian_family:
             self.pkgmgr.apt_get_command('autoremove')     
 
@@ -375,23 +376,23 @@ class UpdClientAPI(object):
                     exclusive=True, notifies=notifies)
 
     def _init_update_status(self):
-            self.update_status = {
-                # object state
-                'server_id': self.server_id,
-                'system_id': self.system_id,
-                'platform': self.platform,
-                'queryenv_url': self.queryenv_url,
-                'messaging_url': self.messaging_url,
-                'scalr_id': self.scalr_id,
-                'scalr_version': self.scalr_version,
-                # update info
-                'repository': self.repository,
-                'package': self.package,
-                'executed_at': time.strftime(DATE_FORMAT, time.gmtime()),
-                'dist': '{name} {release} {codename}'.format(**linux.os),
-                'state': 'in-progress/prepare',
-                'error': None
-            }        
+        self.update_status = {
+            # object state
+            'server_id': self.server_id,
+            'system_id': self.system_id,
+            'platform': self.platform,
+            'queryenv_url': self.queryenv_url,
+            'messaging_url': self.messaging_url,
+            'scalr_id': self.scalr_id,
+            'scalr_version': self.scalr_version,
+            # update info
+            'repository': self.repository,
+            'package': self.package,
+            'executed_at': time.strftime(DATE_FORMAT, time.gmtime()),
+            'dist': '{name} {release} {codename}'.format(**linux.os),
+            'state': 'in-progress/prepare',
+            'error': None
+        }        
 
     def save_update_status(self):
         with open(self.status_file, 'w') as fp:
