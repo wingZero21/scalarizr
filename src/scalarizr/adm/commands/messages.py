@@ -36,6 +36,14 @@ yaml.add_representer(str, _szr_string_representer)
 db_connection = bus.db
 
 
+def _list_factory(cursor, row):
+    """Row factory used to translate rows into lists"""
+    return list(row)
+
+
+db_connection.row_factory = _list_factory
+
+
 class ListMessages(Command):
     """
     Display list of messages that were sent/recieved on this server.
@@ -54,11 +62,12 @@ class ListMessages(Command):
             row[4] = 'yes' if row[4] else 'no'
 
         header_fields = ['id', 'name', 'date', 'direction', 'handled?']
-        table = make_table(res, header_fields)
+        table = make_table(data, header_fields)
         print table
 
     def __call__(self, name=None):
         try:
+            db_connection
             cursor = db_connection.cursor()
             query = "SELECT `message_id`,`message_name`,\
                 `out_last_attempt_time`,`is_ingoing`,`in_is_handled`\
@@ -131,7 +140,7 @@ class MarkAsUnhandled(Command):
             row[4] = 'yes' if row[4] else 'no'
 
         header_fields = ['id', 'name', 'date', 'direction', 'handled?']
-        table = make_table(res, header_fields)
+        table = make_table(data, header_fields)
         print table
     
     def __call__(self, message_id):
