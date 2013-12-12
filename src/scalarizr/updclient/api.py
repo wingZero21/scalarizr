@@ -203,7 +203,7 @@ class UpdClientAPI(object):
             raise NoSystemUUID()
         return ret
 
-    def bootstrap(self):
+    def bootstrap(self, dry_run=False):
         try:
             self.system_id = self.get_system_id()
         except:
@@ -251,13 +251,14 @@ class UpdClientAPI(object):
 
         self.system_matches = system_matches
         if not self.system_matches:
-            self.update(bootstrap=True)
+            if not dry_run:
+                self.update(bootstrap=True)
         else:
             if self.update_state == 'completed/wait-ack':
                 self.update_state = 'completed'
             else:
                 self.update_state = 'noop'
-            self.save_lock()
+        self.save_lock()
 
 
     def uninstall(self):

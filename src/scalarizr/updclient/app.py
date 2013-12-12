@@ -8,7 +8,6 @@ import SocketServer
 import logging
 import optparse
 import os
-import re
 import select
 import signal
 import socket
@@ -84,8 +83,10 @@ class UpdClient(util.Server):
             optparse.Option('-l', '--log-file', default=self.log_file, help='log file'),
             optparse.Option('-v', '--verbose', action='store_true', default=False, 
                             help='verbose logging'),
-            optparse.Option('--system-uuid', action='store_true', default=False, 
-                            help='get system uuid')
+            optparse.Option('--get-system-id', action='store_true', default=False, 
+                            help='print system-id and exit'),
+            optparse.Option('--make-lock-file', action='store_true', default=False,
+                            help='make lock file with current state and exit')
         ))
         self.api = update_api.UpdClientAPI()       
 
@@ -124,14 +125,22 @@ class UpdClient(util.Server):
         opts = self.optparser.parse_args()[0]
         self.__dict__.update(vars(opts))
 
-        if self.__dict__.get('system_uuid'):
+        with open(self.pid_file, 'w+') as f:
+            f.write(str(os.getpid()))
+        self._wait_network()
+
+        if self.__dict__.get('get_system_id'):
             try:
-                print update_api.system_uuid()
+                print self.api.get_system_id()
                 sys.exit()
             except update_api.NoSystemUUID:
-                print "System UUID not detected"
+                print "system-id not detected"
                 sys.exit(1)
-        
+        elif self.__dict__.get('make_lock_file'):
+            self.api.bootstrap(dry_run=True)
+            print 'saved lock file: {0}'.format(self.api.lock_file)
+
+
         if self.daemonize:
             util.daemonize()
         if not linux.os.windows_family:
@@ -142,9 +151,6 @@ class UpdClient(util.Server):
         LOG.info('Starting updclient (pid: %s)', os.getpid())
 
         try:
-            with open(self.pid_file, 'w+') as f:
-                f.write(str(os.getpid()))
-            self._wait_network()
             self._start_api()
             self.api.bootstrap()
         except:

@@ -529,6 +529,10 @@ if [ -n "$installed_version" ]; then
 			EOF
 		fi
 	fi
+
+	if dpkg --compare-versions "$installed_version" lt '0.23.0'; then
+		scalr-upd-client --make-lock-file
+	fi
 fi
 
 chown -R root:root /etc/scalr
@@ -541,20 +545,8 @@ ln -s /usr/bin/szradm /usr/local/bin/szradm
 fi
 
 
-if dpkg-query --status scalr-ami-scripts >/dev/null 2>&1; then
-	cat <<EOF
-WARNING: 
-  scalr-ami-scripts package is installed on this server. 
-  scalarizr is incompatible with scalr-ami-scripts and you should migrate servers in a proper way. 
-  You can read more here: http://wiki.scalr.net/Tutorials/AMI_Scripts_to_Scalarizr_transition
-
-EOF
-fi
-
-
 NAME="scalarizr"
 INIT_SCRIPT="/etc/init.d/$NAME"
-
 
 
 if [ -x $INIT_SCRIPT ]; then

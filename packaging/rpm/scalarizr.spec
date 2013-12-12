@@ -307,6 +307,10 @@ if compare_versions "$installed_version" lt '0.9.r4762-1'; then
 	fi
 fi
 
+if compare_versions "$installed_version" lt '0.23.0'; then
+	scalr-upd-client --make-lock-file
+fi
+
 sync
 umount -l "$priv_cnf_dir" 2>&1 || :	
 
