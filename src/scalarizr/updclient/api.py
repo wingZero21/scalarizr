@@ -174,8 +174,6 @@ class UpdClientAPI(object):
                             'Pin-Priority: 990\n'
                         ).format(norm_branch))
 
-                # for RPM it's important to uninstall package before protect devel repository
-                self.uninstall() 
                 devel_repo.ensure()
             else:
                 self.repo_url = repo_url
