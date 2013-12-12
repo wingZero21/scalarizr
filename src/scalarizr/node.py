@@ -314,16 +314,15 @@ class ScalrVersion(Store):
 
 
 node = {
-        'server_id,role_id,farm_id,farm_role_id,env_id,role_name,server_index':
+        'server_id,role_id,farm_id,farm_role_id,env_id,role_name,server_index,queryenv_url':
                                 Ini(os.path.join(private_dir, 'config.ini'), 'general'),
         'message_format': Ini(os.path.join(private_dir, 'config.ini'), 'messaging_p2p'),
-        'platform_name': Ini(os.path.join(public_dir, 'config.ini'), 'general'),
+        'platform_name,crypto_key_path': Ini(os.path.join(public_dir, 'config.ini'), 'general'),
         'platform': Attr('scalarizr.bus', 'bus.platform'),
-        'behavior': IniOption(
-                                                [public_dir + '/config.ini', private_dir + '/config.ini'], 
-                                                'general', 'behaviour',
-                                                lambda val: val.strip().split(','),
-                                                lambda val: ','.join(val)),
+        'behavior': IniOption([public_dir + '/config.ini', private_dir + '/config.ini'], 
+                              'general', 'behaviour',
+                              lambda val: val.strip().split(','),
+                              lambda val: ','.join(val)),
         'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),
         'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
         'state': File(private_dir + '/.state'),

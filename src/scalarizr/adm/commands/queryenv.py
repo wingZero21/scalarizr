@@ -1,13 +1,26 @@
 import inspect
+import re
 
 from scalarizr.util import system2
 from scalarizr.adm.command import Command
 from scalarizr.adm.command import get_section
 from scalarizr.adm.command import TAB_SIZE
-
+from scalarizr.adm.util import make_table
+from scalarizr.node import __node__
+from scalarizr.queryenv import QueryEnvService
 
 def transpose(l):
     return map(list, zip(*l))
+
+
+def new_queryenv():
+    queryenv_creds = (__node__['queryenv_url'],
+                      __node__['server_id'],
+                      __node__['crypto_key_path'] )
+    queryenv = QueryEnvService(*queryenv_creds)
+    api_version = queryenv.get_latest_version()
+    queryenv = QueryEnvService(*queryenv_creds, api_version=api_version) 
+    return queryenv
 
 
 class Queryenv(Command):
@@ -36,11 +49,11 @@ class Queryenv(Command):
 
     def help(self):
         doc = super(Queryenv, self).help()
-        methods = [(' '*TAB_SIZE*3) + m for m in self.supported_methods()]
-        return doc + (' '*TAB_SIZE*2) + '\nSupported methods:\n' + '\n'.join(methods)
+        methods = [(' '*TAB_SIZE) + m for m in self.supported_methods()]
+        return doc + '\nSupported methods:\n' + '\n'.join(methods)
 
     def supported_methods(self):
-        usage_section = get_section(self.__doc__)
+        usage_section = get_section('usage', self.__doc__)
         usages = re.findall(r'queryenv .+?\s', usage_section)
         methods = [s.split()[1] for s in usages]
         return methods
@@ -102,7 +115,7 @@ class Queryenv(Command):
                 break
 
         if display_method:
-            display_method(self, out)
+            display_method(out)
         elif isinstance(out, list) and isinstance(out[0], list):
             print make_table(out)
         else:
@@ -130,7 +143,7 @@ class Queryenv(Command):
             if arg_name in argnames:
                 filtered_kwds[arg_name] = v
 
-        self._display_method_out(method, m(**filtered_kwds))
+        return m(**filtered_kwds)
 
     def __call__(self, **kwds):
         method = None
