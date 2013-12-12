@@ -85,8 +85,8 @@ class UpdClient(util.Server):
                             help='verbose logging'),
             optparse.Option('--get-system-id', action='store_true', default=False, 
                             help='print system-id and exit'),
-            optparse.Option('--make-lock-file', action='store_true', default=False,
-                            help='make lock file with current state and exit')
+            optparse.Option('--make-status-file', action='store_true', default=False,
+                            help='make status file with current state and exit')
         ))
         self.api = update_api.UpdClientAPI()       
 
@@ -136,9 +136,10 @@ class UpdClient(util.Server):
             except update_api.NoSystemUUID:
                 print "system-id not detected"
                 sys.exit(1)
-        elif self.__dict__.get('make_lock_file'):
+        elif self.__dict__.get('make_status_file'):
             self.api.bootstrap(dry_run=True)
-            print 'saved lock file: {0}'.format(self.api.lock_file)
+            print 'saved lock file: {0}'.format(self.api.status_file)
+            sys.exit() 
 
 
         if self.daemonize:

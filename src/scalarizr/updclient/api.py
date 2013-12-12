@@ -88,7 +88,7 @@ class UpdClientAPI(object):
     else:
         _etc_path = '/etc/scalr'
     _private_path = os.path.join(_etc_path, 'private.d')
-    lock_file = os.path.join(_private_path, 'update.lock')
+    status_file = os.path.join(_private_path, 'update.lock')
     crypto_file = os.path.join(_private_path, 'keys', 'default')
     del _etc_path, _private_path
 
@@ -209,20 +209,20 @@ class UpdClientAPI(object):
             # this is the optimal behavior cause that's ensure latest available package
             self.system_id = str(uuid.uuid4())
         system_matches = False
-        if os.path.exists(self.lock_file):
-            LOG.debug('Checking %s', self.lock_file)
-            with open(self.lock_file) as fp:
-                updatelock = json.load(fp)
-            system_matches = updatelock['system_id'] == self.system_id
+        if os.path.exists(self.status_file):
+            LOG.debug('Checking %s', self.status_file)
+            with open(self.status_file) as fp:
+                update_status = json.load(fp)
+            system_matches = update_status['system_id'] == self.system_id
             if not system_matches:
                 LOG.debug('System ID in lock file and machine one not matched: %s != %s', 
-                        updatelock['system_id'], self.system_id)
+                        update_status['system_id'], self.system_id)
             else:
                 LOG.debug('Serial number in lock file matches machine one')
 
         if system_matches:
-            self.__dict__.update(updatelock)
-            self.update_status = updatelock
+            self.__dict__.update(update_status)
+            self.update_status = update_status
         else:
             user_data = self.meta.user_data()
             norm_user_data(user_data)
@@ -251,12 +251,14 @@ class UpdClientAPI(object):
         if not self.system_matches:
             if not dry_run:
                 self.update(bootstrap=True)
+            else:
+                self._init_update_status()
         else:
             if self.update_state == 'completed/wait-ack':
                 self.update_state = 'completed'
             else:
                 self.update_state = 'noop'
-        self.save_lock()
+        self.save_update_status()
 
 
     def uninstall(self):
@@ -300,24 +302,7 @@ class UpdClientAPI(object):
         reports = self.is_client_mode and not bootstrap
 
         def do_update(op):
-            self.sync()
-            self.update_status = {
-                # object state
-                'server_id': self.server_id,
-                'system_id': self.system_id,
-                'platform': self.platform,
-                'queryenv_url': self.queryenv_url,
-                'messaging_url': self.messaging_url,
-                'scalr_id': self.scalr_id,
-                'scalr_version': self.scalr_version,
-                # update info
-                'repository': self.repository,
-                'package': self.package,
-                'executed_at': time.strftime(DATE_FORMAT, time.gmtime()),
-                'dist': '{name} {release} {codename}'.format(**linux.os),
-                'state': 'in-progress/prepare',
-                'error': None
-            }
+            self._init_update_status()
             old_pkgmgr_logger = pkgmgr.LOG
             try:
                 pkgmgr.LOG = op.logger
@@ -357,7 +342,7 @@ class UpdClientAPI(object):
                     self.pkgmgr.install(self.package, self.update_status['version'])
 
                     self.update_state = 'completed/wait-ack'
-                    self.save_lock()
+                    self.save_update_status()
 
                     if not self.daemon.running:
                         self.daemon.start()
@@ -382,8 +367,28 @@ class UpdClientAPI(object):
         return self.op_api.run('scalarizr.update', do_update, async=async, 
                     exclusive=True, notifies=notifies)
 
-    def save_lock(self):
-        with open(self.lock_file, 'w') as fp:
+    def _init_update_status(self):
+            self.sync()
+            self.update_status = {
+                # object state
+                'server_id': self.server_id,
+                'system_id': self.system_id,
+                'platform': self.platform,
+                'queryenv_url': self.queryenv_url,
+                'messaging_url': self.messaging_url,
+                'scalr_id': self.scalr_id,
+                'scalr_version': self.scalr_version,
+                # update info
+                'repository': self.repository,
+                'package': self.package,
+                'executed_at': time.strftime(DATE_FORMAT, time.gmtime()),
+                'dist': '{name} {release} {codename}'.format(**linux.os),
+                'state': 'in-progress/prepare',
+                'error': None
+            }        
+
+    def save_update_status(self):
+        with open(self.status_file, 'w') as fp:
             json.dump(self.update_status, fp)     
 
     def report(self, ok):
