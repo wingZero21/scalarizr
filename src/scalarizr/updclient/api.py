@@ -15,6 +15,7 @@ import re
 import binascii
 import shutil
 import uuid
+import pprint
 
 from scalarizr import linux, queryenv, rpc
 from scalarizr.bus import bus
@@ -88,7 +89,7 @@ class UpdClientAPI(object):
     else:
         _etc_path = '/etc/scalr'
     _private_path = os.path.join(_etc_path, 'private.d')
-    status_file = os.path.join(_private_path, 'update.lock')
+    status_file = os.path.join(_private_path, 'update.status')
     crypto_file = os.path.join(_private_path, 'keys', 'default')
     del _etc_path, _private_path
 
@@ -228,7 +229,8 @@ class UpdClientAPI(object):
             norm_user_data(user_data)
 
             self.__dict__.update(user_data)
-            self._try_init_devel(user_data)
+            if not dry_run:
+                self._try_init_devel(user_data)
 
             crypto_dir = os.path.dirname(self.crypto_file)
             if not os.path.exists(crypto_dir):
@@ -249,10 +251,11 @@ class UpdClientAPI(object):
 
         self.system_matches = system_matches
         if not self.system_matches:
-            if not dry_run:
-                self.update(bootstrap=True)
+            if dry_run:
+                self._sync()
+                self._init_update_status()                
             else:
-                self._init_update_status()
+                self.update(bootstrap=True)
         else:
             if self.update_state == 'completed/wait-ack':
                 self.update_state = 'completed'
@@ -269,7 +272,7 @@ class UpdClientAPI(object):
             self.pkgmgr.apt_get_command('autoremove')     
 
 
-    def sync(self):
+    def _sync(self):
         globs = self.queryenv.get_global_config()['params']
         self.__dict__.update((key[7:].replace('.', '_'), value) 
                     for key, value in globs.items() 
@@ -282,6 +285,8 @@ class UpdClientAPI(object):
         self.scalr_id = globs['scalr.id']
         self.scalr_version = globs['scalr.version']
         
+
+    def _ensure_repos(self):
         repo = pkgmgr.repository('scalr-{0}'.format(self.repository), self.repo_url)
         # Delete previous repository 
         for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr-*'):
@@ -302,6 +307,8 @@ class UpdClientAPI(object):
         reports = self.is_client_mode and not bootstrap
 
         def do_update(op):
+            self._sync()
+            self._ensure_repos()
             self._init_update_status()
             old_pkgmgr_logger = pkgmgr.LOG
             try:
@@ -368,7 +375,6 @@ class UpdClientAPI(object):
                     exclusive=True, notifies=notifies)
 
     def _init_update_status(self):
-            self.sync()
             self.update_status = {
                 # object state
                 'server_id': self.server_id,
@@ -389,6 +395,7 @@ class UpdClientAPI(object):
 
     def save_update_status(self):
         with open(self.status_file, 'w') as fp:
+            LOG.debug('Saving status: %s', pprint.pformat(self.update_status))
             json.dump(self.update_status, fp)     
 
     def report(self, ok):

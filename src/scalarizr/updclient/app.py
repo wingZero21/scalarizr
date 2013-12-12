@@ -125,8 +125,7 @@ class UpdClient(util.Server):
         opts = self.optparser.parse_args()[0]
         self.__dict__.update(vars(opts))
 
-        with open(self.pid_file, 'w+') as f:
-            f.write(str(os.getpid()))
+        util.init_logging(self.log_file, self.verbose)
         self._wait_network()
 
         if self.__dict__.get('get_system_id'):
@@ -137,10 +136,11 @@ class UpdClient(util.Server):
                 print "system-id not detected"
                 sys.exit(1)
         elif self.__dict__.get('make_status_file'):
+            if os.path.exists(self.api.status_file):
+                os.unlink(self.api.status_file)
             self.api.bootstrap(dry_run=True)
             print 'saved lock file: {0}'.format(self.api.status_file)
             sys.exit() 
-
 
         if self.daemonize:
             util.daemonize()
@@ -148,8 +148,9 @@ class UpdClient(util.Server):
             signal.signal(signal.SIGHUP, self.onSIGHUP)
             signal.signal(signal.SIGTERM, self.onSIGTERM)
 
-        util.init_logging(self.log_file, self.verbose)
         LOG.info('Starting updclient (pid: %s)', os.getpid())
+        with open(self.pid_file, 'w+') as fp:
+            fp.write(str(os.getpid()))
 
         try:
             self._start_api()
@@ -210,7 +211,6 @@ class UpdClient(util.Server):
 
             self.api_thread = threading.Thread(target=serve)
             self.api_thread.start()  
-
 
 
     def _wait_network(self):
