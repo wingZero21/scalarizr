@@ -5,10 +5,9 @@ import itertools
 
 def make_table(data_rows, header=None):
     """Returns PrettyTable object applicable to print"""
-    table = prettytable.PrettyTable()
-    table.header = bool(header)
     max_row_length = len(header) if header else max(map(len, data_rows))
-    table.field_names = header if header else xrange(max_row_length)
+    table = prettytable.PrettyTable(header if header else range(max_row_length))
+    table.header = bool(header)
 
     for row in data_rows:
         row_length = len(row)

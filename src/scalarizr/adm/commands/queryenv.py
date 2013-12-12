@@ -1,7 +1,9 @@
 import inspect
 
-from scalarizr.adm.command import Command
 from scalarizr.util import system2
+from scalarizr.adm.command import Command
+from scalarizr.adm.command import get_section
+from scalarizr.adm.command import TAB_SIZE
 
 
 def transpose(l):
@@ -31,6 +33,17 @@ class Queryenv(Command):
 
     def __init__(self):
         super(Queryenv, self).__init__()
+
+    def help(self):
+        doc = super(Queryenv, self).help()
+        methods = [(' '*TAB_SIZE*3) + m for m in self.supported_methods()]
+        return doc + (' '*TAB_SIZE*2) + '\nSupported methods:\n' + '\n'.join(methods)
+
+    def supported_methods(self):
+        usage_section = get_section(self.__doc__)
+        usages = re.findall(r'queryenv .+?\s', usage_section)
+        methods = [s.split()[1] for s in usages]
+        return methods
 
     @classmethod
     def queryenv(cls):
@@ -119,14 +132,29 @@ class Queryenv(Command):
 
         self._display_method_out(method, m(**filtered_kwds))
 
-    def __call__(self, method=None, **kwds):
+    def __call__(self, **kwds):
+        method = None
+        supported_methods = self.supported_methods()
+        for kwd in kwds.keys():
+            if kwd in supported_methods:
+                method = kwd
+                kwds.pop(kwd)
+                break
+
+        if not method:
+            # if supported method was not found in kwds, assuming that kwds
+            # contains only one element which is method name so we can call it
+            # without parameters
+            method = kwds.keys()[0]
+
         if method == 'list-roles':
-            return self._run_queryenv_method(
+            out = self._run_queryenv_method(
                 method,
                 kwds,
                 {'with_initializing': 'with_init'})
         else:
-            return self._run_queryenv_method(method, kwds)
+            out = self._run_queryenv_method(method, kwds)
+        self._display_out(method, out)
 
 
 commands = [Queryenv]

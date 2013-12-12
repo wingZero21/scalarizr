@@ -7,7 +7,7 @@ import resource
 import inspect
 
 from scalarizr.adm import command as command_module
-from scalarizr.app import init_script
+# from scalarizr.app import init_script
 
 
 __dir__ = os.path.dirname(__file__)
