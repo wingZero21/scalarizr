@@ -130,10 +130,10 @@ class Handler(object):
                     api_cls = util.import_class(api.api_routes[behavior])
                     api_cls.check_software(installed_software)
                     ready_behaviors.append(behavior)
-                except (exceptions.NotFound, software.SoftwareError) as e:
+                except (exceptions.NotFound, exceptions.UnsupportedBehavior):
                     continue
                 # TODO
-                # remove except
+                # remove except after refactoring api import
                 except:
                     pass
         return ready_behaviors

@@ -619,7 +619,7 @@ def import_class(import_str):
     except ImportError:
         pass
     else:
-        m = loader.load_module('')
+        m = loader.load_module(loader.fullname)
         try:
             return getattr(m, class_str)
         except (ValueError, AttributeError):

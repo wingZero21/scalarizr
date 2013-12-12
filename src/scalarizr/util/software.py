@@ -9,7 +9,6 @@ from scalarizr.util import system2
 from scalarizr import linux
 from scalarizr.linux import coreutils, pkgmgr
 import os, re, zipfile, glob, platform
-from pkg_resources import parse_requirements
 
 __all__ = ('all_installed', 'software_info', 'explore', 'which')
 
@@ -494,26 +493,4 @@ def postgresql_software_info():
         raise SoftwareError
 
 explore('postgresql', postgresql_software_info)
-
-
-def check_software(required, installed=None, excluded=None):
-    if installed == None:
-        installed = pkgmgr.package_mgr().list()
-    for conflict in parse_requirements(excluded or []):
-        name = conflict.project_name
-        if name in installed and installed[name] in conflict:
-            msg = "Unallowed package '%s' is installed in system. Please remove it" % name
-            raise SoftwareError(msg)
-    for requirement in parse_requirements(required):
-        name = requirement.project_name
-        if name not in installed:
-            raise SoftwareError("'%s' is not installed" % name)
-        if installed[name] not in requirement:
-            msg = "'%s' version mismatch. Installed: '%s' Required: '%s'" \
-                    % (
-                        name,
-                        installed[name],
-                        ', '.join([''.join(_) for _ in requirement.specs])
-                        )
-            raise SoftwareError(msg)
 

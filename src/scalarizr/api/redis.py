@@ -23,8 +23,9 @@ from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr import node
-from scalarizr.util import software
 from scalarizr.util import Singleton
+from scalarizr.linux import pkgmgr
+from scalarizr import exceptions
 
 
 BEHAVIOUR = config.BuiltinBehaviours.REDIS
@@ -326,21 +327,33 @@ class RedisAPI(object):
     def check_software(cls, installed=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
-        if os_name == 'ubuntu':
-            if os_vers >= '12':
-                software.check_software(['redis-server>=2.2,<2.7'], installed)
-            elif os_vers >= '10':
-                software.check_software(['redis-server>=2.2,<2.3'], installed)
+        try:
+            if os_name == 'ubuntu':
+                if os_vers >= '12':
+                    pkgmgr.check_dependency(['redis-server>=2.2,<2.7'], installed)
+                elif os_vers >= '10':
+                    pkgmgr.check_dependency(['redis-server>=2.2,<2.3'], installed)
+            elif os_name == 'debian':
+                pkgmgr.check_dependency(['redis-server>=2.6,<2.7'], installed)
+            elif os_name == 'centos':
+                pkgmgr.check_dependency(['redis>=2.4,<2.7'], installed, ['centalt-release'])
+            elif linux.os.redhat_family or linux.os.oracle_family:
+                pkgmgr.check_dependency(['redis>=2.6,<2.7'], installed, ['centalt-release'])
             else:
-                raise software.SoftwareError('Unsupported version of operating system')
-        elif os_name == 'debian':
-            software.check_software(['redis-server>=2.6,<2.7'], installed)
-        elif os_name == 'centos':
-            software.check_software(['redis>=2.4,<2.7'], installed, ['centalt-release'])
-        elif os_name == 'redhat':
-            software.check_software(['redis>=2.6,<2.7'], installed, ['centalt-release'])
-        elif os_name == 'amazon':
-            software.check_software(['redis>=2.6,<2.7'], installed, ['centalt-release'])
-        else:
-            raise software.SoftwareError('Unsupported operating system')
+                raise exceptions.UnsupportedBehavior('redis',
+                        "'redis' behavior is only supported on " +\
+                        "Debian, RedHat and Oracle operating system family"
+                        )
+        except pkgmgr.NotInstalled as e:
+            raise exceptions.UnsupportedBehavior('redis',
+                    'Redis %s is not installed on %s' % (e.args[1], linux.os['name']))
+        except pkgmgr.VersionMismatch as e:
+            raise exceptions.UnsupportedBehavior('redis', str(
+                    'Redis {} is not supported on {}. ' +\
+                    'Supported: ' +\
+                    'Redis >=2.2,<2.3 on Ubuntu-10.04, >=2.2,<2.7 on Ubuntu-12.04, ' +\
+                    'Redis >=2.6,<2.7 on Debian, ' +\
+                    'Redis >=2.4,<2.7 on CentOS, ' +\
+                    'Redis >=2.6,<2.7 on RedHat, Oracle, Amazon'
+                    ).format(e.args[1], linux.os['name']))
 

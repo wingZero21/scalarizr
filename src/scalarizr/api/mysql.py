@@ -16,9 +16,10 @@ from scalarizr.services import backup as backup_module
 from scalarizr.services import ServiceError
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.handlers import build_tags
-from scalarizr.util import software
 from scalarizr.util import Singleton
 from scalarizr import linux
+from scalarizr.linux import pkgmgr
+from scalarizr import exceptions
 
 
 class MySQLAPI(object):
@@ -187,47 +188,30 @@ class MySQLAPI(object):
 
     @classmethod
     def check_software(cls, installed=None):
-        os_name = linux.os['name'].lower()
-        os_vers = linux.os['version']
-        if os_name == 'ubuntu':
-            if os_vers >= '12':
-                software.check_software(['mysql-client>=5.5,<5.6'], installed)
-                software.check_software(['mysql-server>=5.5,<5.6'], installed, ['apparmor'])
-            elif os_vers >= '10':
-                software.check_software(['mysql-client>=5.1,<5.2'], installed)
-                software.check_software(['mysql-server>=5.1,<5.2'], installed, ['apparmor'])
+        try:
+            if linux.os.debian_family:
+                pkgmgr.check_dependency(
+                        ['mysql-client>=5.0,<5.6', 'mysql-server>5.0,<5.6'], installed, ['apparmor']
+                        )
+            elif linux.os.redhat_family or os.oracle_family:
+                pkgmgr.check_dependency(['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'], installed)
             else:
-                raise software.SoftwareError('Unsupported version of operating system')
-        elif os_name == 'debian':
-            if os_vers >= '7':
-                software.check_software(['mysql-client>=5.5,<5.6'], installed)
-                software.check_software(['mysql-server>=5.5,<5.6'], installed, ['apparmor'])
-            elif os_vers >= '6':
-                software.check_software(['mysql-client>=5.1,<5.6'], installed)
-                software.check_software(['mysql-server>=5.1,<5.6'], installed, ['apparmor'])
-            else:
-                raise software.SoftwareError('Unsupported version of operating system')
-        elif os_name == 'centos':
-            if os_vers >= '6':
-                software.check_software(['mysql>=5.1,<5.2'], installed)
-                software.check_software(['mysql-server>=5.1,<5.2'], installed)
-            elif os_vers >= '5':
-                software.check_software(['mysql>=5.0,<5.1'], installed)
-                software.check_software(['mysql-server>=5.0,<5.1'], installed)
-            else:
-                raise software.SoftwareError('Unsupported version of operating system')
-        elif os_name == 'redhat':
-            if os_vers >= '6':
-                software.check_software(['mysql>=5.1,<5.2'], installed)
-                software.check_software(['mysql-server>=5.1,<5.2'], installed)
-            elif os_vers >= '5':
-                software.check_software(['mysql>=5.0,<5.1'], installed)
-                software.check_software(['mysql-server>=5.0,<5.1'], installed)
-            else:
-                raise software.SoftwareError('Unsupported version of operating system')
-        elif os_name == 'amazon':
-            software.check_software(['mysql>=5.5,<5.6'], installed)
-            software.check_software(['mysql-server>=5.5,<5.6'], installed)
-        else:
-            raise software.SoftwareError('Unsupported operating system')
+                raise exceptions.UnsupportedBehavior('mysqldb2',
+                        "'mysqldb2' behavior is only supported on " +\
+                        "Debian, RedHat or Oracle operating system family"
+                        )
+        except pkgmgr.NotInstalled as e:
+            raise exceptions.UnsupportedBehavior('mysql', 
+                    'MySQLDB %s is not installed on %s' % (e.args[1], linux.os['name']))
+        except pkgmgr.VersionMismatch as e:
+            raise exceptions.UnsupportedBehavior('mysql', str(
+                    'MySQL {} is not supported on {}. ' +\
+                    'Supported: ' +\
+                    'MySQLDB >=5.1,<5.2 on Ubuntu-10.04, >=5.5,<5.6 on Ubuntu-12.04, ' +\
+                    'MySQLDB >=5.1,<5.6 on Debian-6, >=5.5,<5.6 on Debian-7, ' +\
+                    'MySQLDB >=5.0,<5.1 on CentOS-5, >=5.1,<<5.2 on CentOS-6, ' +\
+                    'MySQLDB >=5.0,<5.1 on Oracle, ' +\
+                    'MySQLDB >=5.1,<5.2 on RedHat, ' +\
+                    'MySQLDB >=5.5,<5.6 on Amazon'
+                    ).format(e.args[1], linux.os['name']))
 

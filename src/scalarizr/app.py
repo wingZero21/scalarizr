@@ -49,6 +49,7 @@ import select
 import wsgiref.simple_server
 import SocketServer
 
+from scalarizr import exceptions
 
 
 class ScalarizrError(BaseException):
@@ -828,13 +829,13 @@ class Service(object):
                     api_cls.check_software(installed_software)
                 except exceptions.NotFound:
                     continue
-                except software.SoftwareError as e:
+                except exceptions.UnsupportedBehavior as e:
                     logger.error(e)
                     node.__node__['messaging'].send(
                             'OutOfTheService',
                             body={
                                 'error':'Software error',
-                                'details':"'%s' behavior. %s" % (behavior, str(e))
+                                'details':str(e)
                                 }
                             )
 

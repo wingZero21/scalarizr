@@ -19,6 +19,8 @@ from scalarizr import linux
 from scalarizr.linux import coreutils
 from urlparse import urlparse
 
+from pkg_resources import parse_requirements
+
 LOG = logging.getLogger(__name__)
 
 class PackageMgr(object):
@@ -140,17 +142,20 @@ class AptPackageMgr(PackageMgr):
                         'candidate': candidate if installed != candidate else None}
 
     def list(self):
-        out, err, code = linux.system(('dpkg-query', '-W',), raise_exc=True)
+        out, err, code = linux.system(
+                ("dpkg-query", "-W", "-f=${Status}|${Package}|${Version}\n",),
+                raise_exc=True
+                )
         if err:
             raise Exception("'dpkg-query -W' command failed. Out: %s \nErrors: %s" % (out, err))
-        pkgs = dict([_.split() for _ in out.split('\n') if _])
-        return dict((k, v.split(':')[-1]) for k, v in pkgs.iteritems())
+        pkgs = dict([(_.split('|')[1], _.split('|')[2].split(':')[-1]) \
+                for _ in out.split('\n') if _.split('|')[0]=='install ok installed'])
+        return pkgs
 
     def repos(self):
         files = glob.glob('/etc/apt/sources.list.d/*.list')
         names = [os.path.basename(os.path.splitext(f)[0]) for f in files]
         return names
-
 
 
 class RpmVersion(object):
@@ -284,12 +289,12 @@ class YumPackageMgr(PackageMgr):
 
     def list(self):
         out, err, code = linux.system(
-                ('rpm', '-qa', '--queryformat', '%{NAME} %{VERSION}\n',),
+                ('rpm', '-qa', '--queryformat', '%{NAME}|%{VERSION}\n',),
                 raise_exc=True
                 )
         if err:
             raise Exception("'rpm -qa' command failed. Out: %s \nErrors: %s" % (out, err))
-        pkgs = dict([_.split() for _ in out.split('\n') if _])
+        pkgs = dict([_.split('|') for _ in out.split('\n') if _])
         return pkgs
 
     def repos(self):
@@ -446,3 +451,37 @@ def removed(name, purge=False):
     installed = mgr.info(name)['installed']
     if purge or installed:
         mgr.remove(name, purge)
+
+
+class NotInstalled(Exception):
+    pass
+
+
+class DependencyConflict(Exception):
+    pass
+
+
+class VersionMismatch(Exception):
+    pass
+
+
+def check_dependency(required, installed=None, conflicting=None):
+    if installed == None:
+        installed = package_mgr().list()
+    if conflicting == None:
+        conflicting = list()
+    for conflict in parse_requirements(conflicting):
+        name = conflict.project_name
+        if name in installed and installed[name] in conflict:
+            raise DependencyConflict(name, installed[name])
+    for requirement in parse_requirements(required):
+        name = requirement.project_name
+        if name not in installed:
+            raise NotInstalled(name, ','.join([''.join(_) for _ in requirement.specs]))
+        if installed[name] not in requirement:
+            raise VersionMismatch(
+                    name,
+                    installed[name],
+                    ','.join([''.join(_) for _ in requirement.specs])
+                    )
+

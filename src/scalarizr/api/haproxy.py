@@ -10,12 +10,12 @@ from pprint import pformat
 from scalarizr import exceptions
 from scalarizr.libs import validate
 from scalarizr.services import haproxy
-from scalarizr.linux import iptables
+from scalarizr.linux import iptables, pkgmgr
 from scalarizr import rpc
 from scalarizr import linux
 from scalarizr.handlers import get_role_servers
-from scalarizr.util import software
 from scalarizr.util import Singleton
+from scalarizr import exceptions
 
 import logging
 LOG = logging.getLogger(__name__)
@@ -561,10 +561,18 @@ class HAProxyAPI(object):
         res = list(set(res))
         return res
 
+
     @classmethod
     def check_software(cls, installed=None):
-        if linux.os['family'].lower() in ['debian', 'redhat']:
-            software.check_software(['haproxy'], installed)
-        else:
-            raise software.SoftwareError('Unsupported operating system')
+        try:
+            if linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family:
+                pkgmgr.check_dependency(['haproxy'], installed)
+            else:
+                raise exceptions.UnsupportedBehavior('haproxy',
+                        "'haproxy' behavior is only supported on " +\
+                        "Debian, RedHat or Oracle operating system family"
+                        )
+        except pkgmgr.NotInstalled as e:
+            raise exceptions.UnsupportedBehavior('haproxy',
+                    'HAProxy is not installed on %s' % linux.os['name'])
 

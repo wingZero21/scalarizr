@@ -15,9 +15,10 @@ from scalarizr import util
 from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.util.cryptotool import pwgen
-from scalarizr.util import software
 from scalarizr.util import Singleton
+from scalarizr.linux import pkgmgr
 from scalarizr.services import mongodb as mongo_svc
+from scalarizr import exceptions
 
 
 class _MMSAgent(object):
@@ -166,45 +167,71 @@ class MongoDBAPI:
 
     @classmethod
     def check_software(cls, installed=None):
-        os_name = linux.os['name'].lower()
-        os_vers = linux.os['version']
-        if os_name == 'ubuntu':
-            if os_vers >= '12':
-                software = ['mongodb-10gen>=2.0,<2.5']
-                alt_software = ['mongodb>=2.0,<2.5']
-            elif os_vers >= '10':
-                software = ['mongodb-10gen>=2.0,<2.1']
-                alt_software = ['mongodb>=2.0,<2.1']
-            else:
-                raise software.SoftwareError('Unsupported version of operating system')
-        elif os_name == 'debian':
-            software = ['mongodb-10gen>=2.4,<2.5']
-            alt_software = ['mongodb>=2.4,<2.5']
-        elif os_name == 'centos':
-            if os_vers >= '6':
-                software = ['mongodb-10gen-server>=2.0,<2.5']
-                alt_software = ['mongodb-server>=2.0,<2.5']
-            elif os_vers >= '5':
-                software = ['mongodb-10gen-server>=2.0,<2.1']
-                alt_software = ['mongodb-server>=2.0,<2.1']
-            else:
-                raise software.SoftwareError('Unsupported version of operating system')
-        elif os_name == 'redhat':
-            if os_vers >= '6':
-                software = ['mongodb-10gen-server>=2.4,<2.5']
-                alt_software = ['mongodb-server>=2.4,<2.5']
-            elif os_vers >= '5':
-                software = ['mongodb-10gen-server>=2.0,<2.1']
-                alt_software = ['mongodb-server>=2.0,<2.1']
-            else:
-                raise software.SoftwareError('Unsupported version of operating system')
-        elif os_name == 'amazon':
-            software = ['mongodb-10gen-server>=2.4,<2.5']
-            alt_software = ['mongodb-server>=2.4,<2.5']
-        else:
-            raise software.SoftwareError('Unsupported operating system')
         try:
-            software.check_software(software, installed)
-        except software.SoftwareError:
-            software.check_software(alt_software, installed)
+            def check_any(pkgs):
+                for _ in pkgs:
+                    try:
+                        pkgmgr.check_dependency(_, installed)
+                        break
+                    except:
+                        continue
+                else:
+                    raise
+
+            os_name = linux.os['name'].lower()
+            if os_name == 'ubuntu':
+                if linux.os['version'] >= '12':
+                    check_any([
+                            ['mongodb-10gen>=2.0,<2.5'],
+                            ['mongodb>=2.0,<2.5']
+                            ])
+                elif linux.os['version'] >= '10':
+                    check_any([
+                            ['mongodb-10gen>=2.0,<2.1'],
+                            ['mongodb>=2.0,<2.1']
+                            ])
+            elif os_name == 'debian':
+                check_any([
+                        ['mongodb-10gen>=2.4,<2.5'],
+                        ['mongodb>=2.4,<2.5']
+                        ])
+            elif os_name == 'centos':
+                if linux.os['version'] >= '6':
+                    check_any([
+                            ['mongodb-10gen-server>=2.0,<2.5'],
+                            ['mongodb-server>=2.0,<2.5']
+                            ])
+                elif linux.os['version'] >= '5':
+                    check_any([
+                            ['mongodb-10gen-server>=2.0,<2.1'],
+                            ['mongodb-server>=2.0,<2.1']
+                            ])
+            elif linux.os.redhat_family:
+                check_any([
+                        ['mongodb-10gen-server>=2.4,<2.5'],
+                        ['mongodb-server>=2.4,<2.5']
+                        ])
+            elif linux.os.oracle_family:
+                check_any([
+                        ['mongodb-10gen-server>=2.0,<2.1'],
+                        ['mongodb-server>=2.0,<2.1']
+                        ])
+            else:
+                raise exceptions.UnsupportedBehavior('mongodb',
+                        "'mongodb' behavior is only supported on " +\
+                        "Debian, RedHat or Oracle operating system family"
+                        )
+        except pkgmgr.NotInstalled as e:
+            raise exceptions.UnsupportedBehavior('mongodb', 
+                    'MongoDB %s is not installed on %s' % (e.args[1], linux.os['name']))
+        except pkgmgr.VersionMismatch as e:
+            raise exceptions.UnsupportedBehavior('mongodb', str(
+                    'MongoDB {} is not supported on {}. ' +\
+                    'Supported: ' +\
+                    'MongoDB >=2.0,<2.1 on Ubuntu-10.04, >=2.0,<2.5 on Ubuntu-12.04, ' +\
+                    'MongoDB >=2.4,<2.5 on Debian, ' +\
+                    'MongoDB >=2.0,<2.1 on CentOS-5, >=2.0,<<2.5 on CentOS-6, ' +\
+                    'MongoDB >=2.0,<2.1 on Oracle, ' +\
+                    'MongoDB >=2.4,<2.5 on RedHat, Amazon'
+                    ).format(e.args[1], linux.os['name']))
 

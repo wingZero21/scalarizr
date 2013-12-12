@@ -20,6 +20,8 @@ from scalarizr.util import software
 from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
+from scalarizr.linux import pkgmgr
+from scalarizr import exceptions
 
 __nginx__ = __node__['nginx']
 
@@ -1416,8 +1418,15 @@ class NginxAPI(object):
 
     @classmethod
     def check_software(cls, installed=None):
-        if linux.os['family'].lower() in ['debian', 'redhat']:
-            return
-        else:
-            raise software.SoftwareError('Unsupported operating system')
+        try:
+            if linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family:
+                pkgmgr.check_dependency(['nginx'], installed)
+            else:
+                raise exceptions.UnsupportedBehavior('www',
+                        "'www' behavior is only supported on " +\
+                        "Debian, RedHat or Oracle operating system family"
+                        )
+        except pkgmgr.NotInstalled as e:
+            raise exceptions.UnsupportedBehavior('www',
+                    'Nginx is not installed on %s' % linux.os['name'])
 
