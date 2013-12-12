@@ -7,6 +7,7 @@ import resource
 import inspect
 
 from scalarizr.adm import command as command_module
+from scalarizr.app import init_script
 
 
 __dir__ = os.path.dirname(__file__)
@@ -102,6 +103,7 @@ class Szradm(command_module.Command):
 
 
 def main(argv):
+    init_script()
     szradm = Szradm(os.path.join(__dir__, 'commands'))
     # If szradm called with no arguments - print help() and all/most used possible commands
 

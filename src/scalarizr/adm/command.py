@@ -137,9 +137,10 @@ def _docopt_out_to_kwds(arguments):
     """
     result = {}
     for k, v in arguments.items():
-        new_k = k.lstrip('-').replace('-', '_')
-        new_k = new_k.replace('<', '').replace('>', '')
-        result[new_k] = v
+        if v:
+            new_k = k.lstrip('-').replace('-', '_')
+            new_k = new_k.replace('<', '').replace('>', '')
+            result[new_k] = v
     return result
 
 
