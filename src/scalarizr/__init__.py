@@ -3,18 +3,16 @@ import sys
 __version__ = open(os.path.join(os.path.dirname(__file__), 'version')).read().strip()
 
 
-'''
 class ScalarizrModule(object):
+    def __init__(self, module):
+        self.module = module
+
     def __getattr__(self, name):
-        if name in globals():
-            return globals()[name]
-        elif name == 'WindowsService':
-            import scalarizr.app
-            return scalarizr.app.WindowsService
+        if name == 'WindowsService':
+            from scalarizr import app
+            return app.WindowsService
         else:
-            msg = "'{0}' has no attribute '{1}'".format(__name__, name)
-            raise AttributeError(msg)
+            return getattr(self.module, name)
 
 
-sys.modules[__name__] = ScalarizrModule()
-'''
+sys.modules[__name__] = ScalarizrModule(sys.modules[__name__])
