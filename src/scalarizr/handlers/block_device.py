@@ -110,13 +110,13 @@ class BlockDeviceHandler(handlers.Handler):
     def _plug_new_style_volumes(self, volumes):
         for vol in volumes:
             template = vol.pop('template', None)
-            from_template_if_missing = vol.pop('from_template_if_missing', None)
+            from_template_if_missing = vol.pop('from_template_if_missing', False)
             vol = storage2.volume(**vol)
             self._log_ensure_volume(vol)
             try:
                 vol.ensure(mount=bool(vol.mpoint), mkfs=True)
             except storage2.VolumeNotExistsError, e:
-                if template and from_template_if_missing == '1':
+                if template and bool(int(from_template_if_missing)):
                     LOG.warn('Volume %s not exists, re-creating %s from template', 
                             str(e), vol.type)
                     vol = storage2.volume(**template)

@@ -277,12 +277,12 @@ class NginxAPI(object):
             for proxy_parms in proxy_list:
                 if 'hostname' in proxy_parms:
                     proxy_parms['name'] = proxy_parms.pop('hostname')
-                
                 self.add_proxy(reload_service=False, **proxy_parms)
+
             if reload_service:
                 self._reload_service()
-        except:
-                raise BaseException('Syntax error in template for proxy %s' % proxy_parms['name'])
+        except initdv2.InitdError:
+            raise Exception('Syntax error in template for proxy %s' % proxy_parms['name'])
 
     def _replace_string_in_file(self, file_path, s, new_s):
         raw = None
@@ -725,12 +725,6 @@ class NginxAPI(object):
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 
-        # config.add('%s/ssl_session_timeout' % server_xpath, '10m')
-        # config.add('%s/ssl_session_cache' % server_xpath, 'shared:SSL:10m')
-        # config.add('%s/ssl_protocols' % server_xpath, 'SSLv2 SSLv3 TLSv1')
-        # config.add('%s/ssl_ciphers' % server_xpath, 
-        #            'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-        # config.add('%s/ssl_prefer_server_ciphers' % server_xpath, 'on')
 
     def _make_server_conf(self,
                           hostname,
@@ -752,7 +746,7 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
-        if server_wide_template:
+        if server_wide_template and server_wide_template['content']:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
             with open(temp_file, 'w') as fp:
@@ -761,6 +755,23 @@ class NginxAPI(object):
             template_conf.read(temp_file)
             config.insert_conf(template_conf, 'server')
             os.remove(temp_file)
+        else:
+            config.add('server/proxy_set_header', 'Host $host')
+            config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
+            config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
+            config.add('server/client_max_body_size', '10m')
+            config.add('server/client_body_buffer_size', '128k')
+            config.add('server/proxy_buffering', 'on')
+            config.add('server/proxy_connect_timeout', '15')
+            config.add('server/proxy_intercept_errors', 'on')
+
+            # default SSL params
+            config.add('server/ssl_session_timeout', '10m')
+            config.add('server/ssl_session_cache', 'shared:SSL:10m')
+            config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
+            config.add('server/ssl_ciphers', 
+                       'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
+            config.add('server/ssl_prefer_server_ciphers', 'on')
 
         if port:
             config.add('server/listen', str(port))
@@ -777,15 +788,6 @@ class NginxAPI(object):
         self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
         
-        # Next additions are moved to templates
-        # config.add('server/proxy_set_header', 'Host $host')
-        # config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
-        # config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
-        # config.add('server/client_max_body_size', '10m')
-        # config.add('server/client_body_buffer_size', '128k')
-        # config.add('server/proxy_buffering', 'on')
-        # config.add('server/proxy_connect_timeout', '15')
-        # config.add('server/proxy_intercept_errors', 'on')
 
         # Adding locations leading to defined backends
 
@@ -795,7 +797,7 @@ class NginxAPI(object):
 
             location_xpath = '%s[%i]' % (location_xpath, i + 1)
 
-            if grouped_templates.get(location):
+            if grouped_templates.get(location) and grouped_templates[location]['content']:
                 temp_file = self.proxies_inc_dir + '/temalate.tmp'
                 # TODO: this is ugly. Find the way to read conf from string
                 with open(temp_file, 'w') as fp:
@@ -929,9 +931,9 @@ class NginxAPI(object):
 
         grouped_destinations = self._group_destinations(destinations)
         if not grouped_destinations:
-            raise BaseException('add_proxy() called with no destination list')
+            raise Exception('add_proxy() called with no destination list')
         if ssl_port == port and ssl_port != None:
-            raise BaseException("HTTP and HTTPS ports can't be the same")
+            raise Exception("HTTP and HTTPS ports can't be the same")
 
         if reread_conf:
             self._load_app_servers_inc()

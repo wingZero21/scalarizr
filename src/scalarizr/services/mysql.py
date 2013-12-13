@@ -32,6 +32,7 @@ from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
+from scalarizr.linux import pkgmgr
 
 
 LOG = logging.getLogger(__name__)
@@ -136,6 +137,10 @@ class MySQL(BaseService):
                                 if not system2((software.which('getsebool'), 'mysqld_disable_trans'), raise_exc=False)[2]:
                                     LOG.debug('Make SELinux rule for rsync')
                                     system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
+                                else:
+                                    semanage = get_semanage()
+                                    system2((semanage, 'fcontext', '-a', '-t', 'bin_t', '/usr/bin/rsync'))
+                                    system2((software.which('restorecon'), '-v', '/usr/bin/rsync'))
 
                         LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
                         rsync(src_dir, dest, archive=True, exclude=['ib_logfile*', '*.sock'])
@@ -868,6 +873,16 @@ def _add_apparmor_rules(directory):
                 apparmor_initd.reload()
             except InitdError, e:
                 LOG.error('Cannot restart apparmor. %s', e)
+
+
+def get_semanage():
+    if linux.os['family'] == 'RedHat':
+        semanage = software.which('semanage')
+        if not semanage:
+            mgr = pkgmgr.package_mgr()
+            mgr.install('policycoreutils-python')
+            semanage = software.which('semanage')
+        return semanage
 
 
 class MySQLPresetProvider(PresetProvider):
