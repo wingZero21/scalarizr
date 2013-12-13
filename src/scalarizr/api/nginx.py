@@ -120,6 +120,15 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
         self._wait_workers()
 
+    def reload(self):
+        try:
+            initdv2.ParametrizedInitScript.reload(self)
+        except initdv2.InitdError, e:
+            if 'is not running' in str(e):
+                self.start()
+            else:
+                raise
+
 
 def _open_port(port):
     if iptables.enabled():
@@ -281,8 +290,8 @@ class NginxAPI(object):
 
             if reload_service:
                 self._reload_service()
-        except initdv2.InitdError:
-            raise Exception('Syntax error in template for proxy %s' % proxy_parms['name'])
+        except initdv2.InitdError, e:
+            raise Exception("Can't add proxy %s: %s", proxy_parms['name'], e)
 
     def _replace_string_in_file(self, file_path, s, new_s):
         raw = None
