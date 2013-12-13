@@ -59,7 +59,7 @@ def ensure_disk_detached(connection, project_id, zone, instance_name, disk_link)
     from any instance)
 
     Handles: - Disk already detached
-                     - Instance doesn't exist
+             - Instance doesn't exist
 
     """
     def try_detach():

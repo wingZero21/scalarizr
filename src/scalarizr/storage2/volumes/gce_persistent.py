@@ -72,18 +72,30 @@ class GcePersistentVolume(base.Volume):
         else:
 
             try:
-                # TODO(spike) raise VolumeNotExistsError when link passed disk not exists
                 create = False
                 if not self.link:
                     # Disk does not exist, create it first
                     create_request_body = dict(name=self.name, sizeGb=self.size)
                     if self.snap:
                         self.snap = storage2.snapshot(self.snap)
+                        self.snap.wait()
                         create_request_body['sourceSnapshot'] = to_current_api_version(self.snap.link)
                     create = True
                 else:
-                    self.link = to_current_api_version(self.link)
                     self._check_attr('zone')
+                    LOG.debug('Checking that disk already exists')
+                    try:
+                        disk_dict = connection.disks().get(disk=self.name, project=project_id,
+                                                                            zone=zone).execute()
+                        self.link = disk_dict['selfLink']
+                    except HttpError, e:
+                        code = int(e.resp['status'])
+                        if code == 404:
+                            raise storage2.VolumeNotExistsError(self.name)
+                        else:
+                            raise
+
+
                     if self.zone != zone:
                         # Volume is in different zone, snapshot it,
                         # create new volume from this snapshot, then attach
@@ -269,12 +281,7 @@ class GcePersistentVolume(base.Volume):
             snapshot = GcePersistentSnapshot(id=snapshot_info['id'], name=snapshot_info['name'],
                                              size=snapshot_info['diskSizeGb'], link=snapshot_info['selfLink'])
             if not nowait:
-                while True:
-                    status = snapshot.status()
-                    if status == snapshot.COMPLETED:
-                        break
-                    elif status == snapshot.FAILED:
-                        raise Exception('Snapshot status is "Failed"')
+                snapshot.wait()
             return snapshot
         except:
             e = sys.exc_info()[1]
@@ -310,6 +317,19 @@ class GcePersistentSnapshot(base.Snapshot):
         status = snapshot['status']
 
         return self._status_map.get(status, self.UNKNOWN)
+
+
+    def wait(self):
+        self._check_attr("name")
+        while True:
+            status = self.status()
+            if status == self.COMPLETED:
+                break
+            elif status == self.FAILED:
+                raise Exception('Snapshot status is "Failed"')
+            time.sleep(5)
+
+
 
 
 storage2.volume_types['gce_persistent'] = GcePersistentVolume
