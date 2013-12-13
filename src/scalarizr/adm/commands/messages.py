@@ -94,6 +94,8 @@ class MessageDetails(Command):
       -j, --json
     """
 
+    aliases = ['md']
+
     def __call__(self, message_id, json=False):
         try:
             cursor = db_connection.cursor()
@@ -133,6 +135,8 @@ class MarkAsUnhandled(Command):
     Usage:
       mark-as-unhandled <message_id>
     """
+
+    aliases = ['mau']
 
     def display(self, data):
         for row in data:

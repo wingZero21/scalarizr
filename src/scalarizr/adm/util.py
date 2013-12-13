@@ -12,6 +12,8 @@ def make_table(data_rows, header=None):
     table.header = bool(header)
 
     for row in data_rows:
+        if not row:
+            row = []
         row_length = len(row)
         if row_length != max_row_length:
             row = (row + [None]*max_row_length)[:max_row_length]

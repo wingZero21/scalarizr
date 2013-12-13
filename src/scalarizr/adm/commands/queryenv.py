@@ -48,6 +48,8 @@ class Queryenv(Command):
       -s, --https              Show virtual hosts by https
     """
 
+    aliases = ['q', '-q', '--queryenv']
+
     def __init__(self):
         super(Queryenv, self).__init__()
 
@@ -153,8 +155,9 @@ class Queryenv(Command):
         supported_methods = self.supported_methods()
         if not method:
             for kwd in kwds.keys():
-                if kwd in supported_methods:
-                    method = kwd
+                hyphen_kwd = kwd.replace('_', '-')
+                if hyphen_kwd in supported_methods:
+                    method = hyphen_kwd
                     kwds.pop(kwd)
                     break
 

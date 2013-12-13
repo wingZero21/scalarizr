@@ -5,6 +5,7 @@ import imp
 import time
 import resource
 import inspect
+from textwrap import dedent
 
 from scalarizr.adm import command as command_module
 from scalarizr.app import init_script
@@ -55,7 +56,7 @@ class Szradm(command_module.Command):
         Redefining this method because we don't need to print subcommands list
         for szradm in here.
         """
-        return self.__doc__
+        return dedent(self.__doc__)
 
     def __init__(self, commands_dir=None):
         super(Szradm, self).__init__()

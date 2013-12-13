@@ -58,9 +58,10 @@ class Command(object):
         raise NotImplementedError('You need to define __call__ method')
 
     def _command_help(self):
-        usages = '\n'.join((' '*TAB_SIZE*3) + get_command_name(c) for c in self.subcommands)
+        """Returns help section that contains list of subcommands"""
+        usages = '\n'.join((' '*TAB_SIZE) + get_command_name(c) for c in self.subcommands)
         if usages:
-            return '\n%sSubcommands:\n%s' % (' '*TAB_SIZE*2, usages)
+            return '\nSubcommands:\n' + usages
         else:
             return ''
 
