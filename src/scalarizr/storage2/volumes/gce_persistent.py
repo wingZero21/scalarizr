@@ -279,7 +279,8 @@ class GcePersistentVolume(base.Volume):
             snapshot_info = connection.snapshots().get(project=project_id, snapshot=snap_name,
                                                     fields='id,name,diskSizeGb,selfLink').execute()
             snapshot = GcePersistentSnapshot(id=snapshot_info['id'], name=snapshot_info['name'],
-                                             size=snapshot_info['diskSizeGb'], link=snapshot_info['selfLink'])
+                                             size=snapshot_info['diskSizeGb'], link=snapshot_info['selfLink'],
+                                             type='gce_persistent')
             if not nowait:
                 snapshot.wait()
             return snapshot
@@ -293,6 +294,7 @@ class GcePersistentVolume(base.Volume):
 
 class GcePersistentSnapshot(base.Snapshot):
 
+    type = 'gce_persistent'
     def __init__(self, name, **kwds):
         super(GcePersistentSnapshot, self).__init__(name=name, **kwds)
         self._status_map = dict(CREATING=self.IN_PROGRESS, UPLOADING=self.IN_PROGRESS, READY=self.COMPLETED,
