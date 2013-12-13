@@ -7,6 +7,7 @@ import re
 import os
 import sys
 import uuid
+import glob
 import time
 import random
 import logging
@@ -35,8 +36,9 @@ ROLEBUILDER_USER = 'scalr-rolesbuilder'
 
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
     exclude_dirs = set(['/tmp', '/proc', '/dev',
-                                       '/mnt' ,'/var/lib/google/per-instance',
-                                       '/sys', '/cdrom', '/media'])
+                        '/mnt' ,'/var/lib/google/per-instance',
+                        '/sys', '/cdrom', '/media', '/run', '/selinux', '/var/lock',
+                        '/var/log', '/var/run'])
     exclude_files = ('/etc/ssh/.host_key_regenerated',
                                      '/lib/udev/rules.d/75-persistent-net-generator.rules')
 
@@ -56,15 +58,49 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
             image_path      = os.path.join(rebundle_dir, image_name)
 
             root_size = coreutils.statvfs('/')['size']
-            LOG.debug('Creating image file %s' % image_path)
-            with open(image_path, 'w') as f:
-                f.truncate(root_size + 1*1024)
+
+            root_part_path = os.path.realpath('/dev/root')
+            root_part_sysblock_path = glob.glob('/sys/block/*/%s' % os.path.basename(root_part_path))[0]
+            root_device = '/dev/%s' % os.path.basename(os.path.dirname(root_part_sysblock_path))
+
+            root_device_size = int(system(('fdisk', '-s', root_device))[0].strip()) * 1024
 
             try:
+                out = system(('parted', root_device, 'unit', 'B', 'print'), stdin='c')[0]
+                start_at = int(re.search(re.compile('^\s*1\s+(\d+)B\s+', re.M), out).group(1))
+            except:
+                e = sys.exc_info()[1]
+                raise HandlerError('Failed to detect first patiotion start point: %s' % e)
+
+            LOG.debug('Creating image file %s' % image_path)
+            with open(image_path, 'wb') as _:
+                pass
+
+            LOG.debug('Resizing image file to %s bytes' % root_device_size)
+            with open(image_path, 'wb') as f:
+                f.truncate(root_device_size)
+
+            LOG.debug('Copy all info that is before first partition (starts at %s)' % start_at)
+            block_size = 4096
+            block_count = start_at / block_size
+
+            LOG.debug('Copying %s blocks of % bytes', block_count, block_size)
+            system(('dd', 'if=%s' % root_device, 'of=%s' % image_path, 'conv=notrunc',
+                                        'bs=%s' % block_size,'count=%s' % block_count))
+
+            remaining_bytes = start_at - (block_count * block_size)
+            if remaining_bytes:
+                LOG.debug('Copying remaining %s bytes' % remaining_bytes)
+                system(('dd', 'if=%s' % root_device, 'of=%s' % image_path, 'seek=%s' % (block_count * block_size),
+                  'skip=%s' % (block_count * block_size), 'conv=notrunc', 'bs=1', 'count=%s' % remaining_bytes))
+                
+            try:
+                LOG.debug('Removing first partition from disk image')
+                system(('parted', image_path, 'rm', '1'))
 
                 LOG.debug('Creating partition table on image')
-                system(('parted', image_path, 'mklabel', 'msdos'))
-                system(('parted', image_path, 'mkpart', 'primary', 'ext2', 1, str(root_size/(1024*1024))))
+                system(('parted', image_path, 'mkpart', 'primary', 'ext2', str(start_at / (1024 * 1024)),
+                                                                           str((root_size - start_at) / (1024 * 1024))))
 
                 # Map disk image
                 out = system(('kpartx', '-av', image_path))[0]
@@ -74,7 +110,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
                     LOG.info('Creating filesystem')
                     storage2.filesystem('ext4').mkfs(root_dev_name)
-                    dev_uuid = uuid.uuid4()
+                    dev_uuid = coreutils.blkid(root_part_path)['uuid']
                     system(('tune2fs', '-U', str(dev_uuid), root_dev_name))
 
                     mount.mount(root_dev_name, tmp_mount_dir)
@@ -94,10 +130,10 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
                         LOG.info('Copying root filesystem to image')
                         rsync('/', tmp_mount_dir, archive=True,
-                                                                          hard_links=True,
-                                                                          times=True,
-                                                                          sparse=True,
-                                                                          exclude=excludes)
+                                                  hard_links=True,
+                                                  times=True,
+                                                  sparse=True,
+                                                  exclude=excludes)
 
                         LOG.info('Cleanup image')
                         self._create_spec_devices(tmp_mount_dir)
@@ -129,6 +165,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                     system(('kpartx', '-d', image_path))
 
                 LOG.info('Compressing image.')
+                # TODO: use digest as archive name
                 arch_name = '%s.tar.gz' % self._role_name.lower()
                 arch_path = os.path.join(rebundle_dir, arch_name)
 
@@ -165,40 +202,17 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
         finally:
             shutil.rmtree(rebundle_dir)
 
+        goog_image_name = self._role_name.lower().replace('_', '-') + '-' + str(int(time.time()))
         try:
-            goog_image_name = self._role_name.lower().replace('_', '-') + '-' + str(int(time.time()))
             LOG.info('Registering new image %s' % goog_image_name)
-            # TODO: check duplicate names
             compute = pl.new_compute_client()
 
-            # Getting this instance's kernel
-            instance_id = pl.get_instance_id()
-            zone = os.path.basename(pl.get_zone())
-            all_instances = compute.instances().list(project=proj_id, zone=zone, fields="items(kernel,id)").execute()['items']
-            try:
-                kernel = filter(lambda inst: inst['id'] == instance_id, all_instances)[0]['kernel']
-            except KeyError:
-                # Looks like this instance was started from image, getting kernel from image
-                try:
-                    current_image = pl.get_image()
-
-                    current_image_fq = current_image.split('/')
-                    current_img_project = current_image_fq[1]
-                    current_img_name = current_image_fq[3]
-                    current_img_obj = compute.images().get(project=current_img_project,
-                                                                    image=current_img_name).execute()
-                    kernel = current_img_obj['preferredKernel']
-                except:
-                    raise HandlerError('Could not obtain kernel for this instance')
-                
             image_url = 'http://storage.googleapis.com/%s/%s' % (tmp_bucket_name, arch_name)
 
             req_body = dict(
                     name=goog_image_name,
                     sourceType='RAW',
-                    preferredKernel=kernel,
                     rawDisk=dict(
-                            containerType='TAR',
                             source=image_url
                     )
             )
