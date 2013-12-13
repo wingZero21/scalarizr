@@ -1,6 +1,7 @@
 from __future__ import with_statement
 
 import os
+import sys
 import shutil
 import logging
 from telnetlib import Telnet
@@ -98,6 +99,13 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
         ret = initdv2.ParametrizedInitScript.restart(self)
         time.sleep(1)
         return ret
+
+    def reload(self):
+        try:
+            initdv2.ParametrizedInitScript.reload(self)
+        except:
+            if 'is not running' in str(sys.exc_info()[1]):
+                self.start()
 
     def start(self):
         self.configtest()
