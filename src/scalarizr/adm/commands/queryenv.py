@@ -9,6 +9,7 @@ from scalarizr.adm.util import make_table
 from scalarizr.node import __node__
 from scalarizr.queryenv import QueryEnvService
 
+
 def transpose(l):
     return map(list, zip(*l))
 
@@ -16,7 +17,7 @@ def transpose(l):
 def new_queryenv():
     queryenv_creds = (__node__['queryenv_url'],
                       __node__['server_id'],
-                      __node__['crypto_key_path'] )
+                      __node__['crypto_key_path'])
     queryenv = QueryEnvService(*queryenv_creds)
     api_version = queryenv.get_latest_version()
     queryenv = QueryEnvService(*queryenv_creds, api_version=api_version) 
