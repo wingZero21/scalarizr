@@ -48,7 +48,7 @@ class Queryenv(Command):
       -s, --https              Show virtual hosts by https
     """
 
-    aliases = ['q', '-q', '--queryenv']
+    aliases = ['q']
 
     def __init__(self):
         super(Queryenv, self).__init__()
