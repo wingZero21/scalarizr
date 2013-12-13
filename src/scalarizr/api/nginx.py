@@ -291,7 +291,8 @@ class NginxAPI(object):
             if reload_service:
                 self._reload_service()
         except initdv2.InitdError, e:
-            raise Exception("Can't add proxy %s: %s", proxy_parms['name'], e)
+            msg = "Can't add proxy %s: %s" % (proxy_parms['name'], e)
+            raise Exception(msg)
 
     def _replace_string_in_file(self, file_path, s, new_s):
         raw = None
