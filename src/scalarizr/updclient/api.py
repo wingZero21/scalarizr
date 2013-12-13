@@ -190,9 +190,13 @@ class UpdClientAPI(object):
             if not ret:
                 LOG.debug('WMI returns empty UUID')
         else:
-            ret = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
-            if not ret:
-                LOG.debug('dmidecide returns empty UUID')
+            ret = None
+            try:
+                ret = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
+                if not ret:
+                    LOG.debug('dmidecide returns empty UUID')
+            except:
+                LOG.debug(sys.exc_info()[1])
 
         if not ret:
             if self.meta.platform == 'ec2':
@@ -212,6 +216,7 @@ class UpdClientAPI(object):
         except:
             # This will force updclient to perform check updates each startup, 
             # this is the optimal behavior cause that's ensure latest available package
+            LOG.debug('get system-id failed: %s', sys.exc_info()[1])
             self.system_id = str(uuid.uuid4())
         system_matches = False
         if os.path.exists(self.status_file):
