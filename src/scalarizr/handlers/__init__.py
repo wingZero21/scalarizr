@@ -26,9 +26,7 @@ class Handler(object):
     _logger = logging.getLogger(__name__)
 
     def __init__(self):
-        if self._service_name and self._service_name not in self.get_ready_behaviours():
-            msg = 'Cannot load handler %s. Missing software.' % self._service_name
-            raise HandlerError(msg)
+        pass
 
     def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
         srv = srv or bus.messaging_service
@@ -108,7 +106,7 @@ class Handler(object):
         possible_behaviors = [
             config.BuiltinBehaviours.APP,
             config.BuiltinBehaviours.WWW,
-            config.BuiltinBehaviours.MYSQL, # ?
+            config.BuiltinBehaviours.MYSQL,
             config.BuiltinBehaviours.MYSQL2,
             config.BuiltinBehaviours.PERCONA,
             config.BuiltinBehaviours.MARIADB,

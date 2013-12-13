@@ -818,10 +818,6 @@ class Service(object):
         except (BaseException, Exception):
             raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
 
-        logger.debug('Initialize message handlers')
-        consumer = msg_service.get_consumer()
-        consumer.listeners.append(MessageListener())
-
         if linux.os['family'] != 'Windows':
             installed_software = pkgmgr.package_mgr().list()
             for behavior in node.__node__['behavior']:
@@ -839,6 +835,10 @@ class Service(object):
                                 'details':str(e)
                                 }
                             )
+
+        logger.debug('Initialize message handlers')
+        consumer = msg_service.get_consumer()
+        consumer.listeners.append(MessageListener())
 
         if not linux.os.windows_family:
             logger.debug('Schedule SNMP process')
