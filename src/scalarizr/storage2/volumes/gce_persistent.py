@@ -19,6 +19,7 @@ from scalarizr.storage2.util import gce as gce_util
 LOG = logging.getLogger(__name__)
 compute_api_version = bus.platform.compute_api_version
 
+STORAGE_TYPE = 'gce_persistent'
 
 def to_current_api_version(link):
     if link:
@@ -78,7 +79,7 @@ class GcePersistentVolume(base.Volume):
                     create_request_body = dict(name=self.name, sizeGb=self.size)
                     if self.snap:
                         self.snap = storage2.snapshot(self.snap)
-                        self.snap.wait()
+                        gce_util.wait_snapshot_ready(self.snap)
                         create_request_body['sourceSnapshot'] = to_current_api_version(self.snap.link)
                     create = True
                 else:
@@ -94,7 +95,6 @@ class GcePersistentVolume(base.Volume):
                             raise storage2.VolumeNotExistsError(self.name)
                         else:
                             raise
-
 
                     if self.zone != zone:
                         # Volume is in different zone, snapshot it,
@@ -168,7 +168,8 @@ class GcePersistentVolume(base.Volume):
                     try:
                         garbage.destroy(force=True)
                     except:
-                        pass
+                        e = sys.exc_info()[1]
+                        LOG.debug('Failed to destroy temporary storage object %s: %s', garbage, e)
 
 
     def _attachment_info(self, con):
@@ -280,9 +281,9 @@ class GcePersistentVolume(base.Volume):
                                                     fields='id,name,diskSizeGb,selfLink').execute()
             snapshot = GcePersistentSnapshot(id=snapshot_info['id'], name=snapshot_info['name'],
                                              size=snapshot_info['diskSizeGb'], link=snapshot_info['selfLink'],
-                                             type='gce_persistent')
+                                             type=STORAGE_TYPE)
             if not nowait:
-                snapshot.wait()
+                gce_util.wait_snapshot_ready(snapshot)
             return snapshot
         except:
             e = sys.exc_info()[1]
@@ -294,7 +295,8 @@ class GcePersistentVolume(base.Volume):
 
 class GcePersistentSnapshot(base.Snapshot):
 
-    type = 'gce_persistent'
+    type = STORAGE_TYPE
+
     def __init__(self, name, **kwds):
         super(GcePersistentSnapshot, self).__init__(name=name, **kwds)
         self._status_map = dict(CREATING=self.IN_PROGRESS, UPLOADING=self.IN_PROGRESS, READY=self.COMPLETED,
@@ -321,18 +323,5 @@ class GcePersistentSnapshot(base.Snapshot):
         return self._status_map.get(status, self.UNKNOWN)
 
 
-    def wait(self):
-        self._check_attr("name")
-        while True:
-            status = self.status()
-            if status == self.COMPLETED:
-                break
-            elif status == self.FAILED:
-                raise Exception('Snapshot status is "Failed"')
-            time.sleep(5)
-
-
-
-
-storage2.volume_types['gce_persistent'] = GcePersistentVolume
-storage2.snapshot_types['gce_persistent'] = GcePersistentSnapshot
+storage2.volume_types[STORAGE_TYPE] = GcePersistentVolume
+storage2.snapshot_types[STORAGE_TYPE] = GcePersistentSnapshot
