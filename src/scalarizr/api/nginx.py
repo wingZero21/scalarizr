@@ -746,7 +746,7 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
-        if server_wide_template:
+        if server_wide_template and server_wide_template['content']:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
             with open(temp_file, 'w') as fp:
@@ -797,7 +797,7 @@ class NginxAPI(object):
 
             location_xpath = '%s[%i]' % (location_xpath, i + 1)
 
-            if grouped_templates.get(location):
+            if grouped_templates.get(location) and grouped_templates[location]['content']:
                 temp_file = self.proxies_inc_dir + '/temalate.tmp'
                 # TODO: this is ugly. Find the way to read conf from string
                 with open(temp_file, 'w') as fp:
