@@ -7,7 +7,7 @@ import resource
 import inspect
 
 from scalarizr.adm import command as command_module
-# from scalarizr.app import init_script
+from scalarizr.app import init_script
 
 
 __dir__ = os.path.dirname(__file__)
@@ -106,9 +106,7 @@ def main(argv):
     init_script()
     szradm = Szradm(os.path.join(__dir__, 'commands'))
     # If szradm called with no arguments - print help() and all/most used possible commands
-
     szradm_kwds = command_module.parse_command_line(argv[1:], szradm.help())
-
     # TODO: return exit codes which are dependent on exception thrown
     return szradm(**szradm_kwds)
 

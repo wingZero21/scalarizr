@@ -1,5 +1,6 @@
 import inspect
 import re
+import os
 
 from scalarizr.util import system2
 from scalarizr.adm.command import Command
@@ -7,6 +8,7 @@ from scalarizr.adm.command import get_section
 from scalarizr.adm.command import TAB_SIZE
 from scalarizr.adm.util import make_table
 from scalarizr.node import __node__
+from scalarizr.node import base_dir as scalr_base_dir
 from scalarizr.queryenv import QueryEnvService
 
 
@@ -17,7 +19,7 @@ def transpose(l):
 def new_queryenv():
     queryenv_creds = (__node__['queryenv_url'],
                       __node__['server_id'],
-                      __node__['crypto_key_path'])
+                      os.path.join(scalr_base_dir, __node__['crypto_key_path']))
     queryenv = QueryEnvService(*queryenv_creds)
     api_version = queryenv.get_latest_version()
     queryenv = QueryEnvService(*queryenv_creds, api_version=api_version) 
@@ -33,7 +35,8 @@ class Queryenv(Command):
       queryenv get-latest-version
       queryenv list-ebs-mountpoints
       queryenv list-roles [--behaviour=<bhvr>] [--role-name=<rolename>] [--with-initializing]
-      queryenv list-virtualhosts [--name=<name>] [--https]
+      queryenv list-virtual-hosts [--name=<name>] [--https]
+      queryenv <method>
     
     Options for list-roles:
       -b, --behaviour=<bhvr>      Role behaviour.
@@ -54,7 +57,7 @@ class Queryenv(Command):
         return doc + '\nSupported methods:\n' + '\n'.join(methods)
 
     def supported_methods(self):
-        usage_section = get_section('usage', self.__doc__)
+        usage_section = get_section('usage', self.__doc__)[0]
         usages = re.findall(r'queryenv .+?\s', usage_section)
         methods = [s.split()[1] for s in usages]
         return methods
@@ -70,7 +73,7 @@ class Queryenv(Command):
         print make_table(out, headers)
 
     def _display_get_latest_version(self, out):
-        print make_table([out], ['version'])
+        print make_table([[out]], ['version'])
 
     def _display_list_ebs_mountpoints(self, out):
         headers = ['name', 'dir', 'createfs', 'isarray', 'volume-id', 'device']
@@ -136,7 +139,7 @@ class Queryenv(Command):
             kwds_mapping = {}
 
         method = method.replace('-', '_')
-        m = getattr(self.queryenv, method)
+        m = getattr(self.queryenv(), method)
         argnames = inspect.getargspec(m).args
         filtered_kwds = {}
         for k, v in kwds.items():
@@ -146,20 +149,14 @@ class Queryenv(Command):
 
         return m(**filtered_kwds)
 
-    def __call__(self, **kwds):
-        method = None
+    def __call__(self, method=None, **kwds):
         supported_methods = self.supported_methods()
-        for kwd in kwds.keys():
-            if kwd in supported_methods:
-                method = kwd
-                kwds.pop(kwd)
-                break
-
         if not method:
-            # if supported method was not found in kwds, assuming that kwds
-            # contains only one element which is method name so we can call it
-            # without parameters
-            method = kwds.keys()[0]
+            for kwd in kwds.keys():
+                if kwd in supported_methods:
+                    method = kwd
+                    kwds.pop(kwd)
+                    break
 
         if method == 'list-roles':
             out = self._run_queryenv_method(

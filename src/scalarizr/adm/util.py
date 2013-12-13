@@ -5,6 +5,8 @@ import itertools
 
 def make_table(data_rows, header=None):
     """Returns PrettyTable object applicable to print"""
+    if not data_rows:
+        data_rows = [[]]
     max_row_length = len(header) if header else max(map(len, data_rows))
     table = prettytable.PrettyTable(header if header else range(max_row_length))
     table.header = bool(header)
