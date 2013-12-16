@@ -347,6 +347,9 @@ class RedisAPI(object):
         except pkgmgr.NotInstalled as e:
             raise exceptions.UnsupportedBehavior('redis',
                     'Redis %s is not installed on %s' % (e.args[1], linux.os['name']))
+        except pkgmgr.DependencyConflict as e:
+            raise exceptions.UnsupportedBehavior('redis',
+                    'Redis conflicts with %s-%s on %s' % (e.args[0], e.args[1], linux.os['name'])
         except pkgmgr.VersionMismatch as e:
             raise exceptions.UnsupportedBehavior('redis', str(
                     'Redis {} is not supported on {}. ' +\

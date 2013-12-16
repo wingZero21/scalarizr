@@ -56,6 +56,9 @@ class PerconaAPI(mysql.MySQLAPI):
         except pkgmgr.NotInstalled as e:
             raise exceptions.UnsupportedBehavior('percona', 
                     'Percona >=5.1,<5.6 is not installed on %s' % linux.os['name'])
+        except pkgmgr.DependencyConflict as e:
+            raise exceptions.UnsupportedBehavior('percona',
+                    'Percona conflicts with %s-%s on %s' % (e.args[0], e.args[1], linux.os['name'])
         except pkgmgr.VersionMismatch as e:
             raise exceptions.UnsupportedBehavior('Percona', str(
                     'Percona {} is not supported on {}. ' +\

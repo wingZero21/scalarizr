@@ -202,7 +202,10 @@ class MySQLAPI(object):
                         )
         except pkgmgr.NotInstalled as e:
             raise exceptions.UnsupportedBehavior('mysql', 
-                    'MySQLDB %s is not installed on %s' % (e.args[1], linux.os['name']))
+                    'MySQL %s is not installed on %s' % (e.args[1], linux.os['name']))
+        except pkgmgr.DependencyConflict as e:
+            raise exceptions.UnsupportedBehavior('mysql',
+                    'MySQL conflicts with %s-%s on %s' % (e.args[0], e.args[1], linux.os['name'])
         except pkgmgr.VersionMismatch as e:
             raise exceptions.UnsupportedBehavior('mysql', str(
                     'MySQL {} is not supported on {}. ' +\

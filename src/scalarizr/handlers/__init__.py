@@ -131,7 +131,7 @@ class Handler(object):
                 except (exceptions.NotFound, exceptions.UnsupportedBehavior):
                     continue
                 # TODO
-                # remove except after refactoring api import
+                # remove except block after refactoring api import
                 except:
                     pass
         return ready_behaviors
