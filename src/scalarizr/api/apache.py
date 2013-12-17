@@ -156,7 +156,7 @@ class ApacheAPI(object):
             LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, name))
 
             #Compatibility with old apache handler
-            if self.mod_ssl.is_system_certificate_used():
+            if not self.mod_ssl.has_valid_certificate() or self.mod_ssl.is_system_certificate_used():
                 self.mod_ssl.set_default_certificate(ssl_certificate)
 
         for directory in v_host.document_root_paths:
@@ -943,6 +943,12 @@ class ModSSL(object):
         system_pkey = v_host.ssl_key_path == __apache__["key_path_default"]
 
         return has_certificate and system_crt and system_pkey
+
+    def has_valid_certificate(self):
+        with open(__apache__["ssl_conf_path"], "r") as fp:
+            body = fp.read()
+        v_host = VirtualHost(body)
+        return os.path.exists(v_host.ssl_cert_path) and os.path.exists(v_host.ssl_key_path)
 
     def ensure(self):
         raise NotImplementedError

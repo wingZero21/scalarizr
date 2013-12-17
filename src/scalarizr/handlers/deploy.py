@@ -256,7 +256,7 @@ class GitSource(Source):
                     out, err, ret_code = system2(('git', 'pull'), env=env, cwd=workdir)
             else:
                 log.info('Checkout from %s', self.url)
-                out, err, ret_code = system2(('git', 'clone', self.url, workdir), env=env)
+                out, err, ret_code = system2(('git', 'clone', '--recursive', self.url, workdir), env=env)
 
             if ret_code:
                 raise Exception('Git failed to clone repository. %s' % out)
@@ -321,6 +321,9 @@ class HttpSource(Source):
                     unar += [tmpdst, '-C', workdir]
                 
                 elif mime[0] == 'application/zip':
+                    if not linux.which('unzip'):
+                        log.info('Installing unzip de-archiver')
+                        pkgmgr.installed('unzip')
                     unar = ['unzip', tmpdst, '-d', workdir]
                 else:
                     raise UndefinedSourceError('Unexpected archive format %s' % str(mime))                        
