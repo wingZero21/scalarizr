@@ -783,6 +783,8 @@ class NginxAPI(object):
                        'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
             config.add('server/ssl_prefer_server_ciphers', 'on')
 
+            self._add_noapp_handler(config)
+            
         if port:
             config.add('server/listen', str(port))
         try:
@@ -795,7 +797,6 @@ class NginxAPI(object):
         if ssl:
             self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id, port!=None)
 
-        self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
         
 
