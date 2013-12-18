@@ -72,7 +72,10 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
         status = initdv2.Status.UNKNOWN
         if self.socks:
             ip, port = self.socks[0].conn_address
-            telnet = Telnet(ip, port)
+            try:
+                telnet = Telnet(ip, port)
+            except:
+                return status
             telnet.write('HEAD / HTTP/1.0\n\n')
             if 'server: nginx' in telnet.read_all().lower():
                 return initdv2.Status.RUNNING
