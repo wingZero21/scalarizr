@@ -71,7 +71,7 @@ class GcePersistentVolume(base.Volume):
 
             self.device = device
         else:
-
+            LOG.debug('Successfully created connection to cloud engine')
             try:
                 create = False
                 if not self.link:
@@ -79,6 +79,7 @@ class GcePersistentVolume(base.Volume):
                     create_request_body = dict(name=self.name, sizeGb=self.size)
                     if self.snap:
                         self.snap = storage2.snapshot(self.snap)
+                        LOG.debug('Ensuring that snapshot is ready, before creating disk from it')
                         gce_util.wait_snapshot_ready(self.snap)
                         create_request_body['sourceSnapshot'] = to_current_api_version(self.snap.link)
                     create = True
