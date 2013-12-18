@@ -318,8 +318,10 @@ class GcePersistentSnapshot(base.Snapshot):
         self._check_attr("name")
         connection = __node__['gce']['compute_connection']
         project_id = __node__['gce']['project_id']
+        LOG.debug('Retrieving snapshot status')
         snapshot = connection.snapshots().get(project=project_id, snapshot=self.name, fields='status').execute()
         status = snapshot['status']
+        LOG.debug('Snapshot status: %s', status)
 
         return self._status_map.get(status, self.UNKNOWN)
 
