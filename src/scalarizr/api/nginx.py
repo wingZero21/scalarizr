@@ -131,8 +131,10 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def set_port_to_check(self, port):
         _logger.debug('setting NginxInitScript port to check to: %s' % port)
-        self.socks = [initdv2.SockParam(port)]
-
+        if port:
+            self.socks = [initdv2.SockParam(port)]
+        else:
+            self.socks = []
 
 def _open_port(port):
     if iptables.enabled():
@@ -997,7 +999,6 @@ class NginxAPI(object):
 
         if port:
             _open_port(port)
-            self.service.set_port_to_check(port)
         if ssl_port:
             _open_port(ssl_port)
 
@@ -1007,6 +1008,9 @@ class NginxAPI(object):
 
         if reload_service:
             self._reload_service()
+
+        if port:
+            self.service.set_port_to_check(port)
 
     def _remove_backend(self, name):
         """
@@ -1048,7 +1052,7 @@ class NginxAPI(object):
             self.proxies_inc.remove(xpath)
 
     def _get_any_port(self, config):
-        port = '80'
+        port = None
         try:
             addr = self.proxies_inc.get('server[1]/listen' % server_xpath)
             port = addr.split()[0]
