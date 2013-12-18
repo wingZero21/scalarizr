@@ -19,11 +19,7 @@ from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
 
 from scalarizr.platform import Platform
-from scalarizr.storage.transfer import Transfer
-from scalarizr.platform.gce.storage import GoogleCSTransferProvider
 
-
-Transfer.explore_provider(GoogleCSTransferProvider)
 
 COMPUTE_RW_SCOPE = ('https://www.googleapis.com/auth/compute', "https://www.googleapis.com/auth/compute.readonly")
 STORAGE_FULL_SCOPE = ("https://www.googleapis.com/auth/devstorage.full_control",
@@ -137,8 +133,8 @@ class GoogleServiceManager(object):
 
 
 class GcePlatform(Platform):
-    compute_api_version = 'v1beta15'
-    metadata_url = 'http://metadata/computeMetadata/v1beta1/'
+    compute_api_version = 'v1'
+    metadata_url = 'http://metadata/computeMetadata/v1/'
     _metadata = None
 
     def __init__(self):
@@ -172,7 +168,8 @@ class GcePlatform(Platform):
 
         if not url in self._metadata:
             key_url = os.path.join(self.metadata_url, url)
-            resp = urllib2.urlopen(key_url)
+            req = urllib2.Request(key_url, headers={'X-Google-Metadata-Request': 'True'})
+            resp = urllib2.urlopen(req)
             self._metadata[key] = resp.read()
 
         return self._metadata[key]

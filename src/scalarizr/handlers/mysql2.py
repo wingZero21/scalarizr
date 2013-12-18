@@ -896,11 +896,7 @@ class MysqlHandler(DBMSRHandler):
                         se_enabled = not system2((selinuxenabled_bin, ), raise_exc=False)[2]
                         if se_enabled:
                             # Set selinux context for new mysql datadir
-                            semanage = software.which('semanage')
-                            if not semanage:
-                                mgr = pkgmgr.package_mgr()
-                                mgr.install('policycoreutils-python')
-                                semanage = software.which('semanage')
+                            semanage = mysql_svc.get_semanage()
                             linux.system('%s fcontext -a -t mysqld_db_t "%s(/.*)?"'
                                          % (semanage, __mysql__['storage_dir']), shell=True)
                             # Restore selinux context
