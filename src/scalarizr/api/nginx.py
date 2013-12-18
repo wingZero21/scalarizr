@@ -52,7 +52,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                                                 'nginx',
                                                 '/etc/init.d/nginx',
                                                 pid_file=pid_file,
-                                                socks=[initdv2.SockParam(80)])
+                                                socks=[])
 
     def _wait_workers(self):
         conf_dir = os.path.dirname(__nginx__['app_include_path'])
@@ -69,8 +69,8 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
             out = system2(['ps -C nginx --noheaders'], shell=True)[0]
 
     def status(self):
-        status = initdv2.ParametrizedInitScript.status(self)
-        if not status and self.socks:
+        status = initdv2.Status.UNKNOWN
+        if self.socks:
             ip, port = self.socks[0].conn_address
             telnet = Telnet(ip, port)
             telnet.write('HEAD / HTTP/1.0\n\n')
@@ -131,7 +131,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def set_port_to_check(self, port):
         _logger.debug('setting NginxInitScript port to check to: %s' % port)
-        initdv2.ParametrizedInitScript.socks = [initdv2.SockParam(port)]
+        self.socks = [initdv2.SockParam(port)]
 
 
 def _open_port(port):
