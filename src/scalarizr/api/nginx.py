@@ -19,6 +19,7 @@ from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 
+
 __nginx__ = __node__['nginx']
 
 
@@ -66,7 +67,6 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
         while len(out.splitlines()) - 1 < expected_workers_num:
             time.sleep(1)
             out = system2(['ps -C nginx --noheaders'], shell=True)[0]
-
 
     def status(self):
         status = initdv2.ParametrizedInitScript.status(self)
@@ -128,6 +128,10 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                 self.start()
             else:
                 raise
+
+    def set_port_to_check(self, port):
+        _logger.debug('setting NginxInitScript port to check to: %s' % port)
+        initdv2.ParametrizedInitScript.socks = [initdv2.SockParam(port)]
 
 
 def _open_port(port):
@@ -736,6 +740,26 @@ class NginxAPI(object):
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 
 
+    def _add_default_template(self, config):
+        config.add('server/proxy_set_header', 'Host $host')
+        config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
+        config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
+        config.add('server/client_max_body_size', '10m')
+        config.add('server/client_body_buffer_size', '128k')
+        config.add('server/proxy_buffering', 'on')
+        config.add('server/proxy_connect_timeout', '15')
+        config.add('server/proxy_intercept_errors', 'on')
+
+        # default SSL params
+        config.add('server/ssl_session_timeout', '10m')
+        config.add('server/ssl_session_cache', 'shared:SSL:10m')
+        config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
+        config.add('server/ssl_ciphers', 
+                   'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
+        config.add('server/ssl_prefer_server_ciphers', 'on')
+
+        self._add_noapp_handler(config)
+
     def _make_server_conf(self,
                           hostname,
                           locations_and_backends,
@@ -766,24 +790,7 @@ class NginxAPI(object):
             config.insert_conf(template_conf, 'server')
             os.remove(temp_file)
         else:
-            config.add('server/proxy_set_header', 'Host $host')
-            config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
-            config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
-            config.add('server/client_max_body_size', '10m')
-            config.add('server/client_body_buffer_size', '128k')
-            config.add('server/proxy_buffering', 'on')
-            config.add('server/proxy_connect_timeout', '15')
-            config.add('server/proxy_intercept_errors', 'on')
-
-            # default SSL params
-            config.add('server/ssl_session_timeout', '10m')
-            config.add('server/ssl_session_cache', 'shared:SSL:10m')
-            config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
-            config.add('server/ssl_ciphers', 
-                       'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-            config.add('server/ssl_prefer_server_ciphers', 'on')
-
-            self._add_noapp_handler(config)
+            self._add_default_template(config)
             
         if port:
             config.add('server/listen', str(port))
@@ -990,6 +997,7 @@ class NginxAPI(object):
 
         if port:
             _open_port(port)
+            self.service.set_port_to_check(port)
         if ssl_port:
             _open_port(ssl_port)
 
@@ -1030,14 +1038,23 @@ class NginxAPI(object):
                     backend = backend.replace('http://', '')
                     self._remove_backend(backend)
 
-                for port in self.proxies_inc.get_list('%s/listen' % server_xpath):
-                    port = port.split()[0]
+                for addr in self.proxies_inc.get_list('%s/listen' % server_xpath):
+                    port = addr.split()[0]
                     _close_port(port)
 
                 xpaths_to_remove.append(server_xpath)
 
         for xpath in reversed(xpaths_to_remove):
             self.proxies_inc.remove(xpath)
+
+    def _get_any_port(self, config):
+        port = '80'
+        try:
+            addr = self.proxies_inc.get('server[1]/listen' % server_xpath)
+            port = addr.split()[0]
+        except metaconf.NoPathError:
+            pass
+        return port
 
     @rpc.command_method
     def remove_proxy(self, hostname, reload_service=True):
@@ -1056,6 +1073,8 @@ class NginxAPI(object):
         for backend_name in self.backend_table.keys():
             if hostname == self._backend_nameparts(backend_name)[0]:
                 self.backend_table.pop(backend_name)
+
+        self.service.set_port_to_check(self._get_any_port(self.proxies_inc))
 
         self._save_proxies_inc()
         self._save_app_servers_inc()
