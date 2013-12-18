@@ -95,7 +95,6 @@ def ensure_disk_detached(connection, project_id, zone, instance_name, disk_link)
 def wait_snapshot_ready(snapshot):
         while True:
             status = snapshot.status()
-
             if status == snapshot.COMPLETED:
                 break
             elif status == snapshot.FAILED:
