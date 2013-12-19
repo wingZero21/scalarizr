@@ -425,12 +425,10 @@ class Redis(BaseService):
 
     @property
     def db_path(self):
-        if 'snapshotting' == __redis__["persistence_type"]:
+        if __redis__["persistence_type"] in ('snapshotting', 'nopersistence'):
             return os.path.join(self.redis_conf.dir, self.redis_conf.dbfilename)
         elif 'aof' == __redis__["persistence_type"]:
             return os.path.join(self.redis_conf.dir, self.redis_conf.appendfilename)
-        else:
-            return None
 
     def _get_redis_conf(self):
         return self._get('redis_conf', RedisConf.find, __redis__['config_dir'], self.port)
