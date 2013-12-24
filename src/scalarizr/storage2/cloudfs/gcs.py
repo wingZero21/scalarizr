@@ -129,24 +129,27 @@ class GCSFileSystem(CloudFileSystem):
         return self._format_url(bucket, name)
 
 
-    def delete(self, remote_path):
+    def delete(self, remote_path, delete_bucket=False):
         LOG.info('Deleting %s from GCS', remote_path)
         bucket, obj = self._parse_url(remote_path)
 
         req = self.cloudstorage.objects().delete(bucket=bucket, object=obj)
         try:
-            return req.execute()
+            req.execute()
         except HttpError, e:
             if "Not Found" in json.loads(e.content)["error"]["message"]:
                 return False
             else:
                 raise
 
+        if delete_bucket:
+            self._delete_bucket(bucket)
+
     def _list_buckets(self):
         pl = bus.platform
         proj_id = pl.get_numeric_project_id()
 
-        req = self.cloudstorage.buckets().list(projectId=proj_id)
+        req = self.cloudstorage.buckets().list(project=proj_id)
         resp = req.execute()
         if 'items' not in resp:
             return []
@@ -158,14 +161,21 @@ class GCSFileSystem(CloudFileSystem):
         pl = bus.platform
         proj_id = pl.get_numeric_project_id()
 
-        req_body = dict(id=bucket_name, projectId=proj_id)
-        req = self.cloudstorage.buckets().insert(body=req_body)
+        req_body = dict(name=bucket_name)
+        req = self.cloudstorage.buckets().insert(project=proj_id, body=req_body)
         try:
             req.execute()
         except:
             e = sys.exc_info()[1]
             if not 'You already own this bucket' in str(e):
                 raise
+
+
+    def _delete_bucket(self, bucket_name):
+        pl = bus.platform
+
+        req = self.cloudstorage.buckets().delete(bucket=bucket_name)
+        req.execute()
 
 
     @property
