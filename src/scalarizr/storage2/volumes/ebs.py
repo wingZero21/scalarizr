@@ -152,6 +152,7 @@ class EbsMixin(object):
 
 
 class EbsVolume(base.Volume, EbsMixin):
+    attach_lock = threading.Lock()
 
     _global_timeout = 3600
 
@@ -417,7 +418,7 @@ class EbsVolume(base.Volume, EbsMixin):
             LOG.debug('EBS volume %s attached', volume_id)
 
 
-            if not linux.os.windows_family:
+            if not linux.os.windows:
                 util.wait_until(lambda: base.taken_devices() > taken_before,
                         start_text='Checking that volume %s is available in OS' % volume_id,
                         timeout=30,
