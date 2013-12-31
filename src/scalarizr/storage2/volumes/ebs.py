@@ -50,7 +50,7 @@ def get_free_name():
     filters = {
         'attachment.instance-id': __node__['ec2']['instance_id']
     }
-    attached = list(vol.attach_data.device[-1]
+    attached = set(vol.attach_data.device[-1]
                 for vol in conn.get_all_volumes(filters=filters))
     dirty_detached = set()
     if not linux.os.windows:
