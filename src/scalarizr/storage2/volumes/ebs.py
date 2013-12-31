@@ -427,7 +427,7 @@ class EbsVolume(base.Volume, EbsMixin):
 
                 devices = list(base.taken_devices() - taken_before)
                 if len(devices) > 1:
-                    msg = "While polling for attached device, got multiple new devices: %s. " \
+                    msg = "While polling for attached device, got multiple new devices: {0}. " \
                         "Don't know which one to select".format(devices)
                     raise Exception(msg)
                 return devices[0], device_name
