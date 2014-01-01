@@ -107,6 +107,8 @@ class WsgiApplication(Security):
             start_response('200 OK', headers)
             return result
         except:
+            if sys.exc_info()[0] in (SystemExit, KeyboardInterrupt):
+                raise
             start_response('500 Internal Server Error', [], sys.exc_info())
             LOG.exception('Unhandled exception')
             return ''
