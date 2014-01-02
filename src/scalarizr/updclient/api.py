@@ -274,11 +274,25 @@ class UpdClientAPI(object):
 
 
     def uninstall(self):
-        self.pkgmgr.removed(self.package)
+        pid = None
         if not linux.os.windows:
-            self.pkgmgr.removed('scalarizr-base', purge=True)
-        if linux.os.debian_family:
-            self.pkgmgr.apt_get_command('autoremove')     
+            # Prevent scalr-upd-client restart when updating from old versions 
+            # package 'scalr-upd-client' replaced with 'scalarizr'
+            pid_file = '/var/run/scalr-upd-client.pid'
+            with open(pid_file) as fp:
+                pid = fp.read().strip()
+            with open(pid_file, 'w') as fp:
+                fp.write('0')
+        try:
+            self.pkgmgr.removed(self.package)
+            if not linux.os.windows:
+                self.pkgmgr.removed('scalarizr-base', purge=True)
+            if linux.os.debian_family:
+                self.pkgmgr.apt_get_command('autoremove') 
+        finally:
+            if pid:
+                with open(pid_file, 'w') as fp:
+                    fp.write(pid)    
 
 
     def _sync(self):
