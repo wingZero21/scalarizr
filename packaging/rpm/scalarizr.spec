@@ -254,6 +254,10 @@ set -x
 %post
 set -x
 
+
+%posttrans
+set -x
+
 pub_cnf_dir='/etc/scalr/public.d'
 priv_cnf_dir='/etc/scalr/private.d'
 szr_version_file='/tmp/.szr-version'
@@ -319,16 +323,9 @@ sync
 umount -l "$priv_cnf_dir" 2>&1 || :
 
 
-%posttrans
-set -x
-
-pub_cnf_dir='/etc/scalr/public.d'
-priv_cnf_dir='/etc/scalr/private.d'
-
-
 /sbin/chkconfig --add scalarizr
 /sbin/chkconfig --add scalr-upd-client
-/sbin/chkconfig --del scalarizr_update || :
+/sbin/chkconfig --del scalarizr_update || rm -f /etc/rc*.d/*scalarizr_update
 chmod +x /etc/init.d/scalarizr
 chmod +x /etc/init.d/scalr-upd-client
 
