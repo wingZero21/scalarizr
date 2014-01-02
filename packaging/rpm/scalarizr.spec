@@ -254,10 +254,6 @@ set -x
 %post
 set -x
 
-
-%posttrans
-set -x
-
 pub_cnf_dir='/etc/scalr/public.d'
 priv_cnf_dir='/etc/scalr/private.d'
 szr_version_file='/tmp/.szr-version'
@@ -322,13 +318,6 @@ fi
 sync
 umount -l "$priv_cnf_dir" 2>&1 || :
 
-
-/sbin/chkconfig --add scalarizr
-/sbin/chkconfig --add scalr-upd-client
-/sbin/chkconfig --del scalarizr_update || rm -f /etc/rc*.d/*scalarizr_update
-chmod +x /etc/init.d/scalarizr
-chmod +x /etc/init.d/scalr-upd-client
-
 cp /usr/share/scalr/szradm.bash_completion /etc/bash_completion.d/szradm
 
 pushd .
@@ -345,6 +334,15 @@ rm -f percona.ini  # Measly config in several builds
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini
 popd
+
+
+%posttrans
+set -x
+
+/sbin/chkconfig --add scalarizr
+/sbin/chkconfig --add scalr-upd-client
+chmod +x /etc/init.d/scalarizr
+chmod +x /etc/init.d/scalr-upd-client
 
 /sbin/service scalarizr condrestart > /dev/null 2>&1 || :
 
