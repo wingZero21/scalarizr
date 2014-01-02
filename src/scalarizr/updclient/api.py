@@ -403,6 +403,7 @@ class UpdClientAPI(object):
         self.update_status = {
             # object state
             'server_id': self.server_id,
+            'farm_role_id': self.farm_role_id,
             'system_id': self.system_id,
             'platform': self.platform,
             'queryenv_url': self.queryenv_url,
