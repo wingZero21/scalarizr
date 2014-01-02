@@ -43,8 +43,9 @@ class NoSystemUUID(Exception):
 
 
 def norm_user_data(data):
-    data['server_id'] = data['serverid']
-    data['messaging_url'] = data['p2p_producer_endpoint']
+    data['server_id'] = data.pop('serverid')
+    data['messaging_url'] = data.pop('p2p_producer_endpoint')
+    data['farm_role_id'] = data.pop('farm_roleid')
     return data
 
 
@@ -71,7 +72,7 @@ class UpdClientAPI(object):
         win='http://win.scalr.net'
     )
 
-    server_id = system_id = platform = queryenv_url = messaging_url = None
+    server_id = farm_role_id = system_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
     update_status = None
 
@@ -296,15 +297,16 @@ class UpdClientAPI(object):
 
 
     def _sync(self):
-        globs = self.queryenv.get_global_config()['params']
-        self.__dict__.update((key[7:].replace('.', '_'), value) 
-                    for key, value in globs.items() 
-                    if key.startswith('update.'))
+        params = self.queryenv.list_farm_role_params(self.farm_role_id)
+        update = params.get('params', {}).get('base', {}).get('update', {})
+        self.__dict__.update(update)
         self.repo_url = value_for_repository(
-            deb=globs.get('update.deb.repo_url'),
-            rpm=globs.get('update.rpm.repo_url'),
-            win=globs.get('update.win.repo_url')
+            deb=update.get('deb_repo_url'),
+            rpm=update.get('rpm_repo_url'),
+            win=update.get('win_repo_url')
             ) or self.repo_url
+
+        globs = self.queryenv.get_global_config()['params']
         self.scalr_id = globs['scalr.id']
         self.scalr_version = globs['scalr.version']
         

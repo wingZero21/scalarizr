@@ -56,14 +56,21 @@ class TestUpdClientAPI(object):
 
     GLOBAL_CONFIG = {
         "scalr.version": "4.4.0",
-        "scalr.id": "ab6d8171",
-        "update.repository": "latest",
-        "update.deb.repo_url": "http://apt.scalr.net/debian scalr/",
-        "update.rpm.repo_url": "http://rpm.scalr.net/rpm/rhel/$releasever/$basearch",
-        "update.win.repo_url": "http://win.scalr.net",
+        "scalr.id": "ab6d8171"
         #"update.server_url": "http://update.scalr.net/",
         #"update.client_mode": "client",
         #"update.api_port": "8008"
+    }
+
+    LIST_FARM_ROLE_PARAMS = {
+        'base': {
+            'update': {
+                "repository": "latest",
+                "deb_repo_url": "http://apt.scalr.net/debian scalr/",
+                "rpm_repo_url": "http://rpm.scalr.net/rpm/rhel/$releasever/$basearch",
+                "win_repo_url": "http://win.scalr.net",
+            }
+        }
     }
 
     STATUS_FILE_1 = {
@@ -117,7 +124,7 @@ class TestUpdClientAPI(object):
 
     def assert_bootstrap_no_install(self, upd, metadata):
         eq_(upd.server_id, self.STATUS_FILE_1['server_id'])
-        ok_(not metadata.mock_calls)
+        eq_(upd.uninstall.mock_calls, [])
         eq_(upd.update.mock_calls, [])
 
 
@@ -144,7 +151,8 @@ class TestUpdClientAPI(object):
         
 
     def test_bootstrap_after_restart_or_reboot(self, queryenv=None, metadata=None, **kwds):
-        upd = self.setup_bootstrap(metadata, queryenv, status_file_data=self.STATUS_FILE_1)
+        upd = self.setup_bootstrap(metadata, queryenv, mock_update=True, 
+                mock_uninstall=True, status_file_data=self.STATUS_FILE_1)
         upd.bootstrap()
         self.assert_bootstrap_no_install(upd, metadata)
         ok_(upd.system_matches)
@@ -160,26 +168,28 @@ class TestUpdClientAPI(object):
     def setup_sync(self, queryenv=None, metadata=None, **kwds):
         queryenv.QueryEnvService.return_value.get_global_config.return_value = {
             'params': self.GLOBAL_CONFIG
-        }   
+        } 
+        queryenv.QueryEnvService.return_value.list_farm_role_params.return_value = {
+            'params': self.LIST_FARM_ROLE_PARAMS
+        } 
         upd = self.setup_bootstrap(metadata, queryenv, status_file_data=self.STATUS_FILE_1, **kwds)
         upd.bootstrap()
         return upd
 
     def test_sync(self, queryenv=None, metadata=None, pkgmgr=None, **kwds):
         upd = self.setup_sync(queryenv, metadata)
-        upd.sync()
+        upd._sync()
 
         eq_(upd.scalr_id, self.GLOBAL_CONFIG['scalr.id'])
-        eq_(upd.repository, self.GLOBAL_CONFIG['update.repository'])
-        eq_(upd.repo_url, self.GLOBAL_CONFIG['update.deb.repo_url'])
-        eq_(pkgmgr.repository.mock_calls, [
-                mock.call(upd.repository, upd.repo_url), 
-                mock.call().ensure()
-                ])
-
+        eq_(upd.repository, self.LIST_FARM_ROLE_PARAMS['base']['update']['repository'])
+        eq_(upd.repo_url, self.LIST_FARM_ROLE_PARAMS['base']['update']['deb_repo_url'])
+ 
 
     def test_update(self, queryenv=None, metadata=None, **kwds):
-        upd = self.setup_sync(queryenv, metadata, mock_update=False, mock_uninstall=True)
+        upd = self.setup_sync(queryenv, metadata, mock_update=False)
+        mock.patch.multiple(upd, 
+            uninstall=mock.DEFAULT, 
+            _ensure_repos=mock.DEFAULT).start()
         candidate = '0.21.32'
         def run(*args, **kwds):
             return args[1](mock.Mock())
