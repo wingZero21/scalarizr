@@ -293,7 +293,7 @@ fi
 if compare_versions "$installed_version" lt '0.9.r4762-1'; then
 	dbfile="$priv_cnf_dir/db.sqlite"
 	if [ -e "$dbfile" ]; then
-		${__python} - <<-EOF
+		%{__python} - <<-EOF
 			import sqlite3
 			import os
 			conn = sqlite3.Connection('${dbfile}')
@@ -309,7 +309,7 @@ fi
 
 if compare_versions "$installed_version" lt '0.23.0'; then
     # scalr-upd-client binary here still points to old python module
-	${__python} -m scalarizr.updclient.app --make-lock-file
+	%{__python} -m scalarizr.updclient.app --make-lock-file
 fi
 
 sync
