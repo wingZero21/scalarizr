@@ -251,6 +251,10 @@ Scalarizr converts any server to Scalr-manageable node
 %pre
 set -x 
 
+
+%posttrans
+set -x
+
 pub_cnf_dir='/etc/scalr/public.d'
 priv_cnf_dir='/etc/scalr/private.d'
 szr_version_file='/tmp/.szr-version'
@@ -309,18 +313,12 @@ fi
 
 if compare_versions "$installed_version" lt '0.23.0'; then
     # scalr-upd-client binary here still points to old python module
-	%{__python} -m scalarizr.updclient.app --make-lock-file
+	%{__python} -m scalarizr.updclient.app --make-status-file
 fi
 
 sync
-umount -l "$priv_cnf_dir" 2>&1 || :	
+umount -l "$priv_cnf_dir" 2>&1 || :
 
-
-%posttrans
-set -x
-
-pub_cnf_dir='/etc/scalr/public.d'
-priv_cnf_dir='/etc/scalr/private.d'
 
 /sbin/chkconfig --add scalarizr
 /sbin/chkconfig --add scalr-upd-client

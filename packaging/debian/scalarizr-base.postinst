@@ -531,7 +531,7 @@ if [ -n "$installed_version" ]; then
 	fi
 
 	if dpkg --compare-versions "$installed_version" lt '0.23.0'; then
-		scalr-upd-client --make-lock-file
+		python -m scalarizr.updclient.app --make-status-file
 	fi
 fi
 
