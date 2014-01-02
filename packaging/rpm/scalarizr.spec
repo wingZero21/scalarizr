@@ -309,7 +309,7 @@ fi
 
 if compare_versions "$installed_version" lt '0.23.0'; then
     # scalr-upd-client binary here still points to old python module
-	python26 -m scalarizr.updclient.app --make-lock-file
+	${__python} -m scalarizr.updclient.app --make-lock-file
 fi
 
 sync
@@ -346,7 +346,6 @@ rm -f percona.ini  # Measly config in several builds
 popd
 
 /sbin/service scalarizr condrestart > /dev/null 2>&1 || :
-/sbin/service scalr-upd-client condrestart > /dev/null 2>&1 || :
 
 %preun
 set -x
