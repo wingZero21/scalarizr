@@ -251,8 +251,7 @@ Scalarizr converts any server to Scalr-manageable node
 %pre
 set -x 
 
-
-%posttrans
+%post
 set -x
 
 pub_cnf_dir='/etc/scalr/public.d'
@@ -318,6 +317,13 @@ fi
 
 sync
 umount -l "$priv_cnf_dir" 2>&1 || :
+
+
+%posttrans
+set -x
+
+pub_cnf_dir='/etc/scalr/public.d'
+priv_cnf_dir='/etc/scalr/private.d'
 
 
 /sbin/chkconfig --add scalarizr
