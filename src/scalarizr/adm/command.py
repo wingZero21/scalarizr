@@ -91,13 +91,14 @@ class Command(object):
                              subcommand,
                              usage)
 
-    def run_subcommand(self, subcommand, args):
+    def run_subcommand(self, subcommand, args, kwds=None):
         """
         Launches subcommands with given args.
         """
+        if not kwds:
+            kwds = {}
         sub_cmd_definition = self._find_subcommand(subcommand)
         is_class = inspect.isclass(sub_cmd_definition)
-        kwds = {}
         if is_class:
             sub_cmd = sub_cmd_definition()
             sub_cmd_doc = sub_cmd.help()

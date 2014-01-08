@@ -41,15 +41,25 @@ class Szradm(command_module.Command):
     Szradm is scalarizr administration tool.
 
     Usage:
-      szradm --help
-      szradm --version
-      szradm <command> [<args>...]
+      szradm [options] [<command>] [<args>...]
 
     Options:
-      -v, --version     Show version.
+      -v, --version                Show version.
+      -h, --help                   show this help message and exit
+      -q, --queryenv               QueryEnv CLI
+      --api-version=API_VERSION    QueryEnv API version
+      -m, --msgsnd                 Message sender CLI
+      -r, --repair                 Repair database
+      -n NAME, --name=NAME         
+      -f MSGFILE, --msgfile=MSGFILE
+      -e ENDPOINT, --endpoint=ENDPOINT
+      -o QUEUE, --queue=QUEUE
+      -s, --qa-report              Build report with logs and system info
+      --fire-event=EVENT_NAME      Fire custom event in Scalr. Parameters are passed in a
+                                   key=value form
     """
 
-    version = (0, 1)
+    version = (0, 2)
 
     def help(self):
         """
@@ -62,18 +72,50 @@ class Szradm(command_module.Command):
         super(Szradm, self).__init__()
         self.subcommands = self.find_commands(commands_dir)
 
-    def __call__(self, command=None, version=False, help=False, args=[]):
+    def __call__(self, 
+                 command=None,
+                 version=False,
+                 help=False,
+                 queryenv=False,
+                 msgsnd=False,
+                 qa_report=False,
+                 repair=False,
+                 name=None,
+                 msgfile=None,
+                 queue=None,
+                 api_version=None,
+                 fire_event=None,
+                 endpoint=None,
+                 args=[]):
 
         if version:
             print 'Szradm version: %s.%s' % self.version
+            return
+
         if help:
             self.subcommands = list(self.subcommands)
             print self.help() + self._command_help()
-
-        if not command:
             return
 
         try:
+            # old-style command execution for backward compatibility
+            if queryenv:
+                return self.run_subcommand('queryenv', args, kwds)
+
+            if msgsnd:
+                kwds = {'name': name,
+                        'msgfile': msgfile,
+                        'endpoint': endpoint,
+                        'queue': queue}
+                return self.run_subcommand('msgsnd', args, kwds)
+
+            if fire_event:
+                return self.run_subcommand('fire-event', args, {'name': fire_event})  # TODO:
+
+            if not command:
+                return self(help=True)
+
+            # Standard command execution style
             return self.run_subcommand(command, args)
 
         except (command_module.UnknownCommand, command_module.InvalidCall), e:
@@ -113,4 +155,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    sys.exit(main(sys.argv))

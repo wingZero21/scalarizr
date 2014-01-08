@@ -316,7 +316,7 @@ class ScalrVersion(Store):
 node = {
         'server_id,role_id,farm_id,farm_role_id,env_id,role_name,server_index,queryenv_url':
                                 Ini(os.path.join(private_dir, 'config.ini'), 'general'),
-        'message_format': Ini(os.path.join(private_dir, 'config.ini'), 'messaging_p2p'),
+        'message_format,producer_url': Ini(os.path.join(private_dir, 'config.ini'), 'messaging_p2p'),
         'platform_name,crypto_key_path': Ini(os.path.join(public_dir, 'config.ini'), 'general'),
         'platform': Attr('scalarizr.bus', 'bus.platform'),
         'behavior': IniOption([public_dir + '/config.ini', private_dir + '/config.ini'], 
