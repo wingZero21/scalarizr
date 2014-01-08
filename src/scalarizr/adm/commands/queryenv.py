@@ -44,7 +44,7 @@ class Queryenv(Command):
       -i, --with-initializing     Show initializing servers
 
     Options for list-virtualhosts:
-      -n, --name               Show virtual host by name
+      -n, --name=<name>        Show virtual host by name
       -s, --https              Show virtual hosts by https
     """
 

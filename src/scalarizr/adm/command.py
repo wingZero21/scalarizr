@@ -94,6 +94,8 @@ class Command(object):
     def run_subcommand(self, subcommand, args, kwds=None):
         """
         Launches subcommands with given args.
+        kwds - is dict of keywords that are passed directly to command call and
+        are not parsed with docopt.
         """
         if not kwds:
             kwds = {}
@@ -114,7 +116,7 @@ class Command(object):
             kwds.update(parse_command_line(args, sub_cmd_doc))
         except (DocoptExit, DocoptLanguageError), e:
             usage = ''.join(get_section('usage', sub_cmd_doc))
-            msg = '%s: invalid call.\n%s' % (subcommand, e.message)
+            msg = '%s: invalid call.\n%s' % subcommand
             raise InvalidCall(msg, subcommand, usage)
 
         if 'help' in kwds and not accepts_help:
