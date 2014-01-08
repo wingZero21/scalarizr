@@ -58,10 +58,11 @@ class Queryenv(Command):
         methods = [(' '*TAB_SIZE) + m for m in self.supported_methods()]
         return doc + '\nSupported methods:\n' + '\n'.join(methods)
 
-    def supported_methods(self):
-        usage_section = get_section('usage', self.__doc__)[0]
+    @classmethod
+    def supported_methods(cls):
+        usage_section = get_section('usage', cls.__doc__)[0]
         usages = re.findall(r'queryenv .+?\s', usage_section)
-        methods = [s.split()[1] for s in usages]
+        methods = [s.split()[1] for s in usages if '<method>' not in s]
         return methods
 
     @classmethod

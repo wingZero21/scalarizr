@@ -9,6 +9,7 @@ from textwrap import dedent
 
 from scalarizr.adm import command as command_module
 from scalarizr.app import init_script
+from scalarizr.adm.commands.queryenv import Queryenv as QueryenvCmd
 
 
 __dir__ = os.path.dirname(__file__)
@@ -53,7 +54,7 @@ class Szradm(command_module.Command):
       -f <msgfile>, --msgfile=<msgfile>
       -e <endpoint>, --endpoint=<endpoint>
       -o <queue>, --queue=<queue>
-      --fire-event=<event_name>      Fire custom event in Scalr. Parameters are passed in a
+      --fire-event=<event_name>    Fire custom event in Scalr. Parameters are passed in a
                                    key=value form
     """
 
@@ -119,6 +120,9 @@ class Szradm(command_module.Command):
 
             if not command:
                 return self(help=True)
+
+            if command in QueryenvCmd.supported_methods():
+                return self.run_subcommand('queryenv', [command] + args)
 
             # Standard command execution style
             return self.run_subcommand(command, args)
