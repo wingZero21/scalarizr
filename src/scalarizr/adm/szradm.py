@@ -98,13 +98,13 @@ class Szradm(command_module.Command):
         try:
             # old-style command execution for backward compatibility
             if queryenv:
-                args = ['fetch']
+                run_args = ['fetch']
                 kwds = {}
                 for pair in args:
                     k, v = pair.split('=')
                     kwds[k] = v
                 
-                return self.run_subcommand('queryenv', [], kwds)
+                return self.run_subcommand('queryenv', run_args, kwds)
 
             if msgsnd:
                 kwds = {'name': name,
