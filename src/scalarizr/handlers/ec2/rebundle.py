@@ -117,9 +117,8 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
         if not root_disk:
             raise HandlerError("Can't find root device")
 
-        if instance.root_device_name:
+        if instance.root_device_type == 'ebs':
             # EBS-root device instance
-
             """ detecting root device like rdev=`sda` """
             rdev = None
             for el in os.listdir('/sys/block'):
@@ -942,23 +941,23 @@ class AmiManifest:
     arch = None
     parts = None
     image_size = None
-    bundled_size=None
-    bundler_name=None,
-    bundler_version=None,
-    bundler_release=None,
-    user_encrypted_key=None
-    ec2_encrypted_key=None
-    user_encrypted_iv=None
-    ec2_encrypted_iv=None
-    image_digest=None
-    digest_algo=None
-    crypto_algo=None
-    user_private_key=None
-    kernel_id=None
-    ramdisk_id=None
-    product_codes=None
-    ancestor_ami_ids=None
-    block_device_mapping=None
+    bundled_size = None
+    bundler_name = None,
+    bundler_version = None,
+    bundler_release = None,
+    user_encrypted_key = None
+    ec2_encrypted_key = None
+    user_encrypted_iv = None
+    ec2_encrypted_iv = None
+    image_digest = None
+    digest_algo = None
+    crypto_algo = None
+    user_private_key = None
+    kernel_id = None
+    ramdisk_id = None
+    product_codes = None
+    ancestor_ami_ids = None
+    block_device_mapping = None
 
 
     def __init__(self, name=None, user=None, arch=None,
