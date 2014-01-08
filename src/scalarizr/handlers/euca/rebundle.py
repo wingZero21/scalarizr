@@ -6,7 +6,7 @@ Created on Oct 12, 2010
 '''
 
 from scalarizr.bus import bus
-from scalarizr.handlers.ec2.rebundle import Ec2RebundleHandler, RebundleInstanceStoreStrategy, AmiManifest
+from scalarizr.handlers.ec2 import rebundle as ec2_rebundle_hdlr
 from scalarizr.handlers import HandlerError
 
 import os
@@ -18,13 +18,14 @@ from M2Crypto import BN, EVP, RSA, X509
 
 IMAGE_IO_CHUNK = 10 * 1024
 IMAGE_SPLIT_CHUNK = IMAGE_IO_CHUNK * 1024
+LOG = ec2_rebundle_hdlr.LOG
 
 def get_handlers ():
     return [EucaRebundleHandler()]
 
-class EucaRebundleHandler(Ec2RebundleHandler):
+class EucaRebundleHandler(ec2_rebundle_hdlr.Ec2RebundleHandler):
     def __init__(self):
-        Ec2RebundleHandler.__init__(self, instance_store_strategy_cls=EucaRebundleInstanceStoreStrategy)
+        ec2_rebundle_hdlr.Ec2RebundleHandler.__init__(self, instance_store_strategy_cls=EucaRebundleInstanceStoreStrategy)
 
     @property
     def _s3_bucket_name(self):
@@ -32,10 +33,10 @@ class EucaRebundleHandler(Ec2RebundleHandler):
         return 'scalr2-images-%s' % pl.get_account_id()
 
 
-class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
+class EucaRebundleInstanceStoreStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
     def _bundle_image(self, name, image_file, user, destination, user_private_key_string,
                                     user_cert_string, ec2_cert_string, key=None, iv=None):
-        self._logger.info("Bundling image...")
+        LOG.info("Bundling image...")
         Popen(['sync']).communicate()
 
         image_size, sha_image_digest = self.check_image(image_file, destination)
@@ -56,7 +57,7 @@ class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
         ec2_encrypted_iv = hexlify(ec2_public_key.public_encrypt(iv, pad))
 
         manifest_file = os.path.join(destination, name + '.manifest.xml')
-        manifest = AmiManifest(
+        manifest = ec2_rebundle_hdlr.AmiManifest(
                 name=name,
                 user=user,
                 arch=self._get_arch(),
@@ -76,15 +77,15 @@ class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
         )
         manifest.save(manifest_file)
 
-        self._logger.info("Image bundle complete!")
+        LOG.info("Image bundle complete!")
         return manifest_file, manifest
 
     def check_image(self, image_file, path):
-        self._logger.info('Checking image')
+        LOG.info('Checking image')
         if not os.path.exists(path):
             os.makedirs(path)
         image_size = os.path.getsize(image_file)
-        self._logger.debug('Image size: %d bytes', image_size)
+        LOG.debug('Image size: %d bytes', image_size)
 
         # Euca2ool 1.3 main-31337 2009-04-04
         # Buggy calculates signature from empty string
@@ -101,7 +102,7 @@ class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
 
 
     def tarzip_image(self, prefix, file, path):
-        self._logger.info('Tarring image')
+        LOG.info('Tarring image')
 
         tar_file = '%s.tar.gz' % os.path.join(path, prefix)
         outfile = open(tar_file, 'wb')
@@ -124,13 +125,13 @@ class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
 
 
     def encrypt_image(self, file):
-        self._logger.info('Encrypting image')
+        LOG.info('Encrypting image')
         enc_file = '%s.part' % file.replace('.tar.gz', '')
 
         key = hex(BN.rand(16 * 8))[2:34].replace('L', 'c')
         iv = hex(BN.rand(16 * 8))[2:34].replace('L', 'c')
-        self._logger.debug('Key: %s', key)
-        self._logger.debug('IV: %s', iv)
+        LOG.debug('Key: %s', key)
+        LOG.debug('IV: %s', iv)
 
         k = EVP.Cipher(alg='aes_128_cbc', key=unhexlify(key),
                                    iv=unhexlify(iv), op=1)
@@ -153,7 +154,7 @@ class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
         out_file.write(cipher.final())
 
     def split_image(self, file):
-        self._logger.info('Splitting image...')
+        LOG.info('Splitting image...')
         return self.split_file(file, IMAGE_SPLIT_CHUNK)
 
     def split_file(self, file, chunk_size):
@@ -168,7 +169,7 @@ class EucaRebundleInstanceStoreStrategy(RebundleInstanceStoreStrategy):
             filename = '%s.%d' % (file, i)
             part_digest = sha1()
             file_part = open(filename, 'wb')
-            self._logger.debug('Part: %s', self.get_relative_filename(filename))
+            LOG.debug('Part: %s', self.get_relative_filename(filename))
             part_bytes_written = 0
             while part_bytes_written < IMAGE_SPLIT_CHUNK:
                 data = in_file.read(IMAGE_IO_CHUNK)
