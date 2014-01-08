@@ -142,11 +142,12 @@ class Queryenv(Command):
 
         method = method.replace('-', '_')
         m = getattr(self.queryenv(), method)
-        argnames = inspect.getargspec(m).args
+        argspec = inspect.getargspec(m)
+        argnames = argspec.args
         filtered_kwds = {}
         for k, v in kwds.items():
             arg_name = kwds_mapping.get(k, k)
-            if arg_name in argnames:
+            if argspec.kwds or arg_name in argnames:
                 filtered_kwds[arg_name] = v
 
         return m(**filtered_kwds)

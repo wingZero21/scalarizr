@@ -49,13 +49,11 @@ class Szradm(command_module.Command):
       -q, --queryenv               QueryEnv CLI
       --api-version=API_VERSION    QueryEnv API version
       -m, --msgsnd                 Message sender CLI
-      -r, --repair                 Repair database
-      -n NAME, --name=NAME         
-      -f MSGFILE, --msgfile=MSGFILE
-      -e ENDPOINT, --endpoint=ENDPOINT
-      -o QUEUE, --queue=QUEUE
-      -s, --qa-report              Build report with logs and system info
-      --fire-event=EVENT_NAME      Fire custom event in Scalr. Parameters are passed in a
+      -n <name>, --name=<name>         
+      -f <msgfile>, --msgfile=<msgfile>
+      -e <endpoint>, --endpoint=<endpoint>
+      -o <queue>, --queue=<queue>
+      --fire-event=<event_name>      Fire custom event in Scalr. Parameters are passed in a
                                    key=value form
     """
 
@@ -100,17 +98,23 @@ class Szradm(command_module.Command):
         try:
             # old-style command execution for backward compatibility
             if queryenv:
-                return self.run_subcommand('queryenv', args, kwds)
+                args = ['fetch']
+                kwds = {}
+                for pair in args:
+                    k, v = pair.split('=')
+                    kwds[k] = v
+                
+                return self.run_subcommand('queryenv', [], kwds)
 
             if msgsnd:
                 kwds = {'name': name,
                         'msgfile': msgfile,
                         'endpoint': endpoint,
                         'queue': queue}
-                return self.run_subcommand('msgsnd', args, kwds)
+                return self.run_subcommand('msgsnd', [], kwds)
 
             if fire_event:
-                return self.run_subcommand('fire-event', args, {'name': fire_event})  # TODO:
+                return self.run_subcommand('fire-event', [], {'name': fire_event})  # TODO:
 
             if not command:
                 return self(help=True)
