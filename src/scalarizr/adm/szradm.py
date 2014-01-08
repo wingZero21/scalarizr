@@ -103,6 +103,7 @@ class Szradm(command_module.Command):
                 for pair in args:
                     k, v = pair.split('=')
                     kwds[k] = v
+                kwds['command'] = command
                 
                 return self.run_subcommand('queryenv', run_args, kwds)
 

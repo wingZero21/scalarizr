@@ -36,7 +36,7 @@ class Queryenv(Command):
       queryenv list-ebs-mountpoints
       queryenv list-roles [--behaviour=<bhvr>] [--role-name=<rolename>] [--with-initializing]
       queryenv list-virtual-hosts [--name=<name>] [--https]
-      queryenv <method>
+      queryenv <method> [<args>...]
     
     Options for list-roles:
       -b, --behaviour=<bhvr>      Role behaviour.
@@ -152,7 +152,8 @@ class Queryenv(Command):
 
         return m(**filtered_kwds)
 
-    def __call__(self, method=None, **kwds):
+    def __call__(self, method=None, args=None, **kwds):
+        # TODO: parse args (as they are in k=w form) and add to kwds dict
         supported_methods = self.supported_methods()
         if not method:
             for kwd in kwds.keys():
