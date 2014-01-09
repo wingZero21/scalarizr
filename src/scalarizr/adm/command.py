@@ -116,7 +116,7 @@ class Command(object):
             kwds.update(parse_command_line(args, sub_cmd_doc))
         except (DocoptExit, DocoptLanguageError), e:
             usage = ''.join(get_section('usage', sub_cmd_doc))
-            msg = '%s: invalid call.\n%s' % subcommand
+            msg = '%s: invalid call.' % subcommand
             raise InvalidCall(msg, subcommand, usage)
 
         if 'help' in kwds and not accepts_help:
@@ -130,7 +130,7 @@ def parse_command_line(argv, doc):
     Parses list of command-line argv using doc and translates
     them to keyword dictionary which can be used to call Command instance.
     """
-    arguments = docopt(doc, argv=argv, options_first=True, help=False)
+    arguments = docopt(doc, argv=argv, help=False)
     kwds = _docopt_out_to_kwds(arguments)
     return kwds
 
@@ -159,4 +159,3 @@ def get_command_name(obj):
     elif isinstance(obj, object):
         name = obj.__class__.__name__
     return camel_to_underscore(name).replace('_', '-')
-
