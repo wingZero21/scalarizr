@@ -106,7 +106,7 @@ class Szradm(command_module.Command):
                     kwds[k] = v
                 kwds['command'] = command
                 
-                return self.run_subcommand('queryenv', run_args, kwds, options_first=True)
+                return self.run_subcommand('queryenv', run_args, kwds)
 
             if msgsnd:
                 kwds = {'name': name,
@@ -125,7 +125,7 @@ class Szradm(command_module.Command):
                 return self.run_subcommand('queryenv', [command] + args)
 
             # Standard command execution style
-            return self.run_subcommand(command, args, options_first=True)
+            return self.run_subcommand(command, args)
 
         except (command_module.UnknownCommand, command_module.InvalidCall), e:
             call_str = 'szradm %s %s' % (command, ' '.join(args))
@@ -158,7 +158,7 @@ def main(argv):
     init_script()
     szradm = Szradm(os.path.join(__dir__, 'commands'))
     # If szradm called with no arguments - print help() and all/most used possible commands
-    szradm_kwds = command_module.parse_command_line(argv[1:], szradm.help())
+    szradm_kwds = command_module.parse_command_line(argv[1:], szradm.help(), options_first=True)
     # TODO: return exit codes which are dependent on exception thrown
     return szradm(**szradm_kwds)
 

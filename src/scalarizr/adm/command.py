@@ -91,7 +91,7 @@ class Command(object):
                              subcommand,
                              usage)
 
-    def run_subcommand(self, subcommand, args, kwds=None):
+    def run_subcommand(self, subcommand, args, kwds=None, options_first=False):
         """
         Launches subcommands with given args.
         kwds - is dict of keywords that are passed directly to command call and
@@ -113,7 +113,7 @@ class Command(object):
             if 'self' in spec_args:
                 kwds['self'] = self
         try:
-            kwds.update(parse_command_line(args, sub_cmd_doc))
+            kwds.update(parse_command_line(args, sub_cmd_doc, options_first=options_first))
         except (DocoptExit, DocoptLanguageError), e:
             # TODO: maybe show whole help not just usage
             usage = ''.join(get_section('usage', sub_cmd_doc))
