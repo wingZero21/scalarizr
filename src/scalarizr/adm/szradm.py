@@ -106,7 +106,7 @@ class Szradm(command_module.Command):
                     kwds[k] = v
                 kwds['command'] = command
                 
-                return self.run_subcommand('queryenv', run_args, kwds)
+                return self.run_subcommand('queryenv', run_args, kwds, options_first=True)
 
             if msgsnd:
                 kwds = {'name': name,
@@ -125,7 +125,7 @@ class Szradm(command_module.Command):
                 return self.run_subcommand('queryenv', [command] + args)
 
             # Standard command execution style
-            return self.run_subcommand(command, args)
+            return self.run_subcommand(command, args, options_first=True)
 
         except (command_module.UnknownCommand, command_module.InvalidCall), e:
             call_str = 'szradm %s %s' % (command, ' '.join(args))

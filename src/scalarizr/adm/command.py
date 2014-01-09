@@ -115,6 +115,7 @@ class Command(object):
         try:
             kwds.update(parse_command_line(args, sub_cmd_doc))
         except (DocoptExit, DocoptLanguageError), e:
+            # TODO: maybe show whole help not just usage
             usage = ''.join(get_section('usage', sub_cmd_doc))
             msg = '%s: invalid call.' % subcommand
             raise InvalidCall(msg, subcommand, usage)
@@ -125,12 +126,19 @@ class Command(object):
             return sub_cmd(**kwds)
 
 
-def parse_command_line(argv, doc):
+def parse_command_line(argv, doc, options_first=False):
     """
     Parses list of command-line argv using doc and translates
     them to keyword dictionary which can be used to call Command instance.
+    If options_first is True - options (keys) must go before subcommands.
+    If it is False - it implies that command have no subcommands or subcommands
+    have no options, otherwise those options will be parsed while command is parsed
+    which may cause errors.
+    Example:
+        call `szradm queryenv --help` with options_first=True --help will be
+        passed to queryenv subcomand, and with options_first=False - to szradm.
     """
-    arguments = docopt(doc, argv=argv, help=False)
+    arguments = docopt(doc, argv=argv, help=False, options_first=options_first)
     kwds = _docopt_out_to_kwds(arguments)
     return kwds
 
