@@ -152,15 +152,13 @@ class Queryenv(Command):
         return m(**filtered_kwds)
 
     def __call__(self, method=None, args=None, **kwds):
-        # TODO: parse args (as they are in k=w form) and add to kwds dict
+
         supported_methods = self.supported_methods()
-        if not method:
-            for kwd in kwds.keys():
-                hyphen_kwd = kwd.replace('_', '-')
-                if hyphen_kwd in supported_methods:
-                    method = hyphen_kwd
-                    kwds.pop(kwd)
-                    break
+
+        for pair in args:
+            if not pair.startswith('-') and '=' in pair:
+                k, v = pair.split('=')
+                kwds[k] = v
 
         if method == 'list-roles':
             out = self._run_queryenv_method(

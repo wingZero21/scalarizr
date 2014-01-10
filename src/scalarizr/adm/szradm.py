@@ -63,7 +63,7 @@ class Szradm(command_module.Command):
     def help(self):
         """
         Redefining this method because we don't need to print subcommands list
-        for szradm in here.
+        for szradm here.
         """
         return dedent(self.__doc__)
 
@@ -99,14 +99,8 @@ class Szradm(command_module.Command):
         try:
             # old-style command execution for backward compatibility
             if queryenv:
-                run_args = ['fetch']
-                kwds = {}
-                for pair in args:
-                    k, v = pair.split('=')
-                    kwds[k] = v
-                kwds['command'] = command
-                
-                return self.run_subcommand('queryenv', run_args, kwds)
+                args = ['fetch', 'command='+command] + args
+                return self.run_subcommand('queryenv', args)
 
             if msgsnd:
                 kwds = {'name': name,
@@ -116,7 +110,7 @@ class Szradm(command_module.Command):
                 return self.run_subcommand('msgsnd', [], kwds)
 
             if fire_event:
-                return self.run_subcommand('fire-event', [], {'name': fire_event})  # TODO:
+                return self.run_subcommand('fire-event', [fire_event]+args)
 
             if not command:
                 return self(help=True)
