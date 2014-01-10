@@ -38,12 +38,10 @@ class Queryenv(Command):
       queryenv list-virtual-hosts [--name=<name>] [--https]
       queryenv <method> [<args>...]
     
-    Options for list-roles:
+    Options:
       -b, --behaviour=<bhvr>      Role behaviour.
       -r, --role-name=<rolename>  Role name.
       -i, --with-initializing     Show initializing servers
-
-    Options for list-virtualhosts:
       -n, --name=<name>        Show virtual host by name
       -s, --https              Show virtual hosts by https
     """
@@ -148,7 +146,7 @@ class Queryenv(Command):
         filtered_kwds = {}
         for k, v in kwds.items():
             arg_name = kwds_mapping.get(k, k)
-            if argspec.kwds or arg_name in argnames:
+            if argspec.keywords or arg_name in argnames:
                 filtered_kwds[arg_name] = v
 
         return m(**filtered_kwds)
