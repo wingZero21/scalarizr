@@ -107,7 +107,7 @@ Section "MainSection" SEC01
   
   SetOverwrite on
   SetOutPath "$INSTDIR\scalarizr"
-  File /r /x *.svn* /x *.pyc /x *.pyo /x "${SZR_BASE_PATH}\src\scalarizr"
+  File /r /x *.svn* /x *.pyc /x *.pyo "${SZR_BASE_PATH}\src\scalarizr"
   SetOutPath "$INSTDIR\upd"
   File /r /x *.svn* /x *.pyc /x *.pyo "${SZR_BASE_PATH}\src\upd"
   
