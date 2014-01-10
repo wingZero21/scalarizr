@@ -17,6 +17,8 @@ class Msgsnd(Command):
     def __call__(self, name=None, msgfile=None, endpoint=None, queue=None, kv=None):
         if not msgfile and not name:
             raise Exception('msgfile or name sholuld be presented')
+        if not kv:
+            kv = {}
         msg_service = bus.messaging_service
         producer = msg_service.get_producer()
 

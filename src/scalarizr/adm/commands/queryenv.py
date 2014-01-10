@@ -152,7 +152,8 @@ class Queryenv(Command):
         return m(**filtered_kwds)
 
     def __call__(self, method=None, args=None, **kwds):
-
+        if not args:
+            args = []
         supported_methods = self.supported_methods()
 
         for pair in args:

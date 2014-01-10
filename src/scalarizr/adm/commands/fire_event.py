@@ -1,5 +1,6 @@
 from scalarizr.bus import bus
 from scalarizr.adm.command import Command
+from scalarizr.node import __node__
 
 
 class FireEvent(Command):
@@ -9,6 +10,8 @@ class FireEvent(Command):
     """
 
     def __call__(self, name=None, kv=None):
+        if not kv:
+            kv = {}
         msg_service = bus.messaging_service
         producer = msg_service.get_producer()
 
