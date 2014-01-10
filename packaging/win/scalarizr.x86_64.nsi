@@ -247,7 +247,7 @@ Section -PostInstall
   ${EnableX64FSRedirection}
 
 
-  {$If} $python_updated == "1"
+  ${If} $python_updated == "1"
       services::SendServiceCommand 'stop' 'ScalrUpdClient'
       services::SendServiceCommand 'start' 'ScalrUpdClient'
   ${EndIf}
