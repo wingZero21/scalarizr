@@ -197,7 +197,7 @@ Section -PostInstall
 	${EndIf}
 	
 
-    nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
+    nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\scalarizr\updclient\app.py" "--startup" "auto" "install"'
     nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
 
 
@@ -218,7 +218,7 @@ Section Uninstall
   SetRegView 64
   services::SendServiceCommand 'stop' 'Scalarizr'
   services::SendServiceCommand 'stop' 'ScalrUpdClient'
-  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
+  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\scalarizr\updclient\app.py" "remove"'
   nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
 
   Rename $INSTDIR\etc $PLUGINSDIR\etc
