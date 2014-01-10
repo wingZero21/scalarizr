@@ -40,7 +40,7 @@ class InvalidCall(SystemExit):
         self.usage = usage
 
 
-class RuntimeError(SystemExit):
+class CommandError(SystemExit):
     pass
 
 
@@ -61,7 +61,7 @@ class Command(object):
         """Returns help section that contains list of subcommands"""
         usages = '\n'.join((' '*TAB_SIZE) + get_command_name(c) for c in self.subcommands)
         if usages:
-            return '\nSubcommands:\n' + usages
+            return '\nSubcommands:\n' + usages + '\n'
         else:
             return ''
 

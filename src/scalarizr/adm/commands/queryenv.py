@@ -6,6 +6,7 @@ from scalarizr.util import system2
 from scalarizr.adm.command import Command
 from scalarizr.adm.command import get_section
 from scalarizr.adm.command import TAB_SIZE
+from scalarizr.adm.command import CommandError
 from scalarizr.adm.util import make_table
 from scalarizr.node import __node__
 from scalarizr.node import base_dir as scalr_base_dir
@@ -106,7 +107,7 @@ class Queryenv(Command):
                                    str(host.replication_master)])
         print make_table(table_data, headers)
 
-    def _display_list_virtualhosts(self, out):
+    def _display_list_virtual_hosts(self, out):
         headers = ['hostname', 'https', 'type', 'raw']
         table_data = [[d.hostname, d.https, d.type, d.raw] for d in out]
         print make_table(table_data, headers)
@@ -140,7 +141,10 @@ class Queryenv(Command):
             kwds_mapping = {}
 
         method = method.replace('-', '_')
-        m = getattr(self.queryenv(), method)
+        try:
+            m = getattr(self.queryenv(), method)
+        except AttributeError:
+            raise CommandError('Unknown QueryEnv method\n')
         argspec = inspect.getargspec(m)
         argnames = argspec.args
         filtered_kwds = {}
@@ -155,6 +159,17 @@ class Queryenv(Command):
         if not args:
             args = []
         supported_methods = self.supported_methods()
+
+        # we need to find method in kwds because parser places it there
+        # param method is presented only when default parsing rule is applied
+        # (queryenv <method> [<args>...])
+        if not method:
+            for kwd in kwds.keys():
+                hyphen_kwd = kwd.replace('_', '-')
+                if hyphen_kwd in supported_methods:
+                    method = hyphen_kwd
+                    kwds.pop(kwd)
+                    break
 
         for pair in args:
             if not pair.startswith('-') and '=' in pair:
