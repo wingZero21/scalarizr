@@ -794,6 +794,7 @@ class Service(object):
 
     def _wait_sysprep_oobe(self):
         try:
+            self._logger.debug('Checking sysprep completion')
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
                                  "SYSTEM\\Setup\\Status\\SysprepStatus", 0,
                                  winreg.KEY_READ) as key:
