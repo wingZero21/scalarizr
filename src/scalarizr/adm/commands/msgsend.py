@@ -6,7 +6,7 @@ from scalarizr.node import __node__
 class Msgsnd(Command):
     """
     Usage:
-      msgsnd --queue=<queue> [--name=<name>] [--msgfile=<msgfile>] [--endpoint=<endpoint>] [<kv>...]
+      msgsnd [--queue=<queue>] [--name=<name>] [--msgfile=<msgfile>] [--endpoint=<endpoint>] [<kv>...]
     Options:
       -n <name>, --name=<name>         
       -f <msgfile>, --msgfile=<msgfile>
