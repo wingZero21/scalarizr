@@ -130,6 +130,8 @@ Section "MainSection" SEC01
   FileRead $0 $2
   FileClose $0
 
+  Var /GLOBAL python_updated
+  StrCpy $python_updated "0"
 
   ${IfNot} $1 == $2
      RMDir /r $INSTDIR\Python27
@@ -138,6 +140,7 @@ Section "MainSection" SEC01
 
   ${IfNot} ${FileExists} "$INSTDIR\Python27"
     InstallPython:
+    StrCpy $python_updated "1"
     SetOutPath "$PLUGINSDIR"
     File "x86_64\python.tar.gz"
     untgz::extract "-z" "-d" "$INSTDIR"  "$PLUGINSDIR\python.tar.gz"
@@ -148,6 +151,7 @@ Section "MainSection" SEC01
 
   SetOverwrite off
   SetOutPath "$INSTDIR"
+  CreateShortCut "$INSTDIR\python" "$INSTDIR\Python27"
   File /r /x *.svn* "noarch\*"
 
   SetOutPath "$INSTDIR\scripts\"
@@ -190,6 +194,7 @@ Section -Post
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
+
 SectionEnd
 
 Section -PostInstall
@@ -215,13 +220,15 @@ Section -PostInstall
   ; Remove pythonpath for old scalarizr installations
   ${EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python26\Lib"
   ${EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python26\Lib\site-packages"
+  ${EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python27\Lib"
+  ${EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python27\Lib\site-packages"
 
   ; Set PYTHONPATH only to what we need
-  SetEnv::SetEnvVar "PYTHONPATH" "$INSTDIR\Python27\Lib;$INSTDIR\Python27\Lib\site-packages;$INSTDIR\src"
+  SetEnv::SetEnvVar "PYTHONPATH" "$INSTDIR\python\Lib;$INSTDIR\python\Lib\site-packages;$INSTDIR\src"
 
   ; Set new pythonpath and path variables
-  ${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib"
-  ${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib\site-packages"
+  ${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\python\Lib"
+  ${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\python\Lib\site-packages"
   ${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\src"
   ${EnvVarUpdate} $0 "PATH" "A" "HKLM" "$INSTDIR"
 
@@ -234,10 +241,16 @@ Section -PostInstall
         nsExec::ExecToStack "netsh advfirewall firewall add rule name=Scalarizr dir=in protocol=tcp localport=8008-8014 action=allow"
       ${EndIf}
 
-      nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
-      nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
+      nsExec::ExecToStack '"$INSTDIR\python\python.exe" "$INSTDIR\python\scripts\pywin32_postinstall.py" -silent -install'
+      nsExec::ExecToStack '"$INSTDIR\python\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
       nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
   ${EnableX64FSRedirection}
+
+
+  {$If} $python_updated == "1"
+      services::SendServiceCommand 'stop' 'ScalrUpdClient'
+      services::SendServiceCommand 'start' 'ScalrUpdClient'
+  ${EndIf}
 
 
 SectionEnd
@@ -257,7 +270,7 @@ Section Uninstall
   SetRegView 64
   services::SendServiceCommand 'stop' 'Scalarizr'
   services::SendServiceCommand 'stop' 'ScalrUpdClient'
-  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
+  nsExec::ExecToStack '"$INSTDIR\python\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
   nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
 
   Rename $INSTDIR\etc $PLUGINSDIR\etc
@@ -268,8 +281,8 @@ Section Uninstall
   DeleteRegKey ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}"
   SetAutoClose true
 
-  ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python27\Lib"
-  ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python27\Lib\site-packages"
+  ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\python\Lib"
+  ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\python\Lib\site-packages"
   ${un.EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\src"
 
 SectionEnd
