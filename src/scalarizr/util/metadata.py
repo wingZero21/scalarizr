@@ -7,8 +7,11 @@ import socket
 import urlparse
 import re
 import os
+import posixpath
 import glob
 import time
+
+from scalarizr import linux
 
 
 LOG = logging.getLogger(__name__)
@@ -51,7 +54,7 @@ class UrlMeta(Meta):
 
     def __getitem__(self, rel):
         result = list(urlparse.urlparse(self.base_url))
-        result[2] = os.path.normpath(result[2] + '/' + rel)
+        result[2] = posixpath.normpath(result[2] + '/' + rel)
         url = urlparse.urlunparse(result)
         try:
             return urllib2.urlopen(url, timeout=self.socket_timeout).read().strip()
@@ -154,7 +157,15 @@ class GceMeta(UrlMeta):
 
 
 def meta(timeout=None):
-    pvds = (Ec2Meta(), OpenStackMeta(), CloudStackMeta(), GceMeta(), 
+    if linux.os.windows:
+        pvds = (Ec2Meta(), 
+                OpenStackMeta(), 
+                FileMeta('C:\\Program Files\\Scalarizr\\etc\\private.d\\.user-data'))
+    else:
+        pvds = (Ec2Meta(), 
+                OpenStackMeta(), 
+                CloudStackMeta(), 
+                GceMeta(), 
                 FileMeta('/etc/.scalr-user-data'), 
                 FileMeta('/etc/scalr/private.d/.user-data'))
     for _ in range(0, timeout or 1):
