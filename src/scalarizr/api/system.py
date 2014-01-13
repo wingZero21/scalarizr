@@ -548,9 +548,12 @@ if linux.os.windows_family:
         @coinitialized
         @rpc.query_method
         def get_hostname(self):
-            wmi = client.GetObject('winmgmts:')
-            for computer in wmi.InstancesOf('Win32_ComputerSystem'):
-                return computer.Name
+            try:
+                wmi = client.GetObject('winmgmts:')
+                for computer in wmi.InstancesOf('Win32_ComputerSystem'):
+                    return computer.Name
+            except:
+                return ''
 
         @coinitialized
         @rpc.query_method
