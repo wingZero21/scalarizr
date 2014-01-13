@@ -12,6 +12,7 @@ import logging
 
 from scalarizr.bus import bus
 from scalarizr.node import __node__
+from scalarizr.config import STATE
 from scalarizr.handlers import Handler
 from scalarizr.util import system2, disttool
 from scalarizr.linux import mount, system, os as os_dist
@@ -39,6 +40,7 @@ class Ec2LifeCycleHandler(Handler):
         bus.on("before_hello", self.on_before_hello)
         bus.on("before_host_init", self.on_before_host_init)
         bus.on("before_restart", self.on_before_restart)
+        bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
         try:
             system(('ntpdate', '-u', '0.amazon.pool.ntp.org'))
@@ -107,6 +109,9 @@ class Ec2LifeCycleHandler(Handler):
         else:
             if not os_dist.windows_family:
                 system2('mount -a', shell=True, raise_exc=False)
+
+    def on_before_reboot_finish(self, *args, **kwds):
+        STATE['ec2.t1micro_detached_ebs'] = []
 
 
     def on_reload(self):
