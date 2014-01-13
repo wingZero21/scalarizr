@@ -26,7 +26,7 @@ from scalarizr.linux import iptables, os as os_dist
 if os_dist.windows_family:
     import win32timezone as os_time
 else:
-    import datetime.datetime as os_time
+    from datetime import datetime as os_time
 
 # Stdlibs
 import logging, os, sys, threading
