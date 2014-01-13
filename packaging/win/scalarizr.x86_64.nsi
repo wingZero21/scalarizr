@@ -151,7 +151,7 @@ Section "MainSection" SEC01
 
   SetOverwrite off
   SetOutPath "$INSTDIR"
-  CreateShortCut "$INSTDIR\python.lnk" "$INSTDIR\Python27"
+  nsExec::ExecToStack "mklink /D $INSTDIR\python" "$INSTDIR\Python27"
   File /r /x *.svn* "noarch\*"
 
   SetOutPath "$INSTDIR\scripts\"
