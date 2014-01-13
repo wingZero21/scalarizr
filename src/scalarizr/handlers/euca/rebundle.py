@@ -6,6 +6,7 @@ Created on Oct 12, 2010
 '''
 
 from scalarizr.bus import bus
+from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr.handlers.ec2 import rebundle as ec2_rebundle_hdlr
 from scalarizr.handlers import HandlerError
 from scalarizr import linux
@@ -52,18 +53,23 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
                 fstab_path = bus.cnf.write_key('euca-fstab', fp.read())
             self._fix_fstab(filename=fstab_path)
 
+            # Create image object for gathering directories exclude list
+            image = rebundle_hdlr.LinuxImage('/', 
+                        os.path.join(self._destination, self._image_name), 
+                        self._excludes)
+
             LOG.info('Executing euca-bundle-vol')
             out = linux.system((
                     linux.which('euca-bundle-vol'), 
                     '--arch', linux.os['arch'],
                     '--size', str(self._image_size),
                     '--destination', self._destination,
-                    '--exclude', ','.join(self._excludes),
+                    '--exclude', ','.join(image.excludes),
                     '--fstab', fstab_path,
                     '--prefix', self._image_name,
                     '/'
                 ),
-                environ=environ
+                env=environ
             )[0]
             LOG.info(out)
 
@@ -75,9 +81,9 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
             return self._register_image(s3_manifest_path)
 
         finally:
-            linux.system('chmod 755 {0}/keys/euca-*'.format(bus.cnf.private_path()))
-            linux.system('rm -f {0}/keys/euca-*'.format(bus.cnf.private_path()))
-            linux.system('rm -f {0}/{1}.*'.format(self._destination, self._image_name))
+            linux.system('chmod 755 {0}/keys/euca-*'.format(bus.cnf.private_path()), shell=True)
+            linux.system('rm -f {0}/keys/euca-*'.format(bus.cnf.private_path()), shell=True)
+            linux.system('rm -f {0}/{1}.*'.format(self._destination, self._image_name), shell=True)
 
 
 class EucaRebundleHandler(ec2_rebundle_hdlr.Ec2RebundleHandler):
