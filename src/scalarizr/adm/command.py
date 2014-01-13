@@ -45,7 +45,11 @@ class CommandError(SystemExit):
 
 
 class Command(object):
-    """Class that represents scalarizr command"""
+    """
+    Class that represents scalarizr command.
+
+    Command execution runs __call__() method and command's task should be defined there.
+    """
 
     # list or generator of Command subclasses, that will be used as subcommands
     subcommands = []

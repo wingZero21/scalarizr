@@ -7,7 +7,7 @@ except ImportError:
 import yaml
 
 from scalarizr.adm.command import Command
-from scalarizr.adm.command import RuntimeError
+from scalarizr.adm.command import CommandError
 from scalarizr.util import system2
 from scalarizr.adm.util import make_table
 from scalarizr.adm.util import encode
@@ -125,7 +125,7 @@ class MessageDetails(Command):
             else:
                 print yaml.dump(mdict, default_flow_style=False)
         else:
-            raise RuntimeError('Message not found')
+            raise CommandError('Message not found')
 
 
 class MarkAsUnhandled(Command):

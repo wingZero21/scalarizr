@@ -127,7 +127,6 @@ class Queryenv(Command):
         else:
             print out
 
-
     def _run_queryenv_method(self, method, kwds, kwds_mapping=None):
         """
         Executes queryenv method with given `kwds`. `kwds` can contain excessive

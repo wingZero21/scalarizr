@@ -115,6 +115,7 @@ class Szradm(command_module.Command):
             if not command:
                 return self(help=True)
 
+            # queryenv shortcuts
             if command in QueryenvCmd.supported_methods():
                 return self.run_subcommand('queryenv', [command] + args)
 
