@@ -1,4 +1,30 @@
 #!/usr/bin/python
+
+
+"""
+Purpose of this script is to administrate scalarizr. It launches predefined commands
+which do some tasks. Commands could have inner commands themselves. Inner
+commands in relation to parent are called subcommands. Commands must have
+docstring which describes it and defines its usage. Docstring is used by docopt
+system to determine parsing rules. Commands are classes that inherit from 
+Command class or methods or functions. Method or function-defined commands
+should be used only for simple tasks, for more complicated (>4 if's or for's,
+or uses some context variables) please use classes. Enter point is Szradm
+command that is launched directly from main() function. Other commands are
+launched with Szradm or other commands with run_subcommand() method. Szradm
+searches for commands in modules of given directory. Module that wants to provide
+commands should define commands variable - list of Command class inheritors
+and/or functions. Result of execution is printed output or return code or both.
+If you want to write new command, you can check existing commands for example
+those that are defined in scalarizr.adm.commands.messages. For additional info
+see http://docopt.org.
+As already mentioned before, remember that docstrings for commands are essential
+to write. Not only parser uses them to know what to do with argument list, but
+you are writing command-line tool that people will be using, write them as
+detailed as possible.
+"""
+
+
 import sys
 import os
 import imp
@@ -45,17 +71,21 @@ class Szradm(command_module.Command):
       szradm [options] [<command>] [<args>...]
 
     Options:
-      -v, --version                Show version.
-      -h, --help                   show this help message and exit
-      -q, --queryenv               QueryEnv CLI
-      --api-version=API_VERSION    QueryEnv API version
+      -v, --version                Display version.
+      -h, --help                   Display this message.
+
       -m, --msgsnd                 Message sender CLI
-      -n <name>, --name=<name>         
-      -f <msgfile>, --msgfile=<msgfile>
-      -e <endpoint>, --endpoint=<endpoint>
-      -o <queue>, --queue=<queue>
-      --fire-event=<event_name>    Fire custom event in Scalr. Parameters are passed in a
-                                   key=value form
+      -n, --name=<name>            Sets message name.
+      -e, --endpoint=<endpoint>    Sets endpoint for message send.
+      -f, --msgfile=<msgfile>      Sets message file.
+      -o, --queue=<queue>          Sets queue which will be used for message delivery.
+
+      -q, --queryenv               QueryEnv CLI with a raw XML output. 
+      --api-version=<api-version>  Set QueryEnv API version which will be used in call.
+                                   QueryEnv parameters should be passed in <key>=<value> form.
+
+      --fire-event=<event_name>    Fires custom event in Scalr.
+                                   Parameters should be passed in a <key>=<value> form.
     """
 
     version = (0, 2)
@@ -150,6 +180,9 @@ class Szradm(command_module.Command):
 
 
 def _exit_code_excepthook(exctype, value, trace):
+    """
+    Hook for exceptions to customize exit codes.
+    """
     old_excepthook(exctype, value, trace)
     if isinstance(value, SystemExit) and '__int__' in dir(value):
         sys.exit(int(value))

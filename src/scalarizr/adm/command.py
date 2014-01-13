@@ -79,7 +79,7 @@ class Command(object):
     Commands return value is exit code return by Szradm if no exception is thrown.
     If one of exception standard exceptions is thrown, return code is taken 
         from their int() value.
-
+    
     """
 
     # list or generator of Command subclasses, that will be used as subcommands
