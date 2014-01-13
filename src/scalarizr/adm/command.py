@@ -25,6 +25,14 @@ def extended_doc(doc, usage_case):
 
 
 class UnknownCommand(SystemExit):
+    """
+    This exception is thrown when command couldn't find subcommand with given
+    alias or name
+    """
+
+    def __int__(self):
+        """Exit code"""
+        return 1
     
     def __init__(self, message, command_name=None, usage=None):
         super(UnknownCommand, self).__init__(message)
@@ -33,6 +41,13 @@ class UnknownCommand(SystemExit):
 
 
 class InvalidCall(SystemExit):
+    """
+    This exception is thrown when command with bad pararmeters - bad usage.
+    """
+
+    def __int__(self):
+        """Exit code"""
+        return 2
     
     def __init__(self, message, command_name=None, usage=None):
         super(InvalidCall, self).__init__(message)
@@ -41,7 +56,14 @@ class InvalidCall(SystemExit):
 
 
 class CommandError(SystemExit):
-    pass
+    """
+    This exception is thrown when some command-specific runtime error is occured.
+    Such as unknown message id in message-details or similiar
+    """
+    
+    def __int__(self):
+        """Exit code"""
+        return 3
 
 
 class Command(object):
@@ -49,6 +71,15 @@ class Command(object):
     Class that represents scalarizr command.
 
     Command execution runs __call__() method and command's task should be defined there.
+    Command can have subcommands - other Command subclasses or just functions.
+    Command name is its class name translated from camel-case to hyphen-case:
+        ListMessages -> list-messages
+    Command can have aliases - list of strings.
+    run_subcommand() searches among names and aliases to find given subcommand.
+    Commands return value is exit code return by Szradm if no exception is thrown.
+    If one of exception standard exceptions is thrown, return code is taken 
+        from their int() value.
+
     """
 
     # list or generator of Command subclasses, that will be used as subcommands
@@ -65,11 +96,16 @@ class Command(object):
         """Returns help section that contains list of subcommands"""
         usages = '\n'.join((' '*TAB_SIZE) + get_command_name(c) for c in self.subcommands)
         if usages:
-            return '\nSubcommands:\n' + usages + '\n'
+            return '\nCommands:\n' + usages + '\n'
         else:
             return ''
 
     def help(self):
+        """
+        Returns __doc__ with some additional info or parser rules.
+        By default it's adding --help usage to every command that doesnt have it,
+        so every command could be run with --help key.
+        """
         doc = self.__doc__
         if not '--help' in doc:
             help_usage_string = get_command_name(self) + ' --help\n'

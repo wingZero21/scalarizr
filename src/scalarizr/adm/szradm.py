@@ -149,6 +149,15 @@ class Szradm(command_module.Command):
                     yield cmd
 
 
+def _exit_code_excepthook(exctype, value, trace):
+    old_excepthook(exctype, value, trace)
+    if isinstance(value, SystemExit) and '__int__' in dir(value):
+        sys.exit(int(value))
+
+
+sys.excepthook, old_excepthook = _exit_code_excepthook, sys.excepthook
+
+
 def main(argv):
     init_script()
     szradm = Szradm(os.path.join(__dir__, 'commands'))
