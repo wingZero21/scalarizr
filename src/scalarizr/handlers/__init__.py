@@ -119,16 +119,16 @@ class Handler(object):
             config.BuiltinBehaviours.MONGODB,
             config.BuiltinBehaviours.CHEF,
             config.BuiltinBehaviours.TOMCAT,
-            ]
+        ]
         ready_behaviors = list()
         if linux.os['family'] != 'Windows':
-            installed_software = pkgmgr.package_mgr().list()
+            installed_packages = pkgmgr.package_mgr().list()
             for behavior in possible_behaviors:
                 try:
                     api_cls = util.import_class(api.api_routes[behavior])
-                    api_cls.check_software(installed_software)
+                    api_cls.check_software(installed_packages)
                     ready_behaviors.append(behavior)
-                except (exceptions.NotFound, exceptions.UnsupportedBehavior):
+                except (exceptions.NotFound, exceptions.UnsupportedBehaviorError):
                     continue
                 # TODO
                 # remove except block after refactoring api import
