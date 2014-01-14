@@ -113,9 +113,6 @@ Section "MainSection" SEC01
   SetOutPath "$INSTDIR"
   File /r /x *.svn* "${SZR_BASE_PATH}\share"
 
-  SetOutPath "$PLUGINSDIR"
-  File "x86_64\python.md5"
-
   ; If md5sum doesn't exist - write md5 of first python dist
   IfFileExists $INSTDIR\Python27 +4 0
       FileOpen $4 "$INSTDIR\python.md5" w
@@ -123,30 +120,28 @@ Section "MainSection" SEC01
       FileClose $4
 
   ; Update python, only if md5sum doesn't match
-  ClearErrors
-  FileOpen $0 $PLUGINSDIR\python.md5 r
-  IfErrors +3
-  FileRead $0 $1
-  FileClose $0
+  ;ClearErrors
+  ;FileOpen $0 $PLUGINSDIR\python.md5 r
+  ;IfErrors +3
+  ;FileRead $0 $1
+  ;FileClose $0
 
-  ClearErrors
-  FileOpen $0 $INSTDIR\Python27\python.md5 r
-  IfErrors +3
-  FileRead $0 $2
-  FileClose $0
+  ;ClearErrors
+  ;FileOpen $0 $INSTDIR\Python27\python.md5 r
+  ;IfErrors +3
+  ;FileRead $0 $2
+  ;FileClose $0
 
-  Var /GLOBAL python_updated
-  StrCpy $python_updated "0"
+  ;Var /GLOBAL python_updated
+  ;StrCpy $python_updated "0"
 
-  ${IfNot} $1 == $2
-      RMDir /r $INSTDIR\Python27
-      StrCpy $start_updclient "1"
-      Goto InstallPython
-  ${EndIf}
+  ;${IfNot} $1 == $2
+  ;    RMDir /r $INSTDIR\Python27
+  ;    Goto InstallPython
+  ;${EndIf}
 
   ${IfNot} ${FileExists} "$INSTDIR\Python27"
     InstallPython:
-    StrCpy $python_updated "1"
 
     SetOutPath "$PLUGINSDIR"
     File "x86_64\python.tar.gz"
@@ -154,7 +149,6 @@ Section "MainSection" SEC01
 
     SetOutPath "$INSTDIR\Python27"
     File "x86_64\python.md5"
-
   ${EndIf}
 
   SetOverwrite off

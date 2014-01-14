@@ -1,4 +1,4 @@
-@setlocal enabledelayedexpansion && "%~dp0\python\python" -x "%~f0" %* & exit /b !ERRORLEVEL!
+@setlocal enabledelayedexpansion && "%~dp0\Python27\python" -x "%~f0" %* & exit /b !ERRORLEVEL!
 import sys
 try:
 	from scalarizr.app import main
