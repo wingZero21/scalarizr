@@ -28,7 +28,7 @@ from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import system2, initdv2
 from scalarizr.util import wait_until, dynimp, PopenError
-from scalarizr.util import Singleton
+from scalarizr.util import Singleton, software
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 from scalarizr import exceptions
@@ -626,24 +626,19 @@ class ApacheAPI(object):
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
 
     @classmethod
-    def check_software(cls, installed=None):
+    def check_software(cls, installed_packages=None):
         try:
             if linux.os.debian_family:
-                pkgmgr.check_dependency(['apache2>=2.2,<2.3'], installed)
+                pkgmgr.check_dependency(['apache2>=2.2,<2.3'], installed_packages)
             elif linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(['httpd>=2.2,<2.3'], installed)
+                pkgmgr.check_dependency(['httpd>=2.2,<2.3'], installed_packages)
             else:
                 raise exceptions.UnsupportedBehavior('app',
-                        "'app' behavior is only supported on " +\
-                        "Debian, RedHat or Oracle operating system family"
-                        )
-        except pkgmgr.NotInstalled as e:
-            raise exceptions.UnsupportedBehavior('app',
-                    'Apache %s is not installed on %s' % (e.args[1], linux.os['name']))
-        except pkgmgr.VersionMismatch as e:
-            raise exceptions.UnsupportedBehavior('app', str(
-                    'Apache {} is not supported on {}. Supported: Apache {}'
-                    ).format(e.args[1], linux.os['name'], e.args[2]))
+                    "'app' behavior is only supported on " +\
+                    "Debian, RedHat or Oracle operating system family"
+                )
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'app')
 
 
 class BasicApacheConfiguration(object):

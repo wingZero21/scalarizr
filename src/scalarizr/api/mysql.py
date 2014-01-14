@@ -16,7 +16,7 @@ from scalarizr.services import backup as backup_module
 from scalarizr.services import ServiceError
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.handlers import build_tags
-from scalarizr.util import Singleton
+from scalarizr.util import Singleton, software
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
@@ -185,36 +185,25 @@ class MySQLAPI(object):
                 func_kwds={'backup_conf': backup},
                 async=async, exclusive=True)
 
-
     @classmethod
-    def check_software(cls, installed=None):
+    def check_software(cls, installed_packages=None):
         try:
             if linux.os.debian_family:
                 pkgmgr.check_dependency(
-                        ['mysql-client>=5.0,<5.6', 'mysql-server>5.0,<5.6'], installed, ['apparmor']
-                        )
+                    ['mysql-client>=5.0,<5.6', 'mysql-server>5.0,<5.6'],
+                    installed_packages,
+                    ['apparmor']
+                )
             elif linux.os.redhat_family or os.oracle_family:
-                pkgmgr.check_dependency(['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'], installed)
+                pkgmgr.check_dependency(
+                    ['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'],
+                    installed_packages
+                )
             else:
                 raise exceptions.UnsupportedBehavior('mysqldb2',
-                        "'mysqldb2' behavior is only supported on " +\
-                        "Debian, RedHat or Oracle operating system family"
-                        )
-        except pkgmgr.NotInstalled as e:
-            raise exceptions.UnsupportedBehavior('mysql', 
-                    'MySQL %s is not installed on %s' % (e.args[1], linux.os['name']))
-        except pkgmgr.DependencyConflict as e:
-            raise exceptions.UnsupportedBehavior('mysql',
-                    'MySQL conflicts with %s-%s on %s' % (e.args[0], e.args[1], linux.os['name'])
-        except pkgmgr.VersionMismatch as e:
-            raise exceptions.UnsupportedBehavior('mysql', str(
-                    'MySQL {} is not supported on {}. ' +\
-                    'Supported: ' +\
-                    'MySQLDB >=5.1,<5.2 on Ubuntu-10.04, >=5.5,<5.6 on Ubuntu-12.04, ' +\
-                    'MySQLDB >=5.1,<5.6 on Debian-6, >=5.5,<5.6 on Debian-7, ' +\
-                    'MySQLDB >=5.0,<5.1 on CentOS-5, >=5.1,<<5.2 on CentOS-6, ' +\
-                    'MySQLDB >=5.0,<5.1 on Oracle, ' +\
-                    'MySQLDB >=5.1,<5.2 on RedHat, ' +\
-                    'MySQLDB >=5.5,<5.6 on Amazon'
-                    ).format(e.args[1], linux.os['name']))
+                    "'mysqldb2' behavior is only supported on " +\
+                    "Debian, RedHat or Oracle operating system family"
+                )
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'mysql')
 

@@ -23,7 +23,7 @@ from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr import node
-from scalarizr.util import Singleton
+from scalarizr.util import Singleton, software
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 
@@ -344,19 +344,6 @@ class RedisAPI(object):
                         "'redis' behavior is only supported on " +\
                         "Debian, RedHat and Oracle operating system family"
                         )
-        except pkgmgr.NotInstalled as e:
-            raise exceptions.UnsupportedBehavior('redis',
-                    'Redis %s is not installed on %s' % (e.args[1], linux.os['name']))
-        except pkgmgr.DependencyConflict as e:
-            raise exceptions.UnsupportedBehavior('redis',
-                    'Redis conflicts with %s-%s on %s' % (e.args[0], e.args[1], linux.os['name'])
-        except pkgmgr.VersionMismatch as e:
-            raise exceptions.UnsupportedBehavior('redis', str(
-                    'Redis {} is not supported on {}. ' +\
-                    'Supported: ' +\
-                    'Redis >=2.2,<2.3 on Ubuntu-10.04, >=2.2,<2.7 on Ubuntu-12.04, ' +\
-                    'Redis >=2.6,<2.7 on Debian, ' +\
-                    'Redis >=2.4,<2.7 on CentOS, ' +\
-                    'Redis >=2.6,<2.7 on RedHat, Oracle, Amazon'
-                    ).format(e.args[1], linux.os['name']))
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'redis')
 

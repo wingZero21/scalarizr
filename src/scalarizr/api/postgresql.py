@@ -26,7 +26,7 @@ from scalarizr.api import operation
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services.postgresql import PSQL, PG_DUMP, SU_EXEC
 from scalarizr.storage2.cloudfs import LargeTransfer
-from scalarizr.util import Singleton
+from scalarizr.util import Singleton, software
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 
@@ -265,7 +265,7 @@ class PostgreSQLAPI(object):
 
                             
     @classmethod
-    def check_software(cls, installed=None):
+    def check_software(cls, installed_packages=None):
         try:
             def check_any(pkgs):
                 for _ in pkgs:
@@ -281,63 +281,54 @@ class PostgreSQLAPI(object):
             os_vers = linux.os['version']
             if os_name == 'ubuntu':
                 if os_vers >= '12':
-                    check_any([
-                            ['postgresql-9.1', 'postgresql-client-9.1'],
-                            ['postgresql>=9.1,<9.3', 'postgresql-client>=9.1,<9.3'],
-                            ])
+                    required_list = [
+                        ['postgresql-9.1', 'postgresql-client-9.1'],
+                        ['postgresql>=9.1,<9.3', 'postgresql-client>=9.1,<9.3'],
+                    ]
                 elif os_vers >= '10':
-                    check_any([
-                            ['postgresql-9.1', 'postgresql-client-9.1'],
-                            ['postgresql>=9.1,<9.2', 'postgresql-client>=9.1,<9.2'],
-                            ])
+                    required_list = [
+                        ['postgresql-9.1', 'postgresql-client-9.1'],
+                        ['postgresql>=9.1,<9.2', 'postgresql-client>=9.1,<9.2'],
+                    ]
             elif os_name == 'debian':
-                    check_any([
-                            ['postgresql-9.2', 'postgresql-client-9.2'],
-                            ['postgresql>=9.2,<9.3', 'postgresql-client>=9.2,<9.3'],
-                            ])
+                    required_list = [
+                        ['postgresql-9.2', 'postgresql-client-9.2'],
+                        ['postgresql>=9.2,<9.3', 'postgresql-client>=9.2,<9.3'],
+                    ]
             elif os_name == 'centos':
                 if os_vers >= '6':
-                    check_any([
-                            ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                            [
-                                'postgresql>=9.1,<9.3',
-                                'postgresql-server>=9.1,<9.3',
-                                'postgresql-devel>=9.1,<9.3'
-                                ]
-                            ])
+                    required_list = [
+                        ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                        [
+                            'postgresql>=9.1,<9.3',
+                            'postgresql-server>=9.1,<9.3',
+                            'postgresql-devel>=9.1,<9.3'
+                        ]
+                    ]
                 elif os_vers >= '5':
-                    check_any([
-                            ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                            [
-                                'postgresql>=9.2,<9.3',
-                                'postgresql-server>=9.2,<9.3',
-                                'postgresql-devel>=9.2,<9.3'
-                                ]
-                            ])
-            elif linux.os.redhat_family or linux.os.oracle_family:
-                check_any([
+                    required_list = [
                         ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
                         [
                             'postgresql>=9.2,<9.3',
                             'postgresql-server>=9.2,<9.3',
                             'postgresql-devel>=9.2,<9.3'
-                            ]
-                        ])
+                        ]
+                    ]
+            elif linux.os.redhat_family or linux.os.oracle_family:
+                required_list = [
+                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                    [
+                        'postgresql>=9.2,<9.3',
+                        'postgresql-server>=9.2,<9.3',
+                        'postgresql-devel>=9.2,<9.3'
+                    ]
+                ]
             else:
                 raise exceptions.UnsupportedBehavior('postgresql',
-                        "'postgresql' behavior is only supported on " +\
-                        "Debian, RedHat or Oracle operating system family"
-                        )
-        except pkgmgr.NotInstalled as e:
-            raise exceptions.UnsupportedBehavior('postgresql', 
-                    'PostgreSQL %s is not installed on %s' % (e.args[1], linux.os['name']))
-        except pkgmgr.VersionMismatch as e:
-            raise exceptions.UnsupportedBehavior('mongodb', str(
-                    'PostgreSQL {} is not supported on {}. ' +\
-                    'Supported: ' +\
-                    'PostgreSQL >=9.1,<9.2 on Ubuntu-10.04, >=9.1,<9.3 on Ubuntu-12.04, ' +\
-                    'PostgreSQL >=9.2,<9.3 on Debian, ' +\
-                    'PostgreSQL >=9.2,<9.3 on CentOS-5, >=9.1,<<9.3 on CentOS-6, ' +\
-                    'PostgreSQL >=9.2,<9.3 on Oracle, RedHat, Amazon'
-                    ).format(e.args[1], linux.os['name']))
+                    "'postgresql' behavior is only supported on " +\
+                    "Debian, RedHat or Oracle operating system family"
+                )
+            pkgmgr.check_any_dependency(required_list, installed_packages)
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'postgresql')
 

@@ -4,7 +4,7 @@ import logging
 from scalarizr import linux
 from scalarizr.api import mysql
 from scalarizr.linux import pkgmgr
-from scalarizr.util import Singleton
+from scalarizr.util import Singleton, software
 from scalarizr import exceptions
 
 
@@ -18,51 +18,32 @@ class PerconaAPI(mysql.MySQLAPI):
     def __init__(self):
         super(MariaDBAPI, self).__init__()
 
-
     @classmethod
-    def check_software(cls, installed=None):
+    def check_software(cls, installed_packages=None):
         try:
-            def check_any(pkgs, conflicting):
-                for _ in pkgs:
-                    try:
-                        pkgmgr.check_dependency(_, installed, conflicting)
-                        break
-                    except:
-                        continue
-                else:
-                    raise
-
             if linux.os.debian_family:
-                check_any(
-                        [
-                            ['percona-server-client-5.1', 'percona-server-server-5.1'],
-                            ['percona-server-client-5.5', 'percona-server-server-5.5'],
-                        ],
-                        ['mysql-server', 'mysql-client']
-                        )
+                pkgmgr.check_any_dependency(
+                    [
+                        ['percona-server-client-5.1', 'percona-server-server-5.1'],
+                        ['percona-server-client-5.5', 'percona-server-server-5.5'],
+                    ],
+                    installed_packages,
+                    ['mysql-server', 'mysql-client']
+                )
             elif linux.os.redhat_family or linux.os.oracle_family:
-                check_any(
-                        [
-                            ['Percona-Server-client-5.1', 'Percona-Server-server-5.1'],
-                            ['Percona-Server-client-5.5', 'Percona-Server-server-5.5'],
-                        ],
-                        ['mysql']
-                        )
+                pkgmgr.check_any_dependency(
+                    [
+                        ['Percona-Server-client-5.1', 'Percona-Server-server-5.1'],
+                        ['Percona-Server-client-5.5', 'Percona-Server-server-5.5'],
+                    ],
+                    installed_packages,
+                    ['mysql']
+                )
             else:
                 raise exceptions.UnsupportedBehavior('percona',
-                        "'percona' behavior is only supported on " +\
-                        "Debian, RedHat or Oracle operating system family"
-                        )
-        except pkgmgr.NotInstalled as e:
-            raise exceptions.UnsupportedBehavior('percona', 
-                    'Percona >=5.1,<5.6 is not installed on %s' % linux.os['name'])
-        except pkgmgr.DependencyConflict as e:
-            raise exceptions.UnsupportedBehavior('percona',
-                    'Percona conflicts with %s-%s on %s' % (e.args[0], e.args[1], linux.os['name'])
-        except pkgmgr.VersionMismatch as e:
-            raise exceptions.UnsupportedBehavior('Percona', str(
-                    'Percona {} is not supported on {}. ' +\
-                    'Supported: ' +\
-                    'Percona >=5.1,<5.6 on Debian, RedHat or Oracle oprationg system family'
-                    ).format(e.args[1], linux.os['name']))
+                    "'percona' behavior is only supported on " +\
+                    "Debian, RedHat or Oracle operating system family"
+                )
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'percona')
 

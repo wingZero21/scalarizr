@@ -625,6 +625,7 @@ class Service(object):
             values = CmdLineIni.to_kvals(optparser.values.cnf)
             if not values.get('server_id'):
                 values['server_id'] = str(uuid.uuid4())
+            self._logger.info('Reconfiguring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
         # Load INI files configuration
@@ -819,14 +820,14 @@ class Service(object):
             raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
 
         if linux.os['family'] != 'Windows':
-            installed_software = pkgmgr.package_mgr().list()
+            installed_packages = pkgmgr.package_mgr().list()
             for behavior in node.__node__['behavior']:
                 try:
                     api_cls = util.import_class(api.api_routes[behavior])
-                    api_cls.check_software(installed_software)
+                    api_cls.check_software(installed_packages)
                 except exceptions.NotFound:
                     continue
-                except exceptions.UnsupportedBehavior as e:
+                except exceptions.UnsupportedBehaviorError as e:
                     logger.error(e)
                     node.__node__['messaging'].send(
                             'OutOfTheService',

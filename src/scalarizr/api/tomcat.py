@@ -5,7 +5,7 @@ import logging
 from scalarizr import rpc
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
-from scalarizr.util import Singleton
+from scalarizr.util import Singleton, software
 from scalarizr import exceptions
 
 
@@ -17,36 +17,27 @@ class TomcatAPI(object):
     __metaclass__ = Singleton
 
     @classmethod
-    def check_software(cls, installed=None):
+    def check_software(cls, installed_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         try:
             if os_name == 'ubuntu':
                 if os_vers >= '12':
-                    pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed)
+                    pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
                 elif os_vers >= '10':
-                    pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed)
+                    pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed_packages)
             elif os_name == 'debian':
                 if os_vers >= '7':
-                    pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed)
+                    pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
                 elif os_vers >= '6':
-                    pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed)
+                    pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed_packages)
             elif linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin-webapps'], installed)
+                pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin-webapps'], installed_packages)
             else:
                 raise exceptions.UnsupportedBehavior('tomcat',
-                        "'tomcat' behavior is only supported on " +\
-                        "Debian, RedHat and Oracle operating system family"
-                        )
-        except pkgmgr.NotInstalled as e:
-            raise exceptions.UnsupportedBehavior('tomcat',
-                    'Tomcat is not installed on %s' % linux.os['name'])
-        except pkgmgr.VersionMismatch as e:
-            raise exceptions.UnsupportedBehavior('tomcat', str(
-                    'Tomcat {} is not supported on {}. ' +\
-                    'Supported: ' +\
-                    'Tomcat ==6 on Ubuntu-10.04, ==7 on Ubuntu-12.04, ' +\
-                    'Tomcat ==7 on Debian, ' +\
-                    'Tomcat ==6 on CentOS, RedHat, Oracle, Amazon'
-                    ).format(e.args[1], linux.os['name']))
+                    "'tomcat' behavior is only supported on " +\
+                    "Debian, RedHat and Oracle operating system family"
+                )
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'tomcat')
 
