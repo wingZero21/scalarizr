@@ -976,7 +976,10 @@ def get_redis_processes():
         for line in out.split('\n'):
             words = line.split()
             if len(words) == 2 and words[0] == __redis__['redis-server']:
-                config_files.append(words[1])
+                if words[1].startswith(":*"):  # XXX: 2.8 support
+                    config_files.append(get_redis_conf_path(words[1][2:]))
+                else:
+                    config_files.append(words[1])
     return config_files
 
 
