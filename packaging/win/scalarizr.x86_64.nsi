@@ -114,8 +114,8 @@ Section "MainSection" SEC01
   File /r /x *.svn* "${SZR_BASE_PATH}\share"
 
   ; If md5sum doesn't exist - write md5 of first python dist
-  IfFileExists $INSTDIR\Python27 +4 0
-      FileOpen $4 "$INSTDIR\python.md5" w
+  IfFileExists $INSTDIR\Python27\python.md5 +4 0
+      FileOpen $4 "$INSTDIR\Python27\python.md5" w
       FileWrite $4 "5b14d7be2d17a1aff90a4c5b70bd3218"
       FileClose $4
 
