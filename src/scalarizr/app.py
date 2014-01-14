@@ -825,7 +825,7 @@ class Service(object):
                 try:
                     api_cls = util.import_class(api.api_routes[behavior])
                     api_cls.check_software(installed_packages)
-                except exceptions.NotFound:
+                except (KeyError, exceptions.NotFound):
                     continue
                 except exceptions.UnsupportedBehaviorError as e:
                     logger.error(e)
