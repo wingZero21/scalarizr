@@ -5,8 +5,12 @@ from scalarizr.node import __node__
 
 class Msgsnd(Command):
     """
+    Sends message with given name using given endpoint throughout given queue.
+    Parameters are passed in <key>=<value> form or can be loaded from msgfile.
+
     Usage:
       msgsnd [--queue=<queue>] [--name=<name>] [--msgfile=<msgfile>] [--endpoint=<endpoint>] [<kv>...]
+
     Options:
       -n <name>, --name=<name>         
       -f <msgfile>, --msgfile=<msgfile>

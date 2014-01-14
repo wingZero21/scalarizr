@@ -22,6 +22,8 @@ As already mentioned before, remember that docstrings for commands are essential
 to write. Not only parser uses them to know what to do with argument list, but
 you are writing command-line tool that people will be using, write them as
 detailed as possible.
+Options must be described under 'Options:' section, otherwise they won't be 
+parsed.
 """
 
 
@@ -42,7 +44,10 @@ __dir__ = os.path.dirname(__file__)
 
 
 def find_modules(directory):
-    """Method returns iterator over modules in given directory"""
+    """
+    Method returns iterator over modules in given directory.
+    Module is imported at the time it is accessed.
+    """
     directory = os.path.abspath(directory)
     result = []
 
@@ -74,7 +79,7 @@ class Szradm(command_module.Command):
       -v, --version                Display version.
       -h, --help                   Display this message.
 
-      -m, --msgsnd                 Message sender CLI
+      -m, --msgsnd                 Message sender CLI.
       -n, --name=<name>            Sets message name.
       -e, --endpoint=<endpoint>    Sets endpoint for message send.
       -f, --msgfile=<msgfile>      Sets message file.
@@ -84,7 +89,7 @@ class Szradm(command_module.Command):
       --api-version=<api-version>  Set QueryEnv API version which will be used in call.
                                    QueryEnv parameters should be passed in <key>=<value> form.
 
-      --fire-event=<event_name>    Fires custom event in Scalr.
+      --fire-event=<event_name>    Fires custom event on Scalr.
                                    Parameters should be passed in a <key>=<value> form.
     """
 

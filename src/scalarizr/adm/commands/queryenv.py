@@ -29,7 +29,7 @@ def new_queryenv():
 
 class Queryenv(Command):
     """
-    queryenv command is used to launch queryenv methods.
+    Launches queryenv methods.
 
     Usage:
       queryenv get-https-certificate
@@ -113,6 +113,13 @@ class Queryenv(Command):
         print make_table(table_data, headers)
 
     def _display_out(self, method, out):
+        """
+        General display method. Searches for certain display method and calls it
+        with `out` or prints out in table form or raw. Custom display methods
+        should be named by next pattern '_display_<method_name>' where
+        <method_name> is queryenv method name with hyphens replaced with
+        underscores.
+        """
         all_display_methods = [m for m in dir(self) if m.startswith('_display')]
         display_method = None
         for m in all_display_methods:

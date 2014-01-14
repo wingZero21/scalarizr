@@ -5,6 +5,9 @@ from scalarizr.node import __node__
 
 class FireEvent(Command):
     """
+    Fires event with given name and parameters on Scalr. Parameters should be
+    passed in <key>=<value> form.
+
     Usage:
       fire-event <name> [<kv>...]
     """

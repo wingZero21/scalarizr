@@ -79,7 +79,7 @@ class Command(object):
     Commands return value is exit code return by Szradm if no exception is thrown.
     If one of exception standard exceptions is thrown, return code is taken 
         from their int() value.
-    
+
     """
 
     # list or generator of Command subclasses, that will be used as subcommands
@@ -93,10 +93,17 @@ class Command(object):
         raise NotImplementedError('You need to define __call__ method')
 
     def _command_help(self):
-        """Returns help section that contains list of subcommands"""
-        usages = '\n'.join((' '*TAB_SIZE) + get_command_name(c) for c in self.subcommands)
+        """
+        Returns help section that contains list of subcommands and their aliases.
+        """
+        usages = []
+        for c in self.subcommands:
+            usage = (' '*TAB_SIZE) + get_command_name(c)
+            if c.aliases:
+                usage += ' (%s)' % ', '.join(c.aliases)
+            usages.append(usage)
         if usages:
-            return '\nCommands:\n' + usages + '\n'
+            return '\nCommands:\n' + '\n'.join(usages) + '\n'
         else:
             return ''
 
