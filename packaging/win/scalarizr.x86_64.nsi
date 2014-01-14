@@ -116,6 +116,12 @@ Section "MainSection" SEC01
   SetOutPath "$PLUGINSDIR"
   File "x86_64\python.md5"
 
+  ; If md5sum doesn't exist - write md5 of first python dist
+  IfFileExists $INSTDIR\Python27 +4 0
+      FileOpen $4 "$INSTDIR\python.md5" w
+      FileWrite $4 "5b14d7be2d17a1aff90a4c5b70bd3218"
+      FileClose $4
+
   ; Update python, only if md5sum doesn't match
   ClearErrors
   FileOpen $0 $PLUGINSDIR\python.md5 r
@@ -132,18 +138,7 @@ Section "MainSection" SEC01
   Var /GLOBAL python_updated
   StrCpy $python_updated "0"
 
-  Var /GLOBAL start_updclient
-  StrCpy $start_updclient "0"
-
   ${IfNot} $1 == $2
-      services::SendServiceCommand 'stop' 'ScalrUpdClient'
-      Pop $0
-      StrCmp $0 'Ok' upd_stopped
-          MessageBox MB_OK|MB_ICONSTOP 'Failed to stop service. Reason: $0' /SD IDOK
-          services::SendServiceCommand 'start' 'ScalrUpdClient'
-          SetErrorLevel 2
-          Abort
-      upd_stopped:
       RMDir /r $INSTDIR\Python27
       StrCpy $start_updclient "1"
       Goto InstallPython
@@ -152,15 +147,14 @@ Section "MainSection" SEC01
   ${IfNot} ${FileExists} "$INSTDIR\Python27"
     InstallPython:
     StrCpy $python_updated "1"
+
     SetOutPath "$PLUGINSDIR"
     File "x86_64\python.tar.gz"
     untgz::extract "-z" "-u" "-d" "$INSTDIR"  "$PLUGINSDIR\python.tar.gz"
+
     SetOutPath "$INSTDIR\Python27"
     File "x86_64\python.md5"
 
-    ${If} $start_updclient == "1"
-        services::SendServiceCommand 'start' 'ScalrUpdClient'
-    ${EndIf}
   ${EndIf}
 
   SetOverwrite off
@@ -256,12 +250,6 @@ Section -PostInstall
       nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
       nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
   ${EnableX64FSRedirection}
-
-
-  ${If} $python_updated == "1"
-      services::SendServiceCommand 'stop' 'ScalrUpdClient'
-      services::SendServiceCommand 'start' 'ScalrUpdClient'
-  ${EndIf}
 
 
 SectionEnd
