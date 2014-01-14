@@ -46,7 +46,7 @@ db_connection.row_factory = _list_factory
 
 class ListMessages(Command):
     """
-    Display list of messages that were sent/recieved on this server.
+    Displays list of messages that were sent/recieved on this server.
 
     Usage:
       list-messages [--name=<name>]
