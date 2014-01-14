@@ -182,13 +182,17 @@ class UpdClientAPI(object):
 
                 devel_repo.ensure()
             else:
+                LOG.info('On Windows devel repository is not plugged, but used instead of default one')
+                LOG.info('Set repository URL: %s', repo_url)
                 self.repo_url = repo_url
 
     def get_system_id(self):
         if linux.os.windows:
             wmi = win32com.client.GetObject('winmgmts:')
-            ret = wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS').SerialNumber
-            if not ret:
+            for row in wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS'):
+                ret = row.SerialNumber
+                break
+            else:
                 LOG.debug('WMI returns empty UUID')
         else:
             ret = None
@@ -271,7 +275,8 @@ class UpdClientAPI(object):
                 self.update_state = 'completed'
             else:
                 self.update_state = 'noop'
-        self.save_update_status()
+        if self.update_state != "unknown":
+            self.save_update_status()
 
 
     def uninstall(self):
@@ -333,8 +338,8 @@ class UpdClientAPI(object):
 
         def do_update(op):
             self._sync()
-            self._ensure_repos()
             self._init_update_status()
+            self._ensure_repos()
             old_pkgmgr_logger = pkgmgr.LOG
             try:
                 pkgmgr.LOG = op.logger

@@ -10,7 +10,7 @@ import re
 import os
 import string
 import time
-import urllib
+import urllib2
 import subprocess
 import shutil
 import tempfile
@@ -349,7 +349,7 @@ class YumPackageMgr(PackageMgr):
 
         if name.startswith('http://'):
             filename = os.path.join('/tmp', os.path.basename(name))
-            urllib.urlretrieve(name, filename)
+            urlretrieve(name, filename)
             try:
                 do_localinstall(filename)
             finally:
@@ -433,6 +433,7 @@ class RpmPackageMgr(PackageMgr):
 
 
 if linux.os.windows_family:
+    import posixpath
 
     class WinPackageMgr(object):
         SOURCES_DIR = os.path.join(util.reg_value('InstallDir'), 'etc')
@@ -450,7 +451,7 @@ if linux.os.windows_family:
             try:
                 packagefile = os.path.join(tmp_dir, os.path.basename(packageurl))
                 LOG.info('Downloading %s', packageurl)
-                urllib.urlretrieve(packageurl, packagefile)
+                urlretrieve(packageurl, packagefile)
 
                 LOG.info('Executing installer')
                 p = subprocess.Popen('start "Installer" /wait "%s" /S' % packagefile, shell=True)
@@ -489,10 +490,11 @@ if linux.os.windows_family:
                     urls = map(string.strip, urls)
                     urls = filter(lambda u: u and not u.startswith('#'), urls)
                     for url in urls:
+                        url = posixpath.join(url, linux.os['arch'])
                         dst = os.path.join(tmp_dir, url.replace('/', '_'))
-                        src = url + '/index'
+                        src = posixpath.join(url, 'index')
                         LOG.debug('Fetching index file %s', src)
-                        urllib.urlretrieve(src, dst)
+                        urlretrieve(src, dst)
 
                         with open(dst) as fp:
                             for line in fp:
@@ -500,7 +502,7 @@ if linux.os.windows_family:
                                 colums = filter(None, colums)
                                 package = colums[0]
                                 packagefile = colums[1]
-                                self.index[package] = url + '/' + packagefile
+                                self.index[package] = posixpath.join(url, packagefile)
             finally:
                 shutil.rmtree(tmp_dir)
 
@@ -602,6 +604,15 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
                                       '--keyserver', gpg_keyserver,
                                       '--recv', gpg_keyid),
                                      raise_exc=False)
+
+def urlretrieve(url, dst):
+    resp = urllib2.urlopen(url)
+    with open(dst, 'w+') as fp:
+        while True:
+            buf = resp.read(4096)
+            if not buf:
+                break
+            fp.write(buf)
 
 # Deprecated functions
 
