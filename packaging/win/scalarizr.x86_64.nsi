@@ -88,10 +88,15 @@ FunctionEnd
 
 Section "MainSection" SEC01
   ${DisableX64FSRedirection}
+
+  Var /GLOBAL start_scalarizr
+  StrCpy $start_scalarizr "0"
+
   ${If} $installed_version != ""
 	services::IsServiceRunning 'Scalarizr'
 	Pop $0
 	StrCmp $0 'No' stopped
+	StrCpy $start_scalarizr "1"
     services::SendServiceCommand 'stop' 'Scalarizr'
 	Pop $0
 	StrCmp $0 'Ok' stopped
@@ -244,6 +249,10 @@ Section -PostInstall
       nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
       nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
   ${EnableX64FSRedirection}
+
+  ${If} $start_scalarizr == "1"
+      services::SendServiceCommand 'start' 'Scalarizr'
+  ${EndIf}
 
 
 SectionEnd
