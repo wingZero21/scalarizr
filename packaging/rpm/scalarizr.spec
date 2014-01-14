@@ -18,7 +18,7 @@ URL:            http://scalr.net
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:       python26 python26-m2crypto >= 0.20 python26-pexpect >= 2.3
 Requires:       python26-pysnmp >= 4.1 python26-pyasn1 >= 0.1.7 python26-pysnmp-mibs >= 0.0.8a 
-Requires:       python26-prettytable python26-PyYAML
+Requires:       python26-prettytable python26-PyYAML python26-docopt
 #Requires:		python26-pymongo
 Requires:		python26-pymysql
 Requires:		python26-pychef
@@ -29,7 +29,7 @@ Requires:       python >= 2.5 m2crypto >= 0.20 pexpect >= 2.3
 # snmp
 Requires:       pysnmp >= 4.2.4 python-pyasn1 >= 0.1.7 python-pysnmp-mibs >= 0.0.8a 
 # szradm
-Requires:       python-prettytable PyYAML
+Requires:       python-prettytable PyYAML python-docopt
 # mongodb behavior
 #Requires:		pymongo >= 2.1
 #Requires:		python-bson >= 2.1
