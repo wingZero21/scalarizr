@@ -1,25 +1,34 @@
+import sys
+
 from scalarizr.bus import bus
 from scalarizr.adm.command import Command
 from scalarizr.adm.command import CommandError
 from scalarizr.node import __node__
+from scalarizr.util import initdv2
 from scalarizr.api.apache import ApacheInitScript
 from scalarizr.handlers.chef import ChefInitScript
+from scalarizr.services.haproxy import HAProxyInitScript
+from scalarizr.handlers.memcached import MemcachedInitScript
+from scalarizr.services.mysql import MysqlInitScript
+from scalarizr.api.nginx import NginxInitScript
+from scalarizr.services.postgresql import PgSQLInitScript
+from scalarizr.services.rabbitmq import RabbitMQInitScript
 
 
 service_scripts = {
     'apache': ApacheInitScript,
     'chef': ChefInitScript,
-    # 'haproxy',
-    # 'mariadb',
-    # 'memcached',
+    'haproxy': HAProxyInitScript,
+    'mariadb': MysqlInitScript,
+    'memcached': MemcachedInitScript,
     # 'mongodb',
-    # 'mysql',
-    # 'nginx',
-    # 'percona',
-    # 'postgresql',
-    # 'rabbitmq',
+    'mysql': MysqlInitScript,
+    'nginx': NginxInitScript,
+    'percona': MysqlInitScript,
+    'postgresql': PgSQLInitScript,
+    'rabbitmq': RabbitMQInitScript,
     # 'redis',
-    # 'tomcat',
+    # 'tomcat': ,  # TODO: make ParametrizedInitScript subclass for tomcat
 }
 
 
@@ -33,16 +42,30 @@ class Service(Command):
     """
 
     def _start_service(self, service, **kwds):
-        script = service_scripts[service]
-        script.start()
+        script = service_scripts[service]()
+        try:
+            script.start()
+        except initdv2.InitdError, e:
+            print 'Service start failed.\n' + e.message
+            return int(CommandError())
 
     def _stop_service(self, service, **kwds):
-        script = service_scripts[service]
-        script.stop()
+        script = service_scripts[service]()
+        try:
+            script.stop()
+        except initdv2.InitdError, e:
+            print 'Service stop failed.\n' + e.message
+            return int(CommandError())
 
     def _display_service_status(self, service, **kwds):
-        script = service_scripts[service]
-        script.status()
+        script = service_scripts[service]()
+        status = script.status()
+        status_string = ' is stopped'
+        if status == initdv2.Status.RUNNING:
+            status_string = ' is running'
+        elif status = initdv2.Status.UNKNOWN:
+            status_string = ' has unknown status'
+        print service + status_string
 
     def __call__(self, 
                  start=False,
