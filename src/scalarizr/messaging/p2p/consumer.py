@@ -156,7 +156,7 @@ class P2pMessageConsumer(MessageConsumer):
 
             def log_message(self, format, *args):
                 logger = logging.getLogger(__name__)
-                logger.debug("%s %s\n", self.address_string(), format%args)
+                logger.debug(format, args)
 
         RequestHandler.consumer = self
         return RequestHandler
