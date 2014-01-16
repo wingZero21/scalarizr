@@ -63,7 +63,7 @@ class Service(Command):
         status_string = ' is stopped'
         if status == initdv2.Status.RUNNING:
             status_string = ' is running'
-        elif status = initdv2.Status.UNKNOWN:
+        elif status == initdv2.Status.UNKNOWN:
             status_string = ' has unknown status'
         print service + status_string
 

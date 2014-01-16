@@ -37,6 +37,7 @@ from textwrap import dedent
 
 from scalarizr.adm import command as command_module
 from scalarizr.app import init_script
+from scalarizr.app import _init_platform
 from scalarizr.adm.commands.queryenv import Queryenv as QueryenvCmd
 
 
@@ -198,6 +199,7 @@ sys.excepthook, old_excepthook = _exit_code_excepthook, sys.excepthook
 
 def main(argv):
     init_script()
+    _init_platform()
     szradm = Szradm(os.path.join(__dir__, 'commands'))
     # If szradm called with no arguments - print help() and all/most used possible commands
     szradm_kwds = command_module.parse_command_line(argv[1:], szradm.help(), options_first=True)
