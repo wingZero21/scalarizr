@@ -65,12 +65,12 @@ class Service(Command):
         if redis:
             service = 'redis'
         elif mongodb:
-            mongo_component = (mongos and 'mongos') or
-                              (mongod and 'mongod') or
-                              (configsrv and 'configsrv') or
-                              (configsrv_2 and 'configsrv-2') or
-                              (configsrv_3 and 'configsrv-3') or
-                              (arbiter and 'arbiter')
+            mongo_component = ((mongos and 'mongos') or
+                               (mongod and 'mongod') or
+                               (configsrv and 'configsrv') or
+                               (configsrv_2 and 'configsrv-2') or
+                               (configsrv_3 and 'configsrv-3') or
+                               (arbiter and 'arbiter'))
             # TODO: finish
 
         if service not in service_scripts:
