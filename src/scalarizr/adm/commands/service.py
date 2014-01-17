@@ -16,7 +16,7 @@ from scalarizr.services.rabbitmq import RabbitMQInitScript
 
 
 service_apis = {
-    'apache': ApacheInitScript,
+    'apache': ApacheInitApi,
     'chef': ChefInitScript,
     'haproxy': HAProxyInitScript,
     'mariadb': MysqlInitScript,
@@ -102,7 +102,7 @@ class Service(Command):
                                (arbiter and 'arbiter'))
             # TODO: finish
 
-        if service not in service_scripts:
+        if service not in service_apis:
             raise CommandError('Unknown service/behavior.')
 
         if start:

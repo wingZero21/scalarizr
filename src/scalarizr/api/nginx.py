@@ -163,7 +163,7 @@ class NginxAPI(object):
         if not proxies_inc_dir and __nginx__ and __nginx__['app_include_path']:
             self.proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
         if self.proxies_inc_dir:
-            self.proxies_inc_path = os.path.join(proxies_inc_dir, 'proxies.include')
+            self.proxies_inc_path = os.path.join(self.proxies_inc_dir, 'proxies.include')
 
     def init_service(self):
         _logger.debug('Initializing nginx API.')
