@@ -47,7 +47,7 @@ class Service(Command):
         script = service_scripts[service]()
         try:
             script.start()
-        except Exception, e:
+        except (BaseException, Exception), e:
             print 'Service start failed.\n%s' % e
             return int(CommandError())
 
@@ -55,7 +55,7 @@ class Service(Command):
         script = service_scripts[service]()
         try:
             script.stop()
-        except Exception, e:
+        except (BaseException, Exception), e:
             print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
