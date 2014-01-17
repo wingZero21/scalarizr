@@ -705,7 +705,8 @@ class Service(object):
         # At first startup platform user-data should be applied
         if cnf.state == ScalarizrState.BOOTSTRAPPING:
             cnf.fire('apply_user_data', cnf)
-            self._talk_with_updclient()
+            
+        self._talk_with_updclient()
 
         # Check Scalr version
         if not bus.scalr_version:
