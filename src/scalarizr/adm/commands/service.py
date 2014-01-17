@@ -10,7 +10,7 @@ from scalarizr.handlers.chef import ChefInitScript
 from scalarizr.services.haproxy import HAProxyInitScript
 from scalarizr.handlers.memcached import MemcachedInitScript
 from scalarizr.services.mysql import MysqlInitScript
-from scalarizr.api.nginx import NginxInitScript
+from scalarizr.api.nginx import NginxAPI
 from scalarizr.services.postgresql import PgSQLInitScript
 from scalarizr.services.rabbitmq import RabbitMQInitScript
 
@@ -28,7 +28,7 @@ service_scripts = {
     'postgresql': PgSQLInitScript,
     'rabbitmq': RabbitMQInitScript,
     # 'redis',
-    # 'tomcat': ,  # TODO: make ParametrizedInitScript subclass for tomcat
+    # 'tomcat': ,  # TODO: make ParametrizedInitScript subclass for tomcat, or api
 }
 
 

@@ -151,19 +151,25 @@ class NginxAPI(object):
         self.service = NginxInitScript()
         self.error_pages_inc = None
         self.backend_table = {}
+        self.app_inc_path = None
+        self.proxies_inc_dir = proxies_inc_dir
+        self.proxies_inc_path = None
 
-        if not app_inc_dir:
+        if not app_inc_dir and __nginx__ and __nginx__['app_include_path']:
             app_inc_dir = os.path.dirname(__nginx__['app_include_path'])
-        self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
+        if app_inc_dir:
+            self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
+
+        if not proxies_inc_dir and __nginx__ and __nginx__['app_include_path']:
+            self.proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
+        if self.proxies_inc_dir:
+            self.proxies_inc_path = os.path.join(proxies_inc_dir, 'proxies.include')
+
+    def init_service(self):
+        _logger.debug('Initializing nginx API.')
         self._load_app_servers_inc()
         self._fix_app_servers_inc()
-
-        if not proxies_inc_dir:
-            proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
-        self.proxies_inc_dir = proxies_inc_dir
-        self.proxies_inc_path = os.path.join(proxies_inc_dir, 'proxies.include')
         self._load_proxies_inc()
-
         self._make_error_pages_include()
 
     def _make_error_pages_include(self):

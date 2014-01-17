@@ -130,6 +130,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger = logging.getLogger(__name__)
         self.preset_provider = NginxPresetProvider()
         self.api = NginxAPI()
+        self.api.init_service()
         self._terminating_servers = []
         preset_service.services[BEHAVIOUR] = self.preset_provider
 
