@@ -204,8 +204,8 @@ def main(argv):
     # If szradm called with no arguments - print help() and all/most used possible commands
     szradm_kwds = command_module.parse_command_line(argv[1:], szradm.help(), options_first=True)
     # TODO: return exit codes which are dependent on exception thrown
-    return szradm(**szradm_kwds)
+    sys.exit(szradm(**szradm_kwds))
 
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv))
+    main(sys.argv)
