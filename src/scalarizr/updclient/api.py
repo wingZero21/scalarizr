@@ -382,6 +382,7 @@ class UpdClientAPI(object):
                     self.state = 'in-progress/install'
                     self.pkgmgr.install(self.package, self.candidate)
                     self.state = 'completed/wait-ack'
+                    self.installed = self.candidate
                     self.store()
 
                     if not self.daemon.running:

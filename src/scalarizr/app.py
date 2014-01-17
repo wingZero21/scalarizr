@@ -963,6 +963,7 @@ class Service(object):
                     self._logger.debug('Failed to check updclient status: %s', sys.exc_info()[1])
             wait_until(upd_ready, timeout=60, sleep=1)
             upd_state = upd.status()['state']
+            self._logger.debug('UpdateClient state: %s', upd_state)
             if upd_state.startswith('in-progress'):
                 self._logger.info('Stopped (UpdateClient upgrades Scalarizr)')
                 sys.exit()
