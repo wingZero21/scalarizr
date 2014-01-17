@@ -56,7 +56,8 @@ class OperationAPI(object):
         try:
             return self._ops[operation_id]
         except KeyError:
-            raise OperationNotFoundError("'{0}' not found" % operation_id)
+            msg = "'{0}' not found".format(operation_id)
+            raise OperationNotFoundError(msg)
 
     def remove(self, operation_id):
         del self._ops[operation_id]
