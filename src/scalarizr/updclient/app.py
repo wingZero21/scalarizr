@@ -139,7 +139,7 @@ class UpdClient(util.Server):
             if os.path.exists(self.api.status_file):
                 os.unlink(self.api.status_file)
             self.api.bootstrap(dry_run=True)
-            print 'saved lock file: {0}'.format(self.api.status_file)
+            print 'saved status file: {0}'.format(self.api.status_file)
             sys.exit() 
 
         if self.daemonize:
@@ -149,11 +149,9 @@ class UpdClient(util.Server):
             signal.signal(signal.SIGTERM, self.onSIGTERM)
 
         LOG.info('Starting updclient (pid: %s)', os.getpid())
-        with open(self.pid_file, 'w+') as fp:
-            fp.write(str(os.getpid()))
-
         try:
             self._start_api()
+            self._write_pid_file()
             self.api.bootstrap()
         except:
             self.do_stop()
@@ -225,6 +223,11 @@ class UpdClient(util.Server):
                 return
         msg = 'Network is not available. timeout {0} seconds was reached'.format(60)
         raise Exception(msg)
+
+
+    def _write_pid_file(self):
+        with open(self.pid_file, 'w+') as fp:
+            fp.write(str(os.getpid()))
 
 
 def main():
