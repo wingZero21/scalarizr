@@ -15,7 +15,7 @@ from scalarizr.services.postgresql import PgSQLInitScript
 from scalarizr.services.rabbitmq import RabbitMQInitScript
 
 
-service_scripts = {
+service_apis = {
     'apache': ApacheInitScript,
     'chef': ChefInitScript,
     'haproxy': HAProxyInitScript,
@@ -23,7 +23,7 @@ service_scripts = {
     'memcached': MemcachedInitScript,
     # 'mongodb',
     'mysql': MysqlInitScript,
-    'nginx': NginxInitScript,
+    'nginx': NginxAPI,
     'percona': MysqlInitScript,
     'postgresql': PgSQLInitScript,
     'rabbitmq': RabbitMQInitScript,
@@ -44,24 +44,24 @@ class Service(Command):
     aliases = ['s']
 
     def _start_service(self, service, **kwds):
-        script = service_scripts[service]()
+        api = service_apis[service]()
         try:
-            script.start()
+            api.start_service()
         except (BaseException, Exception), e:
             print 'Service start failed.\n%s' % e
             return int(CommandError())
 
     def _stop_service(self, service, **kwds):
-        script = service_scripts[service]()
+        api = service_apis[service]()
         try:
-            script.stop()
+            api.stop_service()
         except (BaseException, Exception), e:
             print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
     def _display_service_status(self, service, **kwds):
-        script = service_scripts[service]()
-        status = script.status()
+        api = service_apis[service]()
+        status = api.get_service_status()
         status_string = ' is stopped'
         code = 3
         if status == initdv2.Status.RUNNING:

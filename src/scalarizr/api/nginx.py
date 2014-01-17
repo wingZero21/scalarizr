@@ -271,6 +271,10 @@ class NginxAPI(object):
         self.service.restart()
 
     @rpc.command_method
+    def get_service_status(self):
+        return self.service.status()
+
+    @rpc.command_method
     def recreate_proxying(self, proxy_list, reload_service=True):
         if not proxy_list:
             proxy_list = []
