@@ -51,7 +51,10 @@ except LookupError:
     else:
         raise
 
-RABBITMQ_VERSION = software.rabbitmq_software_info().version
+try:
+    RABBITMQ_VERSION = software.rabbitmq_software_info().version
+except:
+    RABBITMQ_VERSION = (0, 0, 0)
 
 
 class RabbitMQInitScript(initdv2.ParametrizedInitScript):
@@ -83,7 +86,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
     reload = restart
 
     def start(self):
-        hostname = RABBIT_HOSTNAME_TPL % __node__['server_index']
+        hostname = RABBIT_HOSTNAME_TPL % __rabbitmq__['server_index']
         nodename = NODE_HOSTNAME_TPL % hostname
 
         env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid',
@@ -259,5 +262,7 @@ class RabbitMQ(object):
         nodes_raw = out.split('running_nodes')[0].split('\n', 1)[1]
         return re.findall("rabbit@([^']+)", nodes_raw)
 
-
-rabbitmq = RabbitMQ()
+if RABBITMQ_VERSION > (0, 0, 0):
+    rabbitmq = RabbitMQ()
+else:
+    rabbitmq = None
