@@ -58,6 +58,14 @@ def value_for_repository(deb=None, rpm=None, win=None):
         return deb
 
 
+def devel_repo_url_for_branch(branch):
+    norm_branch = branch.replace('/','-').replace('.','').strip()
+    return value_for_repository(
+        deb='http://buildbot.scalr-labs.com/apt/debian {0}/'.format(norm_branch),
+        rpm='http://buildbot.scalr-labs.com/rpm/{0}/rhel/$releasever/$basearch'.format(norm_branch),
+        win='http://buildbot.scalr-labs.com/win/{0}/'.format(norm_branch))
+
+
 class UpdClientAPI(object):
 
     package = 'scalarizr'
@@ -74,9 +82,10 @@ class UpdClientAPI(object):
 
     server_id = farm_role_id = system_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
-    update_status = None
+    state = installed = candidate = executed_at = error = dist = None
 
     update_server = None
+    messaging_service = None
     scalarizr = None
     queryenv = None
     pkgmgr = None
@@ -103,22 +112,13 @@ class UpdClientAPI(object):
         return self.client_mode == 'client'
 
 
-    def update_state():
-        # pylint: disable=E0211, E0202, W0612
-        def fget(self):
-            return self.update_status['state']
-        def fset(self, value):
-            self.update_status['state'] = value
-        return locals()
-    update_state = property(**update_state())
-
-
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
         self.pkgmgr = pkgmgr.package_mgr()
         self.daemon = initdv2.Daemon('scalarizr')
         self.op_api = operation.OperationAPI()
-        self.update_status = {'state': 'unknown'}
+        self.dist = '{name} {release} {codename}'.format(**linux.os)
+        self.state = 'unknown'
         self.meta = metadata.meta()
 
 
@@ -132,59 +132,23 @@ class UpdClientAPI(object):
 
 
     def _init_services(self):
-        self._init_queryenv()
+        if not self.queryenv:
+            self._init_queryenv()
 
-        bus.messaging_service = messaging.P2pMessageService(
-                server_id=self.server_id,
-                crypto_key_path=self.crypto_file,
-                producer_url=self.messaging_url,
-                producer_retries_progression='1,2,5,10,20,30,60')
+        if not self.messaging_service:
+            bus.messaging_service = messaging.P2pMessageService(
+                    server_id=self.server_id,
+                    crypto_key_path=self.crypto_file,
+                    producer_url=self.messaging_url,
+                    producer_retries_progression='1,2,5,10,20,30,60')
 
-        if self.is_client_mode:
+        if self.is_client_mode and not self.update_server:
             self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
                             server_id=self.server_id)
 
-        self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file) 
+        if not self.scalarizr:
+            self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file) 
 
-
-    def _try_init_devel(self, user_data):
-        if user_data.get('realrolename', '').endswith('-devel') \
-                and user_data.get('env_id') == '3414' \
-                and user_data.get('custom.scm_branch'):
-            LOG.info('Devel branch: %s', user_data['custom.scm_branch'])
-            norm_branch = user_data['custom.scm_branch'].replace('/','-').replace('.','').strip()
-            repo_url = value_for_repository(
-                deb='http://buildbot.scalr-labs.com/apt/debian {0}/'.format(norm_branch),
-                rpm='http://buildbot.scalr-labs.com/rpm/{0}/rhel/$releasever/$basearch'.format(
-                        norm_branch),
-                win='http://buildbot.scalr-labs.com/win/{0}/'.format(norm_branch)
-            )
-            if not linux.os.windows:
-                devel_repo = pkgmgr.repository('dev-scalr', repo_url)
-                # Pin repository
-                if linux.os.redhat_family or linux.os.oracle_family:
-                    pkg = 'yum-priorities' \
-                            if linux.os['release'] < (6, 0) else \
-                            'yum-plugin-priorities'
-                    self.pkgmgr.installed(pkg)
-                    devel_repo.config += 'priority=10\n'
-                else:
-                    if os.path.isdir('/etc/apt/preferences.d'):
-                        prefile = '/etc/apt/preferences.d/dev-scalr'
-                    else:
-                        prefile = '/etc/apt/preferences'
-                    with open(prefile, 'w+') as fp:
-                        fp.write((
-                            'Package: *\n'
-                            'Pin: release a={0}\n'
-                            'Pin-Priority: 990\n'
-                        ).format(norm_branch))
-
-                devel_repo.ensure()
-            else:
-                LOG.info('On Windows devel repository is not plugged, but used instead of default one')
-                LOG.info('Set repository URL: %s', repo_url)
-                self.repo_url = repo_url
 
     def get_system_id(self):
         if linux.os.windows:
@@ -224,40 +188,42 @@ class UpdClientAPI(object):
             LOG.debug('get system-id failed: %s', sys.exc_info()[1])
             self.system_id = str(uuid.uuid4())
         system_matches = False
+        status_data = None
         if os.path.exists(self.status_file):
             LOG.debug('Checking %s', self.status_file)
             with open(self.status_file) as fp:
-                update_status = json.load(fp)
-            system_matches = update_status['system_id'] == self.system_id
+                status_data = json.load(fp)
+            system_matches = status_data['system_id'] == self.system_id
             if not system_matches:
                 LOG.debug('System ID in lock file and machine one not matched: %s != %s', 
-                        update_status['system_id'], self.system_id)
+                        status_data['system_id'], self.system_id)
             else:
                 LOG.debug('Serial number in lock file matches machine one')
 
         if system_matches:
-            self.__dict__.update(update_status)
-            self.update_status = update_status
+            LOG.debug('Apply %s settings', self.status_file)
+            self.__dict__.update(status_data)
         else:
+            LOG.debug('Getting cloud user-data')
             user_data = self.meta.user_data()
             norm_user_data(user_data)
-
+            LOG.debug('Apply user-data settings')
             self.__dict__.update(user_data)
-            if not dry_run:
-                self._try_init_devel(user_data)
 
             crypto_dir = os.path.dirname(self.crypto_file)
             if not os.path.exists(crypto_dir):
                 os.makedirs(crypto_dir)
-            if os.path.exists(self.crypto_file):  
+            if os.path.exists(self.crypto_file): 
+                LOG.debug('Testing that crypto key works (file: %s)', self.crypto_file) 
                 try:
                     self._init_queryenv()
+                    LOG.debug('Crypto key works')
                 except queryenv.InvalidSignatureError:
-                    pass
+                    LOG.debug("Crypto key doesn't work")
             if not self.queryenv:
+                LOG.debug("Use crypto key from user-data")
                 with open(self.crypto_file, 'w+') as fp:
                     fp.write(user_data['szr_key'])
-
 
         if not linux.os.windows:
             self.package = 'scalarizr-' + self.platform
@@ -266,17 +232,17 @@ class UpdClientAPI(object):
         self.system_matches = system_matches
         if not self.system_matches:
             if dry_run:
-                self._sync()
-                self._init_update_status()                
+                self._sync()  
+                self.state = 'noop'        
             else:
                 self.update(bootstrap=True)
         else:
-            if self.update_state == 'completed/wait-ack':
-                self.update_state = 'completed'
+            if self.state == 'completed/wait-ack':
+                self.state = 'completed'
             else:
-                self.update_state = 'noop'
-        if self.update_state != "unknown":
-            self.save_update_status()
+                self.state = 'noop'
+        if self.state != 'unknown':
+            self.store(self.status(cached=True))
 
 
     def uninstall(self):
@@ -322,10 +288,38 @@ class UpdClientAPI(object):
         for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr-*'):
             if os.path.isfile(filename):
                 os.remove(filename)
+        if 'buildbot.scalr-labs.com' in self.repo_url:
+            self._configure_devel_repo(repo)
         # Ensure new repository
         repo.ensure()
         LOG.info('Updating packages cache')
-        self.pkgmgr.updatedb()      
+        self.pkgmgr.updatedb() 
+
+
+    def _configure_devel_repo(self, repo):
+        # Pin repository
+        if linux.os.redhat_family or linux.os.oracle_family:
+            pkg = 'yum-priorities' \
+                    if linux.os['release'] < (6, 0) else \
+                    'yum-plugin-priorities'
+            self.pkgmgr.installed(pkg)
+            repo.config += 'priority=10\n'
+        else:
+            if os.path.isdir('/etc/apt/preferences.d'):
+                prefile = '/etc/apt/preferences.d/scalr'
+            else:
+                prefile = '/etc/apt/preferences'
+            with open(prefile, 'w+') as fp:
+                fp.write((
+                    'Package: *\n'
+                    'Pin: release a={0}\n'
+                    'Pin-Priority: 990\n'
+                ).format(self.repository))
+
+        # Scalr repo has all required dependencies (like python-* libs, etc), 
+        # while Branch repository has only scalarizr package
+        release_repo = pkgmgr.repository('scalr-release', devel_repo_url_for_branch('scalr'))
+        release_repo.ensure()
 
 
     @rpc.command_method
@@ -336,50 +330,59 @@ class UpdClientAPI(object):
         notifies = not bootstrap
         reports = self.is_client_mode and not bootstrap
 
+        def check_allowed():
+            if not force:
+                self.state = 'in-progress/check-allowed'
+                if self.scalarizr.operation.has_in_progress():
+                    msg = ('Update denied ({0}={1}), '
+                            'cause Scalarizr is performing log-term operation').format(
+                            self.package, self.candidate)
+                    raise UpdateError(msg)
+        
+                if self.is_client_mode:
+                    try:
+                        ok = self.update_server.update_allowed(
+                                package=self.package,
+                                version=self.candidate,
+                                server_id=self.server_id,
+                                scalr_id=self.scalr_id,
+                                scalr_version=self.scalr_version)
+
+                    except urllib2.URLError:
+                        raise UpdateError('Update server is down for maintenance')
+                    if not ok:
+                        msg = ('Update denied ({0}={1}), possible issues detected in '
+                                'later version. Blocking all upgrades until Scalr support '
+                                'overrides.').format(
+                                self.package, self.candidate)
+                        raise UpdateError(msg)            
+
+
         def do_update(op):
+            self.executed_at = time.strftime(DATE_FORMAT, time.gmtime())
+            self.state = 'in-progress/prepare'
             self._sync()
-            self._init_update_status()
             self._ensure_repos()
+
             old_pkgmgr_logger = pkgmgr.LOG
             try:
                 pkgmgr.LOG = op.logger
                 if bootstrap:
-                    self.update_state = 'in-progress/uninstall'
+                    self.state = 'in-progress/uninstall'
                     self.uninstall()
 
-                pkginfo = self.pkgmgr.info(self.package)
-
-                if not pkginfo['candidate']:
+                self.__dict__.update(self.pkgmgr.info(self.package))
+                if not self.candidate:
                     msg = 'No new version available ({0})'.format(self.package)
                     raise UpdateError(msg)
-                self.update_status['version'] = pkginfo['candidate']
 
-                if not force:
-                    self.update_state = 'in-progress/check-allowed'
-                    if self.scalarizr.operation.has_in_progress():
-                        msg = ('Update denied ({0}={1}), '
-                                'cause Scalarizr is performing log-term operation').format(
-                                self.package, self.update_status['version'])
-                        raise UpdateError(msg)
-            
-                    if self.is_client_mode:
-                        try:
-                            ok = self.update_server.update_allowed(**self.update_status)
-                        except urllib2.URLError:
-                            raise UpdateError('Update server is down for maintenance')
-                        if not ok:
-                            msg = ('Update denied ({0}={1}), possible issues detected in '
-                                    'later version. Blocking all upgrades until Scalr support '
-                                    'overrides.').format(
-                                    self.package, self.update_status['version'])
-                            raise UpdateError(msg)
-
+                check_allowed()
+                
                 try:
-                    self.update_state = 'in-progress/install'
-                    self.pkgmgr.install(self.package, self.update_status['version'])
-
-                    self.update_state = 'completed/wait-ack'
-                    self.save_update_status()
+                    self.state = 'in-progress/install'
+                    self.pkgmgr.install(self.package, self.candidate)
+                    self.state = 'completed/wait-ack'
+                    self.store()
 
                     if not self.daemon.running:
                         self.daemon.start()
@@ -393,7 +396,7 @@ class UpdClientAPI(object):
                     raise
             except:
                 e = sys.exc_info()[1]
-                self.update_status['error'] = str(e)
+                self.error = str(e)
                 if isinstance(e, UpdateError):
                     op.logger.warn(str(e))
                 else:
@@ -404,40 +407,23 @@ class UpdClientAPI(object):
         return self.op_api.run('scalarizr.update', do_update, async=async, 
                     exclusive=True, notifies=notifies)
 
-    def _init_update_status(self):
-        self.update_status = {
-            # object state
-            'server_id': self.server_id,
-            'farm_role_id': self.farm_role_id,
-            'system_id': self.system_id,
-            'platform': self.platform,
-            'queryenv_url': self.queryenv_url,
-            'messaging_url': self.messaging_url,
-            'scalr_id': self.scalr_id,
-            'scalr_version': self.scalr_version,
-            # update info
-            'repository': self.repository,
-            'package': self.package,
-            'executed_at': time.strftime(DATE_FORMAT, time.gmtime()),
-            'dist': '{name} {release} {codename}'.format(**linux.os),
-            'state': 'in-progress/prepare',
-            'error': None
-        }        
 
-    def save_update_status(self):
+    def store(self, status=None):
+        status = status or self.status()
         with open(self.status_file, 'w') as fp:
-            LOG.debug('Saving status: %s', pprint.pformat(self.update_status))
-            json.dump(self.update_status, fp)     
+            LOG.debug('Saving status: %s', pprint.pformat(status))
+            json.dump(status, fp)     
+
 
     def report(self, ok):
         if not self.is_client_mode:
             LOG.debug('Reporting is not enabled in {0} mode'.format(self.client_mode))
-
-        self.update_status['ok'] = ok
-        if not ok:
-            self.update_status['error'] = str(sys.exc_info()[1])
-                
-        self.update_server.report(**self.update_status)   
+            return
+        error = str(sys.exc_info()[1]) if not ok else ''                
+        self.update_server.report(
+                ok=ok, package=self.package, version=self.candidate, 
+                server_id=self.server_id, scalr_id=self.scalr_id, scalr_version=self.scalr_version, 
+                phase=self.state, dist=self.dist, error=error)   
 
 
     @rpc.command_method
@@ -445,14 +431,25 @@ class UpdClientAPI(object):
         getattr(self.daemon, 'forcerestart' if force else 'restart')()
         if not self.daemon.running:
             raise Exception('Service restart failed')
-    
+
 
     @rpc.query_method
-    def status(self):
-        status = self.pkgmgr.info(self.package)
-        status.update(self.update_status)
-        status['candidate'] = status['candidate'] or status['installed']
-        status['service_status'] = 'running' if self.daemon.running else 'stopped'
+    def status(self, cached=False):
+        keys_to_copy = [
+            'server_id', 'farm_role_id', 'system_id', 'platform', 'queryenv_url', 
+            'messaging_url', 'scalr_id', 'scalr_version', 
+            'repository', 'repo_url', 'package', 'executed_at', 
+            'state', 'error', 'dist'
+        ]
+        status = {} if cached else self.pkgmgr.info(self.package)
+        if cached:
+            keys_to_copy.extend(['candidate', 'installed'])
+        for key in keys_to_copy:
+            status[key] = getattr(self, key)
+        if not cached:
+            status['service_status'] = 'running' if self.daemon.running else 'stopped'
+        else:
+            status['service_status'] = 'unknown'
         return status
             
 
