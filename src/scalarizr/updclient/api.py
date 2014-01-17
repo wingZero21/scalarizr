@@ -390,6 +390,9 @@ class UpdClientAPI(object):
                     if reports:
                         self.report(True)
                     op.logger.info('Done')
+                except KeyboardInterrupt:
+                    op.cancel()
+                    return
                 except:
                     if reports:
                         self.report(False)
