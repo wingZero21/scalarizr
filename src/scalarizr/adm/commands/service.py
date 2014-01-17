@@ -63,11 +63,15 @@ class Service(Command):
         script = service_scripts[service]()
         status = script.status()
         status_string = ' is stopped'
+        code = 3
         if status == initdv2.Status.RUNNING:
             status_string = ' is running'
+            code = 0
         elif status == initdv2.Status.UNKNOWN:
             status_string = ' has unknown status'
+            code = 4
         print service + status_string
+        return code
 
     def __call__(self, 
                  start=False,
