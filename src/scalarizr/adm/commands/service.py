@@ -102,11 +102,11 @@ class Service(Command):
             raise CommandError('Unknown service/behavior.')
 
         if start:
-            self._start_service(service, index=index, port=port)
+            return self._start_service(service, index=index, port=port)
         elif stop:
-            self._stop_service(service, index=index, port=port)
+            return self._stop_service(service, index=index, port=port)
         elif status:
-            self._display_service_status(service, index=index, port=port)
+            return self._display_service_status(service, index=index, port=port)
 
 
 commands = [Service]
