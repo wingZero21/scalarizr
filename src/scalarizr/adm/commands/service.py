@@ -41,20 +41,22 @@ class Service(Command):
         service (start | stop | status) <service>
     """
 
+    aliases = ['s']
+
     def _start_service(self, service, **kwds):
         script = service_scripts[service]()
         try:
             script.start()
-        except initdv2.InitdError, e:
-            print 'Service start failed.\n' + e.message
+        except Exception, e:
+            print 'Service start failed.\n%s' % e
             return int(CommandError())
 
     def _stop_service(self, service, **kwds):
         script = service_scripts[service]()
         try:
             script.stop()
-        except initdv2.InitdError, e:
-            print 'Service stop failed.\n' + e.message
+        except Exception, e:
+            print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
     def _display_service_status(self, service, **kwds):
