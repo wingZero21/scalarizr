@@ -11,6 +11,7 @@ import logging
 import os
 import pprint
 import re
+import subprocess
 import shutil
 import sqlite3 as sqlite
 import sys
@@ -30,6 +31,7 @@ from scalarizr.util import metadata, initdv2, sqlite_server
 if linux.os.windows:
     import win32com
     import win32com.client
+    import win32process
 
 
 LOG = logging.getLogger(__name__)
@@ -96,11 +98,15 @@ class UpdClientAPI(object):
     system_matches = False
 
     if linux.os.windows:
-        etc_path = r'C:\Program Files\Scalarizr\etc'
-        share_path = r'C:\Program Files\Scalarizr\share'
+        _base = r'C:\Program Files\Scalarizr'
+        etc_path = os.path.join(_base, 'etc')
+        share_path = os.path.join(_base, 'share')
+        pkgmgr_completed_file = os.path.join(_base, r'var\run\pkgmgr.completed')
+        del _base
     else:
         etc_path = '/etc/scalr'
         share_path = '/usr/share/scalr'
+
     _private_path = os.path.join(etc_path, 'private.d')
     status_file = os.path.join(_private_path, 'update.status')
     crypto_file = os.path.join(_private_path, 'keys', 'default')
@@ -276,7 +282,9 @@ class UpdClientAPI(object):
             else:
                 self.update(bootstrap=True)
         else:
-            if self.state == 'completed/wait-ack':
+            if self.state == 'completed/wait-ack' or \
+                (linux.os.windows and self.state == 'in-progress/install' and \
+                    os.path.exists(self.pkgmgr_completed_file)):
                 self.state = 'completed'
             else:
                 self.state = 'noop'
@@ -407,7 +415,7 @@ class UpdClientAPI(object):
             old_pkgmgr_logger = pkgmgr.LOG
             try:
                 pkgmgr.LOG = op.logger
-                if bootstrap:
+                if bootstrap and not linux.os.windows:
                     self.state = 'in-progress/uninstall'
                     self.uninstall()
 
@@ -420,6 +428,24 @@ class UpdClientAPI(object):
                 
                 try:
                     self.state = 'in-progress/install'
+                    if linux.os.windows:
+                        package_url = self.pkgmgr.index[self.package]
+                        subprocess.Popen([
+                                'powershell.exe', 
+                                '-NoProfile', 
+                                '-NonInteractive', 
+                                '-ExecutionPolicy', 'RemoteSigned', 
+                                '-File', os.path.join(os.path.dirname(__file__), 'pkgmgr.ps1'),
+                                '-Install', package_url
+                            ], 
+                            env=os.environ, 
+                            creationflags=win32process.DETACHED_PROCESS
+                        ).communicate()
+                        msg = ('UpdateClient expected to be terminated by pkgmgr.ps1, '
+                                'but never happened')
+                        raise UpdateError(msg)
+
+
                     self.pkgmgr.install(self.package, self.candidate)
                     self.state = 'completed/wait-ack'
                     self.installed = self.candidate
@@ -433,7 +459,8 @@ class UpdClientAPI(object):
                     op.logger.info('Done')
                     return self.status(cached=True)
                 except KeyboardInterrupt:
-                    op.cancel()
+                    if not linux.os.windows:
+                        op.cancel()
                     return
                 except:
                     if reports:

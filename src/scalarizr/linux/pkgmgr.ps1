@@ -1,13 +1,15 @@
 
-
 param (
-	[string]$URL = $(throw "Specify package URL to install")
+	[string]$Install = $(throw "Specify package URL to install")
 )
 
 $ErrorActionPreference = "Stop"
 
 $InstallDir = "C:\\Program Files\\Scalarizr"
+$RunCompletedFile = "$InstallDir\\var\\run\\pkgmgr.completed"
+$LogFile = "$InstallDir\\var\\log\\scalarizr_update.log"
 $BackupDir = $InstallDir + ".bak"
+Start-Transcript -File $LogFile -Append
 
 
 function Download-SzrPackage {
@@ -69,13 +71,17 @@ param ($Certainly = $false)
 }
 
 
-$PackageFile = Download-SzrPackage $URL
+if (Test-Path $RunCompletedFile) {
+	Remove-Item $RunCompletedFile
+}
+$PackageFile = Download-SzrPackage $Install
 Stop-SzrServices
 try {
 	Create-SzrBackup
 	try {
 		Install-SzrPackage $PackageFile
 		Start-SzrServices -Сertainly
+		Echo $Null > $RunCompletedFile
 	}
 	catch {
 		Restore-SzrBackup
