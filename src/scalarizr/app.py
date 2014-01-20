@@ -144,18 +144,20 @@ _logging_configured = False
 
 
 _api_routes = {
-    'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
-    'sysinfo': 'scalarizr.api.system.SystemAPI',
-    'system': 'scalarizr.api.system.SystemAPI',
-    'storage': 'scalarizr.api.storage.StorageAPI',
-    'service': 'scalarizr.api.service.ServiceAPI',
-    'redis': 'scalarizr.api.redis.RedisAPI',
     'apache': 'scalarizr.api.apache.ApacheAPI',
-    'nginx': 'scalarizr.api.apache.NginxAPI',
+    'chef': 'scalarizr.api.chef.ChefAPI',
+    'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
+    'memcached': 'scalarizr.api.memcached.MemcachedAPI',
     'mysql': 'scalarizr.api.mysql.MySQLAPI',
+    'nginx': 'scalarizr.api.apache.NginxAPI',
+    'operation': 'scalarizr.api.operation.OperationAPI',
     'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
     'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI',
-    'operation': 'scalarizr.api.operation.OperationAPI'
+    'redis': 'scalarizr.api.redis.RedisAPI',
+    'service': 'scalarizr.api.service.ServiceAPI',
+    'storage': 'scalarizr.api.storage.StorageAPI',
+    'sysinfo': 'scalarizr.api.system.SystemAPI',
+    'system': 'scalarizr.api.system.SystemAPI',
 }
 
 
