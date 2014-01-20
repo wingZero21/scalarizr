@@ -37,7 +37,7 @@ class MySQLAPI(object):
         self._mysql_init.start()
 
     @rpc.command_method
-    def stop_service(self, reason=None):
+    def stop_service(self):
         self._mysql_init.stop()
 
     @rpc.command_method

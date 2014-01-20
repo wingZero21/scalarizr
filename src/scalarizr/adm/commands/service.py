@@ -11,8 +11,8 @@ from scalarizr.api.haproxy import HAProxyAPI
 from scalarizr.api.memcached import MemcachedAPI
 from scalarizr.api.mysql import MySQLAPI
 from scalarizr.api.nginx import NginxAPI
-from scalarizr.services.postgresql import PgSQLInitScript
-from scalarizr.services.rabbitmq import RabbitMQInitScript
+from scalarizr.api.postgresql import PostgreSQLAPI
+from scalarizr.api.rabbitmq import RabbitMQAPI
 
 
 service_apis = {
@@ -25,8 +25,8 @@ service_apis = {
     'mysql': MySQLAPI,
     'nginx': NginxAPI,
     'percona': MySQLAPI,
-    'postgresql': PgSQLInitScript,
-    'rabbitmq': RabbitMQInitScript,
+    'postgresql': PostgreSQLAPI,
+    'rabbitmq': RabbitMQAPI,
     # 'redis',
     # 'tomcat': ,  # TODO: make ParametrizedInitScript subclass for tomcat, or api
 }
