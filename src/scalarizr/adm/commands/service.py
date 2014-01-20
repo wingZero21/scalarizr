@@ -13,6 +13,7 @@ from scalarizr.api.mysql import MySQLAPI
 from scalarizr.api.nginx import NginxAPI
 from scalarizr.api.postgresql import PostgreSQLAPI
 from scalarizr.api.rabbitmq import RabbitMQAPI
+from scalarizr.api.redis import RedisAPI
 
 
 service_apis = {
@@ -27,7 +28,7 @@ service_apis = {
     'percona': MySQLAPI,
     'postgresql': PostgreSQLAPI,
     'rabbitmq': RabbitMQAPI,
-    # 'redis',
+    'redis': RedisAPI,
     # 'tomcat': ,  # TODO: make ParametrizedInitScript subclass for tomcat, or api
 }
 
@@ -59,9 +60,9 @@ class Service(Command):
             print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
-    def _display_service_status(self, service, **kwds):
+    def _display_service_status(self, service):
         api = service_apis[service]()
-        status = api.get_service_status(**kwds)
+        status = api.get_service_status()
 
         if service == 'redis':
             return self._print_redis_status(status)
@@ -78,6 +79,9 @@ class Service(Command):
         return code
 
     def _print_redis_status(self, statuses):
+        if not statuses:
+            print 'No redis configuration found.'
+            return 0
         for port, status in statuses:
             status_string = 'stopped'
             if status == initdv2.Status.RUNNING:
@@ -122,7 +126,7 @@ class Service(Command):
         elif stop:
             return self._stop_service(service, index=index, port=port)
         elif status:
-            return self._display_service_status(service, index=index, port=port)
+            return self._display_service_status(service)
 
 
 commands = [Service]
