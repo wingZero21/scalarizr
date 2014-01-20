@@ -46,7 +46,7 @@ class Service(Command):
     def _start_service(self, service, **kwds):
         api = service_apis[service]()
         try:
-            api.start_service()
+            api.start_service(**kwds)
         except (BaseException, Exception), e:
             print 'Service start failed.\n%s' % e
             return int(CommandError())
@@ -54,14 +54,18 @@ class Service(Command):
     def _stop_service(self, service, **kwds):
         api = service_apis[service]()
         try:
-            api.stop_service()
+            api.stop_service(**kwds)
         except (BaseException, Exception), e:
             print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
     def _display_service_status(self, service, **kwds):
         api = service_apis[service]()
-        status = api.get_service_status()
+        status = api.get_service_status(**kwds)
+
+        if service == 'redis':
+            return self._print_redis_status(status)
+
         status_string = ' is stopped'
         code = 3
         if status == initdv2.Status.RUNNING:
@@ -72,6 +76,14 @@ class Service(Command):
             code = 4
         print service + status_string
         return code
+
+    def _print_redis_status(self, statuses):
+        for port, status in statuses:
+            status_string = 'stopped'
+            if status == initdv2.Status.RUNNING:
+                status_string = 'running'
+            print '- port: %s\n  status: %s' % (port, status_string)
+        return 0
 
     def __call__(self, 
                  start=False,

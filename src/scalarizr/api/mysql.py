@@ -41,11 +41,11 @@ class MySQLAPI(object):
         self._mysql_init.stop()
 
     @rpc.command_method
-    def reload(self):
+    def reload_service(self):
         self._mysql_init.reload()
 
     @rpc.command_method
-    def restart(self):
+    def restart_service(self):
         self._mysql_init.restart()
 
     @rpc.command_method

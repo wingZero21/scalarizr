@@ -66,11 +66,11 @@ class HAProxyAPI(object):
         self.svc.stop()
 
     @rpc.command_method
-    def reload(self):
+    def reload_service(self):
         self.svc.reload()
 
     @rpc.command_method
-    def restart(self):
+    def restart_service(self):
         self.svc.restart()
 
     @rpc.command_method

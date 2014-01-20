@@ -24,11 +24,11 @@ class RabbitMQAPI(object):
         self.service.stop()
 
     @rpc.command_method
-    def reload(self):
+    def reload_service(self):
         self.service.reload()
 
     @rpc.command_method
-    def restart(self):
+    def restart_service(self):
         self.service.restart()
 
     @rpc.command_method

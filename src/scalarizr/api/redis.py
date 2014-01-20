@@ -15,6 +15,7 @@ from scalarizr import rpc
 from scalarizr.linux import iptables
 from scalarizr.api import operation
 from scalarizr.util import system2, PopenError
+from scalarizr.util import initdv2
 from scalarizr.services import redis as redis_service
 from scalarizr.services import backup
 from scalarizr.handlers import transfer_result_to_backup_result, DbMsrMessages
@@ -43,6 +44,49 @@ class RedisAPI(object):
         ini = self._cnf.rawini
         self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
         self.redis_instances = redis_service.RedisInstances()
+
+    def _get_redis_instance(self, port=None, index=None):
+        assert (port and not index) or (not port and index)
+        if port:
+            if port not in self.redis_instances.ports:
+                raise Exception('Redis is not configured to use given port.')
+            index = self.redis_instances.ports.index(port)
+        return self.redis_instances.instances[index]
+
+    @rpc.command_method
+    def start_service(self, port=None, index=None):
+        assert (port and not index) or (not port and index)
+        redis_inst = self._get_redis_instance(port, index)
+        redis_inst.service.start()
+
+    @rpc.command_method
+    def stop_service(self, port=None, index=None):
+        assert (port and not index) or (not port and index)
+        redis_inst = self._get_redis_instance(port, index)
+        redis_inst.service.stop()
+
+    @rpc.command_method
+    def reload_service(self, port=None, index=None):
+        assert (port and not index) or (not port and index)
+        redis_inst = self._get_redis_instance(port, index)
+        redis_inst.service.reload()
+
+    @rpc.command_method
+    def restart_service(self, port=None, index=None):
+        assert (port and not index) or (not port and index)
+        redis_inst = self._get_redis_instance(port, index)
+        redis_inst.service.restart()
+
+    @rpc.command_method
+    def get_service_status(self):
+        """Returns dict of processes ports as keys and their statuses as values"""
+        statuses = {}
+        for redis_inst in self.redis_instances.instances:
+            status = initdv2.Status.NOT_RUNNING
+            if redis_inst.service.running():
+                status = initdv2.Status.RUNNING
+            statuses[redis_inst.port] = status
+        return statuses
 
     @rpc.command_method
     def launch_processes(self, num=None, ports=None, passwords=None, async=False):
