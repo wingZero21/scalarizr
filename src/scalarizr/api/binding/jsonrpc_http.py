@@ -139,13 +139,15 @@ class HttpServiceProxy(rpc.ServiceProxy, Security):
 
 
     def exchange(self, jsonrpc_req):
-        jsonrpc_req = self.encrypt_data(jsonrpc_req)
-        sig, date = self.sign(jsonrpc_req, self._read_crypto_key())
-
-        headers = {
+        if self.crypto_key_path:
+            jsonrpc_req = self.encrypt_data(jsonrpc_req)
+            sig, date = self.sign(jsonrpc_req, self._read_crypto_key())
+            headers = {
                 'Date': date,
                 'X-Signature': sig
-        }
+            }
+        else:
+            headers = {}
         if self.server_id:
             headers['X-Server-Id'] = self.server_id
 
@@ -154,6 +156,9 @@ class HttpServiceProxy(rpc.ServiceProxy, Security):
         http_req = urllib2.Request(os.path.join(self.endpoint, namespace), jsonrpc_req, headers)
         try:
             jsonrpc_resp = urllib2.urlopen(http_req).read()
-            return self.decrypt_data(jsonrpc_resp)
+            if self.crypto_key_path:
+                return self.decrypt_data(jsonrpc_resp)
+            else:
+                return jsonrpc_resp
         except urllib2.HTTPError, e:
             raise Exception('%s: %s' % (e.code, e.read()))

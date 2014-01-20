@@ -4,26 +4,27 @@ Created on Jan 23, 2012
 @author: marat
 '''
 
-import logging
-import urllib2
+import binascii
 import glob
 import json
-import time
-import sys
+import logging
 import os
-import re
-import binascii
-import shutil
-import uuid
 import pprint
+import re
+import shutil
+import sqlite3 as sqlite
+import sys
+import time
+import urllib2
+import uuid
 
-from scalarizr import linux, queryenv, rpc
-from scalarizr.bus import bus
-from scalarizr.util import metadata, initdv2
-from scalarizr.linux import pkgmgr
-from scalarizr.messaging import p2p as messaging
+from scalarizr import linux, queryenv, rpc, config
 from scalarizr.api import operation
 from scalarizr.api.binding import jsonrpc_http
+from scalarizr.bus import bus
+from scalarizr.linux import pkgmgr
+from scalarizr.messaging import p2p as messaging
+from scalarizr.util import metadata, initdv2, sqlite_server
 
 
 if linux.os.windows:
@@ -95,13 +96,16 @@ class UpdClientAPI(object):
     system_matches = False
 
     if linux.os.windows:
-        _etc_path = r'C:\Program Files\Scalarizr\etc'
+        etc_path = r'C:\Program Files\Scalarizr\etc'
+        share_path = r'C:\Program Files\Scalarizr\share'
     else:
-        _etc_path = '/etc/scalr'
-    _private_path = os.path.join(_etc_path, 'private.d')
+        etc_path = '/etc/scalr'
+        share_path = '/usr/share/scalr'
+    _private_path = os.path.join(etc_path, 'private.d')
     status_file = os.path.join(_private_path, 'update.status')
     crypto_file = os.path.join(_private_path, 'keys', 'default')
-    del _etc_path, _private_path
+    db_file = os.path.join(_private_path, 'db.sqlite')
+    del _private_path
 
     @property
     def is_solo_mode(self):
@@ -123,19 +127,55 @@ class UpdClientAPI(object):
 
 
     def _init_queryenv(self):
+        LOG.debug('Initializing QueryEnv')
         args = (self.queryenv_url, 
                 self.server_id, 
                 self.crypto_file)
         self.queryenv = queryenv.QueryEnvService(*args)
         self.queryenv = queryenv.QueryEnvService(*args, 
-                        api_version=self.queryenv.get_latest_version())        
+                        api_version=self.queryenv.get_latest_version())  
+        bus.queryenv_service = self.queryenv      
+
+
+    def _init_db(self):
+        def connect_db():
+            conn = sqlite.connect(self.db_file, 5.0)
+            conn.row_factory = sqlite.Row
+            conn.text_factory = sqlite.OptimizedUnicode  
+            return conn
+
+        if not os.path.exists(self.db_file) or not os.stat(self.db_file).st_size:
+            LOG.debug('Creating SQLite database')
+            conn = connect_db()
+            try:
+                with open(os.path.join(self.share_path, 'db.sql')) as fp:
+                    conn.executescript(fp.read())
+                conn.commit()
+            finally:
+                conn.close()
+
+        # Configure database connection pool
+        LOG.debug('Initializing database connection')
+        t = sqlite_server.SQLiteServerThread(connect_db)
+        t.setDaemon(True)
+        t.start()
+        sqlite_server.wait_for_server_thread(t)
+        bus.db = t.connection
 
 
     def _init_services(self):
         if not self.queryenv:
             self._init_queryenv()
 
+        if not bus.db:
+            self._init_db()
+
+        if not bus.cnf:
+            bus.cnf = config.ScalarizrCnf(self.etc_path)
+            bus.cnf.bootstrap()
+
         if not self.messaging_service:
+            LOG.debug('Initializing messaging')
             bus.messaging_service = messaging.P2pMessageService(
                     server_id=self.server_id,
                     crypto_key_path=self.crypto_file,
@@ -143,8 +183,7 @@ class UpdClientAPI(object):
                     producer_retries_progression='1,2,5,10,20,30,60')
 
         if self.is_client_mode and not self.update_server:
-            self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
-                            server_id=self.server_id)
+            self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, None)
 
         if not self.scalarizr:
             self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file) 
@@ -391,6 +430,7 @@ class UpdClientAPI(object):
                     if reports:
                         self.report(True)
                     op.logger.info('Done')
+                    return self.status(cached=True)
                 except KeyboardInterrupt:
                     op.cancel()
                     return
@@ -401,8 +441,10 @@ class UpdClientAPI(object):
             except:
                 e = sys.exc_info()[1]
                 self.error = str(e)
+                self.state = 'error'
                 if isinstance(e, UpdateError):
                     op.logger.warn(str(e))
+                    return self.status(cached=True)
                 else:
                     raise
             finally:
