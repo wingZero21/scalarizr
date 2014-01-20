@@ -400,6 +400,7 @@ class UpdClientAPI(object):
         def do_update(op):
             self.executed_at = time.strftime(DATE_FORMAT, time.gmtime())
             self.state = 'in-progress/prepare'
+            self.error = ''
             self._sync()
             self._ensure_repos()
 
