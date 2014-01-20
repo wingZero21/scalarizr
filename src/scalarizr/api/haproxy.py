@@ -6,6 +6,7 @@ Created on Nov 25, 2011
 '''
 
 from pprint import pformat
+import logging
 
 from scalarizr import exceptions
 from scalarizr.libs import validate
@@ -14,7 +15,6 @@ from scalarizr.linux import iptables
 from scalarizr import rpc
 from scalarizr.handlers import get_role_servers
 
-import logging
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
     'timeout': {'check': '3s'},
@@ -43,9 +43,6 @@ _rule_hc_target = validate.rule(re='^[tcp|http]+:\d+$')
 
 
 class HAProxyAPI(object):
-    """
-    Placeholder
-    """
 
     def __init__(self, path=None):
         self.path_cfg = path
@@ -60,6 +57,25 @@ class HAProxyAPI(object):
         else:
             raise TypeError("server must be a dict or a string")
 
+    @rpc.command_method
+    def start_service(self):
+        self.svc.start()
+
+    @rpc.command_method
+    def stop_service(self):
+        self.svc.stop()
+
+    @rpc.command_method
+    def reload(self):
+        self.svc.reload()
+
+    @rpc.command_method
+    def restart(self):
+        self.svc.restart()
+
+    @rpc.command_method
+    def get_service_status(self):
+        return self.svc.status()
 
     def make_proxy(self, port, backend_port=None, backends=None,
                 check_timeout=None, maxconn=None, **default_server_params):

@@ -478,6 +478,10 @@ class ApacheAPI(object):
                 raise
 
     @rpc.command_method
+    def get_service_status(self):
+        return self.service.status()
+
+    @rpc.command_method
     def configtest(self):
         self.service.configtest()
 

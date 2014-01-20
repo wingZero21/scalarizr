@@ -5,26 +5,26 @@ from scalarizr.adm.command import Command
 from scalarizr.adm.command import CommandError
 from scalarizr.node import __node__
 from scalarizr.util import initdv2
-from scalarizr.api.apache import ApacheInitScript
-from scalarizr.handlers.chef import ChefInitScript
-from scalarizr.services.haproxy import HAProxyInitScript
-from scalarizr.handlers.memcached import MemcachedInitScript
-from scalarizr.services.mysql import MysqlInitScript
+from scalarizr.api.apache import ApacheAPI
+from scalarizr.api.chef import ChefAPI
+from scalarizr.api.haproxy import HAProxyAPI
+from scalarizr.api.memcached import MemcachedAPI
+from scalarizr.api.mysql import MySQLAPI
 from scalarizr.api.nginx import NginxAPI
 from scalarizr.services.postgresql import PgSQLInitScript
 from scalarizr.services.rabbitmq import RabbitMQInitScript
 
 
 service_apis = {
-    'apache': ApacheInitApi,
-    'chef': ChefInitScript,
-    'haproxy': HAProxyInitScript,
-    'mariadb': MysqlInitScript,
-    'memcached': MemcachedInitScript,
+    'apache': ApacheAPI,
+    'chef': ChefAPI,
+    'haproxy': HAProxyAPI,
+    'mariadb': MySQLAPI,
+    'memcached': MemcachedAPI,
     # 'mongodb',
-    'mysql': MysqlInitScript,
+    'mysql': MySQLAPI,
     'nginx': NginxAPI,
-    'percona': MysqlInitScript,
+    'percona': MySQLAPI,
     'postgresql': PgSQLInitScript,
     'rabbitmq': RabbitMQInitScript,
     # 'redis',
