@@ -227,7 +227,7 @@ class RedisAPI(object):
             password = redis_conf.requirepass
             processes['ports'].append(port)
             processes['passwords'].append(password)
-            LOG.debug('Redis config %s has password %s', conf_path, password)
+            LOG.debug('Redis config %s has password %s', redis_conf, password)
         return processes
 
     def get_running_processes(self):
@@ -235,14 +235,16 @@ class RedisAPI(object):
 
     def get_stopped_processes(self):
         running_ports = self.busy_ports
-        all_conf_paths = os.listdir(os.path.dirname(__redis['defaults']['redis.conf']))
+        all_conf_paths = os.listdir(os.path.dirname(__redis__['defaults']['redis.conf']))
         all_ports = [conf.split('.')[1] for conf in all_conf_paths]
+        all_ports = filter(lambda x: x.isdigit(), all_ports)
         stopped_ports = [port for port in all_ports if port not in running_ports]
         return self._get_processes(stopped_ports)
 
     def get_all_processes(self):
-        all_conf_paths = os.listdir(os.path.dirname(__redis['defaults']['redis.conf']))
+        all_conf_paths = os.listdir(os.path.dirname(__redis__['defaults']['redis.conf']))
         all_ports = [conf.split('.')[1] for conf in all_conf_paths]
+        all_ports = filter(lambda x: x.isdigit(), all_ports)
         return self._get_processes(all_ports)
 
     @property
