@@ -82,7 +82,7 @@ class Service(Command):
         if not statuses:
             print 'No redis configuration found.'
             return 0
-        for port, status in statuses:
+        for port, status in statuses.items():
             status_string = 'stopped'
             if status == initdv2.Status.RUNNING:
                 status_string = 'running'
@@ -109,6 +109,8 @@ class Service(Command):
                  ):
         if redis:
             service = 'redis'
+            if index:
+                index = int(index) - 1
         elif mongodb:
             mongo_component = ((mongos and 'mongos') or
                                (mongod and 'mongod') or
