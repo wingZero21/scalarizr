@@ -47,9 +47,9 @@ class RedisAPI(object):
         self.redis_instances = redis_service.RedisInstances()
 
     def _reinit_instances(self):
-        running_proc = self.get_all_processes()
-        ports, passwords = running_proc['ports'], running_proc['passwords']
-        stopped_proc = 
+        proc = self.get_all_processes()
+        ports, passwords = proc['ports'], proc['passwords']
+
         self.redis_instances.instances = []
         self.redis_instances.init_processes(len(ports), ports, passwords)
 
