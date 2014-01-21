@@ -29,6 +29,7 @@ BEHAVIOUR = config.BuiltinBehaviours.REDIS
 STORAGE_PATH = '/mnt/redisstorage'
 
 
+
 LOG = logging.getLogger(__name__)
 
 
@@ -45,8 +46,14 @@ class RedisAPI(object):
         self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
         self.redis_instances = redis_service.RedisInstances()
 
+    def _reinit_instances(self):
+        ports, passwords = self.get_running_processes()
+        self.redis_instances.instances = []
+        self.redis_instances.init_processes(len(ports), ports, passwords)
+
     def _get_redis_instance(self, port=None, index=None):
         assert (port and not index) or (not port and index)
+        self._reinit_instances()
         if port:
             if port not in self.redis_instances.ports:
                 raise Exception('Redis is not configured to use given port.')
@@ -81,6 +88,7 @@ class RedisAPI(object):
     def get_service_status(self):
         """Returns dict of processes ports as keys and their statuses as values"""
         statuses = {}
+        self._reinit_instances()
         for redis_inst in self.redis_instances.instances:
             status = initdv2.Status.NOT_RUNNING
             if redis_inst.service.running():
