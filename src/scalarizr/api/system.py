@@ -524,19 +524,19 @@ class SystemAPI(object):
 
     @rpc.query_method
     def get_debug_log(self):
-        return binascii.b2a_base64(_get_log(self._DEBUG_LOG_FILE, 0))
+        return binascii.b2a_base64(_get_log(self._DEBUG_LOG_FILE, -1))
 
     @rpc.query_method
     def get_update_log(self):
-        return binascii.b2a_base64(_get_log(self._UPDATE_LOG_FILE, 0))     
+        return binascii.b2a_base64(_get_log(self._UPDATE_LOG_FILE, -1))     
 
     @rpc.query_method
     def get_log(self):
-        return binascii.b2a_base64(_get_log(self._LOG_FILE, 0))   
+        return binascii.b2a_base64(_get_log(self._LOG_FILE, -1))   
 
 
 def _get_log(logfile, maxsize=max_log_size):
-    if maxsize and (os.path.getsize(logfile) > maxsize):
+    if maxsize != -1 and (os.path.getsize(logfile) > maxsize):
         return u'Unable to fetch Log file %s: file is larger than %s bytes' % (logfile, maxsize)
     try:
         with open(logfile, "r") as fp:
