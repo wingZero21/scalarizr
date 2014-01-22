@@ -106,6 +106,9 @@ class SystemAPI(object):
     _PATH = ['/usr/bin/', '/usr/local/bin/']
     _CPUINFO = '/proc/cpuinfo'
     _NETSTATS = '/proc/net/dev'
+    _LOG_FILE = '/var/log/scalarizr.log'
+    _DEBUG_LOG_FILE = '/var/log/scalarizr_debug.log'
+    _UPDATE_LOG_FILE = '/var/log/scalarizr_update.log'
 
     def _readlines(self, path):
         with open(path, "r") as fp:
@@ -514,8 +517,21 @@ class SystemAPI(object):
         return dict(stdout=stdout, stderr=stderr)
 
 
+    @rpc.service_method
+    def get_debug_log(self):
+        return binascii.b2a_base64(_get_log(self._DEBUG_LOG_FILE, -1))
+
+    @rpc.service_method
+    def get_update_log(self):
+        return binascii.b2a_base64(_get_log(self._UPDATE_LOG_FILE, -1))     
+
+    @rpc.service_method
+    def get_log(self):
+        return binascii.b2a_base64(_get_log(self._LOG_FILE, -1))   
+
+
 def _get_log(logfile, maxsize=max_log_size):
-    if (os.path.getsize(logfile) > maxsize):
+    if maxsize != -1 and (os.path.getsize(logfile) > maxsize):
         return u'Unable to fetch Log file %s: file is larger than %s bytes' % (logfile, maxsize)
     try:
         with open(logfile, "r") as fp:
@@ -531,6 +547,10 @@ if linux.os.windows_family:
 
 
     class WindowsSystemAPI(SystemAPI):
+
+        _LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr.log'
+        _DEBUG_LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr_debug.log'
+        _UPDATE_LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr_update.log' 
 
         @coinitialized
         @rpc.service_method
