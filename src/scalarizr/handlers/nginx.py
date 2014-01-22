@@ -106,7 +106,7 @@ class NginxOptions(Configurator.Container):
 
 
 def get_handlers():
-    return [NginxHandler()]
+    return [NginxHandler()] if nginx_api.NginxAPI.last_check else []
 
 
 class NginxCnfController(CnfController):

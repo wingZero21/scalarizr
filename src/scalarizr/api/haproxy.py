@@ -50,6 +50,7 @@ class HAProxyAPI(object):
     Placeholder
     """
     __metaclass__ = Singleton
+    last_check = False
 
     def __init__(self, path=None):
         self.path_cfg = path
@@ -564,6 +565,7 @@ class HAProxyAPI(object):
     @classmethod
     def check_software(cls, installed_packages=None):
         try:
+            HAProxyAPI.last_check = False
             if linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family:
                 pkgmgr.check_dependency(['haproxy'], installed_packages)
             else:
@@ -571,6 +573,7 @@ class HAProxyAPI(object):
                     "'haproxy' behavior is only supported on " +\
                     "Debian, RedHat or Oracle operating system family"
                 )
+            HAProxyAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'haproxy')
 

@@ -38,6 +38,7 @@ LOG = logging.getLogger(__name__)
 class RedisAPI(object):
 
     __metaclass__ = Singleton
+    last_check = False
 
     _cnf = None
     _queryenv = None
@@ -325,9 +326,10 @@ class RedisAPI(object):
 
     @classmethod
     def check_software(cls, installed=None):
-        os_name = linux.os['name'].lower()
-        os_vers = linux.os['version']
         try:
+            RedisAPI.last_check = False
+            os_name = linux.os['name'].lower()
+            os_vers = linux.os['version']
             if os_name == 'ubuntu':
                 if os_vers >= '12':
                     pkgmgr.check_dependency(['redis-server>=2.2,<2.7'], installed)
@@ -344,6 +346,7 @@ class RedisAPI(object):
                         "'redis' behavior is only supported on " +\
                         "Debian, RedHat and Oracle operating system family"
                         )
+            RedisAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'redis')
 

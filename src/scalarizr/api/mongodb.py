@@ -105,6 +105,7 @@ class MongoDBAPI:
     MongoDB API class
     """
     __metaclass__ = Singleton
+    last_check = False
 
     @rpc.command_method
     def reset_password(self):
@@ -167,6 +168,7 @@ class MongoDBAPI:
     @classmethod
     def check_software(cls, installed_packages=None):
         try:
+            MongoDBAPI.last_check = False
             os_name = linux.os['name'].lower()
             if os_name == 'ubuntu':
                 if linux.os['version'] >= '12':
@@ -212,6 +214,7 @@ class MongoDBAPI:
                 )
 
             pkgmgr.check_any_dependency(required_list, installed_packages)
+            MongoDBAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'mongodb')
 

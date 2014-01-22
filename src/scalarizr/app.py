@@ -822,20 +822,22 @@ class Service(object):
         if linux.os['family'] != 'Windows':
             installed_packages = pkgmgr.package_mgr().list()
             for behavior in node.__node__['behavior']:
+                if behavior == 'base' or behavior not in api.api_routes.keys():
+                    continue
                 try:
                     api_cls = util.import_class(api.api_routes[behavior])
                     api_cls.check_software(installed_packages)
-                except (KeyError, exceptions.NotFound):
-                    continue
+                except exceptions.NotFound as e:
+                    logger.error(e)
                 except exceptions.UnsupportedBehaviorError as e:
                     logger.error(e)
                     node.__node__['messaging'].send(
-                            'OutOfTheService',
-                            body={
-                                'error':'Software error',
-                                'details':str(e)
-                                }
-                            )
+                        'OutOfTheService',
+                        body={
+                            'error':'Software error',
+                            'details':str(e)
+                        }
+                    )
 
         logger.debug('Initialize message handlers')
         consumer = msg_service.get_consumer()

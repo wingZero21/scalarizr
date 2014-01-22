@@ -12,6 +12,7 @@ import signal
 import logging
 
 from scalarizr import linux
+from scalarizr.api import chef as chef_api
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.util import system2, initdv2, PopenError
@@ -36,7 +37,7 @@ node_name        '%(node_name)s'
 
 
 def get_handlers():
-    return (ChefHandler(), )
+    return [ChefHandler()] if chef_api.ChefAPI.last_check else []
 
 
 PID_FILE = '/var/run/chef-client.pid'

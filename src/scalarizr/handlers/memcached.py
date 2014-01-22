@@ -13,6 +13,7 @@ from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import PresetProvider, BaseConfig
 from scalarizr.api import service as preset_service
+from scalarizr.api import memcached as memcached_api
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, FarmSecurityMixin
 from scalarizr.messaging import Messages
 
@@ -79,7 +80,7 @@ initdv2.explore('memcached', MemcachedInitScript)
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MEMCACHED
 
 def get_handlers():
-    return [MemcachedHandler()]
+    return [MemcachedHandler()] if memcached_api.MemcachedAPI.last_check else []
 
 class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 

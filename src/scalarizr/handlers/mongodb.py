@@ -80,7 +80,7 @@ MONGO_VOLUME_CREATED    = "mongodb_created_volume_id"
 
         
 def get_handlers():
-    return (MongoDBHandler(), )
+    return [MongoDBHandler()] if mongodb_api.MongoDBAPI.last_check else []
 
 
 class MongoDBClusterStates:

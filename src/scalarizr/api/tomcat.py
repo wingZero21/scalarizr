@@ -15,12 +15,14 @@ LOG = logging.getLogger(__name__)
 class TomcatAPI(object):
 
     __metaclass__ = Singleton
+    last_check = False
 
     @classmethod
     def check_software(cls, installed_packages=None):
-        os_name = linux.os['name'].lower()
-        os_vers = linux.os['version']
         try:
+            TomcatAPI.last_check = False
+            os_name = linux.os['name'].lower()
+            os_vers = linux.os['version']
             if os_name == 'ubuntu':
                 if os_vers >= '12':
                     pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
@@ -38,6 +40,7 @@ class TomcatAPI(object):
                     "'tomcat' behavior is only supported on " +\
                     "Debian, RedHat and Oracle operating system family"
                 )
+            TomcatAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'tomcat')
 

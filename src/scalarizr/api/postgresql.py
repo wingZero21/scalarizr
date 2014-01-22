@@ -44,6 +44,7 @@ __postgresql__ = postgresql_svc.__postgresql__
 class PostgreSQLAPI(object):
 
     __metaclass__ = Singleton
+    last_check = False
 
     replication_status_query = '''SELECT
     CASE WHEN pg_last_xlog_receive_location() = pg_last_xlog_replay_location()
@@ -267,16 +268,7 @@ class PostgreSQLAPI(object):
     @classmethod
     def check_software(cls, installed_packages=None):
         try:
-            def check_any(pkgs):
-                for _ in pkgs:
-                    try:
-                        pkgmgr.check_dependency(_, installed)
-                        break
-                    except:
-                        continue
-                else:
-                    raise
-
+            PostgreSQLAPI.last_check = False
             os_name = linux.os['name'].lower()
             os_vers = linux.os['version']
             if os_name == 'ubuntu':
@@ -329,6 +321,7 @@ class PostgreSQLAPI(object):
                     "Debian, RedHat or Oracle operating system family"
                 )
             pkgmgr.check_any_dependency(required_list, installed_packages)
+            PostgreSQLAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'postgresql')
 

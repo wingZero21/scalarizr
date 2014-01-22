@@ -14,6 +14,7 @@ LOG = logging.getLogger(__name__)
 class PerconaAPI(mysql.MySQLAPI):
 
     __metaclass__ = Singleton
+    last_check = False
 
     def __init__(self):
         super(MariaDBAPI, self).__init__()
@@ -21,6 +22,7 @@ class PerconaAPI(mysql.MySQLAPI):
     @classmethod
     def check_software(cls, installed_packages=None):
         try:
+            PerconaAPI.last_check = False
             if linux.os.debian_family:
                 pkgmgr.check_any_dependency(
                     [
@@ -44,6 +46,7 @@ class PerconaAPI(mysql.MySQLAPI):
                     "'percona' behavior is only supported on " +\
                     "Debian, RedHat or Oracle operating system family"
                 )
+            PerconaAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'percona')
 

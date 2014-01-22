@@ -149,6 +149,7 @@ def _bool_from_scalr_str(bool_str):
 class NginxAPI(object):
 
     __metaclass__ = Singleton
+    last_check = False
 
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
         _logger.debug('Initializing nginx API.')
@@ -1419,6 +1420,7 @@ class NginxAPI(object):
     @classmethod
     def check_software(cls, installed_packages=None):
         try:
+            NginxAPI.last_check = False
             if linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family:
                 pkgmgr.check_dependency(['nginx'], installed_packages)
             else:
@@ -1426,6 +1428,7 @@ class NginxAPI(object):
                     "'www' behavior is only supported on " +\
                     "Debian, RedHat or Oracle operating system family"
                 )
+            NginxAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'www')
 

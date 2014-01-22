@@ -11,6 +11,7 @@ from scalarizr.linux import pkgmgr, execute
 from scalarizr.messaging import Messages
 from scalarizr.util import initdv2, firstmatched
 from scalarizr.node import __node__
+from scalarizr.api import tomcat as tomcat_api
 
 
 LOG = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ __tomcat__.update({
 })
 
 def get_handlers():
-    return [TomcatHandler()]
+    return [TomcatHandler()] if tomcat_api.TomcatAPI.last_check else []
 
 
 class KeytoolExec(execute.BaseExec):

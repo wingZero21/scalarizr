@@ -17,6 +17,7 @@ from scalarizr import exceptions
 class RabbitMQAPI:
 
     __metaclass__ = Singleton
+    last_check = False
 
     @rpc.command_method
     def reset_password(self, new_password=None):
@@ -30,9 +31,10 @@ class RabbitMQAPI:
 
     @classmethod
     def check_software(cls, installed_packages=None):
-        os_name = linux.os['name'].lower()
-        os_vers = linux.os['version']
         try:
+            RabbitMQAPI.last_check = False
+            os_name = linux.os['name'].lower()
+            os_vers = linux.os['version']
             if os_name == 'ubuntu':
                 if os_vers >= '12':
                     pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.2'], installed_packages)
@@ -51,6 +53,7 @@ class RabbitMQAPI:
                         "'rabbitmq' behavior is only supported on " +\
                         "Debian and RedHat operating system family"
                 )
+            RabbitMQAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'rabbitmq')
 

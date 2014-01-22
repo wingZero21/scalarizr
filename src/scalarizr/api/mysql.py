@@ -27,6 +27,7 @@ class MySQLAPI(object):
     @xxx: reporting is a pain
     """
     __metaclass__ = Singleton
+    last_check = False
 
     error_messages = {
         'empty': "'%s' can't be blank",
@@ -188,6 +189,7 @@ class MySQLAPI(object):
     @classmethod
     def check_software(cls, installed_packages=None):
         try:
+            MySQLAPI.last_check = False
             if linux.os.debian_family:
                 pkgmgr.check_dependency(
                     ['mysql-client>=5.0,<5.6', 'mysql-server>5.0,<5.6'],
@@ -204,6 +206,7 @@ class MySQLAPI(object):
                     "'mysqldb2' behavior is only supported on " +\
                     "Debian, RedHat or Oracle operating system family"
                 )
+            MySQLAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'mysql')
 
