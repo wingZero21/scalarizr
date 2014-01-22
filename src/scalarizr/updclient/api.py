@@ -414,6 +414,9 @@ class UpdClientAPI(object):
             package_url = self.pkgmgr.index[self.package]
             if os.path.exists(self.win_status_file):
                 os.unlink(self.win_status_file)
+            logfd = logging.getLogger('').handlers[0].stream
+            logfd = os.dup(logfd)
+
             LOG.info('Invoke powershell script "update.ps1 -URL %s"', package_url)
             linux.system([
                     'powershell.exe', 
@@ -425,8 +428,9 @@ class UpdClientAPI(object):
                 ], 
                 env=os.environ, 
                 #creationflags=win32process.DETACHED_PROCESS,
-                stdout=open(self.log_file, 'a+'),
+                stdout=logfd,
                 stderr=subprocess.STDOUT)
+
             LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)
             time.sleep(self.win_update_timeout)
             msg = ('UpdateClient expected to be terminated by update.ps1, '
@@ -455,9 +459,8 @@ class UpdClientAPI(object):
             self._sync()
             self._ensure_repos()
 
-            old_pkgmgr_logger = pkgmgr.LOG
+            pkgmgr.LOG.addHandler(op.logger.handlers[0])
             try:
-                pkgmgr.LOG = op.logger
                 if bootstrap and not linux.os.windows:
                     self.state = 'in-progress/uninstall'
                     self.uninstall()
@@ -494,7 +497,7 @@ class UpdClientAPI(object):
                 else:
                     raise
             finally:
-                pkgmgr.LOG = old_pkgmgr_logger
+                pkgmgr.LOG.removeHandler(op.logger.handlers[0])
 
         return self.op_api.run('scalarizr.update', do_update, async=async, 
                     exclusive=True, notifies=notifies)
