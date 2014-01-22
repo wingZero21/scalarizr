@@ -95,10 +95,13 @@ class QueryEnvService(object):
                     self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, msg, msg_wait)
                     if "Signature doesn't match" in msg:
                         raise InvalidSignatureError(msg)
+                    if "not supported" in msg:
+                        raise
                 else:
                     self._logger.warn('QueryEnv failed. %s. %s', e, msg_wait)
                 self._logger.warn('Sleep %s seconds before next attempt...', wait_seconds)
                 time.sleep(wait_seconds)
+
 
         resp_body = response.read()
         resp_body = self.htmlparser.unescape(resp_body)

@@ -11,7 +11,6 @@ import logging
 import os
 import pprint
 import re
-import subprocess
 import shutil
 import sqlite3 as sqlite
 import sys
@@ -101,7 +100,7 @@ class UpdClientAPI(object):
         _base = r'C:\Program Files\Scalarizr'
         etc_path = os.path.join(_base, 'etc')
         share_path = os.path.join(_base, 'share')
-        pkgmgr_completed_file = os.path.join(_base, r'var\run\pkgmgr.completed')
+        pkgmgr_completed_file = os.path.join(_base, r'var\run\win-update.completed')
         del _base
     else:
         etc_path = '/etc/scalr'
@@ -335,7 +334,7 @@ class UpdClientAPI(object):
         for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr-*'):
             if os.path.isfile(filename):
                 os.remove(filename)
-        if 'buildbot.scalr-labs.com' in self.repo_url:
+        if 'buildbot.scalr-labs.com' in self.repo_url and not linux.os.windows:
             self._configure_devel_repo(repo)
         # Ensure new repository
         repo.ensure()
@@ -430,18 +429,17 @@ class UpdClientAPI(object):
                     self.state = 'in-progress/install'
                     if linux.os.windows:
                         package_url = self.pkgmgr.index[self.package]
-                        subprocess.Popen([
+                        linux.system([
                                 'powershell.exe', 
                                 '-NoProfile', 
                                 '-NonInteractive', 
                                 '-ExecutionPolicy', 'RemoteSigned', 
-                                '-File', os.path.join(os.path.dirname(__file__), 'pkgmgr.ps1'),
-                                '-Install', package_url
+                                '-File', os.path.join(os.path.dirname(__file__), 'update.ps1'),
+                                '-URL', package_url
                             ], 
                             env=os.environ, 
-                            creationflags=win32process.DETACHED_PROCESS
-                        ).communicate()
-                        msg = ('UpdateClient expected to be terminated by pkgmgr.ps1, '
+                            creationflags=win32process.DETACHED_PROCESS)
+                        msg = ('UpdateClient expected to be terminated by update.ps1, '
                                 'but never happened')
                         raise UpdateError(msg)
 
