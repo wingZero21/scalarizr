@@ -14,7 +14,7 @@ param (
 }
 
 $InstallDir = "C:\\Program Files\\Scalarizr"
-$RunCompletedFile = "$InstallDir\\var\\run\\win-update.completed"
+$StatusFile = "$InstallDir\\etc\\private.d\\win-update.status"
 $LogFile = "$InstallDir\\var\\log\\scalarizr_update.log"
 $TmpLogFile = TmpName -Suffix ".log"
 $BackupDir = ""
@@ -107,8 +107,8 @@ param ($Certainly = $false)
 }
 
 function Main-Szr {
-    if (Test-Path $RunCompletedFile) {
-        Remove-Item $RunCompletedFile
+    if (Test-Path $StatusFile) {
+        Remove-Item $StatusFile
     }
     if (Test-Path $InstallDir) {
         $script:BackupDir = $InstallDir + $(Get-SzrVersion)
@@ -120,7 +120,7 @@ function Main-Szr {
         try {
             Install-SzrPackage $PackageFile
             Start-SzrServices -Сertainly
-            Echo $Null > $RunCompletedFile
+            Echo $Null > $StatusFile
         }
         catch {
             Write-Error $_ -ErrorAction Continue
@@ -139,8 +139,8 @@ function Main-Szr {
     }
 }
 
-#Main-Szr -ErrorAction Continue 2>&1 5>&1
-Main-Szr -ErrorAction Continue 2>&1 5>&1 | Tee-Object $TmpLogFile -Append
+Main-Szr -ErrorAction Continue 5>&1
 
-Get-Content $TmpLogFile | Out-File $LogFile -NoClobber -Append
-Remove-Item $TmpLogFile
+#Main-Szr -ErrorAction Continue 2>&1 5>&1 | Tee-Object $TmpLogFile -Append
+#Get-Content $TmpLogFile | Out-File $LogFile -NoClobber -Append
+#Remove-Item $TmpLogFile

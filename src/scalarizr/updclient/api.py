@@ -13,6 +13,7 @@ import pprint
 import re
 import shutil
 import sqlite3 as sqlite
+import subprocess
 import sys
 import time
 import urllib2
@@ -73,7 +74,7 @@ class UpdClientAPI(object):
     package = 'scalarizr'
     client_mode = 'client'
     api_port = 8008
-    talk_timeout = 60
+    win_update_timeout = 300
     server_url = 'http://update.scalr.net/'
     repository = 'latest'
     repo_url = value_for_repository(
@@ -100,7 +101,8 @@ class UpdClientAPI(object):
         _base = r'C:\Program Files\Scalarizr'
         etc_path = os.path.join(_base, 'etc')
         share_path = os.path.join(_base, 'share')
-        pkgmgr_completed_file = os.path.join(_base, r'var\run\win-update.completed')
+        win_log_file = os.path.join(_base, r'var\log\scalarizr_update.log')
+        win_status_file = os.path.join(etc_path, 'private.d\win-update.status')
         del _base
     else:
         etc_path = '/etc/scalr'
@@ -283,7 +285,7 @@ class UpdClientAPI(object):
         else:
             if self.state == 'completed/wait-ack' or \
                 (linux.os.windows and self.state == 'in-progress/install' and \
-                    os.path.exists(self.pkgmgr_completed_file)):
+                    os.path.exists(self.win_update_completed_file)):
                 self.state = 'completed'
             else:
                 self.state = 'noop'
@@ -403,6 +405,41 @@ class UpdClientAPI(object):
                                 self.package, self.candidate)
                         raise UpdateError(msg)            
 
+        def update_windows():
+            package_url = self.pkgmgr.index[self.package]
+            if os.path.exists(self.win_status_file):
+                os.unlink(self.win_status_file)
+            linux.system([
+                    'powershell.exe', 
+                    '-NoProfile', 
+                    '-NonInteractive', 
+                    '-ExecutionPolicy', 'RemoteSigned', 
+                    '-File', os.path.join(os.path.dirname(__file__), 'update.ps1'),
+                    '-URL', package_url
+                ], 
+                env=os.environ, 
+                creationflags=win32process.DETACHED_PROCESS,
+                stdout=open(self.win_log_file, 'a+'),
+                stderr=subprocess.STDOUT)
+            time.sleep(self.win_update_timeout)
+            msg = ('UpdateClient expected to be terminated by update.ps1, '
+                    'but never happened')
+            raise UpdateError(msg)
+
+
+        def update_linux():
+            self.pkgmgr.install(self.package, self.candidate)
+            self.state = 'completed/wait-ack'
+            self.installed = self.candidate
+            self.store()
+
+            if not self.daemon.running:
+                self.daemon.start()
+
+            if reports:
+                self.report(True)
+            return self.status(cached=True)
+
 
         def do_update(op):
             self.executed_at = time.strftime(DATE_FORMAT, time.gmtime())
@@ -428,34 +465,10 @@ class UpdClientAPI(object):
                 try:
                     self.state = 'in-progress/install'
                     if linux.os.windows:
-                        package_url = self.pkgmgr.index[self.package]
-                        linux.system([
-                                'powershell.exe', 
-                                '-NoProfile', 
-                                '-NonInteractive', 
-                                '-ExecutionPolicy', 'RemoteSigned', 
-                                '-File', os.path.join(os.path.dirname(__file__), 'update.ps1'),
-                                '-URL', package_url
-                            ], 
-                            env=os.environ, 
-                            creationflags=win32process.DETACHED_PROCESS)
-                        msg = ('UpdateClient expected to be terminated by update.ps1, '
-                                'but never happened')
-                        raise UpdateError(msg)
-
-
-                    self.pkgmgr.install(self.package, self.candidate)
-                    self.state = 'completed/wait-ack'
-                    self.installed = self.candidate
-                    self.store()
-
-                    if not self.daemon.running:
-                        self.daemon.start()
-
-                    if reports:
-                        self.report(True)
-                    op.logger.info('Done')
-                    return self.status(cached=True)
+                        # raises KeyboardInterrupt
+                        self.update_windows()
+                    else:
+                        return self.update_linux()
                 except KeyboardInterrupt:
                     if not linux.os.windows:
                         op.cancel()
