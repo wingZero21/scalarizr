@@ -1,4 +1,6 @@
 
+# TODO: store update status as JSON to $StatusFile file
+
 param (
     [string]$URL = $(throw "Specify package URL to install")
 )
@@ -49,7 +51,21 @@ param ($URL)
 function Create-SzrBackup {
     if (Test-Path $InstallDir) {
         Log "Backuping current installation $(Get-SzrVersion)"
-        Rename-Item $InstallDir $BackupDir
+        try {
+            Rename-Item $InstallDir $BackupDir
+        }
+        catch {
+            $Ex = $_
+            Get-Process | foreach { 
+                $Proc = $_; 
+                $_.Modules | foreach {
+                    if($_.FileName.IndexOf($InstallDir) -eq 0) { 
+                        $Proc.Name + " Id:" + $Proc.id
+                    }
+                }
+            }
+            Throw $Ex
+        }
     }
 }
 

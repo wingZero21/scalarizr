@@ -101,12 +101,13 @@ class UpdClientAPI(object):
         _base = r'C:\Program Files\Scalarizr'
         etc_path = os.path.join(_base, 'etc')
         share_path = os.path.join(_base, 'share')
-        win_log_file = os.path.join(_base, r'var\log\scalarizr_update.log')
+        log_file = os.path.join(_base, r'var\log\scalarizr_update.log')
         win_status_file = os.path.join(etc_path, 'private.d\win-update.status')
         del _base
     else:
         etc_path = '/etc/scalr'
         share_path = '/usr/share/scalr'
+        log_file = '/var/log/scalarizr_update.log'
 
     _private_path = os.path.join(etc_path, 'private.d')
     status_file = os.path.join(_private_path, 'update.status')
@@ -283,9 +284,13 @@ class UpdClientAPI(object):
             else:
                 self.update(bootstrap=True)
         else:
-            if self.state == 'completed/wait-ack' or \
-                (linux.os.windows and self.state == 'in-progress/install' and \
-                    os.path.exists(self.win_update_completed_file)):
+            if self.state == 'completed/wait-ack':
+                self.state = 'completed'
+            elif linux.os.windows and self.state == 'in-progress/install' and \
+                    os.path.exists(self.win_status_file):
+                # todo: 
+                # merge status and win_status
+                # report status to update server
                 self.state = 'completed'
             else:
                 self.state = 'noop'
@@ -409,6 +414,7 @@ class UpdClientAPI(object):
             package_url = self.pkgmgr.index[self.package]
             if os.path.exists(self.win_status_file):
                 os.unlink(self.win_status_file)
+            LOG.info('Invoke powershell script "update.ps1 -URL %s"', package_url)
             linux.system([
                     'powershell.exe', 
                     '-NoProfile', 
@@ -418,9 +424,10 @@ class UpdClientAPI(object):
                     '-URL', package_url
                 ], 
                 env=os.environ, 
-                creationflags=win32process.DETACHED_PROCESS,
-                stdout=open(self.win_log_file, 'a+'),
+                #creationflags=win32process.DETACHED_PROCESS,
+                stdout=open(self.log_file, 'a+'),
                 stderr=subprocess.STDOUT)
+            LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)
             time.sleep(self.win_update_timeout)
             msg = ('UpdateClient expected to be terminated by update.ps1, '
                     'but never happened')
@@ -466,9 +473,9 @@ class UpdClientAPI(object):
                     self.state = 'in-progress/install'
                     if linux.os.windows:
                         # raises KeyboardInterrupt
-                        self.update_windows()
+                        update_windows()
                     else:
-                        return self.update_linux()
+                        return update_linux()
                 except KeyboardInterrupt:
                     if not linux.os.windows:
                         op.cancel()
