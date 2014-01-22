@@ -226,13 +226,13 @@ class ChefHandler(Handler):
 
                                 LOG.debug('Applying run_list')
                                 self.run_chef_client(with_json_attributes=True)
-                                msg.chef = self._chef_data
                         finally:
                             os.remove(self._json_attributes_path)
 
                     if self._daemonize:
                         with op.step('Running chef-client in daemonized mode'):
                             self.run_chef_client(daemonize=True)
+                    msg.chef = self._chef_data
                 finally:
                     self._chef_data = None
 
