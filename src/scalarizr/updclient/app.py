@@ -63,15 +63,16 @@ if linux.os.windows_family:
 
 class UpdClient(util.Server):
     daemonize = False
-    verbose = False
     if linux.os.windows_family:
         base = r'C:\Program Files\Scalarizr'
         pid_file = os.path.join(base, r'var\run\scalr-upd-client.pid')
         log_file = os.path.join(base, r'var\log\scalarizr_update.log')
+        verbose = True
         del base
     else:
         pid_file = '/var/run/scalr-upd-client.pid'
         log_file = sys.stderr
+        verbose = False
 
     api = api_server = api_thread = None
 
