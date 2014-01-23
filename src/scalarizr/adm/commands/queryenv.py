@@ -1,6 +1,7 @@
 import inspect
 import re
 import os
+import itertools
 
 from scalarizr.util import system2
 from scalarizr.adm.command import Command
@@ -48,17 +49,36 @@ class Queryenv(Command):
     """
 
     aliases = ['q']
+    method_aliases = {'list-virtual-hosts': ['list-virtualhosts']}
 
     def __init__(self):
         super(Queryenv, self).__init__()
 
     def help(self):
         doc = super(Queryenv, self).help()
-        methods = [(' '*TAB_SIZE) + m for m in self.supported_methods()]
+        methods = [(' '*TAB_SIZE) + m for m in self.get_supported_methods()]
         return doc + '\nSupported methods:\n' + '\n'.join(methods)
 
     @classmethod
-    def supported_methods(cls):
+    def get_method_name(cls, alias):
+        """
+        Returns method name if alias to supported method exists,
+        None otherwise.
+        """
+        for method, aliases in cls.method_aliases.items():
+            if method == alias or alias in aliases:
+                return method
+        return None
+
+    @classmethod
+    def supports_method(cls, method_or_alias):
+        """
+        Returns True if method is supported or is alias of supported method
+        """
+        return cls.get_method_name(method_or_alias) is not None
+
+    @classmethod
+    def get_supported_methods(cls):
         usage_section = get_section('usage', cls.__doc__)[0]
         usages = re.findall(r'queryenv .+?\s', usage_section)
         methods = [s.split()[1] for s in usages if '<method>' not in s]
@@ -129,7 +149,7 @@ class Queryenv(Command):
 
         if display_method:
             display_method(out)
-        elif isinstance(out, list) and isinstance(out[0], list):
+        elif isinstance(out, list) and isinstance(out[0], list) and method != 'fetch':
             print make_table(out)
         else:
             print out
@@ -164,7 +184,6 @@ class Queryenv(Command):
     def __call__(self, method=None, args=None, **kwds):
         if not args:
             args = []
-        supported_methods = self.supported_methods()
 
         # we need to find method in kwds because parser places it there
         # param method is presented only when default parsing rule is applied
@@ -172,8 +191,9 @@ class Queryenv(Command):
         if not method:
             for kwd in kwds.keys():
                 hyphen_kwd = kwd.replace('_', '-')
-                if hyphen_kwd in supported_methods:
-                    method = hyphen_kwd
+                _method = self.get_method_name(hyphen_kwd)
+                if _method:
+                    method = _method
                     kwds.pop(kwd)
                     break
 
