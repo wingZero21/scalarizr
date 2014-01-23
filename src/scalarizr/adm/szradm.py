@@ -79,17 +79,14 @@ class Szradm(command_module.Command):
     Options:
       -v, --version                Display version.
       -h, --help                   Display this message.
-
       -m, --msgsnd                 Message sender CLI.
       -n, --name=<name>            Sets message name.
       -e, --endpoint=<endpoint>    Sets endpoint for message send.
       -f, --msgfile=<msgfile>      Sets message file.
       -o, --queue=<queue>          Sets queue which will be used for message delivery.
-
       -q, --queryenv               QueryEnv CLI with a raw XML output. 
       --api-version=<api-version>  Set QueryEnv API version which will be used in call.
                                    QueryEnv parameters should be passed in <key>=<value> form.
-
       --fire-event=<event_name>    Fires custom event on Scalr.
                                    Parameters should be passed in a <key>=<value> form.
     """
@@ -135,6 +132,8 @@ class Szradm(command_module.Command):
         try:
             # old-style command execution for backward compatibility
             if queryenv:
+                if not command:
+                  raise command_module.CommandError('No queryenv method given.')
                 args = ['fetch', 'command='+command] + args
                 return self.run_subcommand('queryenv', args)
 

@@ -65,8 +65,10 @@ class Queryenv(Command):
         Returns method name if alias to supported method exists,
         None otherwise.
         """
+        if alias in cls.get_supported_methods():
+            return alias
         for method, aliases in cls.method_aliases.items():
-            if method == alias or alias in aliases:
+            if alias in aliases:
                 return method
         return None
 
