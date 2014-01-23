@@ -102,7 +102,6 @@ class UpdClientAPI(object):
         etc_path = os.path.join(_base, 'etc')
         share_path = os.path.join(_base, 'share')
         log_file = os.path.join(_base, r'var\log\scalarizr_update.log')
-        win_status_file = os.path.join(etc_path, 'private.d\win-update.status')
         del _base
     else:
         etc_path = '/etc/scalr'
@@ -111,6 +110,7 @@ class UpdClientAPI(object):
 
     _private_path = os.path.join(etc_path, 'private.d')
     status_file = os.path.join(_private_path, 'update.status')
+    win_status_file = os.path.join(_private_path, 'update-win.status')
     crypto_file = os.path.join(_private_path, 'keys', 'default')
     db_file = os.path.join(_private_path, 'db.sqlite')
     del _private_path
@@ -295,7 +295,7 @@ class UpdClientAPI(object):
             else:
                 self.state = 'noop'
         if self.state != 'unknown':
-            self.store(self.status(cached=True))
+            self.store()
 
 
     def uninstall(self):
@@ -507,7 +507,7 @@ class UpdClientAPI(object):
 
 
     def store(self, status=None):
-        status = status or self.status()
+        status = status or self.status(cached=True)
         with open(self.status_file, 'w') as fp:
             LOG.debug('Saving status: %s', pprint.pformat(status))
             json.dump(status, fp)     

@@ -15,9 +15,11 @@ param (
     return [System.IO.Path]::GetTempPath() + [System.Guid]::NewGuid().ToString() + $Suffix
 }
 
-$InstallDir = "C:\\Program Files\\Scalarizr"
-$StatusFile = "$InstallDir\\etc\\private.d\\win-update.status"
-$LogFile = "$InstallDir\\var\\log\\scalarizr_update.log"
+$InstallDir = "C:\Program Files\Scalarizr"
+$StatusFile = "$InstallDir\etc\private.d\update-win.status"
+$BackupCreatedLock = "$InstallDir\var\run\backup.created"
+$InstalledVersion = ""
+$LogFile = "$InstallDir\var\log\scalarizr_update.log"
 $TmpLogFile = TmpName -Suffix ".log"
 $BackupDir = ""
 
@@ -52,18 +54,20 @@ function Create-SzrBackup {
     if (Test-Path $InstallDir) {
         Log "Backuping current installation $(Get-SzrVersion)"
         try {
-            New-Item $BackupDir -Type Directory 
             "Python27", "src" | foreach {
-                Rename-Item "$InstallDir/$_" "$BackupDir/$_"
+                Log "Renaming $InstallDir\$_ -> $_-$InstalledVersion"
+                Rename-Item -Path "$InstallDir\$_" -NewName "$_-$InstalledVersion"
             }
+            Echo $Null > $BackupCreatedLock
         }
         catch {
             $Ex = $_
+            Log "Caught $Ex"
             Get-Process | foreach { 
                 $Proc = $_; 
                 $_.Modules | foreach {
                     if($_.FileName.IndexOf($InstallDir) -eq 0) { 
-                        Log $Proc.Name + " Id:" + $Proc.id
+                        Log $Proc.Name + " Id:" + $Proc.Id
                     }
                 }
             }
@@ -73,22 +77,24 @@ function Create-SzrBackup {
 }
 
 function Restore-SzrBackup {
-    if (Test-Path $BackupDir) {
+    if (Test-Path $BackupCreatedLock) {
         Log "Restoring previous installation from backup"
         "Python27", "src" | foreach {
-            $Name = $_
-            if (Test-Path "$InstallDir/$Name") {
-                Remove-Item "$InstallDir/$Name" -Recurse -Force
-            }
-            Rename-Item "$BackupDir/$Name" "$InstallDir/$Name"
+            Rename-Item -Path "$_-$InstalledVersion" -NewName "$InstallDir\$_"
         }
     }
 }
 
 function Delete-SzrBackup {
-    if (Test-Path $BackupDir) {
+    if (Test-Path $BackupCreatedLock) {
         Log "Cleanuping"
-        Remove-Item -Recurse -Force $BackupDir
+        "Python27", "src" | foreach {
+            $Path = "$InstallDir\$_-$InstalledVersion"
+            if (Test-Path $Path) {
+                Remove-Item $Path -Force -Recurse
+            }
+        }
+        Remove-Item $BackupCreatedLock
     }
 }
 
@@ -132,35 +138,55 @@ param ($Certainly = $false)
 }
 
 function Main-Szr {
-    if (Test-Path $StatusFile) {
-        Remove-Item $StatusFile
-    }
-    if (Test-Path $InstallDir) {
-        $script:BackupDir = $InstallDir + $(Get-SzrVersion)
-    }
-    $PackageFile = Download-SzrPackage $URL
-    Stop-SzrServices
     try {
-        Create-SzrBackup
+        $State = "prepare"
+        if (Test-Path $StatusFile) {
+            Remove-Item $StatusFile
+        }
+        if (Test-Path $InstallDir) {
+            $script:InstalledVersion = Get-SzrVersion
+        }
+        $State = "download"
+        $PackageFile = Download-SzrPackage $URL
+        $State = "stop"
+        Stop-SzrServices
         try {
-            Install-SzrPackage $PackageFile
-            Start-SzrServices -Сertainly
-            Echo $Null > $StatusFile
+            Create-SzrBackup
+            try {
+                $State = "install"
+                Install-SzrPackage $PackageFile
+                if (-not (Test-Path "$InstallDir\src")) {
+                    Throw "Installer successfully completed without installing new files. Maybe this version was already installed?"
+                }
+                $State = "start"
+                Start-SzrServices -Сertainly
+                $State = "completed"
+            }
+            catch {
+                Write-Error $_ -ErrorAction Continue
+                Restore-SzrBackup
+            }
+            finally {
+                Delete-SzrBackup
+            }
         }
         catch {
             Write-Error $_ -ErrorAction Continue
-            Restore-SzrBackup
         }
         finally {
-            #Delete-SzrBackup
+            Start-SzrServices -ErrorAction Continue
+            Remove-Item $PackageFile
         }
     }
-    catch {
-        Write-Error $_ -ErrorAction Continue
-    }
     finally {
-        Start-SzrServices -ErrorAction Continue
-        Remove-Item $PackageFile
+        $Msg = @()
+        $Error | foreach { $Msg += [string]$_ }
+        $Status = @{
+            error => $Msg -join "`n"; 
+            state => $State
+        } | ConvertTo-Json
+        Log "Saving status: $Status"
+        Echo $Status > $StatusFile
     }
 }
 

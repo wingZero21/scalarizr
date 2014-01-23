@@ -31,7 +31,8 @@ def system(*args, **kwds):
     args = list(args)
     kwds['exc_class'] = LinuxError
     kwds['close_fds'] = system.close_fds
-    if not kwds.get('shell') and not osmod.access(args[0][0], osmod.X_OK):
+    if not os.windows and not kwds.get('shell') and \
+            not osmod.access(args[0][0], osmod.X_OK):
         executable = which(args[0][0])
         if not executable:
             msg = "Executable '%s' not found" % args[0][0]
