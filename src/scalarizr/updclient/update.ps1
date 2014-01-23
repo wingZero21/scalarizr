@@ -52,7 +52,10 @@ function Create-SzrBackup {
     if (Test-Path $InstallDir) {
         Log "Backuping current installation $(Get-SzrVersion)"
         try {
-            Rename-Item $InstallDir $BackupDir
+            New-Item $BackupDir -Type Directory 
+            "Python27", "src" | foreach {
+                Rename-Item "$InstallDir/$_" "$BackupDir/$_"
+            }
         }
         catch {
             $Ex = $_
@@ -72,7 +75,13 @@ function Create-SzrBackup {
 function Restore-SzrBackup {
     if (Test-Path $BackupDir) {
         Log "Restoring previous installation from backup"
-        Rename-Item $BackupDir $InstallDir
+        "Python27", "src" | foreach {
+            $Name = $_
+            if (Test-Path "$InstallDir/$Name") {
+                Remove-Item "$InstallDir/$Name" -Recurse -Force
+            }
+            Rename-Item "$BackupDir/$Name" "$InstallDir/$Name"
+        }
     }
 }
 

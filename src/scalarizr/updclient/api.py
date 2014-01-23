@@ -414,8 +414,8 @@ class UpdClientAPI(object):
             package_url = self.pkgmgr.index[self.package]
             if os.path.exists(self.win_status_file):
                 os.unlink(self.win_status_file)
-            logfd = logging.getLogger('').handlers[0].stream
-            logfd = os.dup(logfd)
+            logfp = logging.getLogger('').handlers[0].stream
+            outfp = os.fdopen(os.dup(logfp.fileno()))
 
             LOG.info('Invoke powershell script "update.ps1 -URL %s"', package_url)
             linux.system([
@@ -428,7 +428,7 @@ class UpdClientAPI(object):
                 ], 
                 env=os.environ, 
                 #creationflags=win32process.DETACHED_PROCESS,
-                stdout=logfd,
+                stdout=outfp,
                 stderr=subprocess.STDOUT)
 
             LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)
@@ -480,6 +480,7 @@ class UpdClientAPI(object):
                     else:
                         return update_linux()
                 except KeyboardInterrupt:
+                    LOG.debug('Caught KeyboardInterrupt')
                     if not linux.os.windows:
                         op.cancel()
                     return

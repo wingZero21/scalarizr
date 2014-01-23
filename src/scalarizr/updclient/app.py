@@ -63,7 +63,7 @@ if linux.os.windows_family:
 
 class UpdClient(util.Server):
     daemonize = False
-    if linux.os.windows_family:
+    if linux.os.windows:
         base = r'C:\Program Files\Scalarizr'
         pid_file = os.path.join(base, r'var\run\scalr-upd-client.pid')
         log_file = os.path.join(base, r'var\log\scalarizr_update.log')
@@ -82,7 +82,7 @@ class UpdClient(util.Server):
             optparse.Option('-d', '--daemonize', action='store_true', help='daemonize process'),
             optparse.Option('-P', '--pid-file', default=self.pid_file, help='file to store PID in'),
             optparse.Option('-l', '--log-file', default=self.log_file, help='log file'),
-            optparse.Option('-v', '--verbose', action='store_true', default=False, 
+            optparse.Option('-v', '--verbose', action='store_true', default=self.verbose, 
                             help='verbose logging'),
             optparse.Option('--get-system-id', action='store_true', default=False, 
                             help='print system-id and exit'),
@@ -164,7 +164,8 @@ class UpdClient(util.Server):
         LOG.info('Stopping updclient')
 
         if self.api_thread:
-            LOG.debug('Stopping API')           
+            LOG.debug('Stopping API') 
+            self.api.store()          
             self.api_server.shutdown()
             self.api_thread.join()
 
