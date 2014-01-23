@@ -63,13 +63,18 @@ function Create-SzrBackup {
         catch {
             $Ex = $_
             Log "Caught $Ex"
-            Get-Process | foreach { 
-                $Proc = $_; 
-                $_.Modules | foreach {
-                    if($_.FileName.IndexOf($InstallDir) -eq 0) { 
-                        Log $Proc.Name + " Id:" + $Proc.Id
+            try {
+                Get-Process | foreach { 
+                    $Proc = $_; 
+                    $_.Modules | foreach {
+                        if($_.FileName.IndexOf($InstallDir) -eq 0) { 
+                            Log $Proc.Name + " Id:" + $Proc.Id
+                        }
                     }
                 }
+            } 
+            catch {
+                Write-Error $_ -ErrorAction Continue
             }
             Throw $Ex
         }
@@ -80,8 +85,9 @@ function Restore-SzrBackup {
     if (Test-Path $BackupCreatedLock) {
         Log "Restoring previous installation from backup"
         "Python27", "src" | foreach {
-            Rename-Item -Path "$_-$InstalledVersion" -NewName "$InstallDir\$_"
+            Rename-Item -Path "$InstallDir\$_-$InstalledVersion" -NewName $_
         }
+        Remove-Item $BackupCreatedLock
     }
 }
 
@@ -125,6 +131,7 @@ function Stop-SzrServices {
     Log "Stopping services"
     Stop-SzrService "ScalrUpdClient" 
     Stop-SzrService "Scalarizr"
+    Start-Sleep -s 2
 }
 
 function Start-SzrServices {
@@ -182,16 +189,13 @@ function Main-Szr {
         $Msg = @()
         $Error | foreach { $Msg += [string]$_ }
         $Status = @{
-            error => $Msg -join "`n"; 
-            state => $State
+            error = $Msg -join "`n"; 
+            state = $State
         } | ConvertTo-Json
         Log "Saving status: $Status"
-        Echo $Status > $StatusFile
+        $Status > $StatusFile
     }
 }
 
 Main-Szr -ErrorAction Continue 5>&1 2>&1
 
-#Main-Szr -ErrorAction Continue 2>&1 5>&1 | Tee-Object $TmpLogFile -Append
-#Get-Content $TmpLogFile | Out-File $LogFile -NoClobber -Append
-#Remove-Item $TmpLogFile
