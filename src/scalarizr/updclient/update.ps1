@@ -164,7 +164,7 @@ function Main-Szr {
     }
 }
 
-Main-Szr -ErrorAction Continue 5>&1
+Main-Szr -ErrorAction Continue 5>&1 2>&1
 
 #Main-Szr -ErrorAction Continue 2>&1 5>&1 | Tee-Object $TmpLogFile -Append
 #Get-Content $TmpLogFile | Out-File $LogFile -NoClobber -Append

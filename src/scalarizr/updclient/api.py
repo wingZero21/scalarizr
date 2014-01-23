@@ -415,7 +415,7 @@ class UpdClientAPI(object):
             if os.path.exists(self.win_status_file):
                 os.unlink(self.win_status_file)
             logfp = logging.getLogger('').handlers[0].stream
-            outfp = os.fdopen(os.dup(logfp.fileno()))
+            outfp = os.fdopen(os.dup(logfp.fileno()), 'a')
 
             LOG.info('Invoke powershell script "update.ps1 -URL %s"', package_url)
             linux.system([
@@ -428,6 +428,7 @@ class UpdClientAPI(object):
                 ], 
                 env=os.environ, 
                 #creationflags=win32process.DETACHED_PROCESS,
+                close_fds=True,
                 stdout=outfp,
                 stderr=subprocess.STDOUT)
 
@@ -474,6 +475,7 @@ class UpdClientAPI(object):
                 
                 try:
                     self.state = 'in-progress/install'
+                    self.store()
                     if linux.os.windows:
                         # raises KeyboardInterrupt
                         update_windows()
