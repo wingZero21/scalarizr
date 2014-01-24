@@ -427,8 +427,8 @@ class UpdClientAPI(object):
                     '-URL', package_url
                 ], 
                 env=os.environ, 
-                #creationflags=win32process.DETACHED_PROCESS,
-                close_fds=True,
+                creationflags=win32process.DETACHED_PROCESS,
+                #close_fds=True,
                 stdout=outfp,
                 stderr=subprocess.STDOUT)
 

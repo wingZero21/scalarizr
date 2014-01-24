@@ -17,6 +17,7 @@ param (
 
 $InstallDir = "C:\Program Files\Scalarizr"
 $StatusFile = "$InstallDir\etc\private.d\update-win.status"
+$DirsToBackup = @("src", "Python27")
 $BackupCreatedLock = "$InstallDir\var\run\backup.created"
 $InstalledVersion = ""
 $LogFile = "$InstallDir\var\log\scalarizr_update.log"
@@ -53,7 +54,7 @@ param ($URL)
 function Create-SzrBackup {
     if (Test-Path $InstallDir) {
         Log "Backuping current installation $(Get-SzrVersion)"
-        "Python27", "src" | foreach {
+        $DirsToBackup | foreach {
             for ($Cnt = 0; $Cnt -lt 5; $Cnt++) {
                 Log "Renaming $InstallDir\$_ -> $_-$InstalledVersion"
                 Rename-Item -Path "$InstallDir\$_" -NewName "$_-$InstalledVersion" -ErrorAction Continue
@@ -70,7 +71,7 @@ function Create-SzrBackup {
 function Restore-SzrBackup {
     if (Test-Path $BackupCreatedLock) {
         Log "Restoring previous installation from backup"
-        "Python27", "src" | foreach {
+        $DirsToBackup | foreach {
             Rename-Item -Path "$InstallDir\$_-$InstalledVersion" -NewName $_
         }
         Remove-Item $BackupCreatedLock
@@ -80,7 +81,7 @@ function Restore-SzrBackup {
 function Delete-SzrBackup {
     if (Test-Path $BackupCreatedLock) {
         Log "Cleanuping"
-        "Python27", "src" | foreach {
+        $DirsToBackup | foreach {
             $Path = "$InstallDir\$_-$InstalledVersion"
             if (Test-Path $Path) {
                 Remove-Item $Path -Force -Recurse
