@@ -7,27 +7,39 @@ import Queue
 
 LOG = logging.getLogger(__name__)
 
-class NotificationCenter(object):
 
-    breakpoints = dict()
+
+class EventMgr(object):
+
+    events = dict()
     waitlist = dict()
 
-    def add_breakpoint(self, breakpoint, fn):
-        if not breakpoint in NotificationCenter.breakpoints:
-            NotificationCenter.breakpoints[breakpoint] = list()
-        NotificationCenter.breakpoints[breakpoint].append(fn)
+    def add_listener(self, event, fn):
+        if not event in self.events:
+            self.events[event] = list()
+        self.events[event].append(fn)
 
-    def wait_for_breakpoint(self, breakpoint, timeout=None, fn=None):
-        event = threading.Event()
+    def wait(self, event, timeout=None, fn=None):
+        """
+        wait for specific event to happen.
+
+        If fn argument is passed, it must be callable, which accept 1 argument of Event type. It will be
+        used as callback for event, function's result will be returned as a result:
+
+            is_first = wait(Event(event='queryenv', method='list-roles'), timeout=120,
+                                fn=lambda ev: ev.server.index == 1)
+        """
+        t_event = threading.Event()
         queue = fn and Queue.Queue() or None
-        if not isinstance(breakpoint, Breakpoint):
-            breakpoint = Breakpoint(breakpoint)
-        LOG.debug('Wait for breakpoint: %s' % breakpoint.cond)
+        if not isinstance(event, Event):
+            event = Event(**event)
+        LOG.debug('Wait for event: %s' % event.cond)
 
-        self.waitlist[breakpoint] = (event, queue, fn)
+        # TODO: Multiple threads could wait for single event ?
+        self.waitlist[event] = (t_event, queue, fn)
         try:
-            event.wait(timeout)
-            if not event.isSet():
+            t_event.wait(timeout)
+            if not t_event.isSet():
                 raise Exception('Timeout occured while waiting for breakpoint')
 
             if fn:
@@ -38,70 +50,69 @@ class NotificationCenter(object):
                 else:
                     return res['result']
         finally:
-            del self.waitlist[breakpoint]
+            del self.waitlist[event]
 
-    def apply_breakpoints(self, *args, **kwargs):
-        if len(args) == 1 and not kwargs:
-            if isinstance(args[0], Breakpoint):
-                bp_to_apply = args[0]
-            elif isinstance(args[0], dict):
-                bp_to_apply = Breakpoint(args[0])
-            else:
-                raise Exception("Can't apply breakpoint. Args: %s Kwargs: %s" % (args, kwargs))
-        else:
-            bp_to_apply = Breakpoint(kwargs)
+    def notify(self, event_to_apply):
+        """
+        Notifies listeners that specified event has happened. First, it notifies those listeners who wait
+        for event with timeouts (using `wait` method). After that, notify all other listeners.
+        """
 
-        # TODO: fix race condition
-        for bp, event_and_queue_and_maybe_fn in self.waitlist.iteritems():
-            if bp in bp_to_apply:
-                event, queue, fn = event_and_queue_and_maybe_fn
-                if fn is not None:
-                    try:
-                        queue.put(dict(status='ok', result=fn(bp_to_apply)))
-                    except:
-                        queue.put(dict(status='error', error=sys.exc_info()))
-                event.set()
-
+        # Find matching listeners before any notifications, since event can be changed during notifications
         to_notify = list()
-        for bp, fn in self.breakpoints.iteritems():
-            if bp in bp_to_apply:
+        for event, fn in self.events.iteritems():
+            if event in event_to_apply:
                 to_notify.append(fn)
 
+        # TODO: first - set all thread_events, second - run callbacks
+        # Notify listeners who uses `wait` method, run callbacks
+        for event, tevent_and_queue_and_maybe_fn in self.waitlist.iteritems():
+            if event in event_to_apply:
+                tevent, queue, fn = tevent_and_queue_and_maybe_fn
+                tevent.set()
+                if fn is not None:
+                    try:
+                        queue.put(dict(status='ok', result=fn(event_to_apply)))
+                    except:
+                        queue.put(dict(status='error', error=sys.exc_info()))
+
+        # Notify `listener` wrapped functions in spies
         for fn_list in to_notify:
             for fn in fn_list:
-                fn(bp_to_apply)
+                fn(event_to_apply)
 
 
-class Breakpoint(object):
+class Event(object):
 
-    def __init__(self, cond):
+    def __init__(self, **cond):
         bp = cond.copy()
         for key in ('source', 'target'):
             if bp.get(key):
                 if '.' in bp[key]:
-                    bp[key + '_behaviour'], bp[key + '_index'] = bp[key].split('.')
+                    bp[key + '_behavior'], bp[key + '_index'] = bp[key].split('.')
                 else:
-                    bp[key + '_behaviour'] = bp[key]
+                    bp[key + '_behavior'] = bp[key]
                 del bp[key]
         self.cond = bp
-
 
     def __getitem__(self, item):
         return self.cond[item]
 
-
     def __contains__(self, test_cond):
-        test_bp = test_cond if isinstance(test_cond, Breakpoint) else Breakpoint(test_cond)
-        for k, v in test_bp.cond.iteritems():
+        test_event = test_cond if isinstance(test_cond, Event) else Event(test_cond)
+        for k, v in test_event.cond.iteritems():
             k, attr = k.split('.', 1) if '.' in k else (k, None)
             # TODO: use wildcards for strings, add lambdas support
             if not k in self.cond:
                 return False
             self_value = self.cond[k] if not attr else getattr(self.cond[k], attr)
-            if self_value != v:
-                return False
+            if callable(v):
+                if not v(self_value):
+                    return False
+            else:
+                if self_value != v:
+                    return False
         return True
-
 
     def __getattr__(self, item):
         try:
@@ -110,9 +121,11 @@ class Breakpoint(object):
             raise AttributeError(item)
 
 
-def breakpoint(**kwds):
+def listener(*args, **kwds):
+    if len(args) == 1 and not kwds:
+        kwds = args[0]
     def wrapper(fn):
-        bp = Breakpoint(kwds)
-        fn._breakpoint = bp
+        bp = Event(**kwds)
+        fn._events = bp
         return fn
     return wrapper
