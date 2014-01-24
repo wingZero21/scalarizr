@@ -241,7 +241,6 @@ class ChefHandler(Handler):
                             json.dump(self._with_json_attributes, fp)
 
                         self.run_chef_client(with_json_attributes=True)
-                        msg.chef = self._chef_data
                     finally:
                         os.remove(self._json_attributes_path)
 
@@ -303,6 +302,7 @@ class ChefHandler(Handler):
 
             else:
                 raise HandlerError('Neither chef server not cookbook url were specified')
+            msg.chef = self._chef_data
         finally:
             self._chef_data = None
 

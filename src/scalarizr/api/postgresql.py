@@ -225,7 +225,7 @@ class PostgreSQLAPI(object):
                 LOG.info("Postgresql backup uploaded to cloud storage under %s/%s",
                                 cloud_storage_path, backup_filename)
                 
-                result = list(dict(path=os.path.join(cloud_storage_path, c[0]), size=c[2]) for c in
+                result = list(dict(path=os.path.join(os.path.dirname(manifest.cloudfs_path), c[0]), size=c[2]) for c in
                                 manifest['files'][0]['chunks'])
                     
                 # Notify Scalr
