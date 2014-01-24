@@ -24,7 +24,9 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.api.binding import jsonrpc_http
 
 from scalarizr.linux import pkgmgr
-if not linux.os.windows_family:
+if linux.os.windows:
+    import _winreg as winreg
+else:
     from scalarizr.snmp.agent import SnmpServer
 
 # Utils
@@ -693,6 +695,8 @@ class Service(object):
                 _cleanup_after_rebundle()
                 cnf.state = ScalarizrState.BOOTSTRAPPING
         '''
+        if linux.os.windows:
+            self._wait_sysprep_oobe()
 
         # Initialize local database
         _init_db()
@@ -745,7 +749,7 @@ class Service(object):
                         exc_info=sys.exc_info())
 
         # Install signal handlers
-        if not 'Windows' == linux.os['family']:
+        if not linux.os.windows:
             signal.signal(signal.SIGCHLD, self.onSIGCHILD)
             signal.signal(signal.SIGTERM, self.onSIGTERM)
             signal.signal(signal.SIGHUP, self.onSIGHUP)
@@ -787,6 +791,26 @@ class Service(object):
                 self._shutdown()
         self._logger.debug('Mainloop: leave')
 
+
+    def _wait_sysprep_oobe(self):
+        try:
+            self._logger.debug('Checking sysprep completion')
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                 "SYSTEM\\Setup\\Status\\SysprepStatus", 0,
+                                 winreg.KEY_READ) as key:
+                while True:
+                    gen_state = winreg.QueryValueEx(key, "GeneralizationState")[0]
+                    if gen_state == 7:
+                        break
+                    time.sleep(1)
+                    self._logger.debug('Waiting for sysprep completion. '
+                              'GeneralizationState: %d' % gen_state)
+        except WindowsError, ex:
+            if ex.winerror == 2:
+                self._logger.debug('Sysprep data not found in the registry, '
+                          'skipping sysprep completion check.')
+            else:
+                raise ex
 
 
     def _init_services(self):

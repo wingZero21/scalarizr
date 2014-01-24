@@ -23,6 +23,10 @@ from scalarizr.util.flag import Flag
 # Libs
 from scalarizr.util import cryptotool, software
 from scalarizr.linux import iptables, os as os_dist
+if os_dist.windows_family:
+    import win32timezone as os_time
+else:
+    from datetime import datetime as os_time
 
 # Stdlibs
 import logging, os, sys, threading
@@ -454,7 +458,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         """
         message.meta.update({
             'szr_version': scalarizr.__version__,
-            'timestamp': time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
+            'timestamp': os_time.utcnow().strftime("%a %d %b %Y %H:%M:%S %z")
         })
 
 
