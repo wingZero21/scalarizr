@@ -14,7 +14,7 @@ from scalarizr.api.nginx import NginxAPI
 from scalarizr.api.postgresql import PostgreSQLAPI
 from scalarizr.api.rabbitmq import RabbitMQAPI
 from scalarizr.api.redis import RedisAPI
-
+from scalarizr.api.tomcat import TomcatAPI
 
 service_apis = {
     'apache': ApacheAPI,
@@ -29,7 +29,7 @@ service_apis = {
     'postgresql': PostgreSQLAPI,
     'rabbitmq': RabbitMQAPI,
     'redis': RedisAPI,
-    # 'tomcat': ,  # TODO: make ParametrizedInitScript subclass for tomcat, or api
+    'tomcat': TomcatAPI, 
 }
 
 

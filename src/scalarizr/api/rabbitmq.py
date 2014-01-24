@@ -1,16 +1,12 @@
-'''
-Created on Feb 25, 2011
-
-@author: uty
-'''
-
-
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.services.rabbitmq import rabbitmq as rabbitmq_svc
 from scalarizr import rpc
+from scalarizr.util import Singleton
 
 
 class RabbitMQAPI(object):
+
+    __metaclass__ = Singleton
 
     def __init__(self):
         self.service = rabbitmq_svc.RabbitMQInitScript()
