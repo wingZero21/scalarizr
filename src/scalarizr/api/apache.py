@@ -554,9 +554,10 @@ class ApacheAPI(object):
 
     def update_log_rotate_config(self):
         if not os.path.exists(__apache__["logrotate_conf_path"]):
-            with open(__apache__["logrotate_conf_path"], "w") as fp:
-                fp.write(__apache__["logrotate_conf"])
-            LOG.info("LogRorate config updated.")
+            if not os.path.exists("/etc/logrotate.d/httpd"):
+                with open(__apache__["logrotate_conf_path"], "w") as fp:
+                    fp.write(__apache__["logrotate_conf"])
+                LOG.info("LogRorate config updated.")
 
     def reload_virtual_hosts(self):
         """

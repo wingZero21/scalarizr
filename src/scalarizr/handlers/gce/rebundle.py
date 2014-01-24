@@ -1,12 +1,10 @@
 from __future__ import with_statement
-from __future__ import with_statement
 
 __author__ = 'Nick Demyanchuk'
 
 import re
 import os
 import sys
-import uuid
 import glob
 import time
 import random
@@ -37,10 +35,9 @@ ROLEBUILDER_USER = 'scalr-rolesbuilder'
 class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
     exclude_dirs = set(['/tmp', '/proc', '/dev',
                         '/mnt' ,'/var/lib/google/per-instance',
-                        '/sys', '/cdrom', '/media', '/run', '/selinux', '/var/lock',
-                        '/var/log', '/var/run'])
+                        '/sys', '/cdrom', '/media', '/run', '/selinux'])
     exclude_files = ('/etc/ssh/.host_key_regenerated',
-                                     '/lib/udev/rules.d/75-persistent-net-generator.rules')
+                     '/lib/udev/rules.d/75-persistent-net-generator.rules')
 
     def rebundle(self):
         rebundle_dir = tempfile.mkdtemp()

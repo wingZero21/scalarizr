@@ -126,7 +126,7 @@ class Handler(object):
 
                 elif name == 'postgresql' and Version('9.0') <= version < Version('9.3'):
                     handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-                elif name == 'redis' and Version('2.2') <= version < Version('2.7'):
+                elif name == 'redis' and Version('2.2') <= version < Version('2.9'):
                     handlers.append(config.BuiltinBehaviours.REDIS)
                 elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.2'):
                     handlers.append(config.BuiltinBehaviours.RABBITMQ)
@@ -762,7 +762,7 @@ def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
         tags['scalr-status'] = state
 
     if set_owner:
-        for opt in ('farm_id', 'farm_role_id', 'env_id'):
+        for opt in ('scalr-farm-id', 'scalr-farm-role-id', 'scalr-env-id'):
             try:
                 tags[opt] = __node__[opt]
             except KeyError:
