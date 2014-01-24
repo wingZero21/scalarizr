@@ -198,6 +198,11 @@ class Queryenv(Command):
                     method = _method
                     kwds.pop(kwd)
                     break
+        else:
+            # if it's alias - taking real method name
+            # it can be not known method so get_method_name() can return None
+            # for valid method (such as 'fetch')
+            method = self.get_method_name(method) or method
 
         for pair in args:
             if not pair.startswith('-') and '=' in pair:

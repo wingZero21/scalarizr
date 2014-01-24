@@ -166,7 +166,7 @@ class Szradm(command_module.Command):
             # except-section for user-defined exceptions, semantic errors, etc.
             call_str = 'szradm %s %s' % (command, ' '.join(args))
             message = '\n'.join((call_str, e.message))
-            raise Exception(message)
+            raise command_module.CommandError(message)
 
     def find_commands(self, directory=None):
         """
