@@ -131,9 +131,9 @@ class Service(Command):
             raise CommandError('Unknown service/behavior.')
 
         if start:
-            return self._start_service(service, index=index, port=port)
+            return self._start_service(service, indexes=index, ports=port)
         elif stop:
-            return self._stop_service(service, index=index, port=port)
+            return self._stop_service(service, indexes=index, ports=port)
         elif status:
             return self._display_service_status(service)
 
