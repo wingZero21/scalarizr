@@ -7,6 +7,7 @@ Created on Dec 24, 2009
 from scalarizr.bus import bus
 from scalarizr import config as szrconfig
 from scalarizr import linux
+from scalarizr.node import __node__
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
@@ -147,6 +148,11 @@ class ScriptExecutor(Handler):
 
         for sc in scripts:
             self._execute_one_script(sc)
+
+        if __node__['state'] == 'running':
+            params = self._queryenv.list_farm_role_params(__node__['farm_role_id']).get('params', {})
+            keep_scripting_logs_time = int(params.get('base', {}).get('keep_scripting_logs_time', 86400))
+            self.log_rotate_runnable.keep_scripting_logs_time = keep_scripting_logs_time
 
     def on_shutdown(self):
         # save state
