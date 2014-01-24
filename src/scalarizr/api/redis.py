@@ -53,39 +53,62 @@ class RedisAPI(object):
         self.redis_instances.instances = []
         self.redis_instances.init_processes(len(ports), ports, passwords)
 
-    def _get_redis_instance(self, port=None, index=None):
-        assert (port and index is None) or (port is None and index)
+    def _get_redis_instances(self, ports=None, indexes=None):
+        assert (ports and indexes is None) or (ports is None and indexes)
         self._reinit_instances()
-        if port:
-            port = int(port)
-            if port not in self.redis_instances.ports:
-                raise Exception('Redis is not configured to use given port.')
-            index = self.redis_instances.ports.index(port)
-        return self.redis_instances.instances[index]
+        if ports:
+            if not isinstance(ports, list):
+                ports = [ports]
+            indexes = []
+            for port in ports:
+                port = int(port)
+                if port not in self.redis_instances.ports:
+                    raise Exception('Redis is not configured to use given port. Port: %s' % port)
+                indexes.append(self.redis_instances.ports.index(port))
+        if not isinstance(indexes, list):
+            indexes = [indexes]
+        indexes = [int(i) for i in indexes]
+        return [self.redis_instances.instances[index] for index in indexes]
 
     @rpc.command_method
-    def start_service(self, port=None, index=None):
-        assert (port and index is None) or (port is None and index)
-        redis_inst = self._get_redis_instance(port, index)
-        redis_inst.service.start()
+    def start_service(self, ports=None, indexes=None):
+        """
+        ports and indexes parameters can be int or list of ints.
+        """
+        assert (ports and indexes is None) or (ports is None and indexes)
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
+            inst.service.start()
 
     @rpc.command_method
-    def stop_service(self, port=None, index=None):
-        assert (port and index is None) or (port is None and index)
-        redis_inst = self._get_redis_instance(port, index)
-        redis_inst.service.stop()
+    def stop_service(self, ports=None, indexes=None):
+        """
+        ports and indexes parameters can be int or list of ints.
+        """
+        assert (ports and indexes is None) or (ports is None and indexes)
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
+            inst.service.stop()
 
     @rpc.command_method
-    def reload_service(self, port=None, index=None):
-        assert (port and index is None) or (port is None and index)
-        redis_inst = self._get_redis_instance(port, index)
-        redis_inst.service.reload()
+    def reload_service(self, ports=None, indexes=None):
+        """
+        ports and indexes parameters can be int or list of ints.
+        """
+        assert (ports and indexes is None) or (ports is None and indexes)
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
+            inst.service.reload()
 
     @rpc.command_method
-    def restart_service(self, port=None, index=None):
-        assert (port and index is None) or (port is None and index)
-        redis_inst = self._get_redis_instance(port, index)
-        redis_inst.service.restart()
+    def restart_service(self, ports=None, indexes=None):
+        """
+        ports and indexes parameters can be int or list of ints.
+        """
+        assert (ports and indexes is None) or (ports is None and indexes)
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
+            inst.service.restart()
 
     @rpc.command_method
     def get_service_status(self):
@@ -230,21 +253,22 @@ class RedisAPI(object):
             LOG.debug('Redis config %s has password %s', redis_conf, password)
         return processes
 
+    def _get_redis_ports(self):
+        conf_paths = os.listdir(os.path.dirname(__redis__['defaults']['redis.conf']))
+        ports = [conf.split('.')[1] for conf in conf_paths]
+        return filter(lambda x: x.isdigit(), ports)
+
     def get_running_processes(self):
         return self._get_processes(self.busy_ports)
 
     def get_stopped_processes(self):
         running_ports = self.busy_ports
-        all_conf_paths = os.listdir(os.path.dirname(__redis__['defaults']['redis.conf']))
-        all_ports = [conf.split('.')[1] for conf in all_conf_paths]
-        all_ports = filter(lambda x: x.isdigit(), all_ports)
+        all_ports = self._get_redis_ports()
         stopped_ports = [port for port in all_ports if port not in running_ports]
         return self._get_processes(stopped_ports)
 
     def get_all_processes(self):
-        all_conf_paths = os.listdir(os.path.dirname(__redis__['defaults']['redis.conf']))
-        all_ports = [conf.split('.')[1] for conf in all_conf_paths]
-        all_ports = filter(lambda x: x.isdigit(), all_ports)
+        all_ports = self._get_redis_ports()
         return self._get_processes(all_ports)
 
     @property

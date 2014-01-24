@@ -110,7 +110,14 @@ class Service(Command):
         if redis:
             service = 'redis'
             if index:
-                index = int(index) - 1
+                if '-' in index:
+                    start, end = map(int, index.split('-'))
+                    index = range(start-1, end)
+                else:
+                    index = int(index) - 1
+            elif port and '-' in port:
+                start, end = map(int, port.split('-'))
+                port = range(start-1, end)
         elif mongodb:
             mongo_component = ((mongos and 'mongos') or
                                (mongod and 'mongod') or
