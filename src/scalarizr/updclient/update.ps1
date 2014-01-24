@@ -20,7 +20,7 @@ $StatusFile = "$InstallDir\etc\private.d\update-win.status"
 $DirsToBackup = @("src", "Python27")
 $BackupCreatedLock = "$InstallDir\var\run\backup.created"
 $InstalledVersion = ""
-$LogFile = "$InstallDir\var\log\scalarizr_update.log"
+$LogFile = "$InstallDir\var\log\scalarizr_update_win.log"
 $TmpLogFile = TmpName -Suffix ".log"
 $BackupDir = ""
 
@@ -72,7 +72,11 @@ function Restore-SzrBackup {
     if (Test-Path $BackupCreatedLock) {
         Log "Restoring previous installation from backup"
         $DirsToBackup | foreach {
-            Rename-Item -Path "$InstallDir\$_-$InstalledVersion" -NewName $_
+            $NewName = $_
+            $Path = "$InstallDir\$_-$InstalledVersion"
+            if (Test-Path $Path) {
+                Rename-Item -Path $Path -NewName $NewName
+            }
         }
         Remove-Item $BackupCreatedLock
     }
@@ -106,6 +110,8 @@ param ($Name)
     Log "Stopping $Name"
     $Job = Start-Job {
         Stop-Service $Name
+        Log "Stop-Service completed"
+        Get-WmiObject -Class Win32_Service -Filter "name = '$Name'"
     }
     Wait-Job -Id $Job.Id -Timeout 30
     $Svs = Get-WmiObject -Class Win32_Service -Filter "Name = '$Name'"
@@ -118,6 +124,7 @@ function Stop-SzrServices {
     Log "Stopping services"
     Stop-SzrService "ScalrUpdClient" 
     Stop-SzrService "Scalarizr"
+    Get-Process -Name PythonService
     Start-Sleep -s 2
 }
 
@@ -176,6 +183,8 @@ function Main-Szr {
         $Msg = @()
         $Error | foreach { $Msg += [string]$_ }
         $Msg = $Msg | Select -Uniq
+        [array]::Reverse($Msg)
+
         $Status = @{
             error = $Msg -join "`n"; 
             state = $State
@@ -185,5 +194,5 @@ function Main-Szr {
     }
 }
 
-Main-Szr -ErrorAction Continue 5>&1 2>&1
+Main-Szr -ErrorAction Continue 5>&1 2>&1 | Tee-Object -Append $LogFile
 

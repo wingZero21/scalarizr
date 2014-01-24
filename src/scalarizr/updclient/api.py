@@ -288,10 +288,12 @@ class UpdClientAPI(object):
                 self.state = 'completed'
             elif linux.os.windows and self.state == 'in-progress/install' and \
                     os.path.exists(self.win_status_file):
-                # todo: 
-                # merge status and win_status
-                # report status to update server
-                self.state = 'completed'
+                with open(self.win_status_file) as fp:
+                    win_status = json.load(fp)
+                os.unlink(self.win_status_file)
+                if win_status['state'] != 'completed':
+                    win_status['state'] = 'in-progress/' + win_status['state']
+                self.__dict__.update(win_status)
             else:
                 self.state = 'noop'
         if self.state != 'unknown':
@@ -418,7 +420,7 @@ class UpdClientAPI(object):
             outfp = os.fdopen(os.dup(logfp.fileno()), 'a')
 
             LOG.info('Invoke powershell script "update.ps1 -URL %s"', package_url)
-            linux.system([
+            proc = subprocess.Popen([
                     'powershell.exe', 
                     '-NoProfile', 
                     '-NonInteractive', 
@@ -427,11 +429,13 @@ class UpdClientAPI(object):
                     '-URL', package_url
                 ], 
                 env=os.environ, 
+                shell=True,
                 creationflags=win32process.DETACHED_PROCESS,
                 #close_fds=True,
                 stdout=outfp,
-                stderr=subprocess.STDOUT)
-
+                stderr=subprocess.STDOUT
+            )
+            LOG.debug('Started powershell process (pid: %s)', proc.pid)
             LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)
             time.sleep(self.win_update_timeout)
             msg = ('UpdateClient expected to be terminated by update.ps1, '
