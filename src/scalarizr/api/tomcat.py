@@ -8,7 +8,7 @@ from scalarizr.node import __node__
 from scalarizr import linux
 from scalarizr.util import Singleton
 from scalarizr.util import initdv2
-
+from scalarizr.util import firstmatched
 
 LOG = logging.getLogger(__name__)
 
