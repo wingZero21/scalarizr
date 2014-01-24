@@ -25,6 +25,15 @@ __tomcat__.update({
 })
 
 
+def augload():
+    path = __tomcat__['config_dir']
+    return [
+        'set /augeas/load/Xml/incl[last()+1] "{0}/*.xml"'.format(path),
+        'load',
+        'defvar service /files{0}/server.xml/Server/Service'.format(path)                       
+    ]
+
+
 def augtool(script_lines):
     augscript = augload() + script_lines
     augscript = '\n'.join(augscript)

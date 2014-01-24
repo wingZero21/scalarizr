@@ -12,7 +12,7 @@ from scalarizr.messaging import Messages
 from scalarizr.util import initdv2, firstmatched
 from scalarizr.node import __node__
 from scalarizr.api import tomcat as api_module
-from scalarizr.api.tomcat import augtool
+from scalarizr.api.tomcat import augtool, augload
 
 
 LOG = logging.getLogger(__name__)
@@ -35,15 +35,6 @@ class KeytoolExec(execute.BaseExec):
     # last param is a keytool command that should be first
     def _after_all_handlers(self, cmd_args):
         return ['-{0}'.format(cmd_args[-1])] + cmd_args[0:-1]
-
-
-def augload():
-    path = __tomcat__['config_dir']
-    return [
-        'set /augeas/load/Xml/incl[last()+1] "{0}/*.xml"'.format(path),
-        'load',
-        'defvar service /files{0}/server.xml/Server/Service'.format(path)                       
-    ]
 
 
 class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
