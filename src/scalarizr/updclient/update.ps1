@@ -53,34 +53,17 @@ param ($URL)
 function Create-SzrBackup {
     if (Test-Path $InstallDir) {
         Log "Backuping current installation $(Get-SzrVersion)"
-        try {
-            "Python27", "src" | foreach {
+        "Python27", "src" | foreach {
+            for ($Cnt = 0; $Cnt -lt 5; $Cnt++) {
                 Log "Renaming $InstallDir\$_ -> $_-$InstalledVersion"
-                Rename-Item -Path "$InstallDir\$_" -NewName "$_-$InstalledVersion"
-            }
-            Echo $Null > $BackupCreatedLock
-        }
-        catch {
-            $Ex = $_
-            Log "Caught $Ex"
-            try {
-                Get-Process | foreach { 
-                    $Proc = $_; 
-                    #Log "Proc: $Proc"
-                    $_.Modules | foreach {
-                        #Log "Module: $_"
-                        #Log "Module.FileName: $($_.FileName)"
-                        if($_.FileName -and ($_.FileName.IndexOf($InstallDir) -eq 0)) { 
-                            Log $Proc.Name + " Id:" + $Proc.Id
-                        }
-                    }
+                Rename-Item -Path "$InstallDir\$_" -NewName "$_-$InstalledVersion" -ErrorAction Continue
+                if ($?) {
+                    break
                 }
-            } 
-            catch {
-                Write-Error $_ -ErrorAction Continue
+                Start-Sleep -s 1
             }
-            Throw $Ex
         }
+        Echo $Null > $BackupCreatedLock
     }
 }
 
@@ -191,6 +174,7 @@ function Main-Szr {
     finally {
         $Msg = @()
         $Error | foreach { $Msg += [string]$_ }
+        $Msg = $Msg | Select -Uniq
         $Status = @{
             error = $Msg -join "`n"; 
             state = $State
