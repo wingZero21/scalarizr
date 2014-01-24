@@ -13,12 +13,11 @@ import glob
 import logging
 import platform
 import threading
-import sys
 import time
 import signal
 import binascii
 import weakref
-import subprocess as subps
+import subprocess
 
 from multiprocessing import pool
 
@@ -47,7 +46,7 @@ class _ScalingMetricStrategy(object):
   
         exec_timeout = 3
         close_fds = not linux.os.windows_family
-        proc = subps.Popen(metric.path, stdout=subps.PIPE, stderr=subps.PIPE, close_fds=close_fds)
+        proc = subprocess.Popen(metric.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=close_fds)
  
         timeout_time = time.time() + exec_timeout
         while time.time() < timeout_time:
@@ -107,6 +106,9 @@ class SystemAPI(object):
     _PATH = ['/usr/bin/', '/usr/local/bin/']
     _CPUINFO = '/proc/cpuinfo'
     _NETSTATS = '/proc/net/dev'
+    _LOG_FILE = '/var/log/scalarizr.log'
+    _DEBUG_LOG_FILE = '/var/log/scalarizr_debug.log'
+    _UPDATE_LOG_FILE = '/var/log/scalarizr_update.log'
 
     def _readlines(self, path):
         with open(path, "r") as fp:
@@ -134,8 +136,8 @@ class SystemAPI(object):
         script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
         LOG.debug("Executing %s" % script_path)
         if os.access(script_path, os.X_OK):
-            return subps.Popen(script_path, stdout=subps.PIPE,
-                stderr=subps.PIPE, close_fds=True).communicate()[0].strip()
+            return subprocess.Popen(script_path, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, close_fds=True).communicate()[0].strip()
         else:
             raise Exception('File not exists: %s' % script_path)
 
@@ -529,9 +531,21 @@ class SystemAPI(object):
 
         return dict(stdout=stdout, stderr=stderr)
 
+    @rpc.query_method
+    def get_debug_log(self):
+        return binascii.b2a_base64(_get_log(self._DEBUG_LOG_FILE, -1))
+
+    @rpc.query_method
+    def get_update_log(self):
+        return binascii.b2a_base64(_get_log(self._UPDATE_LOG_FILE, -1))     
+
+    @rpc.query_method
+    def get_log(self):
+        return binascii.b2a_base64(_get_log(self._LOG_FILE, -1))   
+
 
 def _get_log(logfile, maxsize=max_log_size):
-    if (os.path.getsize(logfile) > maxsize):
+    if maxsize != -1 and (os.path.getsize(logfile) > maxsize):
         return u'Unable to fetch Log file %s: file is larger than %s bytes' % (logfile, maxsize)
     try:
         with open(logfile, "r") as fp:
@@ -546,6 +560,10 @@ if linux.os.windows_family:
     from scalarizr.util import coinitialized
 
     class WindowsSystemAPI(SystemAPI):
+
+        _LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr.log'
+        _DEBUG_LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr_debug.log'
+        _UPDATE_LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr_update.log'  
 
         @coinitialized
         @rpc.command_method
@@ -564,9 +582,12 @@ if linux.os.windows_family:
         @coinitialized
         @rpc.query_method
         def get_hostname(self):
-            wmi = client.GetObject('winmgmts:')
-            for computer in wmi.InstancesOf('Win32_ComputerSystem'):
-                return computer.Name
+            try:
+                wmi = client.GetObject('winmgmts:')
+                for computer in wmi.InstancesOf('Win32_ComputerSystem'):
+                    return computer.Name
+            except:
+                return ''
 
         @coinitialized
         @rpc.query_method
@@ -687,8 +708,8 @@ if linux.os.windows_family:
                 letter = disk.DeviceId[0].lower()
                 if letter in mpoints:
                     ret[letter] = dict(
-                        total=int(disk.Size),
-                        free=int(disk.FreeSpace)
+                        total=int(disk.Size) / 1024,  # Kb
+                        free=int(disk.FreeSpace) / 1024  # Kb
                     )
             return ret
 

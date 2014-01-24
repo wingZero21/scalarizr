@@ -19,6 +19,7 @@ from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 
+
 __nginx__ = __node__['nginx']
 
 
@@ -51,7 +52,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                                                 'nginx',
                                                 '/etc/init.d/nginx',
                                                 pid_file=pid_file,
-                                                socks=[initdv2.SockParam(80)])
+                                                socks=[])
 
     def _wait_workers(self):
         conf_dir = os.path.dirname(__nginx__['app_include_path'])
@@ -67,12 +68,14 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
             time.sleep(1)
             out = system2(['ps -C nginx --noheaders'], shell=True)[0]
 
-
     def status(self):
-        status = initdv2.ParametrizedInitScript.status(self)
-        if not status and self.socks:
+        status = initdv2.Status.UNKNOWN
+        if self.socks:
             ip, port = self.socks[0].conn_address
-            telnet = Telnet(ip, port)
+            try:
+                telnet = Telnet(ip, port)
+            except:
+                return status
             telnet.write('HEAD / HTTP/1.0\n\n')
             if 'server: nginx' in telnet.read_all().lower():
                 return initdv2.Status.RUNNING
@@ -120,6 +123,21 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
         self._wait_workers()
 
+    def reload(self):
+        try:
+            initdv2.ParametrizedInitScript.reload(self)
+        except initdv2.InitdError, e:
+            if 'is not running' in str(e):
+                self.start()
+            else:
+                raise
+
+    def set_port_to_check(self, port):
+        _logger.debug('setting NginxInitScript port to check to: %s' % port)
+        if port:
+            self.socks = [initdv2.SockParam(port)]
+        else:
+            self.socks = []
 
 def _open_port(port):
     if iptables.enabled():
@@ -281,8 +299,9 @@ class NginxAPI(object):
 
             if reload_service:
                 self._reload_service()
-        except initdv2.InitdError:
-            raise Exception('Syntax error in template for proxy %s' % proxy_parms['name'])
+        except initdv2.InitdError, e:
+            msg = "Can't add proxy %s: %s" % (proxy_parms['name'], e)
+            raise Exception(msg)
 
     def _replace_string_in_file(self, file_path, s, new_s):
         raw = None
@@ -726,6 +745,26 @@ class NginxAPI(object):
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 
 
+    def _add_default_template(self, config):
+        config.add('server/proxy_set_header', 'Host $host')
+        config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
+        config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
+        config.add('server/client_max_body_size', '10m')
+        config.add('server/client_body_buffer_size', '128k')
+        config.add('server/proxy_buffering', 'on')
+        config.add('server/proxy_connect_timeout', '15')
+        config.add('server/proxy_intercept_errors', 'on')
+
+        # default SSL params
+        config.add('server/ssl_session_timeout', '10m')
+        config.add('server/ssl_session_cache', 'shared:SSL:10m')
+        config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
+        config.add('server/ssl_ciphers', 
+                   'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
+        config.add('server/ssl_prefer_server_ciphers', 'on')
+
+        self._add_noapp_handler(config)
+
     def _make_server_conf(self,
                           hostname,
                           locations_and_backends,
@@ -746,7 +785,7 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
-        if server_wide_template:
+        if server_wide_template and server_wide_template['content']:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
             with open(temp_file, 'w') as fp:
@@ -756,23 +795,8 @@ class NginxAPI(object):
             config.insert_conf(template_conf, 'server')
             os.remove(temp_file)
         else:
-            config.add('server/proxy_set_header', 'Host $host')
-            config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
-            config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
-            config.add('server/client_max_body_size', '10m')
-            config.add('server/client_body_buffer_size', '128k')
-            config.add('server/proxy_buffering', 'on')
-            config.add('server/proxy_connect_timeout', '15')
-            config.add('server/proxy_intercept_errors', 'on')
-
-            # default SSL params
-            config.add('server/ssl_session_timeout', '10m')
-            config.add('server/ssl_session_cache', 'shared:SSL:10m')
-            config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
-            config.add('server/ssl_ciphers', 
-                       'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-            config.add('server/ssl_prefer_server_ciphers', 'on')
-
+            self._add_default_template(config)
+            
         if port:
             config.add('server/listen', str(port))
         try:
@@ -785,7 +809,6 @@ class NginxAPI(object):
         if ssl:
             self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id, port!=None)
 
-        self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
         
 
@@ -797,7 +820,7 @@ class NginxAPI(object):
 
             location_xpath = '%s[%i]' % (location_xpath, i + 1)
 
-            if grouped_templates.get(location):
+            if grouped_templates.get(location) and grouped_templates[location]['content']:
                 temp_file = self.proxies_inc_dir + '/temalate.tmp'
                 # TODO: this is ugly. Find the way to read conf from string
                 with open(temp_file, 'w') as fp:
@@ -989,6 +1012,9 @@ class NginxAPI(object):
         if reload_service:
             self._reload_service()
 
+        if port:
+            self.service.set_port_to_check(port)
+
     def _remove_backend(self, name):
         """
         Removes backend with given name from app-servers config.
@@ -1019,14 +1045,23 @@ class NginxAPI(object):
                     backend = backend.replace('http://', '')
                     self._remove_backend(backend)
 
-                for port in self.proxies_inc.get_list('%s/listen' % server_xpath):
-                    port = port.split()[0]
+                for addr in self.proxies_inc.get_list('%s/listen' % server_xpath):
+                    port = addr.split()[0]
                     _close_port(port)
 
                 xpaths_to_remove.append(server_xpath)
 
         for xpath in reversed(xpaths_to_remove):
             self.proxies_inc.remove(xpath)
+
+    def _get_any_port(self, config):
+        port = None
+        try:
+            addr = self.proxies_inc.get('server[1]/listen' % server_xpath)
+            port = addr.split()[0]
+        except metaconf.NoPathError:
+            pass
+        return port
 
     @rpc.command_method
     def remove_proxy(self, hostname, reload_service=True):
@@ -1045,6 +1080,8 @@ class NginxAPI(object):
         for backend_name in self.backend_table.keys():
             if hostname == self._backend_nameparts(backend_name)[0]:
                 self.backend_table.pop(backend_name)
+
+        self.service.set_port_to_check(self._get_any_port(self.proxies_inc))
 
         self._save_proxies_inc()
         self._save_app_servers_inc()

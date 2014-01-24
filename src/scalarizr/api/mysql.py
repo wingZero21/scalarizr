@@ -110,22 +110,21 @@ class MySQLAPI(object):
 
         def do_backup(op, backup_conf=None):
             try:
+                purpose = '{0}-{1}'.format(
+                        __mysql__.behavior, 
+                        'master' if int(__mysql__.replication_master) == 1 else 'slave')
                 backup = {
                     'type': 'mysqldump',
-                    'cloudfs_dir': __node__.platform.scalrfs.backups('mysql')
+                    'cloudfs_dir': __node__.platform.scalrfs.backups('mysql'),
+                    'description': 'MySQL backup (farm: {0} role: {1})'.format(
+                            __node__.farm_id, __node__.role_name),
+                    'tags': build_tags(purpose, 'active')
                 }
                 backup.update(backup_conf or {})
+
                 if backup['type'] == 'snap_mysql':
-                    descrition = 'MySQL data bundle (farm: {0} role: {1})'.format(
-                            __node__.farm_id, __node__.role_name)
-                    purpose = '{0}-{1}'.format(
-                            __mysql__.behavior, 
-                            'master' if int(__mysql__.replication_master) == 1 else 'slave')
-                    backup.update({
-                        'volume': __mysql__.volume,
-                        'description': descrition,
-                        'tags': build_tags(purpose, 'active')
-                    })
+                    backup['description'].replace('backup', 'data bundle')
+                    backup['volume'] = __mysql__.volume
 
                 bak = op.data['bak'] = backup_module.backup(**backup)
                 try:
@@ -138,7 +137,7 @@ class MySQLAPI(object):
                     __node__.messaging.send('DbMsr_CreateBackupResult', {
                         'db_type': __mysql__.behavior,
                         'status': 'ok',
-                        'backup_parts': restore
+                        'backup_parts': restore.parts
                     })
                 else:
                     data = {
@@ -156,12 +155,12 @@ class MySQLAPI(object):
                         __mysql__.behavior: data
                     })
  
-                return restore
+                return dict(restore)
             except:
                 # For Scalr < 4.5.0
                 c, e, t = sys.exc_info()
                 msg_name = 'DbMsr_CreateBackupResult' \
-                            if bak.type == 'mysqldump' else \
+                            if backup['type'] == 'mysqldump' else \
                             'DbMsr_CreateDataBundleResult'
                 __node__.messaging.send(msg_name, {
                     'db_type': __mysql__.behavior,

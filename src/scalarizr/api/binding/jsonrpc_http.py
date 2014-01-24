@@ -10,6 +10,7 @@ Public Scalarizr API
 from __future__ import with_statement
 
 import os
+import posixpath
 import binascii
 import logging
 import sys
@@ -149,7 +150,7 @@ class HttpServiceProxy(rpc.ServiceProxy, Security):
         }
         namespace = self.local.method[0] if len(self.local.method) > 1 else ''
 
-        http_req = urllib2.Request(os.path.join(self.endpoint, namespace), jsonrpc_req, headers)
+        http_req = urllib2.Request(posixpath.join(self.endpoint, namespace), jsonrpc_req, headers)
         try:
             jsonrpc_resp = urllib2.urlopen(http_req).read()
             return self.decrypt_data(jsonrpc_resp)

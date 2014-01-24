@@ -36,8 +36,8 @@ class P2pMessageSecurity(object):
             # Remove special chars
             return xml.strip(''.join(chr(i) for i in range(0, 31)))
 
-        except (BaseException, Exception), e:
-            raise MessagingError('Cannot decrypt message. error: %s; raw message: %s' % (e, message))
+        except:
+            raise MessagingError('Cannot decrypt message. raw message: %s', message)
 
     def out_protocol_filter(self, producer, queue, message, headers):
         try:
