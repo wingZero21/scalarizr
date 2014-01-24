@@ -66,8 +66,11 @@ function Create-SzrBackup {
             try {
                 Get-Process | foreach { 
                     $Proc = $_; 
+                    Log "Proc: $Proc"
                     $_.Modules | foreach {
-                        if($_.FileName.IndexOf($InstallDir) -eq 0) { 
+                        Log "Module: $_"
+                        Log "Module.FileName: $($_.FileName)"
+                        if($_.FileName -and ($_.FileName.IndexOf($InstallDir) -eq 0)) { 
                             Log $Proc.Name + " Id:" + $Proc.Id
                         }
                     }
