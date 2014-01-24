@@ -1,15 +1,15 @@
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.services.rabbitmq import rabbitmq as rabbitmq_svc
+from scalarizr.services import rabbitmq as rabbitmq_module
 from scalarizr import rpc
 from scalarizr.util import Singleton
-
 
 class RabbitMQAPI(object):
 
     __metaclass__ = Singleton
 
     def __init__(self):
-        self.service = rabbitmq_svc.RabbitMQInitScript()
+        self.service = rabbitmq_module.RabbitMQInitScript()
 
     @rpc.command_method
     def start_service(self):

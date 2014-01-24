@@ -1067,7 +1067,7 @@ class NginxAPI(object):
     def _get_any_port(self, config):
         port = None
         try:
-            addr = self.proxies_inc.get('server[1]/listen' % server_xpath)
+            addr = self.proxies_inc.get('server[1]/listen')
             port = addr.split()[0]
         except metaconf.NoPathError:
             pass

@@ -29,7 +29,6 @@ BEHAVIOUR = config.BuiltinBehaviours.REDIS
 STORAGE_PATH = '/mnt/redisstorage'
 
 
-
 LOG = logging.getLogger(__name__)
 
 
@@ -37,7 +36,7 @@ class RedisAPI(object):
 
     _cnf = None
     _queryenv = None
-    
+
     def __init__(self):
         self._cnf = bus.cnf
         self._op_api = operation.OperationAPI()

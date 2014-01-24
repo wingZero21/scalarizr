@@ -1,9 +1,16 @@
 import os
+import socket
+import glob
+import logging
 
 from scalarizr import rpc
 from scalarizr.node import __node__
 from scalarizr import linux
 from scalarizr.util import Singleton
+from scalarizr.util import initdv2
+
+
+LOG = logging.getLogger(__name__)
 
 
 __tomcat__ = __node__['tomcat']
@@ -16,6 +23,13 @@ __tomcat__.update({
     'config_dir': None,
     'install_type': None
 })
+
+
+def augtool(script_lines):
+    augscript = augload() + script_lines
+    augscript = '\n'.join(augscript)
+    LOG.debug('augscript: %s', augscript)
+    return linux.system(('augtool', ), stdin=augscript)[0].strip()
 
 
 class CatalinaInitScript(initdv2.ParametrizedInitScript):
@@ -45,7 +59,7 @@ class CatalinaInitScript(initdv2.ParametrizedInitScript):
 class TomcatAPI(object):
 
     __metaclass__ = Singleton
-    
+
     def _find_service(self):
         # try to read CATALINA_HOME from environment
         __tomcat__['catalina_home_dir'] = linux.system('echo $CATALINA_HOME', shell=True)[0].strip()

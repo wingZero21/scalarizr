@@ -12,6 +12,8 @@ from scalarizr.messaging import Messages
 from scalarizr.util import initdv2, firstmatched
 from scalarizr.node import __node__
 from scalarizr.api import tomcat as api_module
+from scalarizr.api.tomcat import augtool
+
 
 LOG = logging.getLogger(__name__)
 
@@ -42,13 +44,6 @@ def augload():
         'load',
         'defvar service /files{0}/server.xml/Server/Service'.format(path)                       
     ]
-
-
-def augtool(script_lines):
-    augscript = augload() + script_lines
-    augscript = '\n'.join(augscript)
-    LOG.debug('augscript: %s', augscript)
-    return linux.system(('augtool', ), stdin=augscript)[0].strip()
 
 
 class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
