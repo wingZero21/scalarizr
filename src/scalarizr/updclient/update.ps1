@@ -36,7 +36,7 @@ function Get-SzrVersion {
 param (
     [string]$Path = $InstallDir
 )
-    return $(Get-Content "$Path\\src\\scalarizr\\version").Trim()
+    return $(Get-Content "$Path\src\scalarizr\version").Trim()
 }
 
 function Download-SzrPackage {
@@ -66,10 +66,10 @@ function Create-SzrBackup {
             try {
                 Get-Process | foreach { 
                     $Proc = $_; 
-                    Log "Proc: $Proc"
+                    #Log "Proc: $Proc"
                     $_.Modules | foreach {
-                        Log "Module: $_"
-                        Log "Module.FileName: $($_.FileName)"
+                        #Log "Module: $_"
+                        #Log "Module.FileName: $($_.FileName)"
                         if($_.FileName -and ($_.FileName.IndexOf($InstallDir) -eq 0)) { 
                             Log $Proc.Name + " Id:" + $Proc.Id
                         }
