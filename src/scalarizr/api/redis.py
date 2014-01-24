@@ -54,8 +54,12 @@ class RedisAPI(object):
         self.redis_instances.init_processes(len(ports), ports, passwords)
 
     def _get_redis_instances(self, ports=None, indexes=None):
-        assert (ports and indexes is None) or (ports is None and indexes)
+        assert not (ports is not None and indexes not is None)
         self._reinit_instances()
+
+        if not ports and not indexes:
+            return self.redis_instances.instances
+
         if ports:
             if not isinstance(ports, list):
                 ports = [ports]
@@ -75,7 +79,8 @@ class RedisAPI(object):
         """
         ports and indexes parameters can be int or list of ints.
         """
-        assert (ports and indexes is None) or (ports is None and indexes)
+        assert not (ports is not None and indexes not is None)
+
         instances = self._get_redis_instances(ports, indexes)
         for inst in instances:
             inst.service.start()
@@ -85,7 +90,7 @@ class RedisAPI(object):
         """
         ports and indexes parameters can be int or list of ints.
         """
-        assert (ports and indexes is None) or (ports is None and indexes)
+        assert not (ports is not None and indexes not is None)
         instances = self._get_redis_instances(ports, indexes)
         for inst in instances:
             inst.service.stop()
@@ -95,7 +100,7 @@ class RedisAPI(object):
         """
         ports and indexes parameters can be int or list of ints.
         """
-        assert (ports and indexes is None) or (ports is None and indexes)
+        assert not (ports is not None and indexes not is None)
         instances = self._get_redis_instances(ports, indexes)
         for inst in instances:
             inst.service.reload()
@@ -105,7 +110,7 @@ class RedisAPI(object):
         """
         ports and indexes parameters can be int or list of ints.
         """
-        assert (ports and indexes is None) or (ports is None and indexes)
+        assert not (ports is not None and indexes not is None)
         instances = self._get_redis_instances(ports, indexes)
         for inst in instances:
             inst.service.restart()
