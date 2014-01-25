@@ -56,10 +56,25 @@ function Create-SzrBackup {
         Log "Backuping current installation $(Get-SzrVersion)"
         $DirsToBackup | foreach {
             for ($Cnt = 0; $Cnt -lt 5; $Cnt++) {
-                Log "Renaming $InstallDir\$_ -> $_-$InstalledVersion"
-                Rename-Item -Path "$InstallDir\$_" -NewName "$_-$InstalledVersion" -ErrorAction Continue
-                if ($?) {
+                $Name = $_
+                Log "Renaming $InstallDir\$_ -> $Name-$InstalledVersion"
+                try {
+                    Rename-Item -Path "$InstallDir\$Name" -NewName "$Name-$InstalledVersion"
                     break
+                }
+                catch {
+                    Log "Finding a locker process"
+                    Get-Process | foreach { 
+                        $Proc = $_; 
+                        Log "===== PROCESS $Proc ===="
+                        $_.Modules | foreach {
+                            Log $_.FileName
+                            if($_.FileName -and ($_.FileName.IndexOf("$InstallDir\$Name") -eq 0)) { 
+                                Log "Found the locker: " + $Proc.Name + " PID:" + $Proc.id
+                            }
+                        }
+                    }
+
                 }
                 Start-Sleep -s 1
             }
@@ -124,7 +139,7 @@ function Stop-SzrServices {
     Log "Stopping services"
     Stop-SzrService "ScalrUpdClient" 
     Stop-SzrService "Scalarizr"
-    Get-Process -Name PythonService
+    Get-Process -Name PythonService -ErrorAction SilentlyContinue
     Start-Sleep -s 2
 }
 
@@ -174,10 +189,6 @@ function Main-Szr {
         catch {
             Write-Error $_ -ErrorAction Continue
         }
-        finally {
-            Start-SzrServices -ErrorAction Continue
-            Remove-Item $PackageFile
-        }
     }
     finally {
         $Msg = @()
@@ -190,7 +201,10 @@ function Main-Szr {
             state = $State
         } | ConvertTo-Json
         Log "Saving status: $Status"
-        $Status > $StatusFile
+        Set-Content -Encoding Ascii -Path $StatusFile -Value $Status
+
+        Start-SzrServices -ErrorAction Continue
+        Remove-Item $PackageFile        
     }
 }
 

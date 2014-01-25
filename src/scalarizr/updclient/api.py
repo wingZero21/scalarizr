@@ -286,16 +286,17 @@ class UpdClientAPI(object):
         else:
             if self.state == 'completed/wait-ack':
                 self.state = 'completed'
-            elif linux.os.windows and self.state == 'in-progress/install' and \
-                    os.path.exists(self.win_status_file):
-                with open(self.win_status_file) as fp:
-                    win_status = json.load(fp)
-                os.unlink(self.win_status_file)
-                if win_status['state'] != 'completed':
-                    win_status['state'] = 'in-progress/' + win_status['state']
-                self.__dict__.update(win_status)
             else:
-                self.state = 'noop'
+                if linux.os.windows and self.state == 'in-progress/install' and \
+                        os.path.exists(self.win_status_file):
+                    with open(self.win_status_file) as fp:
+                        win_status = json.load(fp)
+                    os.unlink(self.win_status_file)
+                    if win_status['state'] != 'completed':
+                        win_status['state'] = 'in-progress/' + win_status['state']
+                    self.__dict__.update(win_status)
+                else:
+                    self.state = 'noop'
         if self.state != 'unknown':
             self.store()
 
@@ -497,7 +498,6 @@ class UpdClientAPI(object):
             except:
                 e = sys.exc_info()[1]
                 self.error = str(e)
-                self.state = 'error'
                 if isinstance(e, UpdateError):
                     op.logger.warn(str(e))
                     return self.status(cached=True)
