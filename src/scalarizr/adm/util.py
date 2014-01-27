@@ -28,6 +28,6 @@ def encode(obj, encoding='ascii'):
     elif isinstance(obj, list):
         return [encode(item) for item in obj]
     elif isinstance(obj, dict):
-        return {encode(k): encode(v) for k, v in obj.items()}
+        return dict((encode(k), encode(v)) for k, v in obj.items())
     else:
         return obj
