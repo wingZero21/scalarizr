@@ -246,7 +246,7 @@ class OpenstackPlatform(platform.Platform):
 
     def get_nova_conn(self):
         if not sef._conn_proxy:
-            self._conn_proxy = NovaConnectionProxy()
+            self._conn_proxy = NovaConnectionProxy(self)
         return self._conn_proxy
 
     def new_nova_connection(self):
