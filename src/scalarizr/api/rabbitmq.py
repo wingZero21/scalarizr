@@ -1,5 +1,5 @@
 from scalarizr.util.cryptotool import pwgen
-from scalarizr.services.rabbitmq import RabbitMQ
+from scalarizr.services.rabbitmq import rabbitmq as rabbitmq_sgt
 from scalarizr.services import rabbitmq as rabbitmq_module
 from scalarizr import rpc
 from scalarizr.util import Singleton
@@ -10,7 +10,7 @@ class RabbitMQAPI(object):
 
     def __init__(self):
         self.service = rabbitmq_module.RabbitMQInitScript()
-        self.rabbitmq = RabbitMQ()
+        self.rabbitmq = rabbitmq_sgt
 
     @rpc.command_method
     def start_service(self):
