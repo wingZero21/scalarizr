@@ -622,15 +622,17 @@ class PSQL(object):
                     
     
 class ClusterDir(object):
-    base_path = glob.glob(pg_pathname_pattern)[0]
-    default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
     
     def __init__(self, path=None):
         self.path = path
         self.user = DEFAULT_USER
+        base_path = glob.glob(pg_pathname_pattern)[0]
+        self.default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
 
     @classmethod
     def find(cls, postgresql_conf):
+        base_path = glob.glob(pg_pathname_pattern)[0]
+        default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
         return cls(postgresql_conf.data_directory or cls.default_path)
 
     def move_to(self, dst, move_files=True):
