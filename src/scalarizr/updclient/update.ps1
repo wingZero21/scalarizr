@@ -64,20 +64,7 @@ function Create-SzrBackup {
                 }
                 catch {
                     Log "Finding a locker process"
-                    handle "$InstallDir\$Name"
-                    <#
-                    Get-Process | foreach { 
-                        $Proc = $_; 
-                        #Log "===== PROCESS $Proc ===="
-                        $_.Modules | foreach {
-                            #Log "$($_.FileName)"
-                            if($_.FileName -and ($_.FileName.IndexOf("$InstallDir\$Name") -eq 0)) { 
-                                Log "Found the locker: " + $Proc.Name + " PID:" + $Proc.id
-                            }
-                        }
-                    }
-                    #>
-
+                    #handle "$InstallDir\$Name"
                 }
                 Start-Sleep -s 1
             }
@@ -106,6 +93,7 @@ function Delete-SzrBackup {
         $DirsToBackup | foreach {
             $Path = "$InstallDir\$_-$InstalledVersion"
             if (Test-Path $Path) {
+                Log "Remove $Path"
                 Remove-Item $Path -Force -Recurse
             }
         }
@@ -206,10 +194,12 @@ function Main-Szr {
         $Error | foreach { $Msg += [string]$_ }
         $Msg = $Msg | Select -Uniq
         [array]::Reverse($Msg)
+        $Installed = $(Get-ItemProperty -Path hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr -Name DisplayVersion).DisplayVersion
 
         $Status = @{
             error = $Msg -join "`n"; 
-            state = $State
+            state = $State;
+            installed = $Installed
         } | ConvertTo-Json
         Log "Saving status: $Status"
         Set-Content -Encoding Ascii -Path $StatusFile -Value $Status
