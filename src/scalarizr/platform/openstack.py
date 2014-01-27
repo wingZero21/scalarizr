@@ -24,7 +24,7 @@ from scalarizr.storage2.cloudfs import swift as swiftcloudfs
 LOG = logging.getLogger(__name__)
 
 
-class NovaConnectionProxy(ConnectionProxy):
+class NovaConnectionProxy(platform.ConnectionProxy):
 
     def __self__(self, platform, *args, **kwds):
         self._platform = platform

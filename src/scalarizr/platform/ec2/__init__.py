@@ -6,6 +6,7 @@ import urllib2
 import logging
 
 from scalarizr.bus import bus
+from scalarizr import platform
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 from scalarizr.storage.transfer import Transfer
@@ -40,7 +41,7 @@ def get_platform():
     return Ec2Platform()
 
 
-class Ec2ConnectionProxy(ConnectionProxy):
+class Ec2ConnectionProxy(platform.ConnectionProxy):
 
     def __self__(self, platform, *args, **kwds):
         self._platform = platform
