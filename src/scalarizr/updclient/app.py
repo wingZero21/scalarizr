@@ -58,8 +58,8 @@ if linux.os.windows_family:
         def SvcStop(self):
             LOG.debug('TEST SvcStop called')
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-            LOG.debug('TEST running: %s', self._upd.running)
-            if self._upd.running:
+            LOG.debug('TEST running: %s', self._.running)
+            if self._.running:
                 LOG.debug('TEST self._upd.stop()')
                 self._upd.stop()
 

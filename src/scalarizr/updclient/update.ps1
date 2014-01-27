@@ -66,9 +66,9 @@ function Create-SzrBackup {
                     Log "Finding a locker process"
                     Get-Process | foreach { 
                         $Proc = $_; 
-                        Log "===== PROCESS $Proc ===="
+                        #Log "===== PROCESS $Proc ===="
                         $_.Modules | foreach {
-                            Log "$($_.FileName)"
+                            #Log "$($_.FileName)"
                             if($_.FileName -and ($_.FileName.IndexOf("$InstallDir\$Name") -eq 0)) { 
                                 Log "Found the locker: " + $Proc.Name + " PID:" + $Proc.id
                             }
@@ -123,12 +123,21 @@ param ($PackageFile)
 function Stop-SzrService {
 param ($Name)
     Log "Stopping $Name"
-    $Job = Start-Job {
-        Stop-Service $Name
-        Log "Stop-Service completed"
+    $Job = Start-Job -ScriptBlock {
+        $DebugPreference = "Continue"
+        $ErrorActionPreference = "Stop"
+        $Name = $using:Name
+        Stop-Service $using:Name
+        Write-Debug "Stop-Service $Name completed"
         Get-WmiObject -Class Win32_Service -Filter "name = '$Name'"
     }
-    Wait-Job -Id $Job.Id -Timeout 30
+    Wait-Job $Job -Timeout 30
+    if ($Job.State -eq "Running") {
+        Log "Killing job $($Job.Id)"
+        Stop-Job $Job
+    } else {
+        Receive-Job $Job
+    }
     $Svs = Get-WmiObject -Class Win32_Service -Filter "Name = '$Name'"
     if ($Svs -and $Svs.ProcessId) {
         Stop-Process -Id $Svs.Processid -Force -ErrorAction Stop
