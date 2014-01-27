@@ -32,7 +32,6 @@ from scalarizr.util import metadata, initdv2, sqlite_server
 if linux.os.windows:
     import win32com
     import win32com.client
-    import win32process
 
 
 LOG = logging.getLogger(__name__)
@@ -420,8 +419,6 @@ class UpdClientAPI(object):
             package_url = self.pkgmgr.index[self.package]
             if os.path.exists(self.win_status_file):
                 os.unlink(self.win_status_file)
-            logfp = logging.getLogger('').handlers[0].stream
-            outfp = os.fdopen(os.dup(logfp.fileno()), 'a')
 
             LOG.info('Invoke powershell script "update.ps1 -URL %s"', package_url)
             proc = subprocess.Popen([
@@ -433,11 +430,8 @@ class UpdClientAPI(object):
                     '-URL', package_url
                 ], 
                 env=os.environ, 
-                shell=True,
-                creationflags=win32process.DETACHED_PROCESS,
-                #close_fds=True,
-                stdout=outfp,
-                stderr=subprocess.STDOUT
+                close_fds=True,
+                cwd='C:\\'
             )
             LOG.debug('Started powershell process (pid: %s)', proc.pid)
             LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)

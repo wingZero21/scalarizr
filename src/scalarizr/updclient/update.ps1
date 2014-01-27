@@ -64,6 +64,8 @@ function Create-SzrBackup {
                 }
                 catch {
                     Log "Finding a locker process"
+                    handle "$InstallDir\$Name"
+                    <#
                     Get-Process | foreach { 
                         $Proc = $_; 
                         #Log "===== PROCESS $Proc ===="
@@ -74,6 +76,7 @@ function Create-SzrBackup {
                             }
                         }
                     }
+                    #>
 
                 }
                 Start-Sleep -s 1
@@ -148,8 +151,7 @@ function Stop-SzrServices {
     Log "Stopping services"
     Stop-SzrService "ScalrUpdClient" 
     Stop-SzrService "Scalarizr"
-    Get-Process -Name PythonService -ErrorAction SilentlyContinue
-    Start-Sleep -s 2
+    Start-Sleep -s 2  # Give them time to shutdown
 }
 
 function Start-SzrServices {

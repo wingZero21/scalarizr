@@ -54,10 +54,8 @@ if linux.os.windows_family:
 
 
         def SvcStop(self):
-            LOG.debug('TEST SvcStop called')
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
             try:
-                LOG.debug('TEST self._upd.stop()')
                 self._upd.stop()
             except:
                 LOG.warning('Caught error during service termination', exc_info=sys.exc_info())
