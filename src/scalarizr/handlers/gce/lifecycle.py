@@ -12,6 +12,7 @@ def get_handlers ():
 class GceLifeCycle(handlers.Handler):
 
     def __init__(self):
+        super(GceLifeCycle, self).__init__()
         bus.on(init=self.on_init)
 
 

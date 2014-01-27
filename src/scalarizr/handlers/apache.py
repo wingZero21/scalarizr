@@ -82,7 +82,7 @@ class ApacheHandler(Handler):
         if "apache" in message.body:
             apache_data = message.body["apache"]
 
-            for virtual_host_data in apache_data.get("virtual_hosts", []):
+            for virtual_host_data in apache_data.get("virtual_hosts", []) or []:
                 virtual_host_data["ssl"] = bool(int(virtual_host_data["ssl"]))
 
                 if not virtual_host_data["ssl"]:

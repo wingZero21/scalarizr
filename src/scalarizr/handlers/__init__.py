@@ -103,6 +103,8 @@ class Handler(object):
 
 
     def get_ready_behaviours(self):
+        '''
+        TODO: remove it, if values() method works fine
         possible_behaviors = [
             config.BuiltinBehaviours.APP,
             config.BuiltinBehaviours.WWW,
@@ -120,6 +122,9 @@ class Handler(object):
             config.BuiltinBehaviours.CHEF,
             config.BuiltinBehaviours.TOMCAT,
         ]
+        '''
+        possible_behaviors = config.BuiltinBehaviours.values()
+
         ready_behaviors = list()
         if linux.os['family'] != 'Windows':
             installed_packages = pkgmgr.package_mgr().list()
@@ -130,10 +135,6 @@ class Handler(object):
                     ready_behaviors.append(behavior)
                 except (exceptions.NotFound, exceptions.UnsupportedBehaviorError):
                     continue
-                # TODO
-                # remove except block after refactoring api import
-                except:
-                    pass
         return ready_behaviors
 
 
@@ -750,7 +751,7 @@ def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
         tags['scalr-status'] = state
 
     if set_owner:
-        for opt in ('farm_id', 'farm_role_id', 'env_id'):
+        for opt in ('scalr-farm-id', 'scalr-farm-role-id', 'scalr-env-id'):
             try:
                 tags[opt] = __node__[opt]
             except KeyError:
