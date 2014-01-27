@@ -34,7 +34,6 @@ if linux.os.windows_family:
     class WindowsService(win32serviceutil.ServiceFramework):
         _svc_name_ = "ScalrUpdClient"
         _svc_display_name_ = "Scalr Update Client"
-        _running = False
         _upd = None
 
         def __init__(self, args=None):
@@ -51,20 +50,17 @@ if linux.os.windows_family:
             servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
                                   servicemanager.PYS_SERVICE_STARTED,
                                   (self._svc_name_, ''))
-            self._running = True
             self._upd.serve_forever()
 
 
         def SvcStop(self):
             LOG.debug('TEST SvcStop called')
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-            LOG.debug('TEST running: %s', self._running)
-            if self._running:
-                try:
-                    LOG.debug('TEST self._upd.stop()')
-                    self._upd.stop()
-                except:
-                    LOG.warning('Caught error during service termination', exc_info=sys.exc_info())
+            try:
+                LOG.debug('TEST self._upd.stop()')
+                self._upd.stop()
+            except:
+                LOG.warning('Caught error during service termination', exc_info=sys.exc_info())
 
 
 class UpdClient(util.Server):
@@ -158,6 +154,12 @@ class UpdClient(util.Server):
         try:
             self._start_api()
             self._write_pid_file()
+
+            self.running = True  
+            # It should be here, cause self.api.bootstrap() on Windows
+            # leads to updclient restart and self.stop(), that is called for this  
+            # checks for self.running is True to perform graceful shutdown
+
             self.api.bootstrap()
         except:
             self.do_stop()
