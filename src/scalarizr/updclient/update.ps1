@@ -68,7 +68,7 @@ function Create-SzrBackup {
                         $Proc = $_; 
                         Log "===== PROCESS $Proc ===="
                         $_.Modules | foreach {
-                            Log $_.FileName
+                            Log "$($_.FileName)"
                             if($_.FileName -and ($_.FileName.IndexOf("$InstallDir\$Name") -eq 0)) { 
                                 Log "Found the locker: " + $Proc.Name + " PID:" + $Proc.id
                             }

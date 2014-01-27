@@ -16,6 +16,7 @@ import sqlite3 as sqlite
 import subprocess
 import sys
 import time
+import threading
 import urllib2
 import uuid
 
@@ -94,6 +95,7 @@ class UpdClientAPI(object):
     pkgmgr = None
     daemon = None
     meta = None
+    shutdown_ev = None
 
     system_matches = False
 
@@ -132,6 +134,7 @@ class UpdClientAPI(object):
         self.dist = '{name} {release} {codename}'.format(**linux.os)
         self.state = 'unknown'
         self.meta = metadata.meta()
+        self.shutdown_ev = threading.Event()
 
 
     def _init_queryenv(self):
@@ -438,10 +441,13 @@ class UpdClientAPI(object):
             )
             LOG.debug('Started powershell process (pid: %s)', proc.pid)
             LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)
-            time.sleep(self.win_update_timeout)
-            msg = ('UpdateClient expected to be terminated by update.ps1, '
-                    'but never happened')
-            raise UpdateError(msg)
+            self.shutdown_ev.wait(self.win_update_timeout)
+            if self.shutdown_ev.is_set():
+                raise KeyboardInterrupt()
+            else:
+                msg = ('UpdateClient expected to be terminated by update.ps1, '
+                        'but never happened')
+                raise UpdateError(msg)
 
 
         def update_linux():
@@ -508,6 +514,10 @@ class UpdClientAPI(object):
 
         return self.op_api.run('scalarizr.update', do_update, async=async, 
                     exclusive=True, notifies=notifies)
+
+    def shutdown(self):
+        self.store()
+        self.shutdown_ev.set()
 
 
     def store(self, status=None):
