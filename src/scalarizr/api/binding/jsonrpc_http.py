@@ -132,16 +132,18 @@ class WsgiApplication(Security):
 
 class HttpServiceProxy(rpc.ServiceProxy, Security):
 
-    def __init__(self, endpoint, crypto_key_path, server_id=None):
+    def __init__(self, endpoint, crypto_key_path, server_id=None, sign_only=False):
         Security.__init__(self, crypto_key_path)
         rpc.ServiceProxy.__init__(self)
         self.endpoint = endpoint
         self.server_id = server_id
+        self.sign_only = sign_only
 
 
     def exchange(self, jsonrpc_req):
         if self.crypto_key_path:
-            jsonrpc_req = self.encrypt_data(jsonrpc_req)
+            if not self.sign_only:
+                jsonrpc_req = self.encrypt_data(jsonrpc_req)
             sig, date = self.sign(jsonrpc_req, self._read_crypto_key())
             headers = {
                 'Date': date,

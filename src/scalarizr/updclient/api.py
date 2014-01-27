@@ -193,10 +193,12 @@ class UpdClientAPI(object):
                     producer_retries_progression='1,2,5,10,20,30,60')
 
         if self.is_client_mode and not self.update_server:
-            self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, None)
+            self.update_server = jsonrpc_http.HttpServiceProxy(self.server_url, self.crypto_file, 
+                    server_id=self.server_id, 
+                    sign_only=True)
 
         if not self.scalarizr:
-            self.scalarizr = jsonrpc_http.HttpServiceProxy('http://0.0.0.0:8010/', self.crypto_file) 
+            self.scalarizr = jsonrpc_http.HttpServiceProxy('http://localhost:8010/', self.crypto_file) 
 
 
     def get_system_id(self):
