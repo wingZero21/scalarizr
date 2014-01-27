@@ -51,7 +51,9 @@ except LookupError:
     else:
         raise
 
-RABBITMQ_VERSION = software.rabbitmq_software_info().version
+
+def get_rabbitmq_version():
+    return software.rabbitmq_software_info().version
 
 
 class RabbitMQInitScript(initdv2.ParametrizedInitScript):
@@ -209,7 +211,7 @@ class RabbitMQ(object):
 
 
     def change_node_type(self, self_hostname, hostnames, disk_node):
-        if RABBITMQ_VERSION >= (3, 0, 0):
+        if get_rabbitmq_version() >= (3, 0, 0):
             type = disk_node and 'disk' or 'ram'
             cmd = [RABBITMQCTL, 'change_cluster_node_type', type]
             system2(cmd, logger=self._logger)
@@ -218,7 +220,7 @@ class RabbitMQ(object):
 
 
     def cluster_with(self, self_hostname, hostnames, disk_node=True, do_reset=True):
-        if RABBITMQ_VERSION >= (3, 0, 0):
+        if get_rabbitmq_version() >= (3, 0, 0):
             # New way of clustering was introduced in rabbit 3.0.0
             one_node = NODE_HOSTNAME_TPL % hostnames[0]
             cmd = [RABBITMQCTL, 'join_cluster', one_node]
