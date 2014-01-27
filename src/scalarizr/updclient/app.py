@@ -60,8 +60,11 @@ if linux.os.windows_family:
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
             LOG.debug('TEST running: %s', self._running)
             if self._running:
-                LOG.debug('TEST self._upd.stop()')
-                self._upd.stop()
+                try:
+                    LOG.debug('TEST self._upd.stop()')
+                    self._upd.stop()
+                except:
+                    LOG.warning('Caught error during service termination', exc_info=sys.exc_info())
 
 
 class UpdClient(util.Server):
