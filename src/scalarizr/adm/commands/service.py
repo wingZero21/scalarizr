@@ -29,7 +29,7 @@ service_apis = {
     'postgresql': PostgreSQLAPI,
     'rabbitmq': RabbitMQAPI,
     'redis': RedisAPI,
-    'tomcat': TomcatAPI, `
+    'tomcat': TomcatAPI,
 }
 
 
