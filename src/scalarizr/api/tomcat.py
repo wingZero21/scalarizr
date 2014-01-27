@@ -51,12 +51,13 @@ class CatalinaInitScript(initdv2.ParametrizedInitScript):
         if not self.server_port:
             out = augtool(['print /files{0}/server.xml/Server/#attribute/port'.format(__tomcat__['config_dir'])])
             self.server_port = out.split(' = ')[-1]
+            self.server_port = int(self.server_port.strip('"'))
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             sock.connect(('', self.server_port))
             return initdv2.Status.RUNNING
-        except:
+        except socket.error:
             return initdv2.Status.NOT_RUNNING
         finally:
             try:

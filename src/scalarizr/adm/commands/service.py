@@ -29,7 +29,7 @@ service_apis = {
     'postgresql': PostgreSQLAPI,
     'rabbitmq': RabbitMQAPI,
     'redis': RedisAPI,
-    'tomcat': TomcatAPI, 
+    'tomcat': TomcatAPI, `
 }
 
 
@@ -46,6 +46,9 @@ class Service(Command):
 
     def _start_service(self, service, **kwds):
         api = service_apis[service]()
+        for key, value in kwds.items():
+            if value == None:
+                kwds.pop(key)
         try:
             api.start_service(**kwds)
         except (BaseException, Exception), e:
@@ -54,6 +57,9 @@ class Service(Command):
 
     def _stop_service(self, service, **kwds):
         api = service_apis[service]()
+        for key, value in kwds.items():
+            if value == None:
+                kwds.pop(key)
         try:
             api.stop_service(**kwds)
         except (BaseException, Exception), e:

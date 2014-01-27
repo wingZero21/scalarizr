@@ -260,6 +260,3 @@ class RabbitMQ(object):
         out = system2((RABBITMQCTL, 'cluster_status'),logger=self._logger)[0]
         nodes_raw = out.split('running_nodes')[0].split('\n', 1)[1]
         return re.findall("rabbit@([^']+)", nodes_raw)
-
-
-rabbitmq = RabbitMQ()
