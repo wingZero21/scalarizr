@@ -7,6 +7,7 @@ import logging
 
 from scalarizr.bus import bus
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
+from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 from scalarizr.storage.transfer import Transfer
 from .storage import S3TransferProvider
 
@@ -37,6 +38,38 @@ UD_OPT_S3_BUCKET_NAME = "s3bucket"
 
 def get_platform():
     return Ec2Platform()
+
+
+class Ec2ConnectionProxy(ConnectionProxy):
+
+    def __self__(self, platform, *args, **kwds):
+        self._platform = platform
+        super(Ec2ConnectionProxy, self).__init__(*args, **kwds)
+
+    def _create_connection(self):
+        region = self._platform.get_region()
+        try:
+            key_id, key = self.self._platform.get_access_keys
+            conn = boto.ec2.connect_to_region(
+                region,
+                aws_access_key_id=key_id,
+                aws_secret_access_key=key
+            )
+        except PlatformError as e:
+            raise NoCredentialsError()
+        except:
+            raise ConnectionError()
+        return conn
+
+    def _raise_error(self, *exc_info):
+        t, e, v = exc_info
+        if t in [NoCredentialsError, InvalidCredentialsError, ConnectionError]:
+            raise e
+        elif t == boto.exception.EC2ResponseError and e.args[0] == 401:
+            raise UnvalidCredentialsError(v)
+        else:
+            raise ConnectionError(v)
+
 
 class Ec2Platform(Ec2LikePlatform):
     name = "ec2"
@@ -73,6 +106,10 @@ class Ec2Platform(Ec2LikePlatform):
             self._ec2_cert = self._cnf.read_key(os.path.join(bus.etc_path, self._cnf.rawini.get(self.name, OPT_EC2_CERT_PATH)), title="EC2 certificate")
         return self._ec2_cert
 
+    def get_ec2_conn(self):
+        if not self._conn_proxy:
+            self._conn_proxy = Ec2ConnectionProxy(self, conn_per_thread=False)
+        return self._conn_proxy
 
     def new_ec2_conn(self):
         """ @rtype: boto.ec2.connection.EC2Connection """

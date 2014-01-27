@@ -28,6 +28,22 @@ class UtilError(BaseException):
     pass
 
 
+class NullPool(object):
+
+    def __init__(self, creator):
+        self._creator = creator
+        self._object = None
+
+    def get(self):
+        return self._object or self._creator()
+
+    def dispose_local(self):
+        self._object = None
+
+    def dispose_all(self):
+        self._object = None
+
+
 class LocalObject:
     def __init__(self, creator, pool_size=50):
         self._logger = logging.getLogger(__name__)
@@ -66,6 +82,13 @@ class LocalObject:
             l = len(self._all_conns) - self.size
             self._logger.debug("Removing %s from connection pool", self._all_conns[:l])
             self._all_conns = self._all_conns[l:]
+
+    def dispose_local(self):
+        if hasattr(self._object, 'current'):
+            del self._object.current
+
+    def dispose_all(self):
+        self._object = threading.local()
 
 
 class SqliteLocalObject(LocalObject):

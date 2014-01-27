@@ -404,7 +404,7 @@ node['ec2'] = Compound({
         'instance_type': Call('scalarizr.bus', 'bus.platform.get_instance_type'),
         'avail_zone': Call('scalarizr.bus', 'bus.platform.get_avail_zone'),
         'region': Call('scalarizr.bus', 'bus.platform.get_region'),
-        'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
+        'connect_ec2': Attr('scalarizr.bus', 'bus.platform.get_ec2_conn'),
         'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
 })
 node['cloudstack'] = Compound({
@@ -415,6 +415,7 @@ node['cloudstack'] = Compound({
 })
 node['openstack'] = Compound({
         'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
+        'connect_nova': Call('scalarizr.bus', 'bus.platform.get_nova_conn'),
         'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
         'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
         'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')

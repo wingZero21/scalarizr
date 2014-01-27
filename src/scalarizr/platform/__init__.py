@@ -18,6 +18,7 @@ import ConfigParser
 
 from scalarizr.bus import bus
 from scalarizr import linux
+from scalarizr.util import LocalObject, NullPool
 if linux.os.windows_family:
     import win32com.client
 else:
@@ -27,8 +28,6 @@ else:
 class PlatformError(BaseException):
     pass
 
-class NoAccessDataError(Exception):
-    pass
 
 class UserDataOptions:
     FARM_ID = "farmid"
@@ -46,6 +45,71 @@ class UserDataOptions:
     REGION = 'region'
     MESSAGE_FORMAT = 'message_format'
     OWNER_EMAIL = 'owner_email'
+
+
+class ConnectionError(Exception):
+    pass
+
+
+class NoCredentialsError(Exception):
+    pass
+
+
+class InvalidCredentialsError(Exception):
+    pass
+
+
+class ConnectionProxy(object):
+
+    def __init__(self, conn_per_thread=True, num_reconnects=1):
+        if conn_per_thread:
+            self.conn_pool = LocalObject(self._create_connection)
+        else:
+            self.conn_pool = NullPool(self._create_connection)
+        self.num_reconnects = num_reconnects
+        self.local = threading.Local()
+
+    def __getattr__(self, name):
+        try:
+            self.__dict__['local'].call_chain.append(name)
+        except AttributeError:
+            self.__dict__['local'].call_chain = [name]
+        return self
+
+    def __call__(self, *args, **kwds):
+        num_retries = 0
+        try:
+            self._do_call(*args, **kwds)
+        except:
+            try:
+                self._raise_error(*sys_exc_info())
+            except NoCredentialsError:
+                # We haven't credentials, so we don't need reconnect,
+                # only remove invalid connection and reraise exception
+                self.conn_pool.dispose_local()
+                raise
+            except:
+                self.conn_pool.dispose_local()
+                if num_retries < self.num_reconnects:
+                    num_retries += 1
+                    self._do_call(*args, **kwds)
+                    raise
+        finally:
+            self.local.call_chain = []
+
+    def _do_call(self, *args, **kwds):
+        conn = self.conn_pool.get()
+        fn = conn
+        for attr in self.local.call_chain:
+            fn = getattr(fn, attr)
+        return fn(*args, **kwds)
+
+    def _create_connection(self):
+        raise NotImplementedError()
+
+    def _raise_error(self, *exc_info):
+        raise NotImplementedError()
+
 
 class PlatformFactory(object):
     _platforms = {}
@@ -66,7 +130,7 @@ class PlatformFeatures:
 class Platform():
     name = None
     _arch = None
-    _access_data = None
+    _access_data = None # why we need this?
     _userdata = None
     _logger = logging.getLogger(__name__)
     features = []
@@ -75,6 +139,7 @@ class Platform():
     def __init__(self):
         self.scalrfs = self._scalrfs(self)
         self._access_data = {} 
+        self._conn_proxy = None
 
     def get_private_ip(self):
         return self.get_public_ip()
@@ -100,6 +165,8 @@ class Platform():
 
     def set_access_data(self, access_data):
         self._access_data = access_data
+        if self._conn_proxy:
+            self._conn_proxy.dispose_all()
 
     def get_access_data(self, prop=None):
         if prop:
@@ -149,7 +216,7 @@ class Platform():
 
     def _raise_no_access_data(self):
         msg = 'There are no credentials from cloud services: %s' % self.name
-        raise NoAccessDataError(msg)
+        raise NoCredentialsError(msg)
 
 
     class _scalrfs(object):
