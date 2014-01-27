@@ -58,24 +58,23 @@ if linux.os.windows_family:
         def SvcStop(self):
             LOG.debug('TEST SvcStop called')
             self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-            LOG.debug('TEST running: %s', self._.running)
-            if self._.running:
+            LOG.debug('TEST running: %s', self._running)
+            if self._running:
                 LOG.debug('TEST self._upd.stop()')
                 self._upd.stop()
 
 
 class UpdClient(util.Server):
     daemonize = False
+    verbose = True
     if linux.os.windows:
         base = r'C:\Program Files\Scalarizr'
         pid_file = os.path.join(base, r'var\run\scalr-upd-client.pid')
         log_file = os.path.join(base, r'var\log\scalarizr_update.log')
-        verbose = True
         del base
     else:
         pid_file = '/var/run/scalr-upd-client.pid'
         log_file = sys.stderr
-        verbose = False
 
     api = api_server = api_thread = None
 
