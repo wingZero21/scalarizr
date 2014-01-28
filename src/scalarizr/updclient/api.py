@@ -518,7 +518,7 @@ class UpdClientAPI(object):
 
     def store(self, status=None):
         status = status or self.status(cached=True)
-        with open(self.status_file, 'w') as fp:
+        with open(self.status_file, 'w+') as fp:
             LOG.debug('Saving status: %s', pprint.pformat(status))
             json.dump(status, fp)     
 
