@@ -28,7 +28,6 @@ from scalarizr.linux import pkgmgr
 from scalarizr.messaging import p2p as messaging
 from scalarizr.util import metadata, initdv2, sqlite_server
 
-
 if linux.os.windows:
     import win32com
     import win32com.client
