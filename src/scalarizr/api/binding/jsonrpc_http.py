@@ -159,7 +159,7 @@ class HttpServiceProxy(rpc.ServiceProxy, Security):
         http_req = urllib2.Request(posixpath.join(self.endpoint, namespace), jsonrpc_req, headers)
         try:
             jsonrpc_resp = urllib2.urlopen(http_req).read()
-            if self.crypto_key_path:
+            if self.crypto_key_path and not self.sign_only:
                 return self.decrypt_data(jsonrpc_resp)
             else:
                 return jsonrpc_resp
