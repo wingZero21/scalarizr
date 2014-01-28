@@ -511,14 +511,16 @@ if linux.os.windows_family:
                 self.updatedb()
 
             try:
+                installed = self.installed_version(name)
+            except:
+                installed = None
+            try:
                 candidate = os.path.basename(self.index[name])
                 candidate = candidate.split('_', 1)[1].rsplit('.', 2)[0]
             except KeyError:
                 candidate = None
-            try:
-                installed = self.installed_version(name)
-            except:
-                installed = None
+            if installed and installed == candidate:
+                candidate = None
 
             LOG.debug('Package %s info. installed: %s, candidate: %s', name, installed, candidate)
             return {

@@ -171,7 +171,7 @@ function Main-Szr {
                 $State = "install"
                 Install-SzrPackage $PackageFile
                 if (-not (Test-Path "$InstallDir\src")) {
-                    Throw "Installer successfully completed without installing new files. Maybe this version was already installed?"
+                    Throw "Installer completed without installing new files"
                 }
                 $State = "start"
                 Start-SzrServices -Сertainly
