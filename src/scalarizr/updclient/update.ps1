@@ -192,24 +192,29 @@ function Main-Szr {
     }
     finally {
         Log "TEST Im in last finally"
-        $Msg = @()
-        $Error | foreach { $Msg += [string]$_ }
-        $Msg = $Msg | Select -Uniq
-        [array]::Reverse($Msg)
-        Log "TEST message done"
-        $Installed = $(Get-ItemProperty -Path hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr -Name DisplayVersion).DisplayVersion
-        Log "TEST installed done"
+        try {
+            $Msg = @()
+            $Error | foreach { $Msg += [string]$_ }
+            $Msg = $Msg | Select -Uniq
+            [array]::Reverse($Msg)
+            Log "TEST message done"
+            $Installed = $(Get-ItemProperty -Path hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr -Name DisplayVersion).DisplayVersion
+            Log "TEST installed done"
 
-        $Status = @{
-            error = $Msg -join "`n"; 
-            state = $State;
-            installed = $Installed
-        } | ConvertTo-Json
-        Log "Saving status: $Status"
-        Set-Content -Encoding Ascii -Path $StatusFile -Value $Status
+            $Status = @{
+                error = $Msg -join "`n"; 
+                state = $State;
+                installed = $Installed
+            } | ConvertTo-Json
+            Log "Saving status: $Status"
+            Set-Content -Encoding Ascii -Path $StatusFile -Value $Status
 
-        Start-SzrServices -ErrorAction Continue
-        Remove-Item $PackageFile        
+            Start-SzrServices -ErrorAction Continue
+            Remove-Item $PackageFile  
+        } 
+        catch {
+            Write-Error $_ -ErrorAction Continue
+        }     
     }
 }
 
