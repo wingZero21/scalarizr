@@ -180,6 +180,7 @@ function Main-Szr {
             catch {
                 Write-Error $_ -ErrorAction Continue
                 Restore-SzrBackup
+                $State = "rollbacked"
             }
             finally {
                 Delete-SzrBackup
@@ -190,11 +191,14 @@ function Main-Szr {
         }
     }
     finally {
+        Log "TEST Im in last finally"
         $Msg = @()
         $Error | foreach { $Msg += [string]$_ }
         $Msg = $Msg | Select -Uniq
         [array]::Reverse($Msg)
+        Log "TEST message done"
         $Installed = $(Get-ItemProperty -Path hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr -Name DisplayVersion).DisplayVersion
+        Log "TEST installed done"
 
         $Status = @{
             error = $Msg -join "`n"; 
