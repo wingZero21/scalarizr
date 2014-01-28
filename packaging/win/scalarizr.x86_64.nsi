@@ -66,8 +66,6 @@ Function .onInit
   ${StrRep} $0 ${PRODUCT_VERSION} "r" ""
   ${StrRep} $1 $installed_version "r" ""
   ${VersionCompare} $0 $1 $R0
-
-  MessageBox MB_OK "product version: ${PRODUCT_VERSION}\ninstalled version: $installed_version\ncmp: $R0"
     
   ${If} $R0 == 2
   ${OrIf} $R0 == 0
