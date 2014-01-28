@@ -83,7 +83,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
     reload = restart
 
     def start(self):
-        hostname = RABBIT_HOSTNAME_TPL % __rabbitmq__['server_index']
+        hostname = RABBIT_HOSTNAME_TPL % __node__['server_index']
         nodename = NODE_HOSTNAME_TPL % hostname
 
         env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid',
