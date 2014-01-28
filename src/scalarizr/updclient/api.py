@@ -101,17 +101,19 @@ class UpdClientAPI(object):
     if linux.os.windows:
         _base = r'C:\Program Files\Scalarizr'
         etc_path = os.path.join(_base, 'etc')
+        run_path = os.path.join(_base, r'var\run')
         share_path = os.path.join(_base, 'share')
         log_file = os.path.join(_base, r'var\log\scalarizr_update.log')
         del _base
     else:
         etc_path = '/etc/scalr'
+        run_path = '/var/run'
         share_path = '/usr/share/scalr'
         log_file = '/var/log/scalarizr_update.log'
 
     _private_path = os.path.join(etc_path, 'private.d')
-    status_file = os.path.join(_private_path, 'update.status')
-    win_status_file = os.path.join(_private_path, 'update-win.status')
+    status_file = os.path.join(run_path, 'scalarizr_update.status')
+    win_status_file = os.path.join(run_path, 'scalarirz_update_win.status')
     crypto_file = os.path.join(_private_path, 'keys', 'default')
     db_file = os.path.join(_private_path, 'db.sqlite')
     del _private_path

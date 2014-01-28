@@ -16,13 +16,13 @@ param (
 }
 
 $InstallDir = "C:\Program Files\Scalarizr"
-$StatusFile = "$InstallDir\etc\private.d\update-win.status"
+$LogDir = "$InstallDir\var\log"
+$RunDir = "$InstallDir\var\run"
+$LogFile = "$LogDir\scalarizr_update_win.log"
+$StatusFile = "$RunDir\scalarizr_update_win.status"
+$BackupCreatedLock = "$RunDir\backup.created"
 $DirsToBackup = @("src", "Python27")
-$BackupCreatedLock = "$InstallDir\var\run\backup.created"
 $InstalledVersion = ""
-$LogFile = "$InstallDir\var\log\scalarizr_update_win.log"
-$TmpLogFile = TmpName -Suffix ".log"
-$BackupDir = ""
 
 
 function Log() {
