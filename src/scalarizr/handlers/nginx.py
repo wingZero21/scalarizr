@@ -201,6 +201,8 @@ class NginxHandler(ServiceCtlHandler):
             roles_for_proxy = [__nginx__['upstream_app_role']]
         else:
             roles_for_proxy = self.get_all_app_roles()
+
+        self.api.fix_app_servers_inc()
         self.make_default_proxy(roles_for_proxy)
 
         https_inc_path = os.path.join(os.path.dirname(self.api.app_inc_path),

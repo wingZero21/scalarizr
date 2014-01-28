@@ -174,7 +174,7 @@ class NginxAPI(object):
             app_inc_dir = os.path.dirname(__nginx__['app_include_path'])
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
         self._load_app_servers_inc()
-        self._fix_app_servers_inc()
+        self.fix_app_servers_inc()
 
         if not proxies_inc_dir:
             proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
@@ -229,7 +229,7 @@ class NginxAPI(object):
             _logger.debug('Creating app-servers.include')
             open(self.app_inc_path, 'w').close()
 
-    def _fix_app_servers_inc(self):
+    def fix_app_servers_inc(self):
         _logger.debug('Fixing app servers include')
         https_inc_xpath = self.app_servers_inc.xpath_of('include',
                                                         '/etc/nginx/https.include')
