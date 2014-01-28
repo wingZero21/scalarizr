@@ -196,7 +196,11 @@ function Main-Szr {
             $Msg = @()
             $Error | foreach { $Msg += [string]$_ }
             $Msg = $Msg | Select -Uniq
-            [array]::Reverse($Msg)
+            if ($Msg) {  
+                # Empty arrays are not welcome: 
+                # Exception calling "Reverse" with "1" argument(s): "Value cannot be null.
+                [array]::Reverse($Msg)
+            }
             Log "TEST message done"
             $Installed = $(Get-ItemProperty -Path hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr -Name DisplayVersion).DisplayVersion
             Log "TEST installed done"
