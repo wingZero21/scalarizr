@@ -480,7 +480,6 @@ class UpdClientAPI(object):
                     raise UpdateError(msg)
 
                 check_allowed()
-                
                 try:
                     self.state = 'in-progress/install'
                     self.store()
