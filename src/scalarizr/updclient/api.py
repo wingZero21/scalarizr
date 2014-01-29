@@ -69,6 +69,20 @@ def devel_repo_url_for_branch(branch):
 
 
 class UpdClientAPI(object):
+    '''
+    States:
+     * noop - initial state 
+     * in-progress -  update performed
+     * completed - new package installed
+     * rollbacked - new package installation failed, so previous was restored
+     * error - update failed and unrecovered
+
+    Transitions:
+     noop -> in-progress
+     in-progress -> completed -> in-progress
+     in-progress -> rollbacked -> in-progress
+     in-progress -> error -> in-progress
+    '''
 
     package = 'scalarizr'
     client_mode = 'client'
@@ -84,7 +98,7 @@ class UpdClientAPI(object):
 
     server_id = farm_role_id = system_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
-    state = installed = candidate = executed_at = error = dist = None
+    _state = prev_state = installed = candidate = executed_at = error = dist = None
 
     update_server = None
     messaging_service = None
@@ -125,6 +139,15 @@ class UpdClientAPI(object):
     def is_client_mode(self):
         return self.client_mode == 'client'
 
+    def state():
+        # pylint: disable=E0211, E0202
+        def fget(self):
+            return self._state
+        def fset(self, state):
+            self.prev_state = state
+            self._state = state
+        return locals()
+    state = property(**state())
 
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
@@ -132,7 +155,7 @@ class UpdClientAPI(object):
         self.daemon = initdv2.Daemon('scalarizr')
         self.op_api = operation.OperationAPI()
         self.dist = '{name} {release} {codename}'.format(**linux.os)
-        self.state = 'unknown'
+        self.state = 'noop'
         self.meta = metadata.meta()
         self.shutdown_ev = threading.Event()
 
@@ -255,6 +278,11 @@ class UpdClientAPI(object):
         if system_matches:
             LOG.debug('Apply %s settings', self.status_file)
             self.__dict__.update(status_data)
+            if os.path.exists(self.win_status_file):
+                with open(self.win_status_file) as fp:
+                    LOG.debug('Apply %s settings', self.win_status_file)
+                    self.__dict__.update(json.load(fp))
+                os.unlink(self.win_status_file)
         else:
             LOG.debug('Getting cloud user-data')
             user_data = self.meta.user_data()
@@ -284,26 +312,18 @@ class UpdClientAPI(object):
         self.system_matches = system_matches
         if not self.system_matches:
             if dry_run:
-                self._sync()  
-                self.state = 'noop'        
+                self._sync()      
             else:
                 self.update(bootstrap=True)
         else:
             if self.state == 'completed/wait-ack':
                 self.state = 'completed'
             else:
-                if linux.os.windows and self.state == 'in-progress/install' and \
-                        os.path.exists(self.win_status_file):
-                    with open(self.win_status_file) as fp:
-                        win_status = json.load(fp)
-                    os.unlink(self.win_status_file)
-                    if win_status['state'] != 'completed':
-                        win_status['state'] = 'in-progress/' + win_status['state']
-                    self.__dict__.update(win_status)
-                else:
-                    self.state = 'noop'
-        if self.state != 'unknown':
+                self.state = 'noop'
+        if not dry_run:
             self.store()
+            if self.state != 'error' and not self.daemon.running:
+                self.daemon.start()
 
 
     def uninstall(self):
@@ -446,7 +466,6 @@ class UpdClientAPI(object):
                         'but never happened')
                 raise UpdateError(msg)
 
-
         def update_linux():
             self.pkgmgr.install(self.package, self.candidate)
             self.state = 'completed/wait-ack'
@@ -459,7 +478,6 @@ class UpdClientAPI(object):
             if reports:
                 self.report(True)
             return self.status(cached=True)
-
 
         def do_update(op):
             self.executed_at = time.strftime(DATE_FORMAT, time.gmtime())
@@ -503,6 +521,7 @@ class UpdClientAPI(object):
             except:
                 e = sys.exc_info()[1]
                 self.error = str(e)
+                self.state = 'error'
                 if isinstance(e, UpdateError):
                     op.logger.warn(str(e))
                     return self.status(cached=True)
@@ -513,6 +532,7 @@ class UpdClientAPI(object):
 
         return self.op_api.run('scalarizr.update', do_update, async=async, 
                     exclusive=True, notifies=notifies)
+
 
     def shutdown(self):
         self.store()
@@ -550,7 +570,7 @@ class UpdClientAPI(object):
             'server_id', 'farm_role_id', 'system_id', 'platform', 'queryenv_url', 
             'messaging_url', 'scalr_id', 'scalr_version', 
             'repository', 'repo_url', 'package', 'executed_at', 
-            'state', 'error', 'dist'
+            'state', 'prev_state', 'error', 'dist'
         ]
         status = {} if cached else self.pkgmgr.info(self.package)
         if cached:

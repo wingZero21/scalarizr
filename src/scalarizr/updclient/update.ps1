@@ -23,6 +23,8 @@ $StatusFile = "$RunDir\scalarizr_update_win.status"
 $BackupCreatedLock = "$RunDir\backup.created"
 $DirsToBackup = @("src", "Python27")
 $InstalledVersion = ""
+$State = "in-progress"
+$PrevState = $Null
 
 
 function Log() {
@@ -152,35 +154,41 @@ param ($Certainly = $false)
     }
 }
 
+function Set-SzrState {
+param ($State)
+    $script:PrevState = $script:State
+    $script:State = $State
+}
+
 function Main-Szr {
     try {
-        $State = "prepare"
+        Set-SzrState "in-progress/prepare"
         if (Test-Path $StatusFile) {
             Remove-Item $StatusFile
         }
         if (Test-Path $InstallDir) {
             $script:InstalledVersion = Get-SzrVersion
         }
-        $State = "download"
+        Set-SzrState "in-progress/download-package"
         $PackageFile = Download-SzrPackage $URL
-        $State = "stop"
+        Set-SzrState "in-progress/stop"
         Stop-SzrServices
         try {
             Create-SzrBackup
             try {
-                $State = "install"
+                Set-SzrState "in-progress/install"
                 Install-SzrPackage $PackageFile
                 if (-not (Test-Path "$InstallDir\src")) {
                     Throw "Installer completed without installing new files"
                 }
-                $State = "start"
+                Set-SzrState "in-progress/start"
                 Start-SzrServices -Сertainly
-                $State = "completed"
+                Set-SzrState "completed"
             }
             catch {
                 Write-Error $_ -ErrorAction Continue
                 Restore-SzrBackup
-                $State = "rollbacked"
+                Set-SzrState "rollbacked"
             }
             finally {
                 Delete-SzrBackup
@@ -188,6 +196,7 @@ function Main-Szr {
         }
         catch {
             Write-Error $_ -ErrorAction Continue
+            Set-SzrState "error"
         }
     }
     finally {
@@ -205,6 +214,7 @@ function Main-Szr {
             $Status = @{
                 error = $Msg -join "`n"; 
                 state = $State;
+                prev_state = $PrevState;
                 installed = $Installed
             } | ConvertTo-Json
             Log "Saving status: $Status"

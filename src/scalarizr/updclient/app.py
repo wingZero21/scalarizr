@@ -139,6 +139,7 @@ class UpdClient(util.Server):
             if os.path.exists(self.api.status_file):
                 os.unlink(self.api.status_file)
             self.api.bootstrap(dry_run=True)
+            self.api.store()
             print 'saved status file: {0}'.format(self.api.status_file)
             sys.exit() 
 
