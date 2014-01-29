@@ -327,12 +327,12 @@ class NginxAPI(object):
         # https://scalr-labs.atlassian.net/browse/SCALARIZR-481?focusedCommentId=17428&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-17428
         # saving backend configuration table
         backend_table_bak = self.backend_table.copy()
+        main_conf_path = self.proxies_inc_dir + '/nginx.conf'
         try:
             self.app_inc_path = self.app_inc_path + '.new'
             self.proxies_inc_path = self.proxies_inc_path + '.new'
             self.recreate_proxying(proxies, reload_service=False)
 
-            main_conf_path = self.proxies_inc_dir + '/nginx.conf'
             self._replace_string_in_file(main_conf_path,
                                          'proxies.include',
                                          'proxies.include.new')
