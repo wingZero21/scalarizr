@@ -76,10 +76,13 @@ class GcePersistentVolume(base.Volume):
                 create = False
                 if not self.link:
                     # Disk does not exist, create it first
-                    create_request_body = dict(name=self.name, sizeGb=self.size)
+                    create_request_body = dict(name=self.name)
                     if self.snap:
                         self.snap = storage2.snapshot(self.snap)
                         create_request_body['sourceSnapshot'] = to_current_api_version(self.snap.link)
+                    else:
+                        create_request_body['sizeGb'] = self.size
+
                     create = True
                 else:
                     self.link = to_current_api_version(self.link)
@@ -91,7 +94,6 @@ class GcePersistentVolume(base.Volume):
                         garbage_can.append(temp_snap)
                         new_name = self.name + zone
                         create_request_body = dict(name=new_name,
-                                                   sizeGb=self.size,
                                                    sourceSnapshot=to_current_api_version(temp_snap.link))
                         create = True
 
