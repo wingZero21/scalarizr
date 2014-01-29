@@ -470,14 +470,17 @@ class UpdClientAPI(object):
 
             pkgmgr.LOG.addHandler(op.logger.handlers[0])
             try:
+                pkginfo = self.pkgmgr.info(self.package)
+                if not pkginfo['candidate']:
+                    self.state = 'noop'
+                    LOG.info('No new version available ({0})'.format(self.package))
+                    return 
+                self.__dict__.update(pkginfo)
+
                 if bootstrap and not linux.os.windows:
                     self.state = 'in-progress/uninstall'
                     self.uninstall()
-
-                self.__dict__.update(self.pkgmgr.info(self.package))
-                if not self.candidate:
-                    msg = 'No new version available ({0})'.format(self.package)
-                    raise UpdateError(msg)
+                    self.installed = None
 
                 check_allowed()
                 try:
