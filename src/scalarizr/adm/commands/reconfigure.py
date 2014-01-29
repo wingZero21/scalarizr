@@ -9,7 +9,7 @@ from scalarizr.api.nginx import NginxAPI
 
 
 behavior_apis = {
-    'nginx': NginxAPI,
+    'www': NginxAPI,
 }
 
 
