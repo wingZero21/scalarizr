@@ -109,12 +109,12 @@ class OpenstackPlatform(platform.Platform):
         if not self._ip_addr:
             ifaces = platform.net_interfaces()
             try:
-                self._ip_addr = (iface['ipv4'] for iface in ifaces 
-                        if platform.is_private_ip(iface['ipv4']))[0]
+                self._ip_addr = [iface['ipv4'] for iface in ifaces 
+                        if platform.is_private_ip(iface['ipv4'])][0]
             except IndexError:
                 try:
-                    self._ip_addr = (iface['ipv4'] for iface in ifaces 
-                            if platform.is_public_ip(iface['ipv4']))[0]
+                    self._ip_addr = [iface['ipv4'] for iface in ifaces 
+                            if platform.is_public_ip(iface['ipv4'])][0]
                 except IndexError:
                     pass
         return self._ip_addr
