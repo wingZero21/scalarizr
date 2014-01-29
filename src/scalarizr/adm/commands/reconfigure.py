@@ -25,6 +25,7 @@ class Reconfigure(Command):
             raise CommandError('Unknown behavior.')
 
         api = behavior_apis[behavior]()
+        api.init_service()
         reconfigure_args = inspect.getargspec(api.reconfigure).args
         reconfigure_args.remove('self')
         
