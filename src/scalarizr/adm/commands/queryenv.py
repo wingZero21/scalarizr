@@ -9,23 +9,12 @@ from scalarizr.adm.command import get_section
 from scalarizr.adm.command import TAB_SIZE
 from scalarizr.adm.command import CommandError
 from scalarizr.adm.util import make_table
+from scalarizr.adm.util import new_queryenv
 from scalarizr.node import __node__
-from scalarizr.node import base_dir as scalr_base_dir
-from scalarizr.queryenv import QueryEnvService
 
 
 def transpose(l):
     return map(list, zip(*l))
-
-
-def new_queryenv():
-    queryenv_creds = (__node__['queryenv_url'],
-                      __node__['server_id'],
-                      os.path.join(scalr_base_dir, __node__['crypto_key_path']))
-    queryenv = QueryEnvService(*queryenv_creds)
-    api_version = queryenv.get_latest_version()
-    queryenv = QueryEnvService(*queryenv_creds, api_version=api_version) 
-    return queryenv
 
 
 class Queryenv(Command):
