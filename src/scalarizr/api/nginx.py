@@ -186,7 +186,7 @@ class NginxAPI(object):
     def init_service(self):
         _logger.debug('Initializing nginx API.')
         self._load_app_servers_inc()
-        self._fix_app_servers_inc()
+        self.fix_app_servers_inc()
         self._load_proxies_inc()
         self._make_error_pages_include()
 
@@ -235,7 +235,7 @@ class NginxAPI(object):
             _logger.debug('Creating app-servers.include')
             open(self.app_inc_path, 'w').close()
 
-    def _fix_app_servers_inc(self):
+    def fix_app_servers_inc(self):
         _logger.debug('Fixing app servers include')
         https_inc_xpath = self.app_servers_inc.xpath_of('include',
                                                         '/etc/nginx/https.include')
