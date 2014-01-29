@@ -2,6 +2,7 @@ import sys
 import inspect
 
 from scalarizr.node import __node__
+from scalarizr.bus import bus
 from scalarizr.adm.command import Command
 from scalarizr.adm.command import CommandError
 from scalarizr.adm.util import new_queryenv
@@ -28,6 +29,8 @@ class Reconfigure(Command):
         reconfigure_args.remove('self')
         
         queryenv = new_queryenv()
+        bus.queryenv_service = queryenv
+
         role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
         behavior_params = role_params.get(behavior, {})
         behavior_params = dict((k, v) for k, v in behavior_params.items() if k in reconfigure_args)
