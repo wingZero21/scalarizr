@@ -103,26 +103,6 @@ class Handler(object):
 
 
     def get_ready_behaviours(self):
-        '''
-        TODO: remove it, if values() method works fine
-        possible_behaviors = [
-            config.BuiltinBehaviours.APP,
-            config.BuiltinBehaviours.WWW,
-            config.BuiltinBehaviours.MYSQL,
-            config.BuiltinBehaviours.MYSQL2,
-            config.BuiltinBehaviours.PERCONA,
-            config.BuiltinBehaviours.MARIADB,
-            config.BuiltinBehaviours.CASSANDRA,
-            config.BuiltinBehaviours.MEMCACHED,
-            config.BuiltinBehaviours.POSTGRESQL,
-            config.BuiltinBehaviours.RABBITMQ,
-            config.BuiltinBehaviours.REDIS,
-            config.BuiltinBehaviours.HAPROXY,
-            config.BuiltinBehaviours.MONGODB,
-            config.BuiltinBehaviours.CHEF,
-            config.BuiltinBehaviours.TOMCAT,
-        ]
-        '''
         possible_behaviors = config.BuiltinBehaviours.values()
 
         ready_behaviors = list()
@@ -135,7 +115,7 @@ class Handler(object):
                     api_cls = util.import_class(api.api_routes[behavior])
                     api_cls.check_software(installed_packages)
                     ready_behaviors.append(behavior)
-                except (exceptions.NotFound, exceptions.UnsupportedBehaviorError):
+                except (exceptions.NotFound, exceptions.UnsupportedBehaviorError, ImportError):
                     continue
         return ready_behaviors
 
