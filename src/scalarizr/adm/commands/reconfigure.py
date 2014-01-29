@@ -14,7 +14,10 @@ behavior_apis = {
 
 
 class Reconfigure(Command):
-
+    """
+    Usage:
+        reconfigure [<behavior>]
+    """
     def __call__(self, behavior=None):
 
         if behavior not in behavior_apis:
