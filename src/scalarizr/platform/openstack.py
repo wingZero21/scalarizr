@@ -109,10 +109,13 @@ class OpenstackPlatform(platform.Platform):
     def get_private_ip(self):
         if self._private_ip is None:
             for iface in platform.net_interfaces():
+                LOG.debug('iface: %s', iface)
                 if platform.is_private_ip(iface['ipv4']):
                     self._private_ip = iface['ipv4']
                     break
 
+        if not self._private_ip:
+            linux.system('ifconfig', shell=True)
         return self._private_ip
 
 
