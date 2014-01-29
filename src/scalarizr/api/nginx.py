@@ -322,7 +322,7 @@ class NginxAPI(object):
             fp.write(raw)
 
     @rpc.service_method
-    def reconfigure(self, proxy_list):
+    def reconfigure(self, proxies):
         # TODO: much like recreate_proxying() but with specs described in
         # https://scalr-labs.atlassian.net/browse/SCALARIZR-481?focusedCommentId=17428&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-17428
         # saving backend configuration table
@@ -330,7 +330,7 @@ class NginxAPI(object):
         try:
             self.app_inc_path = self.app_inc_path + '.new'
             self.proxies_inc_path = self.proxies_inc_path + '.new'
-            self.recreate_proxying(proxy_list, reload_service=False)
+            self.recreate_proxying(proxies, reload_service=False)
 
             main_conf_path = self.proxies_inc_dir + '/nginx.conf'
             self._replace_string_in_file(main_conf_path,
