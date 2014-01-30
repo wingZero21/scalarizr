@@ -1,7 +1,11 @@
 """
-Created on Jun 10, 2013
+.. module:: apache
+   :platform: Linux
+   :synopsis: Set of API methods for managing Apache VirtualHosts
 
-@author: Dmytro Korsakov
+.. moduleauthor:: Dmytro Korsakov <dmitry@scalr.com>
+
+
 """
 
 from __future__ import with_statement
@@ -127,13 +131,36 @@ class ApacheAPI(object):
         """
         Creates Name-Based Apache VirtualHost
 
-        @param hostname: Server Name
-        @param port: port to listen to
-        @param template: VirtualHost body with no certificate paths
-        @param ssl: True if VirtualHost uses SSL certificate
-        @param ssl_certificate_id: ID of SSL certificate
-        @param reload: True if immediate apache reload is required.
-        @return: path to VirtualHost file
+        :param hostname: Server Name
+        :type hostname: str
+        :param port: Port number VirtualHost should listen to
+        :type port: int
+        :param template: VirtualHost body with no certificate paths
+        :type template: str
+        :param ssl: True if VirtualHost uses SSL certificate
+        :type ssl: bool
+        :param ssl_certificate_id: ID of SSL certificate
+        :type ssl_certificate_id: int
+        :param reload: True if immediate apache reload is required.
+        :type reload: bool
+        :returns: Path to VirtualHost file
+        :rtype: str
+
+        Examples:
+
+        Configure VirtualHost "www.dima.com" on port 80 without SSL enabled and reload Apache2 service.
+        >>> api.apache.service.create_vhost("www.dima.com", 80, "<template>", False)
+        >>> "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
+
+        ADD VirtualHost "secure.dima.com" on port 443 with SSL enabled, reload Apache2 and allow port 443 in IPTables.
+        >>> api.apache.service.create_vhost("secure.dima.com", 443, "<template>", False)
+        >>> "/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"
+
+        Configure VirtualHost "old.dima.com" on port 8080 without SSL enabled and without reloading Apache2 service.
+        >>> api.apache.service.create_vhost("old.dima.com", 8080, "<template>", reload=False)
+        >>> "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
+
+        Please Note that VirtualHosts on custom ports feature requires testing.
         """
         #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
@@ -238,26 +265,42 @@ class ApacheAPI(object):
         return v_host_path
 
     @rpc.command_method
-    def update_vhost(self,
-                     signature,
-                     hostname=None,
-                     port=80,
-                     template=None,
-                     ssl=False,
-                     ssl_certificate_id=None,
-                     reload=True):
+    def update_vhost(
+            self,
+            signature,
+            hostname=None,
+            port=80,
+            template=None,
+            ssl=False,
+            ssl_certificate_id=None,
+            reload=True):
         """
         Changes settings of VirtualHost defined by @signature
 
-        @param signature: tuple, (hostname,port)
-        @param hostname: String, new hostname
-        @param port: int, new port
-        @param: ssl: bool, indicates if the updated VirtualHost is going to be ssl-based.
-        @param: ssl_certificate_id: int, ID of the new certificate to fetch from Scalr
-        @param: reload: bool, indicates if immediate reload is required.
-        @param template: String, new template. If new template is passed,
+        :param signature: Hostname and Port to identidy VirtualHost for modifying.
+        :type signature: tuple
+        :param hostname: New hostname.
+        :type hostname: str
+        :param port: New port.
+        :type port: int
+        :param ssl: Indicates if the updated VirtualHost is going to be ssl-based.
+        :type ssl: bool
+        :param ssl_certificate_id: ID of the new certificate to fetch from Scalr.
+        :type ssl_certificate_id: int
+        :param reload: Indicates if immediate reload is required.
+        :type reload: bool
+        :param template: New template. If new template is passed,
+
             all other changes (e.g. hostname, port, cert) will be applied to it.
-            Otherwice changes will be applied to old VirtualHost`s body.
+
+            Otherwise changes will be applied to old VirtualHost`s body.
+        :type template: str
+
+        Example:
+        Change ServerName to old.dima.com, switch port to 8080 and reload service.
+        >>> api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)
+
+        Please Note that Scalr does not use update_vhost API method thus it has not been tested properly.
         """
 
         old_hostname, old_port = signature
@@ -273,7 +316,11 @@ class ApacheAPI(object):
             ssl_certificate = SSLCertificate(ssl_certificate_id)
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
-            v_host.use_certificate(ssl_certificate)
+            v_host.use_certificate(
+                ssl_certificate.cert_path,
+                ssl_certificate.key_path,
+                ssl_certificate.chain_path if os.path.exists(ssl_certificate.chain_path) else None
+            )
 
         path = get_virtual_host_path(hostname or old_hostname, port or old_port)
 
@@ -298,10 +345,17 @@ class ApacheAPI(object):
     @rpc.command_method
     def delete_vhosts(self, vhosts, reload=True):
         """
-        Deletes VirtualHost
-        @param vhosts: list, [(hostname:password),]
-        @param reload: indicates if immediate service reload is needed
-        @return: None
+        Removes given VirtualHosts from Apache2 configuration.
+
+        :param vhosts: [(hostname,password),]
+        :type vhosts: list
+        :param reload: Indicates if immediate service reload is reqired.
+        :type reload: bool
+
+        Example:
+        Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service.
+
+        >>> api.apache.service.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])
         """
         LOG.info("Removing Apache VirtualHosts: %s" % str(vhosts))
 
@@ -329,8 +383,16 @@ class ApacheAPI(object):
     def reconfigure(self, vhosts, reload=True, rollback_on_error=True):
         """
         Deploys multiple VirtualHosts and removes odds.
-        @param vhosts: list(dict(vhost_data),)
-        @return: list, paths to reconfigured VirtualHosts
+
+        :param vhosts: list(dict(hostname:hostname1,port:port1,template:tpl1,..),..)
+        :return: paths to reconfigured VirtualHosts
+        :rtype: list
+
+        Example:
+        Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service.
+
+        >>> vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
+        >>> api.apache.service.reconfigure([vhost1,])
         """
         ports = []
         applied_vhosts = []
@@ -388,20 +450,38 @@ class ApacheAPI(object):
     @rpc.query_method
     def get_webserver_statistics(self):
         """
-        @return: dict, parsed mod_status data
+        Returns mod_stat data
 
         i.e.
-        Current Time
-        Restart Time
-        Parent Server Generation
-        Server uptime
-        Total accesses
-        CPU Usage
+        Current Time,
+        Restart Time,
+        Parent Server Generation,
+        Server uptime,
+        Total accesses,
+        CPU Usage.
 
         The machine readable file can be accessed by using the following link:
+
         http://your.server.name/server-status?auto
 
-        Available only when mod_stat is enabled
+        Data are available only when mod_stat is enabled.
+
+        :return: Parsed mod_status data
+        :rtype: dict
+
+        Example:
+
+        >>> api.apache.get_webserver_statistics()
+            {u'BusyWorkers': u'1',
+             u'BytesPerReq': u'204.8',
+             u'BytesPerSec': u'.0222655',
+             u'CPULoad': u'.000293539',
+             u'IdleWorkers': u'5',
+             u'ReqPerSec': u'.000108718',
+             u'Scoreboard': u'____W_....',
+             u'Total Accesses': u'10',
+             u'Total kBytes': u'2',
+             u'Uptime': u'91981'}
         """
         d = dict()
         try:
@@ -429,7 +509,13 @@ class ApacheAPI(object):
         Returns all VirtualHosts deployed by Scalr
         and available on web server
 
-        @return: list, paths to available VirtualHosts
+        :return: Paths to available VirtualHosts
+        :rtype: list
+
+        Example:
+
+        >>> api.apache.service.list_served_virtual_hosts()
+        >>> ["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]
         """
         text = system2((__apache__["apachectl"], "-S"))[0]
         directory = __apache__["vhosts_dir"]
@@ -449,24 +535,52 @@ class ApacheAPI(object):
         If the certificate with given ID already exists on disk
         this method adds it to the default SSL virtual host.
         Otherwice default system certificate will be used.
+
+        :param id: SSL Certificate ID
+        :type id: int
+
+        Example:
+        Set Scalr Certificate ID#873 as default:
+
+        >>> api.apache.service.set_default_ssl_certificate("873")
         """
         cert = SSLCertificate(id)
         self.mod_ssl.set_default_certificate(cert)
 
     @rpc.command_method
     def start_service(self):
+        """
+        Start Apache service
+
+        >>> api.apache.service.start_service()
+        """
         self.service.start()
 
     @rpc.command_method
     def stop_service(self, reason=None):
+        """
+        Stop Apache service
+
+        >>> api.apache.service.stop_service("Configuring Apache2 service.")
+        """
         self.service.stop(reason)
 
     @rpc.command_method
     def restart_service(self, reason=None):
+        """
+        Restart Apache service
+
+        >>> api.apache.service.restart_service("Applying new service configuration preset.")
+        """
         self.service.restart(reason)
 
     @rpc.command_method
     def reload_service(self, reason=None):
+        """
+        Reload Apache service
+
+        >>> api.apache.service.reload_service("Applying RPAF proxy list.")
+        """
         try:
             self.service.reload(reason)
         except initdv2.InitdError, e:
@@ -479,6 +593,11 @@ class ApacheAPI(object):
 
     @rpc.command_method
     def configtest(self):
+        """
+        Run Apache configtest
+
+        >>> api.apache.service.configtest()
+        """
         self.service.configtest()
 
     def init_service(self):
@@ -558,7 +677,7 @@ class ApacheAPI(object):
     def reload_virtual_hosts(self):
         """
         Reloads all VirtualHosts assigned to the server
-        @return: list(virtual_host_path,)
+        :return: list(virtual_host_path,)
         """
         vh_data = self._fetch_virtual_hosts()
         return self.reconfigure(vh_data, reload=True, rollback_on_error=True)
@@ -572,7 +691,7 @@ class ApacheAPI(object):
         """
         Combines list of virtual hosts in unified format
         regardless of Scalr version.
-        @return: list(dict(vhost_data))
+        :return: list(dict(vhost_data))
         """
         LOG.info("Fetching Apache VirtualHost configuration data from Scalr.")
         result = []
@@ -838,9 +957,9 @@ class SSLCertificate(object):
     def update(self, cert, key, authority=None):
         """
         Dumps certificate on disk.
-        @param cert: String, certificate pem
-        @param key: String, certificate key
-        @param authority: String, CA Cert
+        :param cert: String, certificate pem
+        :param key: String, certificate key
+        :param authority: String, CA Cert
         """
         st = os.stat(__apache__["httpd.conf"])
 
@@ -870,7 +989,6 @@ class SSLCertificate(object):
     def delete(self):
         """
         Removes SSL Certificate files from disk.
-        @return:
         """
         for path in (self.cert_path, self.key_path, self.chain_path):
             if os.path.exists(path):
@@ -961,7 +1079,7 @@ class DebianBasedModSSL(ModSSL):
         """
         Enables mod_ssl and default SSL-based virtual host.
         Sets NameVirtualHost and Listen values in this virtual host.
-        @param ssl_port: int, port number
+        :param ssl_port: int, port number
         the default SSL-based virtual host will listen to.
         """
         self._enable_mod_ssl()
@@ -997,7 +1115,7 @@ class RedHatBasedModSSL(ModSSL):
         Installs and enables mod_ssl. Then enables default SSL-based virtual host
         by adding module path to the main apache2 config.
         Sets NameVirtualHost and Listen values in this virtual host.
-        @param ssl_port: int, port number
+        :param ssl_port: int, port number
         the default SSL-based virtual host will listen to.
         """
         self._install_mod_ssl()
