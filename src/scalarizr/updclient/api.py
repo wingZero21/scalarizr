@@ -470,6 +470,8 @@ class UpdClientAPI(object):
             try:
                 self.pkgmgr.install(self.package, self.candidate, backup=True)
             except:
+                 # TODO: remove stacktrace
+                LOG.warn('Install failed, rollbacking. Error: %s', sys.exc_info()[1], exc_info=sys.exc_info())
                 if pkginfo['backup_id']:
                     self.state = 'in-progress/rollback'
                     self.pkgmgr.restore_backup(self.package, pkginfo['backup_id'])
@@ -587,7 +589,8 @@ class UpdClientAPI(object):
         if cached:
             keys_to_copy.extend(pkginfo_keys)
         else:
-            pkginfo = self.pkgmgr.info(self.package, updatedb=True)  # TODO: update only single self.repository
+            self.pkgmgr.updatedb()  # TODO: update only single self.repository
+            pkginfo = self.pkgmgr.info(self.package)
             status.update((key, pkginfo[key]) for key in pkginfo_keys)
 
         for key in keys_to_copy:
