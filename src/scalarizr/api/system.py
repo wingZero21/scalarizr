@@ -456,8 +456,8 @@ class SystemAPI(object):
                 assert mpoint in mounts
                 mpoint_stat = os.statvfs(mpoint)
                 res[mpoint] = dict()
-                res[mpoint]['total'] = (mpoint_stat.f_bsize * mpoint_stat.f_blocks) / 1024
-                res[mpoint]['free'] = (mpoint_stat.f_bsize * mpoint_stat.f_bavail) / 1024
+                res[mpoint]['total'] = (mpoint_stat.f_bsize * mpoint_stat.f_blocks) / 1024  # Kb
+                res[mpoint]['free'] = (mpoint_stat.f_bsize * mpoint_stat.f_bavail) / 1024   # Kb
             except:
                 res[mpoint] = None
 

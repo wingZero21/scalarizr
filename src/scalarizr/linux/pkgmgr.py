@@ -427,7 +427,7 @@ class YumPackageMgr(PackageMgr):
         return {
             'installed': installed,
             'candidate': candidates[-1] if candidates else None,
-            'backup_id': os.path.basename(backup_dir)
+            'backup_id': os.path.basename(backup_dir) if backup_dir else None
         }
 
 
