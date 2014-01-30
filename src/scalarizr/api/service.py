@@ -11,12 +11,15 @@ from scalarizr.api import operation
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.api.nginx import NginxAPI
+from scalarizr.api.apache import ApacheAPI
+
 
 services = {}
 
 
 behavior_apis = {
     'www': NginxAPI,
+    'app': ApacheAPI,
 }
 
 
