@@ -893,11 +893,15 @@ def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
         tags['scalr-status'] = state
 
     if set_owner:
-        for opt in ('scalr-farm-id', 'scalr-farm-role-id', 'scalr-env-id'):
+        for tag, node_opt in {
+            'scalr-farm-id': 'farm_id',
+            'scalr-farm-role-id': 'farm_role_id',
+            'scalr-env-id': 'env_id'
+        }.items():
             try:
-                tags[opt] = __node__[opt]
+                tags[tag] = __node__[node_opt]
             except KeyError:
-                tags[opt] = None
+                tags[tag] = None
 
         try:
             tags['scalr-owner'] = __node__['owner_email']
