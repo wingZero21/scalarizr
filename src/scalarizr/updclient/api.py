@@ -468,14 +468,20 @@ class UpdClientAPI(object):
 
         def update_linux(pkginfo):
             try:
-                self.pkgmgr.install(self.package, self.candidate, backup=True)
+                self.pkgmgr.install(
+                    self.package, self.candidate, 
+                    backup=True,
+                    rpm_raise_scriptlet_errors=True)
+                if not self.daemon.running:
+                    self.daemon.start()
             except:
-                 # TODO: remove stacktrace
-                LOG.warn('Install failed, rollbacking. Error: %s', sys.exc_info()[1], exc_info=sys.exc_info())
                 if pkginfo['backup_id']:
+                    # TODO: remove stacktrace
+                    LOG.warn('Install failed, rollbacking. Error: %s', sys.exc_info()[1], exc_info=sys.exc_info())
                     self.state = 'in-progress/rollback'
                     self.pkgmgr.restore_backup(self.package, pkginfo['backup_id'])
                     self.state = 'rollbacked'
+                    LOG.info('Rollbacked')
                 else:
                     raise
             else:

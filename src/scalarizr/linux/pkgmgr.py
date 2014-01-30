@@ -393,7 +393,10 @@ class YumPackageMgr(PackageMgr):
             if version:
                 install_name += '-%s' % version
             cmd = 'install {0}'.format(install_name)
-            self.yum_command(cmd, raise_exc=True)
+            out, err, _ = self.yum_command(cmd, raise_exc=True)
+            if kwds.get('rpm_raise_scriptlet_errors') \
+                and re.search(r'(Non-fatal|Error in) (PREIN|PRERM|POSTIN|POSTRM) scriptlet', err):
+                raise Exception(out)
 
         if backup:
             download_dir = tempfile.mkdtemp()
