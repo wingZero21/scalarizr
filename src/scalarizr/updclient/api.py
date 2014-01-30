@@ -575,15 +575,21 @@ class UpdClientAPI(object):
 
     @rpc.query_method
     def status(self, cached=False):
+        status = {}
         keys_to_copy = [
             'server_id', 'farm_role_id', 'system_id', 'platform', 'queryenv_url', 
             'messaging_url', 'scalr_id', 'scalr_version', 
             'repository', 'repo_url', 'package', 'executed_at', 
             'state', 'prev_state', 'error', 'dist'
         ]
-        status = {} if cached else self.pkgmgr.info(self.package)
+
+        pkginfo_keys = ['candidate', 'installed']
         if cached:
-            keys_to_copy.extend(['candidate', 'installed'])
+            keys_to_copy.extend(pkginfo_keys)
+        else:
+            pkginfo = self.pkgmgr.info(self.package, updatedb=True)  # TODO: update only single self.repository
+            status.update((key, pkginfo[key]) for key in pkginfo_keys)
+
         for key in keys_to_copy:
             status[key] = getattr(self, key)
         if not cached:

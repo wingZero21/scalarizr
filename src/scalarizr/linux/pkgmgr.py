@@ -163,6 +163,8 @@ class PackageMgr(object):
         # Create new backup dir and copy files
         backup_id = '{0}-{1}'.format(version, time.strftime('%Y%m%d%H%S')) 
         backup_dir = os.path.join(backup_dir, backup_id)
+        if not os.path.exists(backup_dir):
+            os.makedirs(backup_dir, 0755)
         for filename in package_files:
             shutil.copy(filename, backup_dir)
 
@@ -244,14 +246,18 @@ class AptPackageMgr(PackageMgr):
         self.apt_get_command('update')
 
     def install(self, name, version=None, updatedb=False, backup=False, **kwds):
-        if version:
-            name += '=%s' % version
         if updatedb:
             self.updatedb()
 
+        def do_install():
+            install_name = name
+            if version:
+                install_name += '=%s' % version
+            self.apt_get_command('install %s' % install_name, raise_exc=True)      
+
         # get installed list B
 
-        self.apt_get_command('install %s' % name, raise_exc=True)
+        do_install()
 
         # get installed list A
         # get diff between A and B
@@ -338,7 +344,7 @@ class RpmVersion(object):
 
 class YumPackageMgr(PackageMgr):
 
-    def yum_command(self, command, **kwds):
+    def yum_command(self, command, debug_level=0, **kwds):
         # explicit exclude was added after yum tried to install iptables.i686
         # on x86_64 amzn
         exclude = ()
@@ -351,7 +357,7 @@ class YumPackageMgr(PackageMgr):
         elif linux.os["arch"] == "i386":
             exclude = ("--exclude", "x86_64")
 
-        return linux.system((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None, command.split())) + exclude), **kwds)
+        return linux.system((('/usr/bin/yum', '-d{0}'.format(debug_level), '-y') + tuple(filter(None, command.split())) + exclude), **kwds)
 
 
     def yum_list(self, name):
@@ -378,28 +384,40 @@ class YumPackageMgr(PackageMgr):
         self.yum_command('clean expire-cache')
 
 
-    def install(self, name, version=None, updatedb=False, **kwds):
-        if version:
-            name += '-%s' % version
+    def install(self, name, version=None, updatedb=False, backup=False, **kwds):
         if updatedb:
             self.updatedb()
 
-        # download packages
-        download_dir = tempfile.mkdtemp()
-        try:
-            cmd = 'install --downloadonly --downloaddir={0} {1}'.format(download_dir, name)
+        def do_install():
+            install_name = name
+            if version:
+                install_name += '-%s' % version
+            cmd = 'install {0}'.format(install_name)
             self.yum_command(cmd, raise_exc=True)
 
-            # install package
-            cmd = 'install {0}'.format(name)
-            self.yum_command(cmd, raise_exc=True)
+        if backup:
+            download_dir = tempfile.mkdtemp()
+            try:
+                # download package and dependencies
+                cmd = 'install --downloadonly --downloaddir={0} {1}'.format(download_dir, name)
+                code = self.yum_command(cmd, debug_level=1, raise_exc=False)[2]
+                if not os.listdir(download_dir):
+                    msg = 'yum {0} downloaded nothing and exited with code: {1}'.format(cmd, code)
+                    raise Exception(msg)
 
-            # create backup
-            files = (os.path.join(download_dir, name) 
-                    for name in os.listdir(download_dir))
-            self._create_backup(name, version, files)
-        finally:
-            shutil.rmtree(download_dir)
+                # install package
+                do_install()
+
+                # create backup
+                files = (os.path.join(download_dir, name) 
+                        for name in os.listdir(download_dir))
+                if not version:
+                    version = self.yum_list(name)[0]
+                self._create_backup(name, version, files)
+            finally:
+                shutil.rmtree(download_dir)
+        else:
+            do_install()
 
 
     def localinstall(self, name):
@@ -423,7 +441,7 @@ class YumPackageMgr(PackageMgr):
 
     def info(self, name):
         installed, candidates = self.yum_list(name)
-        backup_dir = self._find_backup_dir(name, installed)
+        backup_dir = self._find_backup_dir(name, installed) if installed else None
         return {
             'installed': installed,
             'candidate': candidates[-1] if candidates else None,
