@@ -479,6 +479,7 @@ class UpdClientAPI(object):
                     # TODO: remove stacktrace
                     LOG.warn('Install failed, rollbacking. Error: %s', sys.exc_info()[1], exc_info=sys.exc_info())
                     self.state = 'in-progress/rollback'
+                    self.error = str(sys.exc_info()[1])
                     self.pkgmgr.restore_backup(self.package, pkginfo['backup_id'])
                     self.state = 'rollbacked'
                     LOG.info('Rollbacked')

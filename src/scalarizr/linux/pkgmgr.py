@@ -470,7 +470,7 @@ class YumPackageMgr(PackageMgr):
     def restore_backup(self, name, backup_id):
         backup_dir = os.path.join(self.backup_dir, name, backup_id)
         msg = 'Failed to restore package {0} from backup {1}'.format(name, backup_id)
-        linux.system(['/usr/bin/rpm', '-iv', '--force'] + os.listdir(backup_dir), cwd=backup_dir, error_text=msg)
+        linux.system(['/usr/bin/rpm', '-i', '--force'] + os.listdir(backup_dir), cwd=backup_dir, error_text=msg)
 
 
 
