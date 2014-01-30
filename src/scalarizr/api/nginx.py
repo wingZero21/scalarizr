@@ -371,10 +371,11 @@ class NginxAPI(object):
 
     @rpc.service_method
     def reconfigure(self, proxies, async=True):
-        self._op_api.run('api.nginx.reconfigure', 
-                         func=self.do_reconfigure, 
+        self._op_api.run('api.nginx.reconfigure',
+                         func=self.do_reconfigure,
                          func_kwds={'proxies': proxies},
-                         async=async, exclusive=True)
+                         async=async,
+                         exclusive=True)
 
     def get_role_servers(self, role_id=None, role_name=None):
         """ Method is used to get role servers from scalr """

@@ -30,7 +30,7 @@ from scalarizr.util import system2, initdv2
 from scalarizr.util import wait_until, dynimp, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
-
+from scalarizr.api import operation
 
 LOG = logging.getLogger(__name__)
 
@@ -121,6 +121,7 @@ class ApacheAPI(object):
         self.mod_ssl = DebianBasedModSSL() if linux.os.debian_family else RedHatBasedModSSL()
         self.current_open_ports = []
         self._query_env = bus.queryenv_service
+        self._op_api = operation.OperationAPI()
 
     @rpc.command_method
     def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True, allow_port=False):
@@ -324,9 +325,7 @@ class ApacheAPI(object):
             else:
                 self.reload_service('%s VirtualHosts removed.' % len(vhosts))
 
-
-    @rpc.command_method
-    def reconfigure(self, vhosts, reload=True, rollback_on_error=True):
+    def do_reconfigure(self, vhosts, reload=True, rollback_on_error=True):
         """
         Deploys multiple VirtualHosts and removes odds.
         @param vhosts: list(dict(vhost_data),)
@@ -384,6 +383,16 @@ class ApacheAPI(object):
             LOG.info("Apache configuration has been changed without service reload.")
 
         return applied_vhosts
+
+    @rpc.command_method
+    def reconfigure(self, vhosts, reload=True, rollback_on_error=True, async=True):
+        self._op_api.run('api.apache.reconfigure',
+                         func=self.do_reconfigure,
+                         func_kwds={'vhosts': vhosts,
+                                    'reload': reload,
+                                    'rollback_on_error': rollback_on_error},
+                         async=async,
+                         exclusive=True)
 
     @rpc.query_method
     def get_webserver_statistics(self):
