@@ -18,6 +18,7 @@ from scalarizr.util import PopenError
 from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
+from scalarizr.api import operation
 
 
 __nginx__ = __node__['nginx']
@@ -167,6 +168,7 @@ class NginxAPI(object):
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
         _logger.debug('Initializing nginx API.')
         self.service = NginxInitScript()
+        self._op_api = operation.OperationAPI()
         self.error_pages_inc = None
         self.backend_table = {}
         self.app_inc_path = None
@@ -321,11 +323,7 @@ class NginxAPI(object):
         with open(file_path, 'w') as fp:
             fp.write(raw)
 
-    @rpc.service_method
-    def reconfigure(self, proxies):
-        # TODO: much like recreate_proxying() but with specs described in
-        # https://scalr-labs.atlassian.net/browse/SCALARIZR-481?focusedCommentId=17428&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-17428
-        # saving backend configuration table
+    def do_reconfigure(self, proxies):
         backend_table_bak = self.backend_table.copy()
         main_conf_path = self.proxies_inc_dir + '/nginx.conf'
         try:
@@ -370,7 +368,13 @@ class NginxAPI(object):
             self._reload_service()
             self.app_inc_path = self.app_inc_path[:-4]
             self.proxies_inc_path = self.proxies_inc_path[:-4]
-        
+
+    @rpc.service_method
+    def reconfigure(self, proxies, async=True):
+        self._op_api.run('api.nginx.reconfigure', 
+                         func=self.do_reconfigure, 
+                         func_kwds={'proxies': proxies},
+                         async=async, exclusive=True)
 
     def get_role_servers(self, role_id=None, role_name=None):
         """ Method is used to get role servers from scalr """
