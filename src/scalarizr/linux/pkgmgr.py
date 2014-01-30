@@ -75,8 +75,10 @@ class Repository(object):
 
 
 class PackageMgr(object):
+    backup_dir = '/var/cache/scalr/pkgmgr'
+    backup_count = 5
 
-    def install(self, name, version=None, updatedb=False, **kwds):
+    def install(self, name, version=None, updatedb=False, backup=False, **kwds):
         ''' Installs a `version` of package `name` '''
         raise NotImplementedError()
 
@@ -89,9 +91,11 @@ class PackageMgr(object):
         Returns info about package
         Example:
                 {'installed': '2.6.7-ubuntu1',
-                'candidate': '2.6.7-ubuntu5'}
+                'candidate': '2.6.7-ubuntu5',
+                'backup_id': '20140129171501-2.6.7-ubuntu1'}
         installed is None, if package not installed
         candidate is None, if latest version of package is installed
+        backup_id is None, if no backup was created with a package installation
         '''
         raise NotImplementedError()
 
@@ -107,7 +111,7 @@ class PackageMgr(object):
         ''' Compares 2 package versions '''
         raise NotImplementedError()
 
-    def installed(self, name, version=None, updatedb=False):
+    def installed(self, name, version=None, updatedb=False, **kwds):
         '''
         Ensure that package installed
         '''
@@ -117,9 +121,9 @@ class PackageMgr(object):
         installed = self.info(name)['installed']
         if not installed:
             LOG.info('Installing %s=%s', name, version)
-            self.install(name, version)
+            self.install(name, version, **kwds)
 
-    def latest(self, name, updatedb=True):
+    def latest(self, name, updatedb=True, **kwds):
         '''
         Ensure that latest version of package installed
         '''
@@ -132,7 +136,7 @@ class PackageMgr(object):
 
         if candidate or not installed:
             LOG.info('Installing %s=%s', name, candidate)
-            self.install(name, candidate)
+            self.install(name, candidate, **kwds)
 
     def removed(self, name, purge=False):
         '''
@@ -145,6 +149,36 @@ class PackageMgr(object):
             else:
                 LOG.info('Uninstalling %s', name)
             self.remove(name, purge)
+
+
+    def _create_backup(self, name, version, package_files):
+        # Keep only latest self.backup_count backups
+        backup_dir = os.path.join(self.backup_dir, name)
+        if os.path.exists(backup_dir):
+            names_to_delete = list(reversed(sorted(os.listdir(backup_dir))))[self.backup_count:]
+            for name in names_to_delete:
+                path = os.path.join(backup_dir, name)
+                shutil.rmtree(path)
+
+        # Create new backup dir and copy files
+        backup_id = '{0}-{1}'.format(version, time.strftime('%Y%m%d%H%S')) 
+        backup_dir = os.path.join(backup_dir, backup_id)
+        for filename in package_files:
+            shutil.copy(filename, backup_dir)
+
+        return backup_id
+
+
+    def _find_backup_dir(self, name, version):
+        backup_dir = os.path.join(self.backup_dir, name, version + '-*')
+        try:
+            return glob.glob(backup_dir)[0]
+        except IndexError:
+            return None
+
+
+    def restore_backup(self, name, backup_id):
+        raise NotImplementedError()
 
 
 class AptPackageMgr(PackageMgr):
@@ -209,12 +243,20 @@ class AptPackageMgr(PackageMgr):
                 os.remove(filename)
         self.apt_get_command('update')
 
-    def install(self, name, version=None, updatedb=False, **kwds):
+    def install(self, name, version=None, updatedb=False, backup=False, **kwds):
         if version:
             name += '=%s' % version
         if updatedb:
             self.updatedb()
+
+        # get installed list B
+
         self.apt_get_command('install %s' % name, raise_exc=True)
+
+        # get installed list A
+        # get diff between A and B
+        # create backup from diff files (new and updated)
+
 
     def remove(self, name, purge=False):
         command = 'purge' if purge else 'remove'
@@ -341,7 +383,24 @@ class YumPackageMgr(PackageMgr):
             name += '-%s' % version
         if updatedb:
             self.updatedb()
-        self.yum_command('install %s' %  name, raise_exc=True)
+
+        # download packages
+        download_dir = tempfile.mkdtemp()
+        try:
+            cmd = 'install --downloadonly --downloaddir={0} {1}'.format(download_dir, name)
+            self.yum_command(cmd, raise_exc=True)
+
+            # install package
+            cmd = 'install {0}'.format(name)
+            self.yum_command(cmd, raise_exc=True)
+
+            # create backup
+            files = (os.path.join(download_dir, name) 
+                    for name in os.listdir(download_dir))
+            self._create_backup(name, version, files)
+        finally:
+            shutil.rmtree(download_dir)
+
 
     def localinstall(self, name):
         def do_localinstall(filename):
@@ -364,8 +423,13 @@ class YumPackageMgr(PackageMgr):
 
     def info(self, name):
         installed, candidates = self.yum_list(name)
-        return {'installed': installed,
-                'candidate': candidates[-1] if candidates else None}
+        backup_dir = self._find_backup_dir(name, installed)
+        return {
+            'installed': installed,
+            'candidate': candidates[-1] if candidates else None,
+            'backup_id': os.path.basename(backup_dir)
+        }
+
 
     def repos(self):
         ret = []
@@ -377,8 +441,16 @@ class YumPackageMgr(PackageMgr):
                 ret.append(m.group(1))
         return map(string.lower, ret)
 
+
     def version_cmp(self, name_1, name_2):
         return cmp(RpmVersion(name_1), RpmVersion(name_2))
+
+
+    def restore_backup(self, name, backup_id):
+        backup_dir = os.path.join(self.backup_dir, name, backup_id)
+        msg = 'Failed to restore package {0} from backup {1}'.format(name, backup_id)
+        linux.system(['/usr/bin/rpm', '-iv', '--force'] + os.listdir(backup_dir), cwd=backup_dir, error_text=msg)
+
 
 
 class YumRepository(Repository):

@@ -438,7 +438,7 @@ class UpdClientAPI(object):
                                 self.package, self.candidate)
                         raise UpdateError(msg)            
 
-        def update_windows():
+        def update_windows(pkginfo):
             package_url = self.pkgmgr.index[self.package]
             if os.path.exists(self.win_status_file):
                 os.unlink(self.win_status_file)
@@ -466,10 +466,19 @@ class UpdClientAPI(object):
                         'but never happened')
                 raise UpdateError(msg)
 
-        def update_linux():
-            self.pkgmgr.install(self.package, self.candidate)
-            self.state = 'completed/wait-ack'
-            self.installed = self.candidate
+        def update_linux(pkginfo):
+            try:
+                self.pkgmgr.install(self.package, self.candidate, backup=True)
+            except:
+                if pkginfo['backup_id']:
+                    self.state = 'in-progress/rollback'
+                    self.pkgmgr.restore_backup(self.package, pkginfo['backup_id'])
+                    self.state = 'rollbacked'
+                else:
+                    raise
+            else:
+                self.state = 'completed/wait-ack'
+                self.installed = self.candidate
             self.store()
 
             if not self.daemon.running:
@@ -506,9 +515,9 @@ class UpdClientAPI(object):
                     self.store()
                     if linux.os.windows:
                         # raises KeyboardInterrupt
-                        update_windows()
+                        update_windows(pkginfo)
                     else:
-                        return update_linux()
+                        return update_linux(pkginfo)
                 except KeyboardInterrupt:
                     LOG.debug('Caught KeyboardInterrupt')
                     if not linux.os.windows:
