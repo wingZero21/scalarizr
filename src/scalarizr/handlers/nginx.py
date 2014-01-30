@@ -236,7 +236,7 @@ class NginxHandler(ServiceCtlHandler):
     def on_before_host_up(self, message):
         self._logger.debug('Handling on_before_host_up message')
         log = bus.init_op.logger
-        self._init_script.stop('Configuring Nginx')
+        self._init_script.stop()
 
         log.info('Copy default html error pages')
         self._copy_error_pages()
