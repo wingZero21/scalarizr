@@ -48,7 +48,6 @@ import urllib
 import urllib2
 import pprint
 import select
-import urllib2
 import wsgiref.simple_server
 import SocketServer
 
@@ -960,7 +959,7 @@ class Service(object):
             def upd_ready():
                 try:
                     return upd.status()['state'] != 'unknown'
-                except:
+                except (urllib2.HTTPError, socket.error, IOError):
                     self._logger.debug('Failed to check updclient status: %s', sys.exc_info()[1])
             wait_until(upd_ready, timeout=60, sleep=1)
             upd_state = upd.status()['state']
