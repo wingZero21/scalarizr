@@ -149,14 +149,17 @@ class ApacheAPI(object):
         Examples:
 
         Configure VirtualHost "www.dima.com" on port 80 without SSL enabled and reload Apache2 service.
+
         >>> api.apache.service.create_vhost("www.dima.com", 80, "<template>", False)
         >>> "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
 
         ADD VirtualHost "secure.dima.com" on port 443 with SSL enabled, reload Apache2 and allow port 443 in IPTables.
+
         >>> api.apache.service.create_vhost("secure.dima.com", 443, "<template>", False)
         >>> "/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"
 
         Configure VirtualHost "old.dima.com" on port 8080 without SSL enabled and without reloading Apache2 service.
+
         >>> api.apache.service.create_vhost("old.dima.com", 8080, "<template>", reload=False)
         >>> "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
 
@@ -275,7 +278,7 @@ class ApacheAPI(object):
             ssl_certificate_id=None,
             reload=True):
         """
-        Changes settings of VirtualHost defined by @signature
+        Changes settings of VirtualHost defined by @signature.
 
         :param signature: Hostname and Port to identidy VirtualHost for modifying.
         :type signature: tuple
@@ -298,6 +301,7 @@ class ApacheAPI(object):
 
         Example:
         Change ServerName to old.dima.com, switch port to 8080 and reload service.
+
         >>> api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)
 
         Please Note that Scalr does not use update_vhost API method thus it has not been tested properly.
