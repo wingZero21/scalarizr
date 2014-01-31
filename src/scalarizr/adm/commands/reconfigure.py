@@ -18,9 +18,10 @@ class Reconfigure(Command):
 
     def __call__(self, behavior=None):
 
-        if behavior not in behavior_apis:
-            raise CommandError('Unknown behavior.')
+        # if behavior not in behavior_apis:
+        #     raise CommandError('Unknown behavior.')
 
+        bus.queryenv_service = new_queryenv()
         api = ServiceAPI()
         # api.init_service()
 

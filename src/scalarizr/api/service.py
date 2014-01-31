@@ -60,11 +60,17 @@ class ServiceAPI(object):
         """
         if not behavior_params:
             behavior_params = queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
+            #TODO:
+            reconfigure_args = inspect.getargspec(api.reconfigure).args
+            reconfigure_args.remove('self')
+            behavior_params = role_params.get(behavior, {})
+            behavior_params = dict((k, v) for k, v in behavior_params.items() if k in reconfigure_args)
+
 
         behaviors = behavior_params.keys()
         for behavior in behaviors:
-            api = behavior_apis[behavior]
-            if api.hasattr('init_service'):
+            api = behavior_apis[behavior]()
+            if hasattr(api, 'init_service'):
                 api.init_service()
             api.do_reconfigure(**behavior_params.get(behavior, {}))
 
@@ -72,7 +78,7 @@ class ServiceAPI(object):
     def reconfigure(self, behavior_params=None, async=True):
         """ If behavior_params is None - reconfiguring all behaviors """
         self._op_api.run('api.service.reconfigure',
-                         func=do_backup,
+                         func=self.do_reconfigure,
                          func_kwds={'behavior_params': behavior_params},
                          async=async,
                          exclusive=True)
