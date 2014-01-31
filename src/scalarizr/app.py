@@ -181,8 +181,6 @@ def _init():
     optparser = bus.optparser
     bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
     
-    #dynimp.setup()
-    
     _init_logging()
     logger = logging.getLogger(__name__)    
     

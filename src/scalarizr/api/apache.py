@@ -27,7 +27,7 @@ from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import system2, initdv2
-from scalarizr.util import wait_until, dynimp, PopenError
+from scalarizr.util import wait_until, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 
@@ -765,8 +765,8 @@ class ModRPAF(BasicApacheConfiguration):
         """
         fixing bug in rpaf 0.6-2
         """
-        pm = dynimp.package_mgr()
-        if "0.6-2" == pm.installed("libapache2-mod-rpaf"):
+        mgr = pkgmgr.package_mgr()
+        if "0.6-2" == mgr.info("libapache2-mod-rpaf")['installed']:
             try:
                 self._cnf.set('./IfModule[@value="mod_rpaf.c"]', {"value": "mod_rpaf-2.0.c"})
             except NoPathError:
