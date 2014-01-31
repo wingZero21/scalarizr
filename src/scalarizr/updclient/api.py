@@ -144,7 +144,7 @@ class UpdClientAPI(object):
         def fget(self):
             return self._state
         def fset(self, state):
-            self.prev_state = state
+            self.prev_state = self._state
             self._state = state
         return locals()
     state = property(**state())
