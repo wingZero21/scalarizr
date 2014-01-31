@@ -194,7 +194,7 @@ class Operation(object):
         self.error = exc_info or sys.exc_info()
         self.status = 'failed' if not self.canceled else 'canceled'
         if self.canceled:
-            self.logger.warn('Operation "%s" (id: %s) canceled')
+            self.logger.warn('Operation "%s" (id: %s) canceled', self.name, self.operation_id)
         else:
             self.logger.error('Operation "%s" (id: %s) failed. Reason: %s', 
                     self.name, self.operation_id, self.error[1], exc_info=self.error)
