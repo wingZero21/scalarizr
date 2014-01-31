@@ -255,13 +255,26 @@ class AptPackageMgr(PackageMgr):
                 install_name += '=%s' % version
             self.apt_get_command('install %s' % install_name, raise_exc=True)      
 
-        # get installed list B
+        if backup:
+            download_dir = tempfile.mkdtemp()
+            try:
+                # download package and dependencies
+                cmd = 'install --download-only -o=Dir::Cache::Archives={0} {1}'.format(download_dir, name)
+                self.apt_get_command(cmd, raise_exc=True)
 
-        do_install()
+                # install package
+                do_install()
 
-        # get installed list A
-        # get diff between A and B
-        # create backup from diff files (new and updated)
+                # create backup
+                files = (os.path.join(download_dir, name) 
+                        for name in os.listdir(download_dir))
+                if not version:
+                    version = self.apt_policy(name)[0]
+                self._create_backup(name, version, files)
+            finally:
+                shutil.rmtree(download_dir)
+        else:
+            do_install()
 
 
     def remove(self, name, purge=False):
