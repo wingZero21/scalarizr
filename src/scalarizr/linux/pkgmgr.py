@@ -267,6 +267,31 @@ class AptPackageMgr(PackageMgr):
         self.apt_get_command('%s %s' % (command, name), raise_exc=True)
 
 
+    def restore_backup(self, name, backup_id):
+        def dpkg_configure(raise_exc=False):
+            cmd = ('dpkg', '--configure', '-a')
+            return linux.system(cmd, raise_exc=raise_exc)     
+
+        error_re = re.compile(r'dpkg: error processing ([^\s]+)')
+        problem_packages = []
+        for line in dpkg_configure()[1].splitlines():
+            m = error_re.match(line)
+            if m:
+                problem_packages.append(m.group(1))
+
+        # delete postinst scripts of problem packages
+        for name in problem_packages:
+            postinst_path = '/var/lib/dpkg/info/{0}.postinst'.format(name)
+            coreutils.remove(postinst_path)
+
+        dpkg_configure(raise_exc=True)
+
+        # forcefully install backuped packages
+        backup_dir = os.path.join(self.backup_dir, name, backup_id)
+        cmd = ['dpkg', '-i', '--force'] + os.listdir(backup_dir)
+        linux.system(cmd, cwd=backup_dir, raise_exc=True)
+
+
     def version_cmp(self, name_1, name_2):
         if name_1 == name_2:
             return 0
