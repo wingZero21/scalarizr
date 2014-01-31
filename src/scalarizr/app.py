@@ -954,13 +954,15 @@ class Service(object):
             upd_svs = ScalrUpdClientScript()
             if not upd_svs.running:
                 upd_svs.start()
+            upd_state = [None]
             def upd_ready():
                 try:
-                    return upd.status()['state'] != 'unknown'
+                    upd_state[0] = upd.status()['state']
+                    return upd_state[0] != 'noop'
                 except (urllib2.HTTPError, socket.error, IOError):
                     self._logger.debug('Failed to check updclient status: %s', sys.exc_info()[1])
             wait_until(upd_ready, timeout=60, sleep=1)
-            upd_state = upd.status()['state']
+            upd_state = upd_state[0]
             self._logger.debug('UpdateClient state: %s', upd_state)
             if upd_state.startswith('in-progress'):
                 self._logger.info('Stopped (UpdateClient upgrades Scalarizr)')

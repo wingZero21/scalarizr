@@ -316,10 +316,8 @@ class UpdClientAPI(object):
             else:
                 self.update(bootstrap=True)
         else:
-            if self.state == 'completed/wait-ack':
+            if self.state in ('completed/wait-ack', 'noop'):
                 self.state = 'completed'
-            else:
-                self.state = 'noop'
             self.store()
         if not dry_run and self.state != 'error' and not self.daemon.running:
             self.daemon.start()
