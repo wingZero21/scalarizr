@@ -80,7 +80,13 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
             if 'server: nginx' in telnet.read_all().lower():
                 return initdv2.Status.RUNNING
             return initdv2.Status.UNKNOWN
-        return status
+        else:
+            args = [self.initd_script, 'status']
+            _, _, returncode = system2(args, shell=True, raise_exec=False)
+            if returncode == 0:
+                return initdv2.Status.RUNNING
+            else:
+                return initdv2.Status.NOT_RUNNING
 
     def configtest(self, path=None):
         args = '%s -t' % self._nginx_binary
@@ -94,11 +100,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
     def stop(self):
         if not self.running:
             return
-        try:
-            ret = initdv2.ParametrizedInitScript.stop(self)
-        except PopenError, e:
-            if e.out or e.err:
-                raise
+        ret = initdv2.ParametrizedInitScript.stop(self)
         time.sleep(1)
         return
 
@@ -110,7 +112,10 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def start(self):
         self.configtest()
-        _logger.debug('nginx status is: %s' % self.status())
+
+        if self.running:
+            return
+
         try:
             args = [self.initd_script] \
                 if isinstance(self.initd_script, basestring) \
@@ -120,8 +125,11 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                                            close_fds=True,
                                            preexec_fn=os.setsid)
         except PopenError, e:
-            if e.out or e.err:
-                raise initdv2.InitdError("Popen failed with error %s" % (e,))
+            raise initdv2.InitdError("Popen failed with error %s" % (e,))
+
+        if returncode:
+            raise initdv2.InitdError("Cannot start nginx. output= %s. %s" % (out, err),
+                                     returncode)
 
         self._wait_workers()
 
