@@ -246,11 +246,13 @@ class AptPackageMgr(PackageMgr):
             filename = os.path.join(path, name)
             if name != 'lock' and os.path.isfile(filename):
                 os.remove(filename)
-        cmd = 'update'
+        cmd = ''
         if kwds.get('apt_repository'):
-            cmd += ('-o Dir::Etc::sourcelist="sources.list.d/{0}.list" '
-                    '-o Dir::Etc::sourceparts="-" '
-                    '-o APT::Get::List-Cleanup="0"').format(kwds['apt_repository'])
+            cmd += ('--no-list-cleanup '
+                    '-o Dir::Etc::sourcelist=sources.list.d/{0}.list '
+                    '-o Dir::Etc::sourceparts=- '
+                    ).format(kwds['apt_repository'])
+        cmd += 'update'
         self.apt_get_command(cmd)
 
 
