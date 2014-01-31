@@ -93,19 +93,21 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def stop(self):
         if not self.running:
-            return True
+            return
         ret = initdv2.ParametrizedInitScript.stop(self)
         time.sleep(1)
-        return ret
+        return
 
     def restart(self):
         self.configtest()
         ret = initdv2.ParametrizedInitScript.restart(self)
         time.sleep(1)
-        return ret
+        return
 
     def start(self):
         self.configtest()
+        if self.running:
+            return
         try:
             args = [self.initd_script] \
                 if isinstance(self.initd_script, basestring) \
