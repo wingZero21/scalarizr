@@ -320,10 +320,9 @@ class UpdClientAPI(object):
                 self.state = 'completed'
             else:
                 self.state = 'noop'
-        if not dry_run:
             self.store()
-            if self.state != 'error' and not self.daemon.running:
-                self.daemon.start()
+        if not dry_run and self.state != 'error' and not self.daemon.running:
+            self.daemon.start()
 
 
     def uninstall(self):
@@ -488,7 +487,6 @@ class UpdClientAPI(object):
             else:
                 self.state = 'completed/wait-ack'
                 self.installed = self.candidate
-            self.store()
 
             if not self.daemon.running:
                 self.daemon.start()
@@ -546,6 +544,7 @@ class UpdClientAPI(object):
                 else:
                     raise
             finally:
+                self.store()
                 pkgmgr.LOG.removeHandler(op.logger.handlers[0])
 
         return self.op_api.run('scalarizr.update', do_update, async=async, 
@@ -596,7 +595,7 @@ class UpdClientAPI(object):
         if cached:
             keys_to_copy.extend(pkginfo_keys)
         else:
-            self.pkgmgr.updatedb()  # TODO: update only single self.repository
+            self.pkgmgr.updatedb(apt_repository='scalr-{0}'.format(self.repository))
             pkginfo = self.pkgmgr.info(self.package)
             status.update((key, pkginfo[key]) for key in pkginfo_keys)
 

@@ -99,7 +99,7 @@ class PackageMgr(object):
         '''
         raise NotImplementedError()
 
-    def updatedb(self):
+    def updatedb(self, **kwds):
         ''' Updates package manager internal database '''
         raise NotImplementedError()
 
@@ -233,7 +233,7 @@ class AptPackageMgr(PackageMgr):
 
         return installed, candidate
 
-    def updatedb(self):
+    def updatedb(self, **kwds):
         try:
             coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
         except OSError:
@@ -243,7 +243,12 @@ class AptPackageMgr(PackageMgr):
             filename = os.path.join(path, name)
             if name != 'lock' and os.path.isfile(filename):
                 os.remove(filename)
-        self.apt_get_command('update')
+        cmd = 'update'
+        if kwds.get('apt_repository'):
+            cmd += ('-o Dir::Etc::sourcelist="sources.list.d/{0}.list" '
+                    '-o Dir::Etc::sourceparts="-" '
+                    '-o APT::Get::List-Cleanup="0"').format(kwds['apt_repository'])
+        self.apt_get_command(cmd)
 
     def install(self, name, version=None, updatedb=False, backup=False, **kwds):
         if updatedb:
@@ -393,7 +398,7 @@ class YumPackageMgr(PackageMgr):
         return installed, versions
 
 
-    def updatedb(self):
+    def updatedb(self, **kwds):
         self.yum_command('clean expire-cache')
 
 
@@ -534,7 +539,7 @@ class RpmPackageMgr(PackageMgr):
         return {'installed': installed_version if installed else None,
                 'candidate': None}
 
-    def updatedb(self):
+    def updatedb(self, **kwds):
         pass
 
 
@@ -584,7 +589,7 @@ if linux.os.windows_family:
             format = '%s' + sep +'%s'
             return ' '.join(format % p for p in packages)       
         
-        def updatedb(self):
+        def updatedb(self, **kwds):
             tmp_dir = tempfile.mkdtemp()
 
             self.index = {}
