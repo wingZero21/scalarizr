@@ -106,6 +106,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def start(self):
         self.configtest()
+        _logger.debug('nginx status is: %s' % self.status())
         if self.running:
             return
         try:
