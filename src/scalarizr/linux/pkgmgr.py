@@ -334,7 +334,7 @@ class AptPackageMgr(PackageMgr):
         # remove all not *.deb 
         for name in os.listdir(download_dir):
             if not name.endswith('.deb'):
-                coreutils.remove(os.path.join(download_dir))
+                coreutils.remove(os.path.join(download_dir, name))
 
 
     def _install_package(self, name_version, **kwds):
