@@ -331,6 +331,10 @@ class AptPackageMgr(PackageMgr):
         cmd = 'install --download-only -o=Dir::Cache::Archives={0} {1}'.format(
                 download_dir, name_version)
         self.apt_get_command(cmd, raise_exc=True)
+        # remove all not *.deb 
+        for name in os.listdir(download_dir):
+            if not name.endswith('.deb'):
+                coreutils.remove(os.path.join(download_dir))
 
 
     def _install_package(self, name_version, **kwds):
