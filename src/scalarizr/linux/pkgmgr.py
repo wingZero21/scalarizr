@@ -288,7 +288,7 @@ class AptPackageMgr(PackageMgr):
 
         # forcefully install backuped packages
         backup_dir = os.path.join(self.backup_dir, name, backup_id)
-        cmd = ['dpkg', '-i', '--force'] + os.listdir(backup_dir)
+        cmd = ['dpkg', '-i', '--force-downgrade'] + os.listdir(backup_dir)
         linux.system(cmd, cwd=backup_dir, raise_exc=True)
 
 
