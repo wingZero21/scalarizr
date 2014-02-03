@@ -329,10 +329,11 @@ class UpdClientAPI(object):
             # Prevent scalr-upd-client restart when updating from old versions 
             # package 'scalr-upd-client' replaced with 'scalarizr'
             pid_file = '/var/run/scalr-upd-client.pid'
-            with open(pid_file) as fp:
-                pid = fp.read().strip()
-            with open(pid_file, 'w') as fp:
-                fp.write('0')
+            if os.path.exists(pid_file):
+                with open(pid_file) as fp:
+                    pid = fp.read().strip()
+                with open(pid_file, 'w') as fp:
+                    fp.write('0')
         try:
             self.pkgmgr.removed(self.package)
             if not linux.os.windows:
@@ -341,7 +342,7 @@ class UpdClientAPI(object):
                 self.pkgmgr.apt_get_command('autoremove') 
         finally:
             if pid:
-                with open(pid_file, 'w') as fp:
+                with open(pid_file, 'w+') as fp:
                     fp.write(pid)    
 
 

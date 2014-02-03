@@ -150,6 +150,7 @@ class UpdClient(util.Server):
             signal.signal(signal.SIGTERM, self.onSIGTERM)
 
         LOG.info('Starting updclient (pid: %s)', os.getpid())
+        self._check_singleton()
         try:
             self._start_api()
             self._write_pid_file()
@@ -236,6 +237,21 @@ class UpdClient(util.Server):
     def _write_pid_file(self):
         with open(self.pid_file, 'w+') as fp:
             fp.write(str(os.getpid()))
+
+
+    def _check_singleton(self):
+        if linux.os.windows or not os.path.exists(self.pid_file):
+            return
+        with open(self.pid_file) as fp:
+            pid = fp.read().strip()
+            if not pid:
+                return
+        with open('/proc/{0}/cmdline'.format(pid)) as fp:
+            cmdline = fp.read().split('\x00')
+            if 'python' in cmdline[0] and 'scalr-upd-client' in cmdline[1]:
+                msg = 'Another updclient instance is already running (pid: {0})'.format(pid)
+                LOG.warn(msg)
+                sys.exit(1)                
 
 
 def main():
