@@ -133,16 +133,22 @@ class ApacheAPI(object):
 
         :param hostname: Server Name
         :type hostname: str
+
         :param port: Port number VirtualHost should listen to
         :type port: int
+
         :param template: VirtualHost body with no certificate paths
         :type template: str
+
         :param ssl: True if VirtualHost uses SSL certificate
         :type ssl: bool
+
         :param ssl_certificate_id: ID of SSL certificate
         :type ssl_certificate_id: int
+
         :param reload: True if immediate apache reload is required.
         :type reload: bool
+
         :returns: Path to VirtualHost file
         :rtype: str
 
@@ -151,17 +157,17 @@ class ApacheAPI(object):
         Configure VirtualHost "www.dima.com" on port 80 without SSL enabled and reload Apache2 service.
 
         >>> api.apache.service.create_vhost("www.dima.com", 80, "<template>", False)
-        >>> "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
+        "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
 
         ADD VirtualHost "secure.dima.com" on port 443 with SSL enabled, reload Apache2 and allow port 443 in IPTables.
 
         >>> api.apache.service.create_vhost("secure.dima.com", 443, "<template>", False)
-        >>> "/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"
+        "/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"
 
         Configure VirtualHost "old.dima.com" on port 8080 without SSL enabled and without reloading Apache2 service.
 
         >>> api.apache.service.create_vhost("old.dima.com", 8080, "<template>", reload=False)
-        >>> "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
+        "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
 
         Please Note that VirtualHosts on custom ports feature requires testing.
         """
@@ -282,16 +288,22 @@ class ApacheAPI(object):
 
         :param signature: Hostname and Port to identidy VirtualHost for modifying.
         :type signature: tuple
+
         :param hostname: New hostname.
         :type hostname: str
+
         :param port: New port.
         :type port: int
+
         :param ssl: Indicates if the updated VirtualHost is going to be ssl-based.
         :type ssl: bool
+
         :param ssl_certificate_id: ID of the new certificate to fetch from Scalr.
         :type ssl_certificate_id: int
+
         :param reload: Indicates if immediate reload is required.
         :type reload: bool
+
         :param template: New template. If new template is passed,
 
             all other changes (e.g. hostname, port, cert) will be applied to it.
@@ -302,7 +314,7 @@ class ApacheAPI(object):
         Example:
         Change ServerName to old.dima.com, switch port to 8080 and reload service.
 
-        >>> api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)
+            api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)
 
         Please Note that Scalr does not use update_vhost API method thus it has not been tested properly.
         """
@@ -353,13 +365,14 @@ class ApacheAPI(object):
 
         :param vhosts: [(hostname,password),]
         :type vhosts: list
+
         :param reload: Indicates if immediate service reload is reqired.
         :type reload: bool
 
         Example:
         Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service.
 
-        >>> api.apache.service.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])
+            api.apache.service.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])
         """
         LOG.info("Removing Apache VirtualHosts: %s" % str(vhosts))
 
@@ -389,14 +402,15 @@ class ApacheAPI(object):
         Deploys multiple VirtualHosts and removes odds.
 
         :param vhosts: list(dict(hostname:hostname1,port:port1,template:tpl1,..),..)
+
         :return: paths to reconfigured VirtualHosts
         :rtype: list
 
         Example:
         Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service.
 
-        >>> vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
-        >>> api.apache.service.reconfigure([vhost1,])
+        vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
+        api.apache.service.reconfigure([vhost1,])
         """
         ports = []
         applied_vhosts = []
@@ -475,7 +489,7 @@ class ApacheAPI(object):
 
         Example:
 
-        >>> api.apache.get_webserver_statistics()
+        api.apache.get_webserver_statistics()
             {u'BusyWorkers': u'1',
              u'BytesPerReq': u'204.8',
              u'BytesPerSec': u'.0222655',
@@ -519,7 +533,7 @@ class ApacheAPI(object):
         Example:
 
         >>> api.apache.service.list_served_virtual_hosts()
-        >>> ["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]
+        ["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]
         """
         text = system2((__apache__["apachectl"], "-S"))[0]
         directory = __apache__["vhosts_dir"]
@@ -546,7 +560,7 @@ class ApacheAPI(object):
         Example:
         Set Scalr Certificate ID#873 as default:
 
-        >>> api.apache.service.set_default_ssl_certificate("873")
+        api.apache.service.set_default_ssl_certificate("873")
         """
         cert = SSLCertificate(id)
         self.mod_ssl.set_default_certificate(cert)
@@ -556,7 +570,7 @@ class ApacheAPI(object):
         """
         Start Apache service
 
-        >>> api.apache.service.start_service()
+        api.apache.service.start_service()
         """
         self.service.start()
 
@@ -565,7 +579,7 @@ class ApacheAPI(object):
         """
         Stop Apache service
 
-        >>> api.apache.service.stop_service("Configuring Apache2 service.")
+        api.apache.service.stop_service("Configuring Apache2 service.")
         """
         self.service.stop(reason)
 
@@ -574,7 +588,7 @@ class ApacheAPI(object):
         """
         Restart Apache service
 
-        >>> api.apache.service.restart_service("Applying new service configuration preset.")
+        api.apache.service.restart_service("Applying new service configuration preset.")
         """
         self.service.restart(reason)
 
@@ -583,7 +597,7 @@ class ApacheAPI(object):
         """
         Reload Apache service
 
-        >>> api.apache.service.reload_service("Applying RPAF proxy list.")
+        api.apache.service.reload_service("Applying RPAF proxy list.")
         """
         try:
             self.service.reload(reason)
@@ -600,7 +614,7 @@ class ApacheAPI(object):
         """
         Run Apache configtest
 
-        >>> api.apache.service.configtest()
+        api.apache.service.configtest()
         """
         self.service.configtest()
 
