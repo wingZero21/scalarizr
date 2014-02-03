@@ -6,6 +6,8 @@ Created on Aug 16, 2012
 
 from __future__ import with_statement
 
+import inspect
+
 from scalarizr import rpc
 from scalarizr.api import operation
 from scalarizr.bus import bus
@@ -59,20 +61,24 @@ class ServiceAPI(object):
         reconfigure params are values (they are itself dicts)
         """
         if not behavior_params:
-            behavior_params = queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
-            #TODO:
-            reconfigure_args = inspect.getargspec(api.reconfigure).args
-            reconfigure_args.remove('self')
-            behavior_params = role_params.get(behavior, {})
-            behavior_params = dict((k, v) for k, v in behavior_params.items() if k in reconfigure_args)
-
+            queryenv_answer = self.queryenv.list_farm_role_params(__node__['farm_role_id'])
+            behavior_params = queryenv_answer['params']
 
         behaviors = behavior_params.keys()
         for behavior in behaviors:
             api = behavior_apis[behavior]()
+            #TODO:
+            reconfigure_argspecs = inspect.getargspec(api.reconfigure).args
+            reconfigure_argspecs.remove('self')
+
+            reconfigure_params = behavior_params.get(behavior, {})
+            reconfigure_params = dict((k, v)
+                                      for k, v in reconfigure_params.items()
+                                      if k in reconfigure_argspecs)
+
             if hasattr(api, 'init_service'):
                 api.init_service()
-            api.do_reconfigure(**behavior_params.get(behavior, {}))
+            api.do_reconfigure(**reconfigure_params)
 
     @rpc.query_method
     def reconfigure(self, behavior_params=None, async=True):
