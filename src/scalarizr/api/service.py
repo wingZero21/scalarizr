@@ -55,7 +55,7 @@ class ServiceAPI(object):
         else:
             raise AssertionError('Cannot apply preset: Manifest not found.')
 
-    def do_reconfigure(self, behavior_params=None):
+    def do_reconfigure(self, op, behavior_params=None):
         """
         behavior_params is dict where behavior names are keys and they
         reconfigure params are values (they are itself dicts)
@@ -66,6 +66,8 @@ class ServiceAPI(object):
 
         behaviors = behavior_params.keys()
         for behavior in behaviors:
+            if behavior not in behavior_apis:
+                continue
             api = behavior_apis[behavior]()
             #TODO:
             reconfigure_argspecs = inspect.getargspec(api.reconfigure).args

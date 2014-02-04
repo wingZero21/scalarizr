@@ -19,7 +19,7 @@ from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 from scalarizr.api import operation
-
+from scalarizr.config import BuiltinBehaviours
 
 __nginx__ = __node__['nginx']
 
@@ -201,6 +201,7 @@ class NginxAPI(object):
         self.fix_app_servers_inc()
         self._load_proxies_inc()
         self._make_error_pages_include()
+        self._queryenv = bus.queryenv_service
 
     def _make_error_pages_include(self):
 
@@ -333,13 +334,131 @@ class NginxAPI(object):
         with open(file_path, 'w') as fp:
             fp.write(raw)
 
+    def _main_config_contains_server(self):
+        config_dir = os.path.dirname(self.app_inc_path)
+        nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
+
+        config = None
+        result = False
+        try:
+            config = metaconf.Configuration('nginx')
+            config.read(nginx_conf_path)
+        except (Exception, BaseException), e:
+            raise Exception('Cannot read/parse nginx main configuration file: %s' % str(e))
+
+        try:
+            result = config.get('http/server') != None
+        except:
+            pass
+
+        return result
+
+    def get_all_app_roles(self):
+        return self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
+
+    def _fix_ssl_keypaths(self, vhost_template):
+        bad_keydir = '/etc/aws/keys/ssl/'
+        good_keydir = os.path.join(bus.etc_path, "private.d/keys/")
+        return vhost_template.replace(bad_keydir, good_keydir)
+
+    def make_default_proxy(self, roles):
+        # actually list_virtual_hosts() returns only 1 virtual host if it's
+        # ssl virtual host. If there are no ssl vhosts in farm, it returns
+        # empty list
+        ssl_vhosts = self._queryenv.list_virtual_hosts()
+        _logger.info('Making default proxy with roles: %s' % roles)
+        servers = []
+        for role in roles:
+            servers_ips = []
+            if type(role) is str:
+                servers_ips = self.get_role_servers(role) or \
+                    self.get_role_servers(role_name=role)
+            else:
+                cl = __node__['cloud_location']
+                servers_ips = [h.internal_ip if cl == h.cloud_location else
+                               h.external_ip
+                               for h in role.hosts]
+            servers.extend({'host': srv} for srv in servers_ips)
+
+        if not servers:
+            _logger.debug('No app roles in farm, making mock backend')
+            servers = [{'host': '127.0.0.1',
+                        'port': '80'}]
+
+        _logger.debug('Clearing backend table')
+        self.backend_table = {}
+        
+        _logger.debug('backend table is %s' % self.backend_table)
+        write_proxies = not self._main_config_contains_server()
+        self.make_proxy('backend',
+                        backends=servers,
+                        ssl=False,
+                        backend_ip_hash=True,
+                        hash_backend_name=False,
+                        reload_service=False,
+                        write_proxies=write_proxies)
+
+        with open(self.proxies_inc_path, 'w') as fp:
+            cert, key, cacert = self._queryenv.get_https_certificate()
+            _logger.debug('updating certificates')
+            self.update_ssl_certificate('', cert, key, cacert)
+
+            if ssl_vhosts and cert and key:
+                _logger.info('Writing SSL server configuration to proxies.conf. SSL on')
+                raw_conf = self._fix_ssl_keypaths(ssl_vhosts[0].raw)
+                fp.write(raw_conf)
+            else:
+                _logger.info('Clearing SSL server configuration. SSL off')
+                fp.write('')
+
+        self._reload_service()
+
+        # Uncomment if you want to ssl proxy to be generated and not be taken from template
+        # if ssl_vhosts:
+        #     _logger.debug('adding default ssl nginx server')
+        #     write_proxies = not self._https_config_exists()
+        #     self.make_proxy('backend.ssl',
+        #                         backends=servers,
+        #                         port=None,
+        #                         ssl=True,
+        #                         backend_ip_hash=True,
+        #                         hash_backend_name=False,
+        #                         write_proxies=write_proxies)
+        # else:
+        #     self.remove_proxy('backend.ssl')
+        _logger.debug('After making proxy backend table is %s' % self.backend_table)
+        _logger.debug('Default proxy is made')
+
+    def _recreate_compat_mode(self):
+        _logger.debug('Compatibility mode proxying recreation')
+        roles_for_proxy = []
+        if __nginx__['upstream_app_role']:
+            roles_for_proxy = [__nginx__['upstream_app_role']]
+        else:
+            roles_for_proxy = self.get_all_app_roles()
+
+        self.fix_app_servers_inc()
+        self.make_default_proxy(roles_for_proxy)
+
+        https_inc_path = os.path.join(os.path.dirname(self.app_inc_path),
+                                      'https.include')
+        nginx_dir = os.path.dirname(https_inc_path)
+        for file_path in os.listdir(nginx_dir):
+            if file_path.startswith('https.include'):
+                _logger.debug('Removing %s' % file_path)
+                os.remove(file_path)
+
     def do_reconfigure(self, proxies):
         backend_table_bak = self.backend_table.copy()
         main_conf_path = self.proxies_inc_dir + '/nginx.conf'
         try:
             self.app_inc_path = self.app_inc_path + '.new'
             self.proxies_inc_path = self.proxies_inc_path + '.new'
-            self.recreate_proxying(proxies, reload_service=False)
+
+            if proxies:
+                self.recreate_proxying(proxies, reload_service=False)
+            else:
+                self._recreate_compat_mode()
 
             self._replace_string_in_file(main_conf_path,
                                          'proxies.include',
@@ -393,8 +512,7 @@ class NginxAPI(object):
             role_id = str(role_id)
 
         server_location = __node__['cloud_location']
-        queryenv = bus.queryenv_service
-        roles = queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
+        roles = self._queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
         servers = []
         for role in roles:
             ips = [h.internal_ip if server_location == h.cloud_location else
@@ -440,8 +558,7 @@ class NginxAPI(object):
         Gets ssl certificate and key from Scalr, writes them to files and
         returns paths to files.
         """
-        queryenv = bus.queryenv_service
-        cert, key, cacert = queryenv.get_ssl_certificate(ssl_certificate_id)
+        cert, key, cacert = self._queryenv.get_ssl_certificate(ssl_certificate_id)
         return self.update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
 
     def _normalize_destinations(self, destinations):

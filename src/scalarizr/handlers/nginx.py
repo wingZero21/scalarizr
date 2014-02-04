@@ -184,7 +184,6 @@ class NginxHandler(ServiceCtlHandler):
                              Messages.VHOST_RECONFIGURE,
                              Messages.UPDATE_SERVICE_CONFIGURATION)
 
-
     def _set_nginx_v2_mode_flag(self, on):
         if on and not self._get_nginx_v2_mode_flag():
             open(self._nginx_v2_flag_filepath, 'w').close()
@@ -193,25 +192,6 @@ class NginxHandler(ServiceCtlHandler):
 
     def _get_nginx_v2_mode_flag(self):
         return os.path.exists(self._nginx_v2_flag_filepath)
-
-    def _recreate_compat_mode(self):
-        self._logger.debug('Compatibility mode proxying recreation')
-        roles_for_proxy = []
-        if __nginx__['upstream_app_role']:
-            roles_for_proxy = [__nginx__['upstream_app_role']]
-        else:
-            roles_for_proxy = self.get_all_app_roles()
-
-        self.api.fix_app_servers_inc()
-        self.make_default_proxy(roles_for_proxy)
-
-        https_inc_path = os.path.join(os.path.dirname(self.api.app_inc_path),
-                                      'https.include')
-        nginx_dir = os.path.dirname(https_inc_path)
-        for file_path in os.listdir(nginx_dir):
-            if file_path.startswith('https.include'):
-                self._logger.debug('Removing %s' % file_path)
-                os.remove(file_path)
 
     def on_start(self):
         self._logger.debug('Handling on_start message')
@@ -230,7 +210,7 @@ class NginxHandler(ServiceCtlHandler):
                 self._logger.debug('Recreating proxying with proxies:\n%s' % proxies)
                 self.api.recreate_proxying(proxies)
             else:
-                self._recreate_compat_mode()
+                self.api._recreate_compat_mode()
 
 
     def on_before_host_up(self, message):
@@ -256,8 +236,8 @@ class NginxHandler(ServiceCtlHandler):
             if __nginx__['upstream_app_role']:
                 roles_for_proxy = [__nginx__['upstream_app_role']]
             else:
-                roles_for_proxy = self.get_all_app_roles()
-            self.make_default_proxy(roles_for_proxy)
+                roles_for_proxy = self.api.get_all_app_roles()
+            self.api.make_default_proxy(roles_for_proxy)
 
         bus.fire('service_configured',
                  service_name=SERVICE_NAME,
@@ -276,7 +256,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('on host up backend table is %s' % self.api.backend_table)
         # Assuming backend `backend` can be only in default behaviour mode
         if not self._get_nginx_v2_mode_flag():
-            self._recreate_compat_mode()
+            self.api._recreate_compat_mode()
             # upstream_role = __nginx__['upstream_app_role']
             # self._logger.debug('upstream app role is %s and server is up in role %s',
             #     __nginx__['upstream_app_role'],
@@ -328,7 +308,7 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('removing server %s from backends' % server)
         # Assuming backend `backend` can be only in default behaviour mode
         if not self._get_nginx_v2_mode_flag():
-            self._recreate_compat_mode()
+            self.api._recreate_compat_mode()
             # upstream_role = __nginx__['upstream_app_role']
             # if (upstream_role and upstream_role == role_name) or \
             #     (not upstream_role and BuiltinBehaviours.APP in behaviours):
@@ -405,8 +385,8 @@ class NginxHandler(ServiceCtlHandler):
             if __nginx__['upstream_app_role']:
                 roles_for_proxy = [__nginx__['upstream_app_role']]
             else:
-                roles_for_proxy = self.get_all_app_roles()
-            self.make_default_proxy(roles_for_proxy)
+                roles_for_proxy = self.api.get_all_app_roles()
+            self.api.make_default_proxy(roles_for_proxy)
             self._logger.debug('after vhost reconf backend table is %s' % self.api.backend_table)
 
     def on_SSLCertificateUpdate(self, message):
@@ -450,82 +430,6 @@ class NginxHandler(ServiceCtlHandler):
 
         return config.get('server') != None
 
-    def _fix_ssl_keypaths(self, vhost_template):
-        bad_keydir = '/etc/aws/keys/ssl/'
-        good_keydir = os.path.join(bus.etc_path, "private.d/keys/")
-        return vhost_template.replace(bad_keydir, good_keydir)
-
-    def make_default_proxy(self, roles):
-        # actually list_virtual_hosts() returns only 1 virtual host if it's
-        # ssl virtual host. If there are no ssl vhosts in farm, it returns
-        # empty list
-        ssl_vhosts = self._queryenv.list_virtual_hosts()
-        self._logger.info('Making default proxy with roles: %s' % roles)
-        servers = []
-        for role in roles:
-            servers_ips = []
-            if type(role) is str:
-                servers_ips = self.api.get_role_servers(role) or \
-                    self.api.get_role_servers(role_name=role)
-            else:
-                cl = __node__['cloud_location']
-                servers_ips = [h.internal_ip if cl == h.cloud_location else
-                               h.external_ip
-                               for h in role.hosts]
-            servers.extend({'host': srv} for srv in servers_ips)
-
-        if not servers:
-            self._logger.debug('No app roles in farm, making mock backend')
-            servers = [{'host': '127.0.0.1',
-                        'port': '80'}]
-
-        self._logger.debug('Clearing backend table')
-        self.api.backend_table = {}
-        
-        self._logger.debug('backend table is %s' % self.api.backend_table)
-        write_proxies = not self._main_config_contains_server()
-        self.api.make_proxy('backend',
-                            backends=servers,
-                            ssl=False,
-                            backend_ip_hash=True,
-                            hash_backend_name=False,
-                            reload_service=False,
-                            write_proxies=write_proxies)
-
-        with open(self.api.proxies_inc_path, 'w') as fp:
-            cert, key, cacert = self._queryenv.get_https_certificate()
-            self._logger.debug('updating certificates')
-            self.api.update_ssl_certificate('', cert, key, cacert)
-
-            if ssl_vhosts and cert and key:
-                self._logger.info('Writing SSL server configuration to proxies.conf. SSL on')
-                raw_conf = self._fix_ssl_keypaths(ssl_vhosts[0].raw)
-                fp.write(raw_conf)
-            else:
-                self._logger.info('Clearing SSL server configuration. SSL off')
-                fp.write('')
-
-        self.api._reload_service()
-
-        # Uncomment if you want to ssl proxy to be generated and not be taken from template
-        # if ssl_vhosts:
-        #     self._logger.debug('adding default ssl nginx server')
-        #     write_proxies = not self._https_config_exists()
-        #     self.api.make_proxy('backend.ssl',
-        #                         backends=servers,
-        #                         port=None,
-        #                         ssl=True,
-        #                         backend_ip_hash=True,
-        #                         hash_backend_name=False,
-        #                         write_proxies=write_proxies)
-        # else:
-        #     self.api.remove_proxy('backend.ssl')
-        self._logger.debug('After making proxy backend table is %s' % self.api.backend_table)
-        self._logger.debug('Default proxy is made')
-
-    def get_all_app_roles(self):
-        return self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
-
     def _test_config(self):
         self._logger.debug("Testing new configuration")
         try:
@@ -548,25 +452,6 @@ class NginxHandler(ServiceCtlHandler):
         output = cStringIO.StringIO()
         obj.write_fp(output, close = False)
         return output.getvalue()
-
-    def _main_config_contains_server(self):
-        config_dir = os.path.dirname(self.api.app_inc_path)
-        nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
-
-        config = None
-        result = False
-        try:
-            config = Configuration('nginx')
-            config.read(nginx_conf_path)
-        except (Exception, BaseException), e:
-            raise HandlerError('Cannot read/parse nginx main configuration file: %s' % str(e))
-
-        try:
-            result = config.get('http/server') != None
-        except:
-            pass
-
-        return result
 
     def _update_main_config(self, remove_server_section=True, reload_service=True):
         config_dir = os.path.dirname(self.api.app_inc_path)
