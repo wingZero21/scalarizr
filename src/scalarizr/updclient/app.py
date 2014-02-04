@@ -170,6 +170,10 @@ class UpdClient(util.Server):
     def do_stop(self):
         LOG.info('Stopping updclient')
 
+        LOG.debug('Kill child processes')
+        util.kill_childs(os.getpid())
+        time.sleep(.05)  # Interrupt main thread
+
         if self.api_thread:
             LOG.debug('Stopping API') 
             self.api.shutdown()          
