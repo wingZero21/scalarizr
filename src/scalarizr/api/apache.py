@@ -149,25 +149,25 @@ class ApacheAPI(object):
         :param reload: True if immediate apache reload is required.
         :type reload: bool
 
-        :returns: Path to VirtualHost file
+        :returns: Path to VirtualHost file.
         :rtype: str
 
         Examples:
 
-        Configure VirtualHost "www.dima.com" on port 80 without SSL enabled and reload Apache2 service.
+        Configure VirtualHost "www.dima.com" on port 80 without SSL enabled and reload Apache2 service.::
 
-        >>> api.apache.service.create_vhost("www.dima.com", 80, "<template>", False)
-        "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
+            >>> api.apache.service.create_vhost("www.dima.com", 80, "<template>", False)
+            "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
 
-        ADD VirtualHost "secure.dima.com" on port 443 with SSL enabled, reload Apache2 and allow port 443 in IPTables.
+        ADD VirtualHost "secure.dima.com" on port 443 with SSL enabled, reload Apache2 and allow port 443 in IPTables::
 
-        >>> api.apache.service.create_vhost("secure.dima.com", 443, "<template>", False)
-        "/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"
+            >>> api.apache.service.create_vhost("secure.dima.com", 443, "<template>", False)
+            "/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"
 
-        Configure VirtualHost "old.dima.com" on port 8080 without SSL enabled and without reloading Apache2 service.
+        Configure VirtualHost "old.dima.com" on port 8080 without SSL enabled and without reloading Apache2 service.::
 
-        >>> api.apache.service.create_vhost("old.dima.com", 8080, "<template>", reload=False)
-        "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
+            >>> api.apache.service.create_vhost("old.dima.com", 8080, "<template>", reload=False)
+            "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
 
         Please Note that VirtualHosts on custom ports feature requires testing.
         """
@@ -312,7 +312,8 @@ class ApacheAPI(object):
         :type template: str
 
         Example:
-        Change ServerName to old.dima.com, switch port to 8080 and reload service.
+
+        Change ServerName to old.dima.com, switch port to 8080 and reload service.::
 
             api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)
 
@@ -370,9 +371,10 @@ class ApacheAPI(object):
         :type reload: bool
 
         Example:
-        Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service.
+        Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service.::
 
             api.apache.service.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])
+
         """
         LOG.info("Removing Apache VirtualHosts: %s" % str(vhosts))
 
@@ -407,10 +409,11 @@ class ApacheAPI(object):
         :rtype: list
 
         Example:
-        Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service.
+        Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service.::
 
-        vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
-        api.apache.service.reconfigure([vhost1,])
+            vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
+            api.apache.service.reconfigure([vhost1,])
+
         """
         ports = []
         applied_vhosts = []
@@ -487,19 +490,20 @@ class ApacheAPI(object):
         :return: Parsed mod_status data
         :rtype: dict
 
-        Example:
+        Example::
 
-        api.apache.get_webserver_statistics()
-            {u'BusyWorkers': u'1',
-             u'BytesPerReq': u'204.8',
-             u'BytesPerSec': u'.0222655',
-             u'CPULoad': u'.000293539',
-             u'IdleWorkers': u'5',
-             u'ReqPerSec': u'.000108718',
-             u'Scoreboard': u'____W_....',
-             u'Total Accesses': u'10',
-             u'Total kBytes': u'2',
-             u'Uptime': u'91981'}
+            api.apache.get_webserver_statistics()
+                {u'BusyWorkers': u'1',
+                 u'BytesPerReq': u'204.8',
+                 u'BytesPerSec': u'.0222655',
+                 u'CPULoad': u'.000293539',
+                 u'IdleWorkers': u'5',
+                 u'ReqPerSec': u'.000108718',
+                 u'Scoreboard': u'____W_....',
+                 u'Total Accesses': u'10',
+                 u'Total kBytes': u'2',
+                 u'Uptime': u'91981'}
+
         """
         d = dict()
         try:
@@ -530,10 +534,11 @@ class ApacheAPI(object):
         :return: Paths to available VirtualHosts
         :rtype: list
 
-        Example:
+        Example::
 
         >>> api.apache.service.list_served_virtual_hosts()
         ["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]
+
         """
         text = system2((__apache__["apachectl"], "-S"))[0]
         directory = __apache__["vhosts_dir"]
@@ -558,9 +563,10 @@ class ApacheAPI(object):
         :type id: int
 
         Example:
-        Set Scalr Certificate ID#873 as default:
+        Set Scalr Certificate ID#873 as default::
 
-        api.apache.service.set_default_ssl_certificate("873")
+            api.apache.service.set_default_ssl_certificate("873")
+
         """
         cert = SSLCertificate(id)
         self.mod_ssl.set_default_certificate(cert)
@@ -568,36 +574,36 @@ class ApacheAPI(object):
     @rpc.command_method
     def start_service(self):
         """
-        Start Apache service
+        Start Apache service::
 
-        api.apache.service.start_service()
+            api.apache.service.start_service()
         """
         self.service.start()
 
     @rpc.command_method
     def stop_service(self, reason=None):
         """
-        Stop Apache service
+        Stop Apache service::
 
-        api.apache.service.stop_service("Configuring Apache2 service.")
+            api.apache.service.stop_service("Configuring Apache2 service.")
         """
         self.service.stop(reason)
 
     @rpc.command_method
     def restart_service(self, reason=None):
         """
-        Restart Apache service
+        Restart Apache service::
 
-        api.apache.service.restart_service("Applying new service configuration preset.")
+            api.apache.service.restart_service("Applying new service configuration preset.")
         """
         self.service.restart(reason)
 
     @rpc.command_method
     def reload_service(self, reason=None):
         """
-        Reload Apache service
+        Reload Apache service::
 
-        api.apache.service.reload_service("Applying RPAF proxy list.")
+            api.apache.service.reload_service("Applying RPAF proxy list.")
         """
         try:
             self.service.reload(reason)
@@ -612,9 +618,9 @@ class ApacheAPI(object):
     @rpc.command_method
     def configtest(self):
         """
-        Run Apache configtest
+        Run Apache configtest::
 
-        api.apache.service.configtest()
+            api.apache.service.configtest()
         """
         self.service.configtest()
 
