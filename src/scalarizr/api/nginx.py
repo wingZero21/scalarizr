@@ -173,6 +173,92 @@ def _bool_from_scalr_str(bool_str):
     return int(bool_str) == 1
 
 
+def _replace_string_in_file(file_path, s, new_s):
+    raw = None
+    with open(file_path, 'r') as fp:
+        raw = fp.read()
+        raw = raw.replace(s, new_s)
+    with open(file_path, 'w') as fp:
+        fp.write(raw)
+
+
+def get_all_app_roles():
+    _queryenv = bus.queryenv_service
+    return _queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
+
+
+def _fix_ssl_keypaths(vhost_template):
+    bad_keydir = '/etc/aws/keys/ssl/'
+    good_keydir = os.path.join(bus.etc_path, "private.d/keys/")
+    return vhost_template.replace(bad_keydir, good_keydir)
+
+    
+def _dump_config(obj):
+    output = cStringIO.StringIO()
+    obj.write_fp(output, close = False)
+    return output.getvalue()
+
+
+def get_role_servers(role_id=None, role_name=None):
+    """ Method is used to get role servers from scalr """
+    if type(role_id) is int:
+        role_id = str(role_id)
+
+    server_location = __node__['cloud_location']
+    _queryenv = bus.queryenv_service
+    roles = _queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
+    servers = []
+    for role in roles:
+        ips = [h.internal_ip if server_location == h.cloud_location else
+               h.external_ip
+               for h in role.hosts]
+        servers.extend(ips)
+
+    return servers
+
+
+def update_ssl_certificate(ssl_certificate_id, cert, key, cacert):
+    """
+    Updates ssl certificate. Returns paths to updated or created .key and
+    .crt files
+    """
+    if not cert or not key:
+        return (None, None)
+
+    _logger.debug('Updating ssl certificate with id: %s' % ssl_certificate_id)
+
+    if cacert:
+        cert = cert + '\n' + cacert
+    if ssl_certificate_id:
+        ssl_certificate_id = '_' + str(ssl_certificate_id)
+    else:
+        ssl_certificate_id = ''
+
+    keys_dir_path = os.path.join(bus.etc_path, "private.d/keys")
+    if not os.path.exists(keys_dir_path):
+        os.mkdir(keys_dir_path)
+
+    cert_path = os.path.join(keys_dir_path, 'https%s.crt' % ssl_certificate_id)
+    with open(cert_path, 'w') as fp:
+        fp.write(cert)
+
+    key_path = os.path.join(keys_dir_path, 'https%s.key' % ssl_certificate_id)
+    with open(key_path, 'w') as fp:
+        fp.write(key)
+
+    return (cert_path, key_path)
+
+
+def _fetch_ssl_certificate(ssl_certificate_id):
+    """
+    Gets ssl certificate and key from Scalr, writes them to files and
+    returns paths to files.
+    """
+    _queryenv = bus.queryenv_service
+    cert, key, cacert = _queryenv.get_ssl_certificate(ssl_certificate_id)
+    return update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
+
+
 class NginxAPI(object):
 
     __metaclass__ = Singleton
@@ -328,13 +414,7 @@ class NginxAPI(object):
             msg = "Can't add proxy %s: %s" % (proxy_parms['name'], e)
             raise Exception(msg)
 
-    def _replace_string_in_file(self, file_path, s, new_s):
-        raw = None
-        with open(file_path, 'r') as fp:
-            raw = fp.read()
-            raw = raw.replace(s, new_s)
-        with open(file_path, 'w') as fp:
-            fp.write(raw)
+
 
     def _main_config_contains_server(self):
         config_dir = os.path.dirname(self.app_inc_path)
@@ -355,13 +435,7 @@ class NginxAPI(object):
 
         return result
 
-    def get_all_app_roles(self):
-        return self._queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
 
-    def _fix_ssl_keypaths(self, vhost_template):
-        bad_keydir = '/etc/aws/keys/ssl/'
-        good_keydir = os.path.join(bus.etc_path, "private.d/keys/")
-        return vhost_template.replace(bad_keydir, good_keydir)
 
     def make_default_proxy(self, roles):
         # actually list_virtual_hosts() returns only 1 virtual host if it's
@@ -373,8 +447,8 @@ class NginxAPI(object):
         for role in roles:
             servers_ips = []
             if type(role) is str:
-                servers_ips = self.get_role_servers(role) or \
-                    self.get_role_servers(role_name=role)
+                servers_ips = get_role_servers(role) or \
+                    get_role_servers(role_name=role)
             else:
                 cl = __node__['cloud_location']
                 servers_ips = [h.internal_ip if cl == h.cloud_location else
@@ -403,11 +477,11 @@ class NginxAPI(object):
         with open(self.proxies_inc_path, 'w') as fp:
             cert, key, cacert = self._queryenv.get_https_certificate()
             _logger.debug('updating certificates')
-            self.update_ssl_certificate('', cert, key, cacert)
+            update_ssl_certificate('', cert, key, cacert)
 
             if ssl_vhosts and cert and key:
                 _logger.info('Writing SSL server configuration to proxies.conf. SSL on')
-                raw_conf = self._fix_ssl_keypaths(ssl_vhosts[0].raw)
+                raw_conf = _fix_ssl_keypaths(ssl_vhosts[0].raw)
                 fp.write(raw_conf)
             else:
                 _logger.info('Clearing SSL server configuration. SSL off')
@@ -437,7 +511,7 @@ class NginxAPI(object):
         if __nginx__['upstream_app_role']:
             roles_for_proxy = [__nginx__['upstream_app_role']]
         else:
-            roles_for_proxy = self.get_all_app_roles()
+            roles_for_proxy = get_all_app_roles()
 
         self.fix_app_servers_inc()
         self.make_default_proxy(roles_for_proxy)
@@ -450,10 +524,6 @@ class NginxAPI(object):
                 _logger.debug('Removing %s' % file_path)
                 os.remove(file_path)
 
-    def _dump_config(self, obj):
-        output = cStringIO.StringIO()
-        obj.write_fp(output, close = False)
-        return output.getvalue()
 
     def _update_main_config(self, remove_server_section=True, reload_service=True):
         config_dir = os.path.dirname(self.app_inc_path)
@@ -467,7 +537,7 @@ class NginxAPI(object):
             raise Exception('Cannot read/parse nginx main configuration file: %s' % str(e))
 
         _logger.debug('Update main configuration file')
-        dump = self._dump_config(config)
+        dump = _dump_config(config)
 
         gzip_vary = config.get_list('http/gzip_vary')
         if not gzip_vary:
@@ -519,7 +589,7 @@ class NginxAPI(object):
                 default_host.comment('server')
                 default_host.write(def_host_path)
 
-        if dump == self._dump_config(config):
+        if dump == _dump_config(config):
             _logger.debug("Main nginx config wasn`t changed")
         else:
             # Write new nginx.conf
@@ -535,12 +605,12 @@ class NginxAPI(object):
             self.app_inc_path = self.app_inc_path + '.new'
             self.proxies_inc_path = self.proxies_inc_path + '.new'
 
-            self._replace_string_in_file(main_conf_path,
-                                         'proxies.include',
-                                         'proxies.include.new')
-            self._replace_string_in_file(main_conf_path,
-                                         'app-servers.include',
-                                         'app-servers.include.new')
+            _replace_string_in_file(main_conf_path,
+                                    'proxies.include',
+                                    'proxies.include.new')
+            _replace_string_in_file(main_conf_path,
+                                    'app-servers.include',
+                                    'app-servers.include.new')
             self._update_main_config(remove_server_section=proxies!=None, reload_service=False)
             if proxies:
                 self.recreate_proxying(proxies, reload_service=False)
@@ -553,12 +623,12 @@ class NginxAPI(object):
             os.remove(self.app_inc_path)
             os.remove(self.proxies_inc_path)
             self.backend_table = backend_table_bak
-            self._replace_string_in_file(main_conf_path,
-                                         'proxies.include.new',
-                                         'proxies.include')
-            self._replace_string_in_file(main_conf_path,
-                                         'app-servers.include.new',
-                                         'app-servers.include')
+            _replace_string_in_file(main_conf_path,
+                                    'proxies.include.new',
+                                    'proxies.include')
+            _replace_string_in_file(main_conf_path,
+                                    'app-servers.include.new',
+                                    'app-servers.include')
             self.app_inc_path = self.app_inc_path[:-4]
             self.proxies_inc_path = self.proxies_inc_path[:-4]
             raise
@@ -569,12 +639,12 @@ class NginxAPI(object):
             shutil.copyfile(self.proxies_inc_path, self.proxies_inc_path[:-4])
             os.remove(self.app_inc_path)
             os.remove(self.proxies_inc_path)
-            self._replace_string_in_file(main_conf_path,
-                                         'proxies.include.new',
-                                         'proxies.include')
-            self._replace_string_in_file(main_conf_path,
-                                         'app-servers.include.new',
-                                         'app-servers.include')
+            _replace_string_in_file(main_conf_path,
+                                    'proxies.include.new',
+                                    'proxies.include')
+            _replace_string_in_file(main_conf_path,
+                                    'app-servers.include.new',
+                                    'app-servers.include')
             self._reload_service()
             self.app_inc_path = self.app_inc_path[:-4]
             self.proxies_inc_path = self.proxies_inc_path[:-4]
@@ -587,60 +657,8 @@ class NginxAPI(object):
                          async=async,
                          exclusive=True)
 
-    def get_role_servers(self, role_id=None, role_name=None):
-        """ Method is used to get role servers from scalr """
-        if type(role_id) is int:
-            role_id = str(role_id)
 
-        server_location = __node__['cloud_location']
-        roles = self._queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
-        servers = []
-        for role in roles:
-            ips = [h.internal_ip if server_location == h.cloud_location else
-                   h.external_ip
-                   for h in role.hosts]
-            servers.extend(ips)
 
-        return servers
-
-    def update_ssl_certificate(self, ssl_certificate_id, cert, key, cacert):
-        """
-        Updates ssl certificate. Returns paths to updated or created .key and
-        .crt files
-        """
-        if not cert or not key:
-            return (None, None)
-
-        _logger.debug('Updating ssl certificate with id: %s' % ssl_certificate_id)
-
-        if cacert:
-            cert = cert + '\n' + cacert
-        if ssl_certificate_id:
-            ssl_certificate_id = '_' + str(ssl_certificate_id)
-        else:
-            ssl_certificate_id = ''
-
-        keys_dir_path = os.path.join(bus.etc_path, "private.d/keys")
-        if not os.path.exists(keys_dir_path):
-            os.mkdir(keys_dir_path)
-
-        cert_path = os.path.join(keys_dir_path, 'https%s.crt' % ssl_certificate_id)
-        with open(cert_path, 'w') as fp:
-            fp.write(cert)
-
-        key_path = os.path.join(keys_dir_path, 'https%s.key' % ssl_certificate_id)
-        with open(key_path, 'w') as fp:
-            fp.write(key)
-
-        return (cert_path, key_path)
-
-    def _fetch_ssl_certificate(self, ssl_certificate_id):
-        """
-        Gets ssl certificate and key from Scalr, writes them to files and
-        returns paths to files.
-        """
-        cert, key, cacert = self._queryenv.get_ssl_certificate(ssl_certificate_id)
-        return self.update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
 
     def _normalize_destinations(self, destinations):
         """
@@ -686,7 +704,7 @@ class NginxAPI(object):
             dest['servers'] = []
             if 'farm_role_id' in dest:
                 dest['id'] = str(dest['farm_role_id'])
-                dest['servers'].extend(self.get_role_servers(dest['id']))
+                dest['servers'].extend(get_role_servers(dest['id']))
             if 'host' in dest:
                 dest['servers'].append(dest['host'])
 
@@ -963,7 +981,7 @@ class NginxAPI(object):
 
         if old_style_ssl:
             config.add('%s/ssl' % server_xpath, 'on')
-        ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
+        ssl_cert_path, ssl_cert_key_path = _fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 

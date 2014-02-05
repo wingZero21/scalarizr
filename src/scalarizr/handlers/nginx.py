@@ -19,6 +19,8 @@ from scalarizr.api import service as preset_service
 from scalarizr.node import __node__
 from scalarizr.api.nginx import NginxAPI
 from scalarizr.api.nginx import NginxInitScript
+from scalarizr.api.nginx import update_ssl_certificate
+from scalarizr.api.nginx import get_all_app_roles
 import StringIO
 
 # Libs
@@ -235,7 +237,7 @@ class NginxHandler(ServiceCtlHandler):
             if __nginx__['upstream_app_role']:
                 roles_for_proxy = [__nginx__['upstream_app_role']]
             else:
-                roles_for_proxy = self.api.get_all_app_roles()
+                roles_for_proxy = get_all_app_roles()
             self.api.make_default_proxy(roles_for_proxy)
 
         bus.fire('service_configured',
@@ -377,14 +379,14 @@ class NginxHandler(ServiceCtlHandler):
         if not self._get_nginx_v2_mode_flag():
             self._logger.debug('updating certificates')
             cert, key, cacert = self._queryenv.get_https_certificate()
-            self.api.update_ssl_certificate('', cert, key, cacert)
+            update_ssl_certificate('', cert, key, cacert)
 
             self._logger.debug('before vhost reconf backend table is %s' % self.api.backend_table)
             roles_for_proxy = []
             if __nginx__['upstream_app_role']:
                 roles_for_proxy = [__nginx__['upstream_app_role']]
             else:
-                roles_for_proxy = self.api.get_all_app_roles()
+                roles_for_proxy = get_all_app_roles()
             self.api.make_default_proxy(roles_for_proxy)
             self._logger.debug('after vhost reconf backend table is %s' % self.api.backend_table)
 
@@ -393,10 +395,10 @@ class NginxHandler(ServiceCtlHandler):
         private_key = message.private_key
         certificate = message.certificate
         cacertificate = message.cacertificate
-        self.api.update_ssl_certificate(ssl_cert_id,
-                                        certificate,
-                                        private_key,
-                                        cacertificate)
+        update_ssl_certificate(ssl_cert_id,
+                               certificate,
+                               private_key,
+                               cacertificate)
         self.api._reload_service()
 
     def _copy_error_pages(self):
