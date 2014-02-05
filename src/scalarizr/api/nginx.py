@@ -535,18 +535,18 @@ class NginxAPI(object):
             self.app_inc_path = self.app_inc_path + '.new'
             self.proxies_inc_path = self.proxies_inc_path + '.new'
 
-            self._update_main_config(remove_server_section=proxies!=None, reload_service=False)
-            if proxies:
-                self.recreate_proxying(proxies, reload_service=False)
-            else:
-                self._recreate_compat_mode()
-
             self._replace_string_in_file(main_conf_path,
                                          'proxies.include',
                                          'proxies.include.new')
             self._replace_string_in_file(main_conf_path,
                                          'app-servers.include',
                                          'app-servers.include.new')
+            self._update_main_config(remove_server_section=proxies!=None, reload_service=False)
+            if proxies:
+                self.recreate_proxying(proxies, reload_service=False)
+            else:
+                self._recreate_compat_mode()
+
 
             self.service.configtest()
         except:
