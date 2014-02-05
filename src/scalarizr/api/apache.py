@@ -325,7 +325,7 @@ class ApacheAPI(object):
             else:
                 self.reload_service('%s VirtualHosts removed.' % len(vhosts))
 
-    def do_reconfigure(self, vhosts, reload=True, rollback_on_error=True):
+    def do_reconfigure(self, vhosts=None, reload=True, rollback_on_error=True):
         """
         Deploys multiple VirtualHosts and removes odds.
         @param vhosts: list(dict(vhost_data),)
@@ -333,7 +333,8 @@ class ApacheAPI(object):
         """
         ports = []
         applied_vhosts = []
-
+        if vhosts == None:
+            vhosts = self._fetch_virtual_hosts()
         old_files = []
         LOG.info("Started reconfiguring Apache VirtualHosts.")
 
@@ -385,7 +386,7 @@ class ApacheAPI(object):
         return applied_vhosts
 
     @rpc.command_method
-    def reconfigure(self, vhosts, reload=True, rollback_on_error=True, async=True):
+    def reconfigure(self, vhosts=None, reload=True, rollback_on_error=True, async=True):
         self._op_api.run('api.apache.reconfigure',
                          func=self.do_reconfigure,
                          func_kwds={'vhosts': vhosts,
