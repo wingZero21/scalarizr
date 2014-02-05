@@ -24,7 +24,7 @@ import StringIO
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
 from scalarizr.util import cached, firstmatched,\
-        validators, software, initdv2, disttool
+        validators, software, initdv2
 from scalarizr.linux import iptables
 from scalarizr.services import BaseConfig, PresetProvider
 
@@ -202,7 +202,7 @@ class NginxHandler(ServiceCtlHandler):
                 or self._get_nginx_v2_mode_flag()
 
             self._logger.debug('Updating main config')
-            self._update_main_config(remove_server_section=v2_mode, reload_service=False)
+            self.api._update_main_config(remove_server_section=v2_mode, reload_service=False)
 
             if v2_mode:
                 self._set_nginx_v2_mode_flag(True)
@@ -211,7 +211,6 @@ class NginxHandler(ServiceCtlHandler):
                 self.api.recreate_proxying(proxies)
             else:
                 self.api._recreate_compat_mode()
-
 
     def on_before_host_up(self, message):
         self._logger.debug('Handling on_before_host_up message')
@@ -224,7 +223,7 @@ class NginxHandler(ServiceCtlHandler):
         log.info('Setup proxying')
         self._logger.debug('Updating main config')
         v2_mode = bool(self._proxies) or self._get_nginx_v2_mode_flag()
-        self._update_main_config(remove_server_section=v2_mode,
+        self.api._update_main_config(remove_server_section=v2_mode,
                                  reload_service=False)
 
         if v2_mode:
@@ -447,84 +446,6 @@ class NginxHandler(ServiceCtlHandler):
                 self._logger.debug('%s does not exist', self._app_inc_path+".save")
         else:
             self.api._reload_service()
-
-    def _dump_config(self, obj):
-        output = cStringIO.StringIO()
-        obj.write_fp(output, close = False)
-        return output.getvalue()
-
-    def _update_main_config(self, remove_server_section=True, reload_service=True):
-        config_dir = os.path.dirname(self.api.app_inc_path)
-        nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
-
-        config = None
-        try:
-            config = Configuration('nginx')
-            config.read(nginx_conf_path)
-        except (Exception, BaseException), e:
-            raise HandlerError('Cannot read/parse nginx main configuration file: %s' % str(e))
-
-        self._logger.debug('Update main configuration file')
-        dump = self._dump_config(config)
-
-        gzip_vary = config.get_list('http/gzip_vary')
-        if not gzip_vary:
-            config.add('http/gzip_vary', 'on')
-        gzip_proxied = config.get_list('http/gzip_proxied')
-        if not gzip_proxied:
-            config.add('http/gzip_proxied', 'any')
-        gzip_types = config.get_list('http/gzip_types')
-        if not gzip_types:
-            types = 'text/plain text/css application/json application/x-javascript' \
-                'text/xml application/xml application/xml+rss text/javascript'
-            config.add('http/gzip_types', types)
-
-        include_list = config.get_list('http/include')
-        if not self.api.app_inc_path in include_list:
-            self._logger.debug('adding app-servers.include path to main config')
-            config.add('http/include', self.api.app_inc_path)
-        if not self.api.proxies_inc_path in include_list:
-            self._logger.debug('adding proxies.include path to main config')
-            config.add('http/include', self.api.proxies_inc_path)
-        else:
-            self._logger.debug('config contains proxies.include: %s \n%s' %
-                               (self.api.proxies_inc_path, include_list))
-
-        if remove_server_section:
-            self._logger.debug('removing http/server section')
-            try:
-                config.remove('http/server')
-            except (ValueError, IndexError):
-                self._logger.debug('no http/server section')
-        else:
-            self._logger.debug('Do not removing http/server section')
-            if not config.get_list('http/server'):
-                config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
-
-        if disttool.is_debian_based():
-        # Comment /etc/nginx/sites-enabled/*
-            try:
-                i = config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
-                config.comment('http/include[%d]' % (i+1))
-                self._logger.debug('comment site-enabled include')
-            except (ValueError, IndexError):
-                self._logger.debug('site-enabled include already commented')
-        elif disttool.is_redhat_based():
-            def_host_path = '/etc/nginx/conf.d/default.conf'
-            if os.path.exists(def_host_path):
-                default_host = Configuration('nginx')
-                default_host.read(def_host_path)
-                default_host.comment('server')
-                default_host.write(def_host_path)
-
-        if dump == self._dump_config(config):
-            self._logger.debug("Main nginx config wasn`t changed")
-        else:
-            # Write new nginx.conf
-            shutil.copy(nginx_conf_path, nginx_conf_path + '.bak')
-            config.write(nginx_conf_path)
-            if reload_service:
-                self.api._reload_service()
 
     def _insert_iptables_rules(self, *args, **kwargs):
         if iptables.enabled():

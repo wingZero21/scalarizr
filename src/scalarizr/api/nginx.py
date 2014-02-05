@@ -3,8 +3,9 @@ from __future__ import with_statement
 import os
 import shutil
 import logging
-from telnetlib import Telnet
 import time
+import cStringIO
+from telnetlib import Telnet
 from hashlib import sha1
 
 from scalarizr import rpc
@@ -20,6 +21,7 @@ from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 from scalarizr.api import operation
 from scalarizr.config import BuiltinBehaviours
+from scalarizr.util import disttool
 
 __nginx__ = __node__['nginx']
 
@@ -390,7 +392,7 @@ class NginxAPI(object):
         
         _logger.debug('backend table is %s' % self.backend_table)
         write_proxies = not self._main_config_contains_server()
-        self.make_proxy('backend',
+        self.add_proxy('backend',
                         backends=servers,
                         ssl=False,
                         backend_ip_hash=True,
@@ -448,6 +450,84 @@ class NginxAPI(object):
                 _logger.debug('Removing %s' % file_path)
                 os.remove(file_path)
 
+    def _dump_config(self, obj):
+        output = cStringIO.StringIO()
+        obj.write_fp(output, close = False)
+        return output.getvalue()
+
+    def _update_main_config(self, remove_server_section=True, reload_service=True):
+        config_dir = os.path.dirname(self.app_inc_path)
+        nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
+
+        config = None
+        try:
+            config = metaconf.Configuration('nginx')
+            config.read(nginx_conf_path)
+        except (Exception, BaseException), e:
+            raise Exception('Cannot read/parse nginx main configuration file: %s' % str(e))
+
+        _logger.debug('Update main configuration file')
+        dump = self._dump_config(config)
+
+        gzip_vary = config.get_list('http/gzip_vary')
+        if not gzip_vary:
+            config.add('http/gzip_vary', 'on')
+        gzip_proxied = config.get_list('http/gzip_proxied')
+        if not gzip_proxied:
+            config.add('http/gzip_proxied', 'any')
+        gzip_types = config.get_list('http/gzip_types')
+        if not gzip_types:
+            types = 'text/plain text/css application/json application/x-javascript' \
+                'text/xml application/xml application/xml+rss text/javascript'
+            config.add('http/gzip_types', types)
+
+        include_list = config.get_list('http/include')
+        if not self.app_inc_path in include_list:
+            _logger.debug('adding app-servers.include path to main config')
+            config.add('http/include', self.app_inc_path)
+        if not self.proxies_inc_path in include_list:
+            _logger.debug('adding proxies.include path to main config')
+            config.add('http/include', self.proxies_inc_path)
+        else:
+            _logger.debug('config contains proxies.include: %s \n%s' %
+                               (self.proxies_inc_path, include_list))
+
+        if remove_server_section:
+            _logger.debug('removing http/server section')
+            try:
+                config.remove('http/server')
+            except (ValueError, IndexError):
+                _logger.debug('no http/server section')
+        else:
+            _logger.debug('Do not removing http/server section')
+            if not config.get_list('http/server'):
+                config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
+
+        if disttool.is_debian_based():
+        # Comment /etc/nginx/sites-enabled/*
+            try:
+                i = config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
+                config.comment('http/include[%d]' % (i+1))
+                _logger.debug('comment site-enabled include')
+            except (ValueError, IndexError):
+                _logger.debug('site-enabled include already commented')
+        elif disttool.is_redhat_based():
+            def_host_path = '/etc/nginx/conf.d/default.conf'
+            if os.path.exists(def_host_path):
+                default_host = metaconf.Configuration('nginx')
+                default_host.read(def_host_path)
+                default_host.comment('server')
+                default_host.write(def_host_path)
+
+        if dump == self._dump_config(config):
+            _logger.debug("Main nginx config wasn`t changed")
+        else:
+            # Write new nginx.conf
+            shutil.copy(nginx_conf_path, nginx_conf_path + '.bak')
+            config.write(nginx_conf_path)
+            if reload_service:
+                self._reload_service()
+
     def do_reconfigure(self, proxies):
         backend_table_bak = self.backend_table.copy()
         main_conf_path = self.proxies_inc_dir + '/nginx.conf'
@@ -455,6 +535,7 @@ class NginxAPI(object):
             self.app_inc_path = self.app_inc_path + '.new'
             self.proxies_inc_path = self.proxies_inc_path + '.new'
 
+            self._update_main_config(remove_server_section=proxies!=None, reload_service=False)
             if proxies:
                 self.recreate_proxying(proxies, reload_service=False)
             else:
