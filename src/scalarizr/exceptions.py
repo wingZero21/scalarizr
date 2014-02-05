@@ -17,6 +17,8 @@ class Timeout(Exception):
 class Duplicate(Exception):
     pass
 
-class UnsupportedBehaviorError(Exception):
+class UnsupportedBehavior(Exception):
     pass
+
+class 
 

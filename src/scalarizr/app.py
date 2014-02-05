@@ -853,7 +853,7 @@ class Service(object):
                     api_cls.check_software(installed_packages)
                 except exceptions.NotFound as e:
                     logger.error(e)
-                except exceptions.UnsupportedBehaviorError as e:
+                except exceptions.UnsupportedBehavior as e:
                     logger.error(e)
                     node.__node__['messaging'].send(
                         'OutOfTheService',

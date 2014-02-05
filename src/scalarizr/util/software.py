@@ -572,5 +572,5 @@ def handle_dependency_error(e, behavior):
                 'Ubuntu 10.04, CentOS, RedHat, Oracle, Amazon: ==6\n' +\
                 'Ubuntu 12.04, Debian: ==7'
             )
-    raise exceptions.UnsupportedBehaviorError(behavior, msg)
+    raise exceptions.UnsupportedBehavior(behavior, msg)
                     

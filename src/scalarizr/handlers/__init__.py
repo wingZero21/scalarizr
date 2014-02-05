@@ -115,7 +115,7 @@ class Handler(object):
                     api_cls = util.import_class(api.api_routes[behavior])
                     api_cls.check_software(installed_packages)
                     ready_behaviors.append(behavior)
-                except (exceptions.NotFound, exceptions.UnsupportedBehaviorError, ImportError):
+                except (exceptions.NotFound, exceptions.UnsupportedBehavior, ImportError):
                     continue
         return ready_behaviors
 
