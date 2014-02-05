@@ -191,12 +191,29 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         optparser = bus.optparser
         
-        if Flag.exists(Flag.REBOOT) or Flag.exists(Flag.HALT):
+        if Flag.exists(Flag.REBOOT):
             self._logger.info("Scalarizr resumed after reboot")
             Flag.clear(Flag.REBOOT)
-            Flag.clear(Flag.HALT)
             self._check_control_ports() 
             self._start_after_reboot()
+
+        elif Flag.exists(Flag.HALT):
+            self._logger.info("Scalarizr resumed after server stop")
+            Flag.clear(Flag.HALT)
+            self._check_control_ports()
+
+            queryenv = bus.queryenv_service
+            farm_role_params = queryenv.list_farm_role_params(farm_role_id=__node__['farm_role_id'])
+            resume_strategy = farm_role_params['base']['resume_strategy']
+
+            if resume_strategy == 'reboot':
+                self._start_after_reboot()
+
+            elif resume_strategy == 'init':
+                __node__['state'] = ScalarizrState.BOOTSTRAPPING
+                self._logger.info('Scalarizr will re-initialize server due to resume strategy')
+                self._start_init()
+
 
         elif optparser and optparser.values.import_server:
             self._logger.info('Server will be imported into Scalr')
