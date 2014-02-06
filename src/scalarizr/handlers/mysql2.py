@@ -400,6 +400,11 @@ class MysqlHandler(DBMSRHandler):
         self.generate_datadir()
         self.mysql.service.stop('Configuring MySQL')
 
+        # On Debian/GCE we've got 'Another MySQL daemon already running with the same unix socket.'
+        socket_file = mysql2_svc.my_print_defaults('mysqld').get('socket')
+        if socket_file:
+            coreutils.remove(socket_file)
+
         if 'Amazon' == linux.os['name']:
             self.mysql.my_cnf.pid_file = os.path.join(__mysql__['data_dir'], 'mysqld.pid')
 
