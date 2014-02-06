@@ -159,7 +159,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
                         if os_dist.redhat_family:
                             # Relabel fs for SElinux
-                            os.open(os.path.join(tmp_mount_dir, '.autorelabel'), 'w').close()
+                            open(os.path.join(tmp_mount_dir, '.autorelabel'), 'w').close()
 
                     finally:
                         mount.umount(root_dev_name)
