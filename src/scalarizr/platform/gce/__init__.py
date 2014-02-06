@@ -3,6 +3,7 @@ from __future__ import with_statement
 __author__ = 'Nick Demyanchuk'
 
 import os
+import sys
 import base64
 import logging
 import urllib2
@@ -131,6 +132,59 @@ class GoogleServiceManager(object):
         return cred.authorize(http)
 
 
+class GCEConnectionProxy(platform.ConnectionProxy):
+
+    def __init__(self, platform, num_reconnects=1):
+        self._platform = platform
+        super(GCEConnectionProxy, self).__init__(num_reconnects=num_reconnects)
+
+    def _raise_error(self, *exc_info):
+        t, e, tb = exc_info
+        if isinstance(e, ConnectionError):
+            raise
+        else:
+            raise ConnectionError(e)
+
+
+class GCEComputeConnectionProxy(GCEConnectionProxy):
+
+    api_version = 'v1'
+
+    def _create_connection(self):
+        http = httplib2.Http()
+        try:
+            email = self._platform.get_access_data('service_account_name')
+            pk = base64.b64decode(self._platform.get_access_data('key'))
+        except:
+            raise NoCredentialsError(sys.exc_info[1])
+        scope = COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE
+        try:
+            cred = SignedJwtAssertionCredentials(email, pk, scope=scope)
+            conn = build('compute', self.api_version, http=cred.authorize(http))
+        except:
+            raise InvalidCredentialsError(sys.exc_info[1])
+        return conn
+
+
+class GCEStorageConnectionProxy(GCEConnectionProxy):
+
+    api_version = 'v1beta2'
+
+    def _create_connection(self):
+        http = httplib2.Http()
+        try:
+            email = self._platform.get_access_data('service_account_name')
+            pk = base64.b64decode(self._platform.get_access_data('key'))
+        except:
+            raise NoCredentialsError(sys.exc_info[1])
+        scope = STORAGE_FULL_SCOPE
+        try:
+            cred = SignedJwtAssertionCredentials(email, pk, scope=scope)
+            conn = build('storage', self.api_version, http=cred.authorize(http))
+        except:
+            raise InvalidCredentialsError(sys.exc_info[1])
+        return conn
+
 
 class GcePlatform(Platform):
     compute_api_version = 'v1'
@@ -143,6 +197,8 @@ class GcePlatform(Platform):
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
                 self, 'storage', 'v1beta2', *STORAGE_FULL_SCOPE)
+        self._compute_conn_proxy = None
+        self._storage_conn_proxy = None
 
 
     def get_user_data(self, key=None):
@@ -214,6 +270,15 @@ class GcePlatform(Platform):
     def get_image(self):
         return self._get_metadata('instance/image')
 
+    def get_compute_conn(self):
+        if not self._compute_conn_proxy:
+            self._compute_conn_proxy = GCEComputeConnectionProxy(self)
+        return self._compute_conn_proxy
+
+    def get_storage_conn(self):
+        if not self._storage_conn_proxy:
+            self._storage_conn_proxy = GCEStorageConnectionProxy(self)
+        return self._storage_conn_proxy
 
     def new_compute_client(self):
         return self.compute_svc_mgr.get_service()

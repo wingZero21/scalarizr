@@ -14,11 +14,12 @@ import platform
 import sys
 import struct
 import array
+import threading
 import ConfigParser
 
 from scalarizr.bus import bus
 from scalarizr import linux
-from scalarizr.util import LocalObject, NullPool
+from scalarizr.util import LocalPool, NullPool
 if linux.os.windows_family:
     import win32com.client
 else:
@@ -51,25 +52,29 @@ class ConnectionError(Exception):
     pass
 
 
-class NoCredentialsError(Exception):
+class NoCredentialsError(ConnectionError):
     pass
 
 
-class InvalidCredentialsError(Exception):
+class InvalidCredentialsError(ConnectionError):
     pass
 
 
 class ConnectionProxy(object):
 
+    _logger = logging.getLogger(__name__)
+
     def __init__(self, conn_per_thread=True, num_reconnects=1):
         if conn_per_thread:
-            self.conn_pool = LocalObject(self._create_connection)
+            self.conn_pool = LocalPool(self._create_connection)
         else:
             self.conn_pool = NullPool(self._create_connection)
         self.num_reconnects = num_reconnects
-        self.local = threading.Local()
+        self.local = threading.local()
 
     def __getattr__(self, name):
+        print '__getattr__: %s' % name
+        self._logger.debug('__getattr__: %s' % name)
         try:
             self.__dict__['local'].call_chain.append(name)
         except AttributeError:
@@ -93,6 +98,7 @@ class ConnectionProxy(object):
                 if num_retries < self.num_reconnects:
                     num_retries += 1
                     self._do_call(*args, **kwds)
+                else:
                     raise
         finally:
             self.local.call_chain = []
@@ -109,6 +115,9 @@ class ConnectionProxy(object):
 
     def _raise_error(self, *exc_info):
         raise NotImplementedError()
+
+    def clear(self):
+        self.conn_pool.dispose_all()
 
 
 class PlatformFactory(object):
@@ -139,7 +148,6 @@ class Platform():
     def __init__(self):
         self.scalrfs = self._scalrfs(self)
         self._access_data = {} 
-        self._conn_proxy = None
 
     def get_private_ip(self):
         return self.get_public_ip()
@@ -165,8 +173,6 @@ class Platform():
 
     def set_access_data(self, access_data):
         self._access_data = access_data
-        if self._conn_proxy:
-            self._conn_proxy.dispose_all()
 
     def get_access_data(self, prop=None):
         if prop:
@@ -280,6 +286,7 @@ class Ec2LikePlatform(Platform):
         Platform.__init__(self)
         self._logger = logging.getLogger(__name__)
         self._cnf = bus.cnf
+        self._conn_proxy = None
 
     def _get_property(self, name):
         if not self._metadata.has_key(name):

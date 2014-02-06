@@ -2,6 +2,7 @@ from __future__ import with_statement
 
 import os
 import re
+import sys
 import urllib2
 import logging
 
@@ -43,33 +44,36 @@ def get_platform():
 
 class Ec2ConnectionProxy(platform.ConnectionProxy):
 
-    def __self__(self, platform, *args, **kwds):
+    _logger = logging.getLogger(__name__)
+
+    def __init__(self, platform, num_reconnects=1):
         self._platform = platform
-        super(Ec2ConnectionProxy, self).__init__(*args, **kwds)
+        super(Ec2ConnectionProxy, self).__init__(
+            conn_per_thread=False,
+            num_reconnects=num_reconnects
+        )
 
     def _create_connection(self):
         region = self._platform.get_region()
         try:
-            key_id, key = self.self._platform.get_access_keys
+            key_id, key = self._platform.get_access_keys
             conn = boto.ec2.connect_to_region(
                 region,
                 aws_access_key_id=key_id,
                 aws_secret_access_key=key
             )
-        except PlatformError as e:
-            raise NoCredentialsError()
-        except:
-            raise ConnectionError()
+        except PlatformError:
+            raise NoCredentialsError(sys.exc_info[1])
         return conn
 
     def _raise_error(self, *exc_info):
-        t, e, v = exc_info
-        if t in [NoCredentialsError, InvalidCredentialsError, ConnectionError]:
-            raise e
-        elif t == boto.exception.EC2ResponseError and e.args[0] == 401:
-            raise UnvalidCredentialsError(v)
+        t, e, tb = exc_info
+        if isinstance(e, boto.exception.EC2ResponseError) and e.args[0] == 401:
+            raise InvalidCredentialsError(e)
+        if isinstance(e, ConnectionError):
+            raise
         else:
-            raise ConnectionError(v)
+            raise ConnectionError(e)
 
 
 class Ec2Platform(Ec2LikePlatform):
@@ -109,7 +113,7 @@ class Ec2Platform(Ec2LikePlatform):
 
     def get_ec2_conn(self):
         if not self._conn_proxy:
-            self._conn_proxy = Ec2ConnectionProxy(self, conn_per_thread=False)
+            self._conn_proxy = Ec2ConnectionProxy(self)
         return self._conn_proxy
 
     def new_ec2_conn(self):

@@ -44,7 +44,7 @@ class NullPool(object):
         self._object = None
 
 
-class LocalObject:
+class LocalPool:
     def __init__(self, creator, pool_size=50):
         self._logger = logging.getLogger(__name__)
         self._creator = creator         
@@ -91,7 +91,7 @@ class LocalObject:
         self._object = threading.local()
 
 
-class SqliteLocalObject(LocalObject):
+class SqliteLocalObject(LocalPool):
     def do_create(self):
         return _SqliteConnection(self, self._creator)
 

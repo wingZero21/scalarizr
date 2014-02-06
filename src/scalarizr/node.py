@@ -426,6 +426,8 @@ node['rackspace'] = Compound({
 })
 
 node['gce'] = Compound({
+        'connect_compute': Call('scalarizr.bus', 'bus.platform.get_compute_conn'),
+        'connect_storage': Call('scalarizr.bus', 'bus.platform.get_storage_conn'),
         'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
         'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),
         'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id'),

@@ -26,20 +26,21 @@ LOG = logging.getLogger(__name__)
 
 class NovaConnectionProxy(platform.ConnectionProxy):
 
-    def __self__(self, platform, *args, **kwds):
+    def __init__(self, platform, num_reconnects=1):
         self._platform = platform
-        super(NovaConnectionProxy, self).__init__(*args, **kwds)
+        super(NovaConnectionProxy, self).__init__(num_reconnects=num_reconnects)
 
     def _create_connection(self):
-        if not self._platform._access_data:
-            raise NoCredentialsError()
-        username = self._platform._access_data['username']
-        api_key = self._platform._access_data['api_key']
-        password = self._platform._access_data['password']
-        project_id = self._platform._access_data['tenant_name']
-        auth_url = self._platform._access_data['keystone_url']
-        region_name = self._platform._access_data['cloud_location']
-        auth_plugin = None
+        try:
+            username = self._platform._access_data['username']
+            api_key = self._platform._access_data['api_key']
+            password = self._platform._access_data['password']
+            project_id = self._platform._access_data['tenant_name']
+            auth_url = self._platform._access_data['keystone_url']
+            region_name = self._platform._access_data['cloud_location']
+            auth_plugin = None
+        except:
+            raise NoCredentialsError(sys.exc_info()[1])
         if os.environ.get('OS_AUTH_SYSTEM'):
             try:
                 import novaclient.auth_plugin
@@ -58,13 +59,13 @@ class NovaConnectionProxy(platform.ConnectionProxy):
         return conn
 
     def _raise_error(self, *exc_info):
-        t, e, v = exc_info
-        if t in [NoCredentialsError, InvalidCredentialsError, ConnectionError]:
-            raise e
-        elif t in [novaclient.exceptions.Unauthorized, novaclient.exceptions.Forbidden]:
-            raise InvalidCredentialsError(v)
+        t, e, tb = exc_info
+        if isinstance(e, (novaclient.exceptions.Unauthorized, novaclient.exceptions.Forbidden)):
+            raise InvalidCredentialsError(e)
+        if isinstance(e, ConnectionError):
+            raise
         else:
-            raise ConnectionError(v)
+            raise ConnectionError(e)
 
 
 class OpenstackServiceWrapper(object):
@@ -147,6 +148,7 @@ class OpenstackPlatform(platform.Platform):
             # Work over [Errno -3] Temporary failure in name resolution
             # http://bugs.centos.org/view.php?id=4814
             os.chmod('/etc/resolv.conf', 0755)
+        self._nova_conn_proxy = None
 
     def get_private_ip(self):
         if self._private_ip is None:
@@ -245,9 +247,9 @@ class OpenstackPlatform(platform.Platform):
                              self._access_data["cloud_location"])
 
     def get_nova_conn(self):
-        if not sef._conn_proxy:
-            self._conn_proxy = NovaConnectionProxy(self)
-        return self._conn_proxy
+        if not sef._nova_conn_proxy:
+            self._nova_conn_proxy = NovaConnectionProxy(self)
+        return self._nova_conn_proxy
 
     def new_nova_connection(self):
         if not self._access_data:
