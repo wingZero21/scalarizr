@@ -27,6 +27,7 @@ if os_dist.windows_family:
     import win32timezone as os_time
 else:
     from datetime import datetime as os_time
+from scalarizr.libs import metaconf
 
 # Stdlibs
 import logging, os, sys, threading
@@ -170,10 +171,20 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if 'Windows' == os_dist['family']:
             pass
         else:
-            with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
-                for kv in glob_vars.items():
-                    fp.write('export %s="%s"\n' % kv)
-
+            env_file_path = '/etc/environment'
+            env_cfg = metaconf.Configuration('keyvalue')
+            env_cfg.read(env_file_path)
+            env_vars = env_cfg.children('.')
+            for env_var in env_vars:
+                if env_var.startswith('SCALR'):
+                    env_cfg.remove(env_var)
+            env_vars = env_cfg.children('.')
+            for k, v in glob_vars.items():
+                if k in env_vars:
+                    env_cfg.set(k, v)
+                else:
+                    env_cfg.add(k, v)
+            env_cfg.write(env_file_path)
 
     def _assign_hostname(self):
         if not __node__.get('hostname'):
