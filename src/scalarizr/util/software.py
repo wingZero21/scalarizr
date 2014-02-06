@@ -136,7 +136,7 @@ def mysql_software_info():
 explore('mysql', mysql_software_info)
 
 def nginx_software_info():
-    binary = which('nginx')
+    binary = which('nginx', path_append='/usr/local/nginx/sbin')
     if not binary:
         raise SoftwareError("Can't find executable for Nginx server")
 
