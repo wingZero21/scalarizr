@@ -8,7 +8,7 @@ if which update-python-modules >/dev/null 2>&1; then
 		#if dpkg --compare-versions "$2" lt '0.10.0'; then
 		#	rm -rf /usr/lib/pymodules/python2.*/scalarizr
 		#fi
-		update-python-modules -v --post-install /usr/share/python-support/scalarizr-base.public
+		update-python-modules --post-install /usr/share/python-support/scalarizr-base.public
 	else
 		update-python-modules scalarizr-base
 	fi

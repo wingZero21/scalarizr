@@ -114,19 +114,17 @@ class UpdClientAPI(object):
     if linux.os.windows:
         _base = r'C:\Program Files\Scalarizr'
         etc_path = os.path.join(_base, 'etc')
-        run_path = os.path.join(_base, r'var\run')
         share_path = os.path.join(_base, 'share')
         log_file = os.path.join(_base, r'var\log\scalarizr_update.log')
         del _base
     else:
         etc_path = '/etc/scalr'
-        run_path = '/var/run'
         share_path = '/usr/share/scalr'
         log_file = '/var/log/scalarizr_update.log'
 
     _private_path = os.path.join(etc_path, 'private.d')
-    status_file = os.path.join(run_path, 'scalarizr_update.status')
-    win_status_file = os.path.join(run_path, 'scalarirz_update_win.status')
+    status_file = os.path.join(_private_path, 'update.status')
+    win_status_file = os.path.join(_private_path, 'update_win.status')
     crypto_file = os.path.join(_private_path, 'keys', 'default')
     db_file = os.path.join(_private_path, 'db.sqlite')
     del _private_path
@@ -344,21 +342,6 @@ class UpdClientAPI(object):
             if pid:
                 with open(pid_file, 'w+') as fp:
                     fp.write(pid)    
-
-
-    def _sync(self):
-        params = self.queryenv.list_farm_role_params(self.farm_role_id)
-        update = params.get('params', {}).get('base', {}).get('update', {})
-        self.__dict__.update(update)
-        self.repo_url = value_for_repository(
-            deb=update.get('deb_repo_url'),
-            rpm=update.get('rpm_repo_url'),
-            win=update.get('win_repo_url')
-            ) or self.repo_url
-
-        globs = self.queryenv.get_global_config()['params']
-        self.scalr_id = globs['scalr.id']
-        self.scalr_version = globs['scalr.version']
         
 
     def _ensure_repos(self):
@@ -399,6 +382,21 @@ class UpdClientAPI(object):
         # while Branch repository has only scalarizr package
         release_repo = pkgmgr.repository('scalr-release', devel_repo_url_for_branch('scalr'))
         release_repo.ensure()
+
+
+    def _sync(self):
+        params = self.queryenv.list_farm_role_params(self.farm_role_id)
+        update = params.get('params', {}).get('base', {}).get('update', {})
+        self.__dict__.update(update)
+        self.repo_url = value_for_repository(
+            deb=update.get('deb_repo_url'),
+            rpm=update.get('rpm_repo_url'),
+            win=update.get('win_repo_url')
+            ) or self.repo_url
+
+        globs = self.queryenv.get_global_config()['params']
+        self.scalr_id = globs['scalr.id']
+        self.scalr_version = globs['scalr.version']
 
 
     @rpc.command_method
@@ -505,7 +503,7 @@ class UpdClientAPI(object):
             try:
                 pkginfo = self.pkgmgr.info(self.package)
                 if not pkginfo['candidate']:
-                    self.state = 'noop'
+                    self.state = 'completed'
                     LOG.info('No new version available ({0})'.format(self.package))
                     return 
                 self.__dict__.update(pkginfo)
