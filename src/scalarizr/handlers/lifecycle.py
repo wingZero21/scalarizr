@@ -172,19 +172,27 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             pass
         else:
             env_file_path = '/etc/environment'
-            env_cfg = metaconf.Configuration('keyvalue')
-            env_cfg.read(env_file_path)
-            env_vars = env_cfg.children('.')
-            for env_var in env_vars:
-                if env_var.startswith('SCALR'):
-                    env_cfg.remove(env_var)
-            env_vars = env_cfg.children('.')
-            for k, v in glob_vars.items():
-                if k in env_vars:
-                    env_cfg.set(k, v)
-                else:
-                    env_cfg.add(k, v)
-            env_cfg.write(env_file_path)
+            opening_label = \
+                '############## BEGINNGING OF SCALR VARIABLES. PLEASE DO NOT EDIT ##############\n'
+            closing_label = \
+                '############################ END OF SCALR VARIABLES ###########################\n'
+            env_conf = ''
+            with open(env_file_path, 'r') as fp:
+                env_conf = fp.read()
+            try:
+                # Removing outdated variables
+                start = env_conf.index(opening_label)
+                end = env_conf.index(closing_label) + len(closing_label)
+                env_conf = env_conf[:start] + env_conf[end:]
+            except ValueError:
+                pass
+
+            with open(env_file_path, 'w') as fp:
+                scalr_kv = ''
+                for kv in glob_vars.items():
+                    scalr_kv += '%s=%s\n' % kv
+                scalr_kv = opening_label + scalr_kv + closing_label
+                fp.write(env_conf + '\n' + scalr_kv)
 
     def _assign_hostname(self):
         if not __node__.get('hostname'):
