@@ -19,7 +19,8 @@ except ImportError:
 from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
 
-from scalarizr.platform import Platform
+from scalarizr import platform
+from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 
 
 COMPUTE_RW_SCOPE = ('https://www.googleapis.com/auth/compute', "https://www.googleapis.com/auth/compute.readonly")
@@ -156,13 +157,13 @@ class GCEComputeConnectionProxy(GCEConnectionProxy):
             email = self._platform.get_access_data('service_account_name')
             pk = base64.b64decode(self._platform.get_access_data('key'))
         except:
-            raise NoCredentialsError(sys.exc_info[1])
-        scope = COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE
+            raise NoCredentialsError(sys.exc_info()[1])
+        scope = list(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
         try:
             cred = SignedJwtAssertionCredentials(email, pk, scope=scope)
             conn = build('compute', self.api_version, http=cred.authorize(http))
         except:
-            raise InvalidCredentialsError(sys.exc_info[1])
+            raise InvalidCredentialsError(sys.exc_info()[1])
         return conn
 
 
@@ -176,23 +177,23 @@ class GCEStorageConnectionProxy(GCEConnectionProxy):
             email = self._platform.get_access_data('service_account_name')
             pk = base64.b64decode(self._platform.get_access_data('key'))
         except:
-            raise NoCredentialsError(sys.exc_info[1])
-        scope = STORAGE_FULL_SCOPE
+            raise NoCredentialsError(sys.exc_info()[1])
+        scope = list(STORAGE_FULL_SCOPE)
         try:
             cred = SignedJwtAssertionCredentials(email, pk, scope=scope)
             conn = build('storage', self.api_version, http=cred.authorize(http))
         except:
-            raise InvalidCredentialsError(sys.exc_info[1])
+            raise InvalidCredentialsError(sys.exc_info()[1])
         return conn
 
 
-class GcePlatform(Platform):
+class GcePlatform(platform.Platform):
     compute_api_version = 'v1'
     metadata_url = 'http://metadata/computeMetadata/v1/'
     _metadata = None
 
     def __init__(self):
-        Platform.__init__(self)
+        platform.Platform.__init__(self)
         self.compute_svc_mgr = GoogleServiceManager(
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(

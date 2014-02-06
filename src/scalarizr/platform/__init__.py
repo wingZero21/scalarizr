@@ -73,8 +73,6 @@ class ConnectionProxy(object):
         self.local = threading.local()
 
     def __getattr__(self, name):
-        print '__getattr__: %s' % name
-        self._logger.debug('__getattr__: %s' % name)
         try:
             self.__dict__['local'].call_chain.append(name)
         except AttributeError:
@@ -84,7 +82,7 @@ class ConnectionProxy(object):
     def __call__(self, *args, **kwds):
         num_retries = 0
         try:
-            self._do_call(*args, **kwds)
+            return self._do_call(*args, **kwds)
         except:
             try:
                 self._raise_error(*sys_exc_info())
@@ -115,9 +113,6 @@ class ConnectionProxy(object):
 
     def _raise_error(self, *exc_info):
         raise NotImplementedError()
-
-    def clear(self):
-        self.conn_pool.dispose_all()
 
 
 class PlatformFactory(object):

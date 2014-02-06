@@ -430,7 +430,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                             str(sys.exc_info()[1]))
 
         elif __node__['platform'] == 'openstack':
-            conn = __node__['openstack']['new_nova_connection']
+            conn = __node__['openstack']['connect_nova']
             conn.reconnect()
 
             sid = __node__['openstack']['server_id']

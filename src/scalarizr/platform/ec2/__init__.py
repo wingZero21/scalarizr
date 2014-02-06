@@ -56,7 +56,7 @@ class Ec2ConnectionProxy(platform.ConnectionProxy):
     def _create_connection(self):
         region = self._platform.get_region()
         try:
-            key_id, key = self._platform.get_access_keys
+            key_id, key = self._platform.get_access_keys()
             conn = boto.ec2.connect_to_region(
                 region,
                 aws_access_key_id=key_id,

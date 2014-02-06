@@ -24,23 +24,31 @@ from scalarizr.storage2.cloudfs import swift as swiftcloudfs
 LOG = logging.getLogger(__name__)
 
 
-class NovaConnectionProxy(platform.ConnectionProxy):
+class OpenStackConnectionProxy(platform.ConnectionProxy):
 
     def __init__(self, platform, num_reconnects=1):
         self._platform = platform
-        super(NovaConnectionProxy, self).__init__(num_reconnects=num_reconnects)
+        super(OpenStackConnectionProxy, self).__init__(num_reconnects=num_reconnects)
 
-    def _create_connection(self):
+    def _get_credentials(self):
         try:
             username = self._platform._access_data['username']
             api_key = self._platform._access_data['api_key']
             password = self._platform._access_data['password']
-            project_id = self._platform._access_data['tenant_name']
+            tenant_name = self._platform._access_data['tenant_name']
             auth_url = self._platform._access_data['keystone_url']
             region_name = self._platform._access_data['cloud_location']
-            auth_plugin = None
         except:
             raise NoCredentialsError(sys.exc_info()[1])
+        return username, api_key or password, tenant_name, auth_url, region_name
+
+
+class NovaConnectionProxy(OpenStackConnectionProxy):
+
+    def _create_connection(self):
+        credentials = self._get_credentials()
+        username, password, tenant_name, auth_url, region_name = credentials
+        auth_plugin = None
         if os.environ.get('OS_AUTH_SYSTEM'):
             try:
                 import novaclient.auth_plugin
@@ -49,8 +57,8 @@ class NovaConnectionProxy(platform.ConnectionProxy):
                 pass
         conn = nova_client.Client(
             username,
-            password or api_key,
-            project_id,
+            password,
+            tenant_name,
             auth_url=auth_url,
             region_name=region_name,
             auth_plugin=auth_plugin,
@@ -61,6 +69,30 @@ class NovaConnectionProxy(platform.ConnectionProxy):
     def _raise_error(self, *exc_info):
         t, e, tb = exc_info
         if isinstance(e, (novaclient.exceptions.Unauthorized, novaclient.exceptions.Forbidden)):
+            raise InvalidCredentialsError(e)
+        if isinstance(e, ConnectionError):
+            raise
+        else:
+            raise ConnectionError(e)
+
+
+class CinderConnectionProxy(OpenStackConnectionProxy):
+
+    def _create_connection(self):
+        credentials = self._get_credentials()
+        username, password, tenant_name, auth_url, region_name = credentials
+        conn = cinder_client.Client(
+            username,
+            password,
+            tenant_name,
+            auth_url=auth_url,
+            region_name=region_name
+        )
+        return conn
+
+    def _raise_error(self, *exc_info):
+        t, e, tb = exc_info
+        if isinstance(e, (cinderclient.exceptions.Unauthorized, cinderclient.exceptions.Forbidden)):
             raise InvalidCredentialsError(e)
         if isinstance(e, ConnectionError):
             raise
@@ -149,6 +181,7 @@ class OpenstackPlatform(platform.Platform):
             # http://bugs.centos.org/view.php?id=4814
             os.chmod('/etc/resolv.conf', 0755)
         self._nova_conn_proxy = None
+        self._cinder_conn_proxy = None
 
     def get_private_ip(self):
         if self._private_ip is None:
@@ -225,7 +258,7 @@ class OpenstackPlatform(platform.Platform):
         return self._userdata
 
     def set_access_data(self, access_data):
-        platform.Platform.set_access_data(access_data)
+        platform.Platform.set_access_data(self, access_data)
         # if it's Rackspace NG, we need to set env var CINDER_RAX_AUTH
         # and NOVA_RAX_AUTH for proper nova and cinder authentication
         if 'rackspacecloud' in self._access_data["keystone_url"]:
@@ -247,9 +280,14 @@ class OpenstackPlatform(platform.Platform):
                              self._access_data["cloud_location"])
 
     def get_nova_conn(self):
-        if not sef._nova_conn_proxy:
+        if not self._nova_conn_proxy:
             self._nova_conn_proxy = NovaConnectionProxy(self)
         return self._nova_conn_proxy
+
+    def get_cinder_conn(self):
+        if not self._cinder_conn_proxy:
+            self._cinder_conn_proxy = CinderConnectionProxy(self)
+        return self._cinder_conn_proxy
 
     def new_nova_connection(self):
         if not self._access_data:

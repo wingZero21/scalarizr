@@ -55,7 +55,7 @@ class GcePersistentVolume(base.Volume):
         server_name = __node__['server_id']
 
         try:
-            connection = __node__['gce']['compute_connection']
+            connection = __node__['gce']['connect_compute']
         except:
             e = sys.exc_info()[1]
             LOG.debug('Can not get GCE connection: %s' % e)
@@ -169,7 +169,7 @@ class GcePersistentVolume(base.Volume):
 
 
     def _detach(self, force, **kwds):
-        connection = __node__['gce']['compute_connection']
+        connection = __node__['gce']['connect_compute']
         attachment_inf = self._attachment_info(connection)
         if attachment_inf:
             zone = os.path.basename(__node__['gce']['zone'])
@@ -215,7 +215,7 @@ class GcePersistentVolume(base.Volume):
         self._check_attr('link')
         self._check_attr('name')
 
-        connection = __node__['gce']['compute_connection']
+        connection = __node__['gce']['connect_compute']
         project_id = __node__['gce']['project_id']
         zone = os.path.basename(__node__['gce']['zone'])
         try:
@@ -227,7 +227,7 @@ class GcePersistentVolume(base.Volume):
 
     @property
     def resource(self):
-        connection = __node__['gce']['compute_connection']
+        connection = __node__['gce']['connect_compute']
         project_id = __node__['gce']['project_id']
 
         try:
@@ -245,7 +245,7 @@ class GcePersistentVolume(base.Volume):
         :param nowait: if True - do not wait for snapshot to complete, just create and return
         """
         self._check_attr('name')
-        connection = __node__['gce']['compute_connection']
+        connection = __node__['gce']['connect_compute']
         project_id = __node__['gce']['project_id']
         nowait = kwds.get('nowait', True)
 
@@ -294,7 +294,7 @@ class GcePersistentSnapshot(base.Snapshot):
 
     def _destroy(self):
         try:
-            connection = __node__['gce']['compute_connection']
+            connection = __node__['gce']['connect_compute']
             project_id = __node__['gce']['project_id']
             op = connection.snapshots().delete(project=project_id, snapshot=self.name).execute()
             gce_util.wait_for_operation(connection, project_id, op['name'])
@@ -304,7 +304,7 @@ class GcePersistentSnapshot(base.Snapshot):
 
     def _status(self):
         self._check_attr("name")
-        connection = __node__['gce']['compute_connection']
+        connection = __node__['gce']['connect_compute']
         project_id = __node__['gce']['project_id']
         snapshot = connection.snapshots().get(project=project_id, snapshot=self.name, fields='status').execute()
         status = snapshot['status']
