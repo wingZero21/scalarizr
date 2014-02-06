@@ -805,7 +805,7 @@ class Service(object):
                     if gen_state == 7:
                         if gen_prev_state:
                             # Waiting for shutdown
-                            time.sleep(30)
+                            time.sleep(600)
                         break
                     time.sleep(1)
                     self._logger.debug('Waiting for sysprep completion. '
