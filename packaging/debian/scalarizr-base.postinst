@@ -559,7 +559,8 @@ if [ -x $INIT_SCRIPT ]; then
 	else
 		rm -f /etc/init.d/scalarizr_update
 		update-rc.d scalarizr_update remove || :
-		update-rc.d $NAME disable
+		update-rc.d -f $NAME remove || :
+		update-rc.d scalarizr stop 99 0 1 6 .
 		update-rc.d scalr-upd-client defaults 98 >/dev/null
 	fi
 
