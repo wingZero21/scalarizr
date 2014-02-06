@@ -204,7 +204,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
             queryenv = bus.queryenv_service
             farm_role_params = queryenv.list_farm_role_params(farm_role_id=__node__['farm_role_id'])
-            resume_strategy = farm_role_params['base']['resume_strategy']
+            try:
+                resume_strategy = farm_role_params['params']['base']['resume_strategy']
+            except KeyError:
+                resume_strategy = 'reboot'
 
             if resume_strategy == 'reboot':
                 self._start_after_reboot()
