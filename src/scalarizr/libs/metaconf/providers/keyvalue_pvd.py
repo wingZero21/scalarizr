@@ -1,7 +1,9 @@
+import os
 
 from .redis_pvd import RedisFormatProvider
 from ..utils import unquote
 from . import FormatProvider
+from .. import MetaconfError
 
 class KeyvalueFormatProvider(RedisFormatProvider):
     _opt_re_string = r'(?P<option>[^\s]+)=(?P<value>.*)(?P<comment>#(.*))?$'
