@@ -866,9 +866,11 @@ class MysqlHandler(DBMSRHandler):
             __mysql__['volume'].ensure(mount=True, mkfs=True)
             LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
 
+        coreutils.remove(__mysql__['defaults']['datadir'])
         self.mysql.flush_logs(__mysql__['data_dir'])
+        self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
+        self._change_selinux_ctx()
 
-        log.info('Move data directory to storage')
         storage_valid = self._storage_valid()
         user_creds = self.get_user_creds()
         self._fix_percona_debian_cnf()
@@ -879,12 +881,9 @@ class MysqlHandler(DBMSRHandler):
         #    self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
 
 
-        if not storage_valid:
-            for path in (__mysql__['data_dir'], __mysql__['binlog_dir']):
-                if not os.path.exists(path):
-                    os.makedirs(path)
-                coreutils.chown_r(path, 'mysql', 'mysql')
 
+        if not storage_valid:
+            '''
             if linux.os['family'] == 'RedHat':
                 try:
                     # Check if selinux enabled
@@ -901,6 +900,7 @@ class MysqlHandler(DBMSRHandler):
                             linux.system('%s -R -v %s' % (restorecon, __mysql__['storage_dir']), shell=True)
                 except:
                     LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
+                '''
 
             self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
             linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
@@ -936,7 +936,7 @@ class MysqlHandler(DBMSRHandler):
             # but move_mysqldir_to call required to set several options in my.cnf
             coreutils.clean_dir(__mysql__['data_dir'])
 
-        self._change_selinux_ctx()
+        #self._change_selinux_ctx()
 
         log.info('Patch my.cnf configuration file')
         # Init replication
