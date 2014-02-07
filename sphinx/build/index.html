@@ -1,0 +1,310 @@
+
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  </head>
+  <body role="document">  
+            
+  <h1>Scalarizr API</h1>
+<h2>Базовая информация</h2>
+<p>Endpoint:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[http://{$hostname}:8010]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>Protocol: <a class="reference external" href="http://jsonrpc.org/">JSON-RPC</a></p>
+<h3>Аутентификация</h3>
+<p>Запрос шифруется и подписывается ключом сервера:</p>
+<p>Шифорвание:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[request = JSON-RPC request
+crypto_key =  Base64 encoded key
+raw_key = base64_decode(crypto_key)
+encrypted_request = crypt(request, algo="des_ede3_cbc", key=raw_key[0:24], iv=raw_key[-8:])]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>Подпись:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[date = "%a %d %b %Y %H:%M:%S UTC"
+canonical_string = encrypted_request + date
+signature = hmac(raw_key, canonical_string, "sha1")]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>Пример запроса:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api_client.storage.create(
+    storage_config={
+        'type': 'ebs',
+        'size': 1
+    },
+    _platform_access_data={
+        'key_id': 'XXXaws_access_key',
+        'key': 'XXXaws_secret_key'
+    }
+)]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>JSON-RPC layer:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[{"params": {"_platform_access_data": {"key_id": "XXXaws_access_key", "key": "XXXaws_secret_key"}, "storage_config": {"type": "ebs", "size": 1}}, "method": "create", "id": 1340184043.523402}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>HTTP layer:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[POST /storage HTTP/1.1
+Host: 23.22.0.61:8011
+Date: Wed 20 Jun 2012 09:20:43 UTC
+X-Signature: CCl+4bChjhxMJ4XGfvQ5MqL1q6s=
+Accept-Encoding: identity
+User-Agent: Python-urllib/2.7
+Connection: close
+
+
+SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Gop3kbYSsA840204hQ9/aiKbyiueugwbQhH0s42TNB8sO88OvM8qssmt7IF+VZw9CG//Jk5dgDAjcKbW87bnLij7+roUSvAsgv5FwuZ5Im2Y4p9zXrCTvFO/M9l0nmzsmM3Be9YioOdmXzHuzNN14ZihC+1AYRGZR47NAepqdWEnWn1Q9OTCwQhgaCFQJMlEWYVXKF9Q==]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<h4>Мета параметры</h4>
+<p><em>_platform_access_data</em> - Секретные данные доступа к клауд платформе. Описаны в спецификациях каждой клауд платформы. Идентичны <em>body.platform_access_data</em> в мессаджинге.</p>
+<h2>API</h2>
+<div class="toctree-wrapper compound">
+</div>
+<div class="class">
+<h2 id="scalarizr.api.apache.ApacheAPI">
+<em class="property">class </em><span class="descclassname">scalarizr.api.apache.</span><span class="descname">ApacheAPI</span></h2>
+<div><div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.create_vhost">
+<span class="descname">create_vhost</span><big>(</big><em>hostname</em>, <em>port</em>, <em>template</em>, <em>ssl</em>, <em>ssl_certificate_id=None</em>, <em>reload=True</em>, <em>allow_port=False</em><big>)</big></h2>
+<div><p>Creates Name-Based Apache VirtualHost</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>hostname</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- Server Name</li>
+<li><strong>port</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#int" title="(in Python v2.7)"><em>int</em></a>) -- Port number VirtualHost should listen to</li>
+<li><strong>template</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- VirtualHost body with no certificate paths</li>
+<li><strong>ssl</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- True if VirtualHost uses SSL certificate</li>
+<li><strong>ssl_certificate_id</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#int" title="(in Python v2.7)"><em>int</em></a>) -- ID of SSL certificate</li>
+<li><strong>reload</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- True if immediate apache reload is required.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">Path to VirtualHost file.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">str</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p>Examples:</p>
+<p>Configure VirtualHost &quot;www.dima.com&quot; on port 80 without SSL enabled and reload Apache2 service.:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.create_vhost("www.dima.com", 80, "<template>", False)
+"/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>ADD VirtualHost &quot;secure.dima.com&quot; on port 443 with SSL enabled, reload Apache2 and allow port 443 in IPTables:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.create_vhost("secure.dima.com", 443, "<template>", False)
+"/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>Configure VirtualHost &quot;old.dima.com&quot; on port 8080 without SSL enabled and without reloading Apache2 service.:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.create_vhost("old.dima.com", 8080, "<template>", reload=False)
+"/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>Please Note that VirtualHosts on custom ports feature requires testing.</p>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.update_vhost">
+<span class="descname">update_vhost</span><big>(</big><em>signature</em>, <em>hostname=None</em>, <em>port=80</em>, <em>template=None</em>, <em>ssl=False</em>, <em>ssl_certificate_id=None</em>, <em>reload=True</em><big>)</big></h2>
+<div><p>Changes settings of VirtualHost defined by &#64;signature.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>signature</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#tuple" title="(in Python v2.7)"><em>tuple</em></a>) -- Hostname and Port to identidy VirtualHost for modifying.</li>
+<li><strong>hostname</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- New hostname.</li>
+<li><strong>port</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#int" title="(in Python v2.7)"><em>int</em></a>) -- New port.</li>
+<li><strong>ssl</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- Indicates if the updated VirtualHost is going to be ssl-based.</li>
+<li><strong>ssl_certificate_id</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#int" title="(in Python v2.7)"><em>int</em></a>) -- ID of the new certificate to fetch from Scalr.</li>
+<li><strong>reload</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- Indicates if immediate reload is required.</li>
+<li><strong>template</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- <p>New template. If new template is passed,</p>
+<p>all other changes (e.g. hostname, port, cert) will be applied to it.</p>
+<p>Otherwise changes will be applied to old VirtualHost`s body.</p>
+</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<p>Change ServerName to old.dima.com, switch port to 8080 and reload service.:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>Please Note that Scalr does not use update_vhost API method thus it has not been tested properly.</p>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.delete_vhosts">
+<span class="descname">delete_vhosts</span><big>(</big><em>vhosts</em>, <em>reload=True</em><big>)</big></h2>
+<div><p>Removes given VirtualHosts from Apache2 configuration.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>vhosts</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#list" title="(in Python v2.7)"><em>list</em></a>) -- [(hostname,password),]</li>
+<li><strong>reload</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- Indicates if immediate service reload is reqired.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<p>Example:
+Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service.:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.reconfigure">
+<span class="descname">reconfigure</span><big>(</big><em>vhosts</em>, <em>reload=True</em>, <em>rollback_on_error=True</em><big>)</big></h2>
+<div><p>Deploys multiple VirtualHosts and removes odds.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>vhosts</strong> -- list(dict(hostname:hostname1,port:port1,template:tpl1,..),..)</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">paths to reconfigured VirtualHosts</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+<p>Example:
+Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service.:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
+api.apache.service.reconfigure([vhost1,])]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.get_webserver_statistics">
+<span class="descname">get_webserver_statistics</span><big>(</big><big>)</big></h2>
+<div><p>Returns mod_stat data</p>
+<p>i.e.
+Current Time,
+Restart Time,
+Parent Server Generation,
+Server uptime,
+Total accesses,
+CPU Usage.</p>
+<p>The machine readable file can be accessed by using the following link:</p>
+<p><a class="reference external" href="http://your.server.name/server-status?auto">http://your.server.name/server-status?auto</a></p>
+<p>Data are available only when mod_stat is enabled.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Parsed mod_status data</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.get_webserver_statistics()
+    {u'BusyWorkers': u'1',
+     u'BytesPerReq': u'204.8',
+     u'BytesPerSec': u'.0222655',
+     u'CPULoad': u'.000293539',
+     u'IdleWorkers': u'5',
+     u'ReqPerSec': u'.000108718',
+     u'Scoreboard': u'____W_....',
+     u'Total Accesses': u'10',
+     u'Total kBytes': u'2',
+     u'Uptime': u'91981'}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.list_served_virtual_hosts">
+<span class="descname">list_served_virtual_hosts</span><big>(</big><big>)</big></h2>
+<div><p>Returns all VirtualHosts deployed by Scalr
+and available on web server</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Paths to available VirtualHosts</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.list_served_virtual_hosts()
+["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.set_default_ssl_certificate">
+<span class="descname">set_default_ssl_certificate</span><big>(</big><em>id</em><big>)</big></h2>
+<div><p>If the certificate with given ID already exists on disk
+this method adds it to the default SSL virtual host.
+Otherwice default system certificate will be used.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>id</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#int" title="(in Python v2.7)"><em>int</em></a>) -- SSL Certificate ID</td>
+</tr>
+</tbody>
+</table>
+<p>Example:
+Set Scalr Certificate ID#873 as default:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.set_default_ssl_certificate("873")]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.start_service">
+<span class="descname">start_service</span><big>(</big><big>)</big></h2>
+<div><p>Start Apache service:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.start_service()]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.stop_service">
+<span class="descname">stop_service</span><big>(</big><em>reason=None</em><big>)</big></h2>
+<div><p>Stop Apache service:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.stop_service("Configuring Apache2 service.")]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.restart_service">
+<span class="descname">restart_service</span><big>(</big><em>reason=None</em><big>)</big></h2>
+<div><p>Restart Apache service:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.restart_service("Applying new service configuration preset.")]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.reload_service">
+<span class="descname">reload_service</span><big>(</big><em>reason=None</em><big>)</big></h2>
+<div><p>Reload Apache service:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.reload_service("Applying RPAF proxy list.")]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+<div class="method">
+<h2 id="scalarizr.api.apache.ApacheAPI.configtest">
+<span class="descname">configtest</span><big>(</big><big>)</big></h2>
+<div><p>Run Apache configtest:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.configtest()]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
+
+</div></div>
+
+
+
+      <div class="clearer"></div>
+    <div class="footer" role="contentinfo">
+    </div>
+  </body>
+</html>
