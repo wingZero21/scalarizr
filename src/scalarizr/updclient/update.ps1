@@ -111,6 +111,7 @@ param ($PackageFile)
         Throw "Scalarizr installer $(Split-Path -Leaf $PackageFile) exited with code: $($Proc.ExitCode)"
     }
     Log "Installer completed"
+    Start-Sleep -s 2  # Give them time to think
 }
 
 function Stop-SzrService {
