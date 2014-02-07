@@ -105,6 +105,7 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                 try:
                     loop = re.search('(/dev/loop\d+)', out).group(1)
                     root_dev_name = '/dev/mapper/%sp1' % loop.split('/')[-1]
+                    wait_until(os.path.exists, args=(root_dev_name,), sleep=0.1, timeout=10)
 
                     LOG.info('Creating filesystem')
                     storage2.filesystem('ext4').mkfs(root_dev_name)
