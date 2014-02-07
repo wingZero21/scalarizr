@@ -891,8 +891,12 @@ class MysqlHandler(DBMSRHandler):
         for key, value in options.items():
             self.mysql.my_cnf.set('mysqld/' + key, value)
 
-        #if not os.listdir(__mysql__['data_dir']):
         if not storage_valid:
+            for path in (__mysql__['data_dir'], __mysql__['binlog_dir']):
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                coreutils.chown_r(path, 'mysql', 'mysql')
+
             if linux.os['family'] == 'RedHat':
                 try:
                     # Check if selinux enabled
