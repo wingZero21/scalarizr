@@ -536,8 +536,8 @@ class ApacheAPI(object):
 
         Example::
 
-        >>> api.apache.service.list_served_virtual_hosts()
-        ["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]
+            >>> api.apache.service.list_served_virtual_hosts()
+            ["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]
 
         """
         text = system2((__apache__["apachectl"], "-S"))[0]

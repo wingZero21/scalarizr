@@ -86,4 +86,3 @@ API
 		restart_service,
 		reload_service,
 		configtest
-
