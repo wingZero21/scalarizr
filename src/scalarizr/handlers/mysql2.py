@@ -866,7 +866,7 @@ class MysqlHandler(DBMSRHandler):
             __mysql__['volume'].ensure(mount=True, mkfs=True)
             LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
 
-        coreutils.remove(__mysql__['defaults']['datadir'])
+        coreutils.clean_dir(__mysql__['defaults']['datadir'])
         self.mysql.flush_logs(__mysql__['data_dir'])
         self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
         self._change_selinux_ctx()
@@ -909,7 +909,7 @@ class MysqlHandler(DBMSRHandler):
         options = {
             'bind-address': '0.0.0.0',
             'datadir': __mysql__['data_dir'],
-            'log_bin': __mysql__['binlog_dir'],
+            'log_bin': os.path.join(__mysql__['binlog_dir'], 'binlog'),
             'log-bin-index': os.path.join(__mysql__['binlog_dir'], 'binlog.index'),  # MariaDB
             'sync_binlog': '1',
             'innodb_flush_log_at_trx_commit': '1',
