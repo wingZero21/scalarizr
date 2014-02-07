@@ -112,10 +112,11 @@ def chmod_r(path, mode):
 
 
 def remove(path):
-    if os.path.isfile(path):
-        os.remove(path) 
-    elif os.path.isdir(path):
-        shutil.rmtree(path)
+    if os.path.exists(path):
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else: 
+            os.remove(path) 
 
 
 def clean_dir(path, recursive=True):
