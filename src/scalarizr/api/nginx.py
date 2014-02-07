@@ -598,7 +598,7 @@ class NginxAPI(object):
             if reload_service:
                 self._reload_service()
 
-    def do_reconfigure(self, proxies):
+    def do_reconfigure(self, op, proxies):
         backend_table_bak = self.backend_table.copy()
         main_conf_path = self.proxies_inc_dir + '/nginx.conf'
         try:
@@ -616,9 +616,8 @@ class NginxAPI(object):
                 self.recreate_proxying(proxies, reload_service=False)
             else:
                 self._recreate_compat_mode()
-
-
             self.service.configtest()
+
         except:
             os.remove(self.app_inc_path)
             os.remove(self.proxies_inc_path)

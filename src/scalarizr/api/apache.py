@@ -325,7 +325,7 @@ class ApacheAPI(object):
             else:
                 self.reload_service('%s VirtualHosts removed.' % len(vhosts))
 
-    def do_reconfigure(self, vhosts=None, reload=True, rollback_on_error=True):
+    def do_reconfigure(self, op, vhosts=None, reload=True, rollback_on_error=True):
         """
         Deploys multiple VirtualHosts and removes odds.
         @param vhosts: list(dict(vhost_data),)
