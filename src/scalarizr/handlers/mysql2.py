@@ -878,18 +878,6 @@ class MysqlHandler(DBMSRHandler):
         #    #self.mysql.my_cnf.datadir = '/var/lib/mysql'
         #    self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
 
-        # Patch configuration
-        options = {
-            'bind-address': '0.0.0.0',
-            'datadir': __mysql__['data_dir'],
-            'log_bin': __mysql__['binlog_dir'],
-            'log-bin-index': os.path.join(__mysql__['binlog_dir'], 'binlog.index'),  # MariaDB
-            'sync_binlog': '1',
-            'innodb_flush_log_at_trx_commit': '1',
-            'expire_logs_days': '10'
-        }
-        for key, value in options.items():
-            self.mysql.my_cnf.set('mysqld/' + key, value)
 
         if not storage_valid:
             for path in (__mysql__['data_dir'], __mysql__['binlog_dir']):
@@ -914,7 +902,23 @@ class MysqlHandler(DBMSRHandler):
                 except:
                     LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
 
+            self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
             linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
+
+        # Patch configuration
+        options = {
+            'bind-address': '0.0.0.0',
+            'datadir': __mysql__['data_dir'],
+            'log_bin': __mysql__['binlog_dir'],
+            'log-bin-index': os.path.join(__mysql__['binlog_dir'], 'binlog.index'),  # MariaDB
+            'sync_binlog': '1',
+            'innodb_flush_log_at_trx_commit': '1',
+            'expire_logs_days': '10'
+        }
+        for key, value in options.items():
+            self.mysql.my_cnf.set('mysqld/' + key, value)
+
+        if not storage_valid:
             if __mysql__['behavior'] == 'percona' and linux.os.debian_family:
                 self.mysql.service.start()
                 debian_cnf = metaconf.Configuration('mysql')
