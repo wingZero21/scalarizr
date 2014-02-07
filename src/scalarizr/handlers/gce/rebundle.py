@@ -22,6 +22,7 @@ from scalarizr.handlers import HandlerError, rebundle as rebundle_hndlr
 from scalarizr.linux.tar import Tar
 from scalarizr.linux.rsync import rsync
 from scalarizr.linux import coreutils
+from scalarizr.linux import os as os_dist
 
 
 def get_handlers():
@@ -155,6 +156,10 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
                             with open(fstab_path, 'w') as f:
                                 f.write(new_fstab)
+
+                        if os_dist.redhat_family:
+                            # Relabel fs for SElinux
+                            open(os.path.join(tmp_mount_dir, '.autorelabel'), 'w').close()
 
                     finally:
                         mount.umount(root_dev_name)
