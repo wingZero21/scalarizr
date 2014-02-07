@@ -387,13 +387,13 @@ class ApacheAPI(object):
 
     @rpc.command_method
     def reconfigure(self, vhosts=None, reload=True, rollback_on_error=True, async=True):
-        self._op_api.run('api.apache.reconfigure',
-                         func=self.do_reconfigure,
-                         func_kwds={'vhosts': vhosts,
-                                    'reload': reload,
-                                    'rollback_on_error': rollback_on_error},
-                         async=async,
-                         exclusive=True)
+        return self._op_api.run('api.apache.reconfigure',
+                                func=self.do_reconfigure,
+                                func_kwds={'vhosts': vhosts,
+                                           'reload': reload,
+                                           'rollback_on_error': rollback_on_error},
+                                async=async,
+                                exclusive=True)
 
     @rpc.query_method
     def get_webserver_statistics(self):
