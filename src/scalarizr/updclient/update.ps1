@@ -149,8 +149,10 @@ param ($Certainly = $false)
 
     if ($Certainly -or (Get-Service "ScalrUpdClient" -ErrorAction SilentlyContinue)) {
         Log "Starting services"
-        Start-Service "ScalrUpdClient"  
+        Start-Service "ScalrUpdClient"
+        Log "Started ScalrUpdClient without any errors"  
         Start-Service "Scalarizr"
+        Log "Started Scalarizr without any errors" 
     }
 }
 
