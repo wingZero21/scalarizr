@@ -173,7 +173,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         else:
             env_file_path = '/etc/environment'
             opening_label = \
-                '############## BEGINNGING OF SCALR VARIABLES. PLEASE DO NOT EDIT ##############\n'
+                '########## BEGINNGING OF SCALR-DEFINED VARIABLES. PLEASE DO NOT EDIT ##########\n'
             closing_label = \
                 '############################ END OF SCALR VARIABLES ###########################\n'
             env_conf = ''
@@ -192,7 +192,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                 for kv in glob_vars.items():
                     scalr_kv += '%s=%s\n' % kv
                 scalr_kv = opening_label + scalr_kv + closing_label
-                fp.write(env_conf + '\n' + scalr_kv)
+                if not env_conf.endswith('\n'):
+                    scalr_kv = '\n' + scalr_kv
+                fp.write(env_conf + scalr_kv)
 
     def _assign_hostname(self):
         if not __node__.get('hostname'):
