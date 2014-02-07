@@ -871,25 +871,25 @@ class MysqlHandler(DBMSRHandler):
         log.info('Move data directory to storage')
         storage_valid = self._storage_valid()
         user_creds = self.get_user_creds()
-
-        datadir = mysql2_svc.my_print_defaults('mysqld').get('datadir', '/var/lib/mysql')
-        self.mysql.my_cnf.datadir = datadir
         self._fix_percona_debian_cnf()
-
-        if not storage_valid and datadir.find(__mysql__['data_dir']) == 0:
-            # When role was created from another mysql role it contains modified my.cnf settings
-            self.mysql.my_cnf.datadir = '/var/lib/mysql'
-            self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
+        #datadir = mysql2_svc.my_print_defaults('mysqld').get('datadir', __mysql__['defaults']['datadir'])
+        #if not storage_valid and datadir.find(__mysql__['data_dir']) == 0:
+        #    # When role was created from another mysql role it contains modified my.cnf settings
+        #    #self.mysql.my_cnf.datadir = '/var/lib/mysql'
+        #    self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
 
         # Patch configuration
-        self.mysql.my_cnf.expire_logs_days = 10
-        LOG.debug('bind-address pre: %s', self.mysql.my_cnf.bind_address)
-        self.mysql.my_cnf.bind_address = '0.0.0.0'
-        LOG.debug('bind-address post: %s', self.mysql.my_cnf.bind_address)
-        self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
-        self.mysql.my_cnf.set('mysqld/log-bin-index', __mysql__['binlog_dir'] + '/binlog.index')  # MariaDB 
-        self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
-        self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
+        options = {
+            'bind-address': '0.0.0.0',
+            'datadir': __mysql__['data_dir'],
+            'log_bin': __mysql__['binlog_dir'],
+            'log-bin-index': os.path.join(__mysql__['binlog_dir'], 'binlog.index'),  # MariaDB
+            'sync_binlog': '1',
+            'innodb_flush_log_at_trx_commit': '1',
+            'expire_logs_days': '10'
+        }
+        for key, value in options.items():
+            self.mysql.my_cnf.set('mysqld/' + key, value)
 
         #if not os.listdir(__mysql__['data_dir']):
         if not storage_valid:
