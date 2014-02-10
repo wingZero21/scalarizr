@@ -79,8 +79,11 @@ function Restore-SzrBackup {
     if (Test-Path $BackupCreatedLock) {
         Log "Restoring previous installation from backup"
         $DirsToBackup | foreach {
-            $NewName = $_
             $Path = "$InstallDir\$_-$InstalledVersion"
+            $NewName = "$InstallDir\$_"
+            if (Test-Path $NewName) {
+                Remove-Item $NewName -Force -Recurse
+            }
             if (Test-Path $Path) {
                 Rename-Item -Path $Path -NewName $NewName
             }
@@ -190,6 +193,7 @@ function Main-Szr {
             }
             catch {
                 Write-Error $_ -ErrorAction Continue
+                Stop-SzrServices
                 Restore-SzrBackup
                 Set-SzrState "rollbacked"
             }
