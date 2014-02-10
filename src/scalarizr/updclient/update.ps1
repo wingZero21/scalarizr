@@ -22,6 +22,7 @@ $LogFile = "$LogDir\scalarizr_update_win.log"
 $StatusFile = "$InstallDir\etc\private.d\update_win.status"
 $BackupCreatedLock = "$RunDir\backup.created"
 $DirsToBackup = @("src", "Python27")
+$ServicesToOperate = @("Scalarizr", "ScalrUpdClient")
 $InstalledVersion = ""
 $State = "in-progress"
 $PrevState = $Null
@@ -81,6 +82,7 @@ function Restore-SzrBackup {
         $DirsToBackup | foreach {
             $Path = "$InstallDir\$_-$InstalledVersion"
             $NewName = "$InstallDir\$_"
+            handle $NewName
             if (Test-Path $NewName) {
                 Remove-Item $NewName -Force -Recurse
             }
@@ -143,8 +145,9 @@ param ($Name)
 
 function Stop-SzrServices {
     Log "Stopping services"
-    Stop-SzrService "ScalrUpdClient" 
-    Stop-SzrService "Scalarizr"
+    ServicesToOperate | foreach {
+        Stop-SzrService $_
+    }
     Start-Sleep -s 2  # Give them time to shutdown
 }
 
@@ -153,10 +156,17 @@ param ($Certainly = $false)
 
     if ($Certainly -or (Get-Service "ScalrUpdClient" -ErrorAction SilentlyContinue)) {
         Log "Starting services"
-        Start-Service "ScalrUpdClient"
-        Log "Started ScalrUpdClient without any errors"  
-        Start-Service "Scalarizr"
-        Log "Started Scalarizr without any errors" 
+        $ServicesToOperate | foreach {
+            $Name = $_
+            Start-Service $Name
+            Log "Started $Name"  
+            Start-Sleep -s 2
+            $Svs = Get-Service $Name
+            Log $Svs
+            if (-not $Svs.Status -eq "Running") {
+                Throw "Serviсe started but failed a moment later: $Name"
+            }
+        }
     }
 }
 
