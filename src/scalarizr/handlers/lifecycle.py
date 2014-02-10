@@ -171,8 +171,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             pass
         else:
             with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
-                for kv in glob_vars.items():
-                    fp.write('export %s="%s"\n' % kv)
+                for k, v in glob_vars.items():
+                    v = v.replace('"', '\\"')
+                    fp.write('export %s="%s"\n' % (k, v))
 
     def _assign_hostname(self):
         if not __node__.get('hostname'):
