@@ -383,6 +383,7 @@ class ApacheAPI(object):
         else:
             LOG.info("Apache configuration has been changed without service reload.")
 
+        LOG.debug("applied vhosts: %s" % applied_vhosts)
         return applied_vhosts
 
     @rpc.command_method
