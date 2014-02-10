@@ -189,8 +189,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
             with open(env_file_path, 'w') as fp:
                 scalr_kv = ''
-                for kv in glob_vars.items():
-                    scalr_kv += '%s=%s\n' % kv
+                for k, v in glob_vars.items():
+                    v = v.replace('"', '\\"')
+                    v = v.replace('\n', '\\n')
+                    scalr_kv += '%s=%s\n' % (k, v)
                 scalr_kv = opening_label + scalr_kv + closing_label
                 if not env_conf.endswith('\n'):
                     scalr_kv = '\n' + scalr_kv
