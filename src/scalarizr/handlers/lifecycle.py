@@ -27,6 +27,7 @@ if os_dist.windows_family:
     import win32timezone as os_time
 else:
     from datetime import datetime as os_time
+from scalarizr.libs import metaconf
 
 # Stdlibs
 import logging, os, sys, threading
@@ -170,10 +171,30 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if 'Windows' == os_dist['family']:
             pass
         else:
-            with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
-                for kv in glob_vars.items():
-                    fp.write('export %s="%s"\n' % kv)
+            env_file_path = '/etc/environment'
+            opening_label = \
+                '########## BEGINNGING OF SCALR-DEFINED VARIABLES. PLEASE DO NOT EDIT ##########\n'
+            closing_label = \
+                '############################ END OF SCALR VARIABLES ###########################\n'
+            env_conf = ''
+            with open(env_file_path, 'r') as fp:
+                env_conf = fp.read()
+            try:
+                # Removing outdated variables
+                start = env_conf.index(opening_label)
+                end = env_conf.index(closing_label) + len(closing_label)
+                env_conf = env_conf[:start] + env_conf[end:]
+            except ValueError:
+                pass
 
+            with open(env_file_path, 'w') as fp:
+                scalr_kv = ''
+                for kv in glob_vars.items():
+                    scalr_kv += '%s=%s\n' % kv
+                scalr_kv = opening_label + scalr_kv + closing_label
+                if not env_conf.endswith('\n'):
+                    scalr_kv = '\n' + scalr_kv
+                fp.write(env_conf + scalr_kv)
 
     def _assign_hostname(self):
         if not __node__.get('hostname'):

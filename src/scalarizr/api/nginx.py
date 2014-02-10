@@ -80,7 +80,13 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
             if 'server: nginx' in telnet.read_all().lower():
                 return initdv2.Status.RUNNING
             return initdv2.Status.UNKNOWN
-        return status
+        else:
+            args = [self.initd_script, 'status']
+            _, _, returncode = system2(args, raise_exc=False)
+            if returncode == 0:
+                return initdv2.Status.RUNNING
+            else:
+                return initdv2.Status.NOT_RUNNING
 
     def configtest(self, path=None):
         args = '%s -t' % self._nginx_binary
@@ -93,19 +99,23 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def stop(self):
         if not self.running:
-            return True
+            return
         ret = initdv2.ParametrizedInitScript.stop(self)
         time.sleep(1)
-        return ret
+        return
 
     def restart(self):
         self.configtest()
         ret = initdv2.ParametrizedInitScript.restart(self)
         time.sleep(1)
-        return ret
+        return
 
     def start(self):
         self.configtest()
+
+        if self.running:
+            return
+
         try:
             args = [self.initd_script] \
                 if isinstance(self.initd_script, basestring) \
@@ -174,7 +184,7 @@ class NginxAPI(object):
             app_inc_dir = os.path.dirname(__nginx__['app_include_path'])
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
         self._load_app_servers_inc()
-        self._fix_app_servers_inc()
+        self.fix_app_servers_inc()
 
         if not proxies_inc_dir:
             proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
@@ -229,7 +239,7 @@ class NginxAPI(object):
             _logger.debug('Creating app-servers.include')
             open(self.app_inc_path, 'w').close()
 
-    def _fix_app_servers_inc(self):
+    def fix_app_servers_inc(self):
         _logger.debug('Fixing app servers include')
         https_inc_xpath = self.app_servers_inc.xpath_of('include',
                                                         '/etc/nginx/https.include')

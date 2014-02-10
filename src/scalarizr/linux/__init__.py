@@ -12,12 +12,14 @@ class LinuxError(util.PopenError):
     pass
 
 
-def which(exe):
+def which(exe, path_append=None):
     if exe and exe.startswith('/') and \
                     osmod.access(exe, osmod.X_OK):
         return exe
     exe = osmod.path.basename(exe)
     path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
+    if path_append:
+        path = '{0}:{1}'.format(path, path_append)
     if osmod.environ.get('PATH'):
         path += ':' + osmod.environ['PATH']
     for p in set(path.split(osmod.pathsep)):

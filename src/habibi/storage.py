@@ -22,8 +22,7 @@ class StorageError(Exception):
     pass
 
 
-class StorageManager():
-
+class StorageMgr():
 
     def __init__(self, farm):
         self.farm = farm
@@ -32,8 +31,7 @@ class StorageManager():
         # Server_id -> [volumes attached]
         self.attachments = dict()
 
-
-    @events.breakpoint(event='server_terminated')
+    @events.listener(event='server_terminated')
     def _server_terminated(self, server):
         if self.attachments.get(server['id']):
             for volume in self.attachments[server['id']]:
@@ -143,9 +141,18 @@ class StorageManager():
         assert attached_to == instance_id, 'Volume not atached to instance "%s"' % instance_id
 
         deny_path_wildcard = os.path.join(cgroup_mpoint, 'devices/lxc/%s*/devices.deny' % instance_id)
-        deny_path = glob.glob(deny_path_wildcard)[0]
-        with open(deny_path, 'w') as f:
-            f.write("b %s:%s rwm\n" % (volume['maj'], volume['min']))
+        try:
+            deny_path = glob.glob(deny_path_wildcard)[0]
+        except IndexError:
+            # Server is no longer exist
+            pass
+        else:
+            try:
+                # Again. does not exist
+                with open(deny_path, 'w') as f:
+                    f.write("b %s:%s rwm\n" % (volume['maj'], volume['min']))
+            except IOError:
+                pass
 
         volume['attached_to'] = None
         self.attachments[instance_id].remove(volume)
@@ -188,7 +195,6 @@ class StorageManager():
 
 
     def describe_volume(self, id):
-        # TODO: check if attached to dead instance, change attachment state
         try:
             return self.volumes[id]
         except KeyError:
