@@ -61,7 +61,11 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 <div class="class">
 <h2 id="scalarizr.api.apache.ApacheAPI">
 <em class="property">class </em><span class="descclassname">scalarizr.api.apache.</span><span class="descname">ApacheAPI</span></h2>
-<div><div class="method">
+<div><p>Basic API for configuring Apache VirtualHosts, querying statistics and controlling service status.</p>
+<p>namespace:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[apache]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<div class="method">
 <h2 id="scalarizr.api.apache.ApacheAPI.create_vhost">
 <span class="descname">create_vhost</span><big>(</big><em>hostname</em>, <em>port</em>, <em>template</em>, <em>ssl</em>, <em>ssl_certificate_id=None</em>, <em>reload=True</em>, <em>allow_port=False</em><big>)</big></h2>
 <div><p>Creates Name-Based Apache VirtualHost</p>
@@ -88,7 +92,7 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 </tbody>
 </table>
 <p>Examples:</p>
-<p>Configure VirtualHost &quot;www.dima.com&quot; on port 80 without SSL enabled and reload Apache2 service.:</p>
+<p>Configure VirtualHost &quot;www.dima.com&quot; on port 80 without SSL enabled and reload Apache2 service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.create_vhost("www.dima.com", 80, "<template>", False)
 "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
 </div>
@@ -96,7 +100,7 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.create_vhost("secure.dima.com", 443, "<template>", False)
 "/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
 </div>
-<p>Configure VirtualHost &quot;old.dima.com&quot; on port 8080 without SSL enabled and without reloading Apache2 service.:</p>
+<p>Configure VirtualHost &quot;old.dima.com&quot; on port 8080 without SSL enabled and without reloading Apache2 service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.create_vhost("old.dima.com", 8080, "<template>", reload=False)
 "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
 </div>
@@ -128,7 +132,7 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 </tbody>
 </table>
 <p>Example:</p>
-<p>Change ServerName to old.dima.com, switch port to 8080 and reload service.:</p>
+<p>Change ServerName to old.dima.com, switch port to 8080 and reload service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)]]></ac:plain-text-body></ac:structured-macro>
 </div>
 <p>Please Note that Scalr does not use update_vhost API method thus it has not been tested properly.</p>
@@ -151,7 +155,7 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 </tbody>
 </table>
 <p>Example:
-Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service.:</p>
+Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div></div>
@@ -173,7 +177,7 @@ Remove 2 VirtualHosts from Apache2 configuration without removing website conten
 </tbody>
 </table>
 <p>Example:
-Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service.:</p>
+Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
 api.apache.service.reconfigure([vhost1,])]]></ac:plain-text-body></ac:structured-macro>
 </div>
