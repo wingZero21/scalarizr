@@ -147,8 +147,9 @@ class UpdClientAPI(object):
         return locals()
     state = property(**state())
 
+
     def __init__(self, **kwds):
-        self.__dict__.update(kwds)
+        self._update_self_dict(**kwds)
         self.pkgmgr = pkgmgr.package_mgr()
         self.daemon = initdv2.Daemon('scalarizr')
         self.op_api = operation.OperationAPI()
@@ -156,6 +157,12 @@ class UpdClientAPI(object):
         self.state = 'noop'
         self.meta = metadata.meta()
         self.shutdown_ev = threading.Event()
+
+
+    def _update_self_dict(self, data):
+        self.__dict__.update(data)
+        if 'state' in data:
+            self.__dict__['_state'] = data['state']
 
 
     def _init_queryenv(self):
@@ -275,18 +282,18 @@ class UpdClientAPI(object):
 
         if system_matches:
             LOG.debug('Apply %s settings', self.status_file)
-            self.__dict__.update(status_data)
+            self._update_self_dict(status_data)
             if os.path.exists(self.win_status_file):
                 with open(self.win_status_file) as fp:
                     LOG.debug('Apply %s settings', self.win_status_file)
-                    self.__dict__.update(json.load(fp))
+                    self._update_self_dict(json.load(fp))
                 os.unlink(self.win_status_file)
         else:
             LOG.debug('Getting cloud user-data')
             user_data = self.meta.user_data()
             norm_user_data(user_data)
             LOG.debug('Apply user-data settings')
-            self.__dict__.update(user_data)
+            self._update_self_dict(user_data)
 
             crypto_dir = os.path.dirname(self.crypto_file)
             if not os.path.exists(crypto_dir):
@@ -387,7 +394,7 @@ class UpdClientAPI(object):
     def _sync(self):
         params = self.queryenv.list_farm_role_params(self.farm_role_id)
         update = params.get('params', {}).get('base', {}).get('update', {})
-        self.__dict__.update(update)
+        self._update_self_dict(update)
         self.repo_url = value_for_repository(
             deb=update.get('deb_repo_url'),
             rpm=update.get('rpm_repo_url'),
@@ -506,7 +513,7 @@ class UpdClientAPI(object):
                     self.state = 'completed'
                     LOG.info('No new version available ({0})'.format(self.package))
                     return 
-                self.__dict__.update(pkginfo)
+                self._update_self_dict(pkginfo)
 
                 if bootstrap and not linux.os.windows:
                     self.state = 'in-progress/uninstall'
