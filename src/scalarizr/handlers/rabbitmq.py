@@ -267,12 +267,13 @@ class RabbitMQHandler(ServiceCtlHandler):
         hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
         rabbitmq_data['hostname'] = hostname
         dns.ScalrHosts.set('127.0.0.1', hostname)
+        self._set_nodename_in_env()
 
         self.service.start()
         self.rabbitmq.stop_app()
         self.rabbitmq.reset()
         self.service.stop()
-        
+
         # Use RABBITMQ_NODENAME instead of setting actual hostname
         #with open('/etc/hostname', 'w') as f:
         #    f.write(hostname)
@@ -284,8 +285,6 @@ class RabbitMQHandler(ServiceCtlHandler):
         rabbitmq_data['volume'].tags = self.rabbitmq_tags
 
         __rabbitmq__.update(rabbitmq_data)
-
-        self._set_nodename_in_env()
 
 
     def _is_storage_empty(self, storage_path):
