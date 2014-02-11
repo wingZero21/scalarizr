@@ -703,7 +703,7 @@ class Service(object):
         if cnf.state == ScalarizrState.BOOTSTRAPPING:
             cnf.fire('apply_user_data', cnf)
             
-        self._talk_with_updclient()
+        self._talk_to_updclient()
 
         # Check Scalr version
         if not bus.scalr_version:
@@ -953,7 +953,7 @@ class Service(object):
         ex = bus.periodical_executor
         ex.start()
 
-    def _talk_with_updclient(self):
+    def _talk_to_updclient(self):
         try:
             upd = jsonrpc_http.HttpServiceProxy('http://localhost:8008', bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
             upd_svs = ScalrUpdClientScript()
@@ -965,17 +965,20 @@ class Service(object):
                     upd_state[0] = upd.status()['state']
                     return upd_state[0] != 'noop'
                 except (urllib2.HTTPError, socket.error, IOError):
-                    self._logger.debug('Failed to check updclient status: %s', sys.exc_info()[1])
+                    self._logger.debug('Failed to get UpdateClient status: %s', sys.exc_info()[1])
             wait_until(upd_ready, timeout=60, sleep=1)
             upd_state = upd_state[0]
-            self._logger.debug('UpdateClient state: %s', upd_state)
-            if upd_state.startswith('in-progress'):
-                self._logger.info('Stopped (UpdateClient upgrades Scalarizr)')
+            self._logger.info('UpdateClient state: %s', upd_state)
+            if upd_state == 'in-progress/restart':
+                self._logger.info('Scalarizr was restarted by update process')
+            elif upd_state.startswith('in-progress'):
+                self._logger.info('Update is in-progress, exiting')
                 sys.exit()
             elif upd_state == 'completed/wait-ack':
+                self._logger.info('UpdateClient completed update and should be restarted, restarting')
                 upd_svs.restart()
         except:
-            self._logger.warn('Failed to talk with scalr-upd-client: %s', sys.exc_info()[1])
+            self._logger.warn('Failed to talk to UpdateClient: %s', sys.exc_info()[1])
 
 
     def _shutdown(self):

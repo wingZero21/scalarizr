@@ -145,7 +145,7 @@ param ($Name)
 
 function Stop-SzrServices {
     Log "Stopping services"
-    ServicesToOperate | foreach {
+    $ServicesToOperate | foreach {
         Stop-SzrService $_
     }
     Start-Sleep -s 2  # Give them time to shutdown
@@ -176,6 +176,27 @@ param ($State)
     $script:State = $State
 }
 
+function Save-SzrStatus {
+    $Msg = @()
+    $Error | foreach { $Msg += [string]$_ }
+    $Msg = $Msg | Select -Uniq
+    if ($Msg) {  
+        # Empty arrays are not welcome: 
+        # Exception calling "Reverse" with "1" argument(s): "Value cannot be null.
+        [array]::Reverse($Msg)
+    }
+    $Installed = $(Get-ItemProperty -Path hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr -Name DisplayVersion).DisplayVersion
+
+    $Status = @{
+        error = $Msg -join "`n"; 
+        state = $State;
+        prev_state = $PrevState;
+        installed = $Installed
+    } | ConvertTo-Json
+    Log "Saving status: $Status"
+    Set-Content -Encoding Ascii -Path $StatusFile -Value $Status  
+}
+
 function Main-Szr {
     try {
         Set-SzrState "in-progress/prepare"
@@ -197,7 +218,8 @@ function Main-Szr {
                 if (-not (Test-Path "$InstallDir\src")) {
                     Throw "Installer completed without installing new files"
                 }
-                Set-SzrState "in-progress/start"
+                Set-SzrState "in-progress/restart"
+                Save-SzrStatus
                 Start-SzrServices -Сertainly
                 Set-SzrState "completed"
             }
@@ -218,25 +240,7 @@ function Main-Szr {
     }
     finally {
         try {
-            $Msg = @()
-            $Error | foreach { $Msg += [string]$_ }
-            $Msg = $Msg | Select -Uniq
-            if ($Msg) {  
-                # Empty arrays are not welcome: 
-                # Exception calling "Reverse" with "1" argument(s): "Value cannot be null.
-                [array]::Reverse($Msg)
-            }
-            $Installed = $(Get-ItemProperty -Path hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr -Name DisplayVersion).DisplayVersion
-
-            $Status = @{
-                error = $Msg -join "`n"; 
-                state = $State;
-                prev_state = $PrevState;
-                installed = $Installed
-            } | ConvertTo-Json
-            Log "Saving status: $Status"
-            Set-Content -Encoding Ascii -Path $StatusFile -Value $Status
-
+            Save-SzrStatus
             Start-SzrServices -ErrorAction Continue
             Remove-Item $PackageFile  
         } 
