@@ -149,7 +149,7 @@ class UpdClientAPI(object):
 
 
     def __init__(self, **kwds):
-        self._update_self_dict(**kwds)
+        self._update_self_dict(kwds)
         self.pkgmgr = pkgmgr.package_mgr()
         self.daemon = initdv2.Daemon('scalarizr')
         self.op_api = operation.OperationAPI()
