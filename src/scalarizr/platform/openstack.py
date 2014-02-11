@@ -45,7 +45,7 @@ class NovaConnectionProxy(OpenStackConnectionProxy):
                 region_name=self._platform._access_data['cloud_location'],
                 service_type='compute'
             )
-            import novaclient
+            import novaclient # NameError: name 'novaclient' is not defined
             if hasattr(novaclient, '__version__') and os.environ.get('OS_AUTH_SYSTEM'):
                 try:
                     import novaclient.auth_plugin
