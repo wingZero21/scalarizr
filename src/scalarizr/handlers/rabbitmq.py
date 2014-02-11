@@ -265,7 +265,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         self.service.stop()
 
         hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
-        rabbitmq_data['hostname'] = hostname
+        __rabbitmq__['hostname'] = hostname
         dns.ScalrHosts.set('127.0.0.1', hostname)
         self._set_nodename_in_env()
 
