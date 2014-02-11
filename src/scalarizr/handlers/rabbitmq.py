@@ -77,10 +77,14 @@ class RabbitMQHandler(ServiceCtlHandler):
         bus.on("host_init_response", self.on_host_init_response)
         bus.on("before_host_up", self.on_before_host_up)
         bus.on("before_hello", self.on_before_hello)
+        bus.on("start", self.on_start)
+
         if bus.event_defined('rebundle_cleanup_image'):
             bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
         bus.on("before_host_down", self.on_before_host_down)
 
+
+    def on_start(self):
         if 'running' == __node__['state']:
             self._set_nodename_in_env()
             rabbitmq_vol = __rabbitmq__['volume']
