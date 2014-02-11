@@ -22,7 +22,7 @@ $LogFile = "$LogDir\scalarizr_update_win.log"
 $StatusFile = "$InstallDir\etc\private.d\update_win.status"
 $BackupCreatedLock = "$RunDir\backup.created"
 $DirsToBackup = @("src", "Python27")
-$ServicesToOperate = @("Scalarizr", "ScalrUpdClient")
+$ServicesToOperate = @("ScalrUpdClient", "Scalarizr")
 $InstalledVersion = ""
 $State = "in-progress"
 $PrevState = $Null
@@ -82,7 +82,7 @@ function Restore-SzrBackup {
         $DirsToBackup | foreach {
             $Path = "$InstallDir\$_-$InstalledVersion"
             $NewName = "$InstallDir\$_"
-            handle $NewName
+            #handle $NewName
             if (Test-Path $NewName) {
                 Remove-Item $NewName -Force -Recurse
             }
