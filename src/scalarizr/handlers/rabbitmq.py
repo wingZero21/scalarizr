@@ -261,16 +261,18 @@ class RabbitMQHandler(ServiceCtlHandler):
         os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 
         self._logger.info('Performing initial cluster reset')
-        self.service.start()
-        self.rabbitmq.stop_app()
-        self.rabbitmq.reset()
+
         self.service.stop()
 
         hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
         rabbitmq_data['hostname'] = hostname
-
         dns.ScalrHosts.set('127.0.0.1', hostname)
 
+        self.service.start()
+        self.rabbitmq.stop_app()
+        self.rabbitmq.reset()
+        self.service.stop()
+        
         # Use RABBITMQ_NODENAME instead of setting actual hostname
         #with open('/etc/hostname', 'w') as f:
         #    f.write(hostname)
