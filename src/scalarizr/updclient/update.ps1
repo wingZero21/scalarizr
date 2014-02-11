@@ -16,6 +16,7 @@ param (
 }
 
 $InstallDir = "C:\Program Files\Scalarizr"
+$UninstallRegKey = "hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr"
 $LogDir = "$InstallDir\var\log"
 $RunDir = "$InstallDir\var\run"
 $LogFile = "$LogDir\scalarizr_update_win.log"
@@ -82,7 +83,6 @@ function Restore-SzrBackup {
         $DirsToBackup | foreach {
             $Path = "$InstallDir\$_-$InstalledVersion"
             $NewName = "$InstallDir\$_"
-            #handle $NewName
             if (Test-Path $NewName) {
                 Remove-Item $NewName -Force -Recurse
             }
@@ -91,6 +91,9 @@ function Restore-SzrBackup {
             }
         }
         Remove-Item $BackupCreatedLock
+
+        Set-ItemProperty -Path $UninstallRegKey -Name DisplayVersion -Value $InstalledVersion
+        Set-ItemProperty -Path $UninstallRegKey -Name DisplayName -Value "Scalarizr $InstalledVersion-1"
     }
 }
 
@@ -185,7 +188,7 @@ function Save-SzrStatus {
         # Exception calling "Reverse" with "1" argument(s): "Value cannot be null.
         [array]::Reverse($Msg)
     }
-    $Installed = $(Get-ItemProperty -Path hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr -Name DisplayVersion).DisplayVersion
+    $Installed = $(Get-ItemProperty -Path $UninstallRegKey -Name DisplayVersion).DisplayVersion
 
     $Status = @{
         error = $Msg -join "`n"; 
