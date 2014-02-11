@@ -82,31 +82,30 @@ class ConnectionProxy(object):
     def __call__(self, *args, **kwds):
         num_retries = 0
         try:
-            return self._do_call(*args, **kwds)
-        except:
-            try:
-                self._raise_error(*sys_exc_info())
-            except NoCredentialsError:
-                # We haven't credentials, so we don't need reconnect,
-                # only remove invalid connection and reraise exception
-                self.conn_pool.dispose_local()
-                raise
-            except:
-                self.conn_pool.dispose_local()
-                if num_retries < self.num_reconnects:
+            while num_retries < self.num_reconnects:
+                try:
+                    return self._do_call(*args, **kwds)
+                except NoCredentialsError:
+                    # We haven't credentials, so we don't need reconnect,
+                    # only remove invalid connection and reraise exception
+                    self.conn_pool.dispose_local()
+                    break
+                except:
                     num_retries += 1
-                    self._do_call(*args, **kwds)
-                else:
-                    raise
+                    continue
         finally:
             self.local.call_chain = []
+        raise
 
     def _do_call(self, *args, **kwds):
-        conn = self.conn_pool.get()
-        fn = conn
-        for attr in self.local.call_chain:
-            fn = getattr(fn, attr)
-        return fn(*args, **kwds)
+        try:
+            conn = self.conn_pool.get()
+            fn = conn
+            for attr in self.local.call_chain:
+                fn = getattr(fn, attr)
+            return fn(*args, **kwds)
+        except:
+            self._raise_error(*sys.exc_info())
 
     def _create_connection(self):
         raise NotImplementedError()
@@ -281,7 +280,8 @@ class Ec2LikePlatform(Platform):
         Platform.__init__(self)
         self._logger = logging.getLogger(__name__)
         self._cnf = bus.cnf
-        self._conn_proxy = None
+        self._ec2_conn_proxy = None
+        self._s3_conn_proxy = None
 
     def _get_property(self, name):
         if not self._metadata.has_key(name):

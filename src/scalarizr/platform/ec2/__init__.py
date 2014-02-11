@@ -42,16 +42,18 @@ def get_platform():
     return Ec2Platform()
 
 
-class Ec2ConnectionProxy(platform.ConnectionProxy):
+class BotoConnectionProxy(platform.ConnectionPoxy):
 
     _logger = logging.getLogger(__name__)
 
     def __init__(self, platform, num_reconnects=1):
         self._platform = platform
-        super(Ec2ConnectionProxy, self).__init__(
+        super(BotoConnectionProxy, self).__init__(
             conn_per_thread=False,
             num_reconnects=num_reconnects
         )
+
+class Ec2ConnectionProxy(BotoConnectionProxy):
 
     def _create_connection(self):
         region = self._platform.get_region()
@@ -63,12 +65,39 @@ class Ec2ConnectionProxy(platform.ConnectionProxy):
                 aws_secret_access_key=key
             )
         except PlatformError:
-            raise NoCredentialsError(sys.exc_info[1])
+            raise NoCredentialsError(sys.exc_info()[1])
         return conn
 
     def _raise_error(self, *exc_info):
         t, e, tb = exc_info
         if isinstance(e, boto.exception.EC2ResponseError) and e.args[0] == 401:
+            raise InvalidCredentialsError(e)
+        if isinstance(e, ConnectionError):
+            raise
+        else:
+            raise ConnectionError(e)
+
+
+class S3ConnectionProxy(BotoConnectionProxy):
+
+    def _create_connection(self):
+        region = self._platform.get_region()
+        endpoint = self._platform._s3_endpoint(region)
+        self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
+        try:
+            key_id, key = self._platform.get_access_keys()
+            conn = boto.connect_s3(
+                host=endpoint,
+                aws_access_key_id=key_id,
+                aws_secret_access_key=key
+            )
+        except PlatformError:
+            raise NoCredentialsError(sys.exc_info()[1])
+        return conn
+
+    def _raise_error(self, *exc_info):
+        t, e, tb = exc_info
+        if isinstance(e, boto.exception.S3ResponseError) and e.args[0] == 401:
             raise InvalidCredentialsError(e)
         if isinstance(e, ConnectionError):
             raise
@@ -112,9 +141,14 @@ class Ec2Platform(Ec2LikePlatform):
         return self._ec2_cert
 
     def get_ec2_conn(self):
-        if not self._conn_proxy:
-            self._conn_proxy = Ec2ConnectionProxy(self)
-        return self._conn_proxy
+        if not self._ec2_conn_proxy:
+            self._ec2_conn_proxy = Ec2ConnectionProxy(self)
+        return self._ec2_conn_proxy
+
+    def get_s3_conn(self):
+        if not self._s3_conn_proxy:
+            self._s3_conn_proxy = S3ConnectionProxy(self)
+        return self._s3_conn_proxy
 
     def new_ec2_conn(self):
         """ @rtype: boto.ec2.connection.EC2Connection """
