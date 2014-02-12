@@ -76,8 +76,8 @@ class CinderConnectionProxy(platform.ConnectionProxy):
                 platform.get_access_data('username'),
                 platform.get_access_data('api_key') or platform.get_access_data('password'),
                 platform.get_access_data('tenant_name'),
-                auth_url=access_data['keystone_url'],
-                region_name=access_data['cloud_location'],
+                auth_url=platform.get_access_data('keystone_url'),
+                region_name=platform.get_access_data('cloud_location'),
             )
         except PlatformError:
             raise NoCredentialsError(sys.exc_info()[1])
