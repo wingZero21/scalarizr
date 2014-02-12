@@ -19,7 +19,9 @@ except ImportError:
 from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
 
+from scalarizr import node
 from scalarizr import platform
+from scalarizr.platform import PlatformError
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 
 
@@ -135,9 +137,26 @@ class GoogleServiceManager(object):
 
 class GCEConnectionProxy(platform.ConnectionProxy):
 
-    def __init__(self, platform, num_reconnects=1):
-        self._platform = platform
-        super(GCEConnectionProxy, self).__init__(num_reconnects=num_reconnects)
+    def __init__(self, service_name, api_version, scope):
+        super(GCEConnectionProxy, self).__init__()
+        self.service_name = service_name
+        self.api_version = api_version
+        self.scope = list(scope)
+
+    def _create_connection(self):
+        platform = node.__node__['platform']
+        http = httplib2.Http()
+        try:
+            email = platform.get_access_data('service_account_name')
+            pk = base64.b64decode(platform.get_access_data('key'))
+        except PlatformError:
+            raise NoCredentialsError(sys.exc_info()[1])
+        try:
+            cred = SignedJwtAssertionCredentials(email, pk, scope=self.scope)
+            conn = build(self.service_name, self.api_version, http=cred.authorize(http))
+        except:
+            raise InvalidCredentialsError(sys.exc_info()[1])
+        return BadStatusLineHandler(conn)
 
     def _raise_error(self, *exc_info):
         t, e, tb = exc_info
@@ -145,46 +164,6 @@ class GCEConnectionProxy(platform.ConnectionProxy):
             raise
         else:
             raise ConnectionError(e)
-
-
-class GCEComputeConnectionProxy(GCEConnectionProxy):
-
-    api_version = 'v1'
-
-    def _create_connection(self):
-        http = httplib2.Http()
-        try:
-            email = self._platform.get_access_data('service_account_name')
-            pk = base64.b64decode(self._platform.get_access_data('key'))
-        except:
-            raise NoCredentialsError(sys.exc_info()[1])
-        scope = list(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
-        try:
-            cred = SignedJwtAssertionCredentials(email, pk, scope=scope)
-            conn = build('compute', self.api_version, http=cred.authorize(http))
-        except:
-            raise InvalidCredentialsError(sys.exc_info()[1])
-        return conn
-
-
-class GCEStorageConnectionProxy(GCEConnectionProxy):
-
-    api_version = 'v1beta2'
-
-    def _create_connection(self):
-        http = httplib2.Http()
-        try:
-            email = self._platform.get_access_data('service_account_name')
-            pk = base64.b64decode(self._platform.get_access_data('key'))
-        except:
-            raise NoCredentialsError(sys.exc_info()[1])
-        scope = list(STORAGE_FULL_SCOPE)
-        try:
-            cred = SignedJwtAssertionCredentials(email, pk, scope=scope)
-            conn = build('storage', self.api_version, http=cred.authorize(http))
-        except:
-            raise InvalidCredentialsError(sys.exc_info()[1])
-        return conn
 
 
 class GcePlatform(platform.Platform):
@@ -198,9 +177,10 @@ class GcePlatform(platform.Platform):
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
                 self, 'storage', 'v1beta2', *STORAGE_FULL_SCOPE)
-        self._compute_conn_proxy = None
-        self._storage_conn_proxy = None
-
+        self._compute_conn_proxy = GCEConnectionProxy(
+                'compute', 'v1', COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
+        self._storage_conn_proxy = GCEConnectionProxy(
+                'storage', 'v1beta2', STORAGE_FULL_SCOPE)
 
     def get_user_data(self, key=None):
         if self._userdata is None:
@@ -271,15 +251,14 @@ class GcePlatform(platform.Platform):
     def get_image(self):
         return self._get_metadata('instance/image')
 
+
     def get_compute_conn(self):
-        if not self._compute_conn_proxy:
-            self._compute_conn_proxy = GCEComputeConnectionProxy(self)
         return self._compute_conn_proxy
 
+
     def get_storage_conn(self):
-        if not self._storage_conn_proxy:
-            self._storage_conn_proxy = GCEStorageConnectionProxy(self)
         return self._storage_conn_proxy
+
 
     def new_compute_client(self):
         return self.compute_svc_mgr.get_service()

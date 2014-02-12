@@ -17,6 +17,7 @@ import array
 import threading
 import ConfigParser
 
+from scalarizr import node
 from scalarizr.bus import bus
 from scalarizr import linux
 from scalarizr.util import LocalPool, NullPool
@@ -133,7 +134,6 @@ class PlatformFeatures:
 class Platform():
     name = None
     _arch = None
-    _access_data = None # why we need this?
     _userdata = None
     _logger = logging.getLogger(__name__)
     features = []
@@ -141,7 +141,7 @@ class Platform():
 
     def __init__(self):
         self.scalrfs = self._scalrfs(self)
-        self._access_data = {} 
+        node.__node__['access_data'] = {}
 
     def get_private_ip(self):
         return self.get_public_ip()
@@ -166,19 +166,19 @@ class Platform():
             return self._userdata
 
     def set_access_data(self, access_data):
-        self._access_data = access_data
+        node.__node__['access_data'] = access_data
 
     def get_access_data(self, prop=None):
         if prop:
             try:
-                return self._access_data[prop]
+                return node.__node__['access_data'][prop]
             except (TypeError, KeyError):
                 raise PlatformError("Platform access data property '%s' doesn't exists" % (prop,))
         else:
-            return self._access_data
+            return node.__node__['access_data']
 
     def clear_access_data(self):
-        self._access_data = {}
+        node.__node__['access_data'] = {}
 
     def get_architecture(self):
         """
@@ -280,8 +280,6 @@ class Ec2LikePlatform(Platform):
         Platform.__init__(self)
         self._logger = logging.getLogger(__name__)
         self._cnf = bus.cnf
-        self._ec2_conn_proxy = None
-        self._s3_conn_proxy = None
 
     def _get_property(self, name):
         if not self._metadata.has_key(name):

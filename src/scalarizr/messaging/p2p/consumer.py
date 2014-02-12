@@ -221,7 +221,7 @@ class P2pMessageConsumer(MessageConsumer):
     def wait_subhandler(self, message):
         pl = bus.platform
 
-        saved_access_data = pl._access_data
+        saved_access_data = pl.get_access_data()
         if saved_access_data:
             saved_access_data = dict(saved_access_data)
 

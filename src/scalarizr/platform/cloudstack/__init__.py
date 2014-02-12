@@ -5,6 +5,7 @@ import urllib2
 import sys
 import logging
 
+from scalarizr import node
 from scalarizr.bus import bus
 from scalarizr.platform import Platform, PlatformFeatures, PlatformError
 from . import storage
@@ -102,8 +103,9 @@ class CloudStackPlatform(Platform):
 
 
     def new_cloudstack_conn(self):
-        if self._access_data and 'api_url' in self._access_data:
+        access_data = self.get_access_data()
+        if access_data and 'api_url' in access_data:
             return cloudstack.Client(
-                            self._access_data['api_url'],
-                            apiKey=self._access_data.get('api_key'),
-                            secretKey=self._access_data.get('secret_key'))
+                            access_data['api_url'],
+                            apiKey=access_data.get('api_key'),
+                            secretKey=access_data.get('secret_key'))

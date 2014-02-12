@@ -130,8 +130,8 @@ class RackspacePlatform(Platform):
         Platform.set_access_data(self, access_data)
         os.environ['CLOUD_SERVERS_USERNAME'] = self.get_access_data("username").encode("ascii")
         os.environ['CLOUD_SERVERS_API_KEY'] = self.get_access_data("api_key").encode("ascii")
-        if 'auth_host' in self._access_data:
-            globals()['auth_url'] = 'https://%s/v1.0' % self._access_data['auth_host']
+        if 'auth_host' in self.get_access_data():
+            globals()['auth_url'] = 'https://%s/v1.0' % self.get_access_data('auth_host')
             CloudServersClient.AUTH_URL = auth_url
 
     def clear_access_data(self):
@@ -148,8 +148,9 @@ class RackspacePlatform(Platform):
         return new_cloudfiles_conn()
 
     def new_swift_connection(self):
+        access_data = self.get_access_data()
         return swiftclient.Connection(
-                                'https://%s/v1.0' % self._access_data.get('auth_host', 'auth.api.rackspacecloud.com'),
-                                self._access_data["username"],
-                                self._access_data.get("password") or self._access_data.get("api_key"),
+                                'https://%s/v1.0' % access_data.get('auth_host', 'auth.api.rackspacecloud.com'),
+                                access_data["username"],
+                                access_data.get("password") or access_data.get("api_key"),
                                 auth_version='1')

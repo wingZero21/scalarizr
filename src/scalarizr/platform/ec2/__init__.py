@@ -7,6 +7,7 @@ import urllib2
 import logging
 
 from scalarizr.bus import bus
+from scalarizr import node
 from scalarizr import platform
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
@@ -42,29 +43,19 @@ def get_platform():
     return Ec2Platform()
 
 
-class BotoConnectionProxy(platform.ConnectionPoxy):
-
-    _logger = logging.getLogger(__name__)
-
-    def __init__(self, platform, num_reconnects=1):
-        self._platform = platform
-        super(BotoConnectionProxy, self).__init__(
-            conn_per_thread=False,
-            num_reconnects=num_reconnects
-        )
-
-class Ec2ConnectionProxy(BotoConnectionProxy):
+class Ec2ConnectionProxy(platform.ConnectionProxy):
 
     def _create_connection(self):
-        region = self._platform.get_region()
+        platform = node.__node__['platform']
+        region = platform.get_region()
         try:
-            key_id, key = self._platform.get_access_keys()
+            key_id, key = platform.get_access_keys()
             conn = boto.ec2.connect_to_region(
                 region,
                 aws_access_key_id=key_id,
                 aws_secret_access_key=key
             )
-        except PlatformError:
+        except (NoCredentialsError, PlatformError, boto.exception.NoAuthHandlerFound):
             raise NoCredentialsError(sys.exc_info()[1])
         return conn
 
@@ -78,20 +69,21 @@ class Ec2ConnectionProxy(BotoConnectionProxy):
             raise ConnectionError(e)
 
 
-class S3ConnectionProxy(BotoConnectionProxy):
+class S3ConnectionProxy(platform.ConnectionProxy):
 
     def _create_connection(self):
-        region = self._platform.get_region()
-        endpoint = self._platform._s3_endpoint(region)
+        platform = node.__node__['platform']
+        region = platform.get_region()
+        endpoint = platform._s3_endpoint(region)
         self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
         try:
-            key_id, key = self._platform.get_access_keys()
+            key_id, key = platform.get_access_keys()
             conn = boto.connect_s3(
                 host=endpoint,
                 aws_access_key_id=key_id,
                 aws_secret_access_key=key
             )
-        except PlatformError:
+        except (AttributeError, PlatformError, boto.exception.NoAuthHandlerFound):
             raise NoCredentialsError(sys.exc_info()[1])
         return conn
 
@@ -124,6 +116,11 @@ class Ec2Platform(Ec2LikePlatform):
 
     features = [PlatformFeatures.SNAPSHOTS, PlatformFeatures.VOLUMES]
 
+    def __init__(self):
+        platform.Ec2LikePlatform.__init__(self)
+        self._ec2_conn_proxy = Ec2ConnectionProxy(conn_per_thread=False)
+        self._s3_conn_proxy = S3ConnectionProxy(conn_per_thread=False)
+
     def get_account_id(self):
         return self.get_access_data("account_id").encode("ascii")
 
@@ -141,13 +138,9 @@ class Ec2Platform(Ec2LikePlatform):
         return self._ec2_cert
 
     def get_ec2_conn(self):
-        if not self._ec2_conn_proxy:
-            self._ec2_conn_proxy = Ec2ConnectionProxy(self)
         return self._ec2_conn_proxy
 
     def get_s3_conn(self):
-        if not self._s3_conn_proxy:
-            self._s3_conn_proxy = S3ConnectionProxy(self)
         return self._s3_conn_proxy
 
     def new_ec2_conn(self):
