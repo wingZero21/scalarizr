@@ -162,10 +162,10 @@ param ($Certainly = $false)
         $ServicesToOperate | foreach {
             $Name = $_
             Start-Service $Name
-            Log "Started $Name"  
-            Start-Sleep -s 2
+            Log "Started $Name, sleeping"  
+            Start-Sleep -s 5
             $Svs = Get-Service $Name
-            Log $Svs
+            Log "Status: $($Svs.Status)"
             if (-not $Svs.Status -eq "Running") {
                 Throw "Serviсe started but failed a moment later: $Name"
             }
