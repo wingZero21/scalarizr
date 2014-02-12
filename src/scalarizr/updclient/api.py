@@ -160,8 +160,10 @@ class UpdClientAPI(object):
 
 
     def _update_self_dict(self, data):
+        LOG.debug('update_self_dict: %s', data)
         self.__dict__.update(data)
         if 'state' in data:
+            LOG.debug('_state: %s', data['state'])
             self.__dict__['_state'] = data['state']
 
 
@@ -284,10 +286,23 @@ class UpdClientAPI(object):
             LOG.debug('Apply %s settings', self.status_file)
             self._update_self_dict(status_data)
             if os.path.exists(self.win_status_file):
-                with open(self.win_status_file) as fp:
-                    LOG.debug('Apply %s settings', self.win_status_file)
-                    self._update_self_dict(json.load(fp))
-                os.unlink(self.win_status_file)
+                def wait_update_script(): 
+                    while not self.shutdown_ev.is_set():
+                        with open(self.win_status_file) as fp:
+                            LOG.debug('Apply %s settings', self.win_status_file)
+                            self._update_self_dict(json.load(fp))
+                        if self.state.startswith('in-progress'):
+                            LOG.debug('update.ps1 is still running, polling status file')
+                            self.shutdown_ev.wait(1)
+                            continue
+                        else:
+                            os.unlink(self.win_status_file)
+                            return
+                wait_thread = threading.Thread(target=wait_update_script)
+                wait_thread.start()
+                wait_thread.join()
+                if self.shutdown_ev.is_set():
+                    return
         else:
             LOG.debug('Getting cloud user-data')
             user_data = self.meta.user_data()
