@@ -188,7 +188,9 @@ function Save-SzrStatus {
         # Exception calling "Reverse" with "1" argument(s): "Value cannot be null.
         [array]::Reverse($Msg)
     }
-    $Installed = $(Get-ItemProperty -Path $UninstallRegKey -Name DisplayVersion).DisplayVersion
+    $Version = $(Get-ItemProperty -Path $UninstallRegKey -Name DisplayVersion).DisplayVersion
+    $Release = $(Get-ItemProperty -Path $UninstallRegKey -Name DisplayRelease).DisplayRelease
+    $Installed = "$Version-$Release"
 
     $Status = @{
         error = $Msg -join "`n"; 
