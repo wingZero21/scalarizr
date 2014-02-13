@@ -618,7 +618,11 @@ def xml2dict(el):
             private_values = {}
             values = {}
             for ch in el:
-                if ch.attrib.get('private'):
+                try:
+                    is_private = int(ch.attrib.get('private', 0))
+                except ValueError, TypeError:
+                    is_private = False
+                if is_private:
                     private_values[ch.attrib[key]] = ch.text
                 else:
                     values[ch.attrib[key]] = ch.text
