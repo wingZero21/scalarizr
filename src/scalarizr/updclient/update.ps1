@@ -163,11 +163,11 @@ param ($Certainly = $false)
             $Name = $_
             Start-Service $Name
             Log "Started $Name, sleeping"  
-            Start-Sleep -s 5
+            Start-Sleep -s 2
             $Svs = Get-Service $Name
             Log "Status: $($Svs.Status)"
-            if (-not $Svs.Status -eq "Running") {
-                Throw "Serviсe started but failed a moment later: $Name"
+            if (-not ($Svs.Status -eq "Running")) {
+                Throw "Service started but failed a moment later: $Name"
             }
         }
     }

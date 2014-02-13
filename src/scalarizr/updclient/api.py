@@ -434,7 +434,8 @@ class UpdClientAPI(object):
         def check_allowed():
             if not force:
                 self.state = 'in-progress/check-allowed'
-                if self.scalarizr.operation.has_in_progress():
+
+                if self.daemon.running and self.scalarizr.operation.has_in_progress():
                     msg = ('Update denied ({0}={1}), '
                             'cause Scalarizr is performing log-term operation').format(
                             self.package, self.candidate)
