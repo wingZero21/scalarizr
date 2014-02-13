@@ -615,7 +615,7 @@ def xml2dict(el):
             elif c.attrib.has_key('name'):
                 key = 'name'
 
-            private_values = []
+            private_values = {}
             values = {}
             for ch in el:
                 if ch.attrib.get('private'):
