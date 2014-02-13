@@ -41,7 +41,7 @@ class QueryEnvService(object):
         self.api_version = api_version
         self.htmlparser = HTMLParser.HTMLParser()
 
-    def fetch(self, command, **params):
+    def fetch(self, command, params=None, log_response=True):
         """
         @return object
         """
@@ -51,7 +51,7 @@ class QueryEnvService(object):
         request_body = {}
         request_body["operation"] = command
         request_body["version"] = self.api_version
-        if {} != params :
+        if params:
             for key, value in params.items():
                 request_body[key] = value
 
@@ -98,7 +98,8 @@ class QueryEnvService(object):
         resp_body = self.htmlparser.unescape(resp_body)
         resp_body = resp_body.encode('utf-8')
 
-        self._logger.debug("QueryEnv response: %s", resp_body)
+        if log_response:
+            self._logger.debug("QueryEnv response: %s", resp_body)
         return resp_body
 
 
@@ -225,22 +226,45 @@ class QueryEnvService(object):
         '''
         Returns dict of scalr-added environment variables
         '''
-        return self._request('list-global-variables', {}, self._read_list_global_variables)
+        glob_vars = self._request('list-global-variables',
+                                  {},
+                                  self._read_list_global_variables,
+                                  log_response=False)
+
+        self._logger.debug("QueryEnv response (parsed): %s", glob_vars['public'])
+        return glob_vars
 
 ###############################################################################
 
-    def _request(self, command, params={}, response_reader=None, response_reader_args=None):
-        xml = self.fetch(command, **params)
+    def _request(self,
+                 command,
+                 params={},
+                 response_reader=None,
+                 response_reader_args=None,
+                 log_response=True):
+        xml = self.fetch(command, params, log_response=False)
         response_reader_args = response_reader_args or ()
-        return response_reader(xml, *response_reader_args)
+        try:
+            parsed_response = response_reader(xml, *response_reader_args)
+            if log_response:
+                self._logger.debug("QueryEnv response (parsed): %s", parsed_response)
+            return parsed_response
+        except (Exception, BaseException), e:
+            self._logger.debug("QueryEnv response: %s", xml)
+            raise
+
 
     def _read_list_global_variables(self, xml):
         '''
         Returns dict
         '''
         data = xml2dict(ET.XML(xml)) or {}
-        glob_vars = data['variables']['values'] if 'variables' in data and data['variables'] else {}
-        glob_vars = dict((k, v.encode('utf-8') if v else '') for k, v in glob_vars.items())
+        data = data['variables'] if 'variables' in data and data['variables'] else {}
+        glob_vars = {}
+        glob_vars['public'] = dict((k, v.encode('utf-8') if v else '')
+                                   for k, v in data['values'].items())
+        glob_vars['private'] = dict((k, v.encode('utf-8') if v else '')
+                                           for k, v in data['private_values'].items())
         return glob_vars
 
     def _read_get_global_config_response(self, xml):
@@ -590,7 +614,16 @@ def xml2dict(el):
                 key = 'key'
             elif c.attrib.has_key('name'):
                 key = 'name'
-            return {'values':dict((ch.attrib[key], ch.text) for ch in el)}
+
+            private_values = {}
+            values = {}
+            for ch in el:
+                if ch.attrib.get('private'):
+                    private_values[key] = ch.text
+                else:
+                    values[key] = ch.text
+
+            return {'values': values, 'private_values': private_values}
 
         if el.tag == 'user-data':
             ret = {}
