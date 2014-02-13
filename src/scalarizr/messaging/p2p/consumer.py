@@ -130,11 +130,14 @@ class P2pMessageConsumer(MessageConsumer):
                         del msg_copy.body['platform_access_data']
                     if 'global_variables' in msg_copy.body:
                         glob_vars = msg_copy.body['global_variables']
-                        for i, v in enumerate(list(glob_vars)):
+                        i = 0
+                        for v in list(glob_vars):
                             if v.get('private'):
                                 del glob_vars[i]
+                                i -= 1
                             elif 'private' in v:
                                 del glob_vars[i]['private']
+                            i += 1
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
 
