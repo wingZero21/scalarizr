@@ -101,12 +101,14 @@ prog=$(basename $scalarizr)
 
 SCALARIZR_CONF_DIR="/etc/scalr"
 SCALARIZR_CONF_FILE="$SCALARIZR_CONF_DIR/public.d/config.ini"
+PYTHON='/usr/bin/python2.6'
 
 [ -f /etc/sysconfig/scalarizr ] && . /etc/sysconfig/scalarizr
 
 lockfile=/var/lock/subsys/scalarizr
 scripts_path=$(cat $SCALARIZR_CONF_FILE | grep "scripts_path" | awk '{print $3}')
 run_level=$(who -r | awk '{print $2}')
+run_level="6"
 
 start() {
     [ -x $scalarizr ] || exit 5
@@ -122,9 +124,9 @@ start() {
 stop() {
     echo -n $"Stopping $prog: "
 	if [ $run_level == "0" ]; then
-		$scripts_path/halt stop
+		$PYTHON $scripts_path/halt stop
 	elif [ $run_level == "6" ]; then
-		$scripts_path/reboot stop
+		$PYTHON $scripts_path/reboot stop
 	fi    
     killproc -d 3 $prog
     retval=$?
