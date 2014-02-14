@@ -328,6 +328,9 @@ class AptPackageMgr(PackageMgr):
 
 
     def _install_download_only(self, name_version, download_dir, **kwds):
+        partial_dir = os.path.join(download_dir, 'partial')
+        if not os.path.exists(partial_dir):
+            os.makedirs(partial_dir)
         cmd = 'install --download-only -o=Dir::Cache::Archives={0} {1}'.format(
                 download_dir, name_version)
         self.apt_get_command(cmd, raise_exc=True)
