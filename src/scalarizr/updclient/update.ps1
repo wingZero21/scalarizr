@@ -221,6 +221,7 @@ function Main-Szr {
                 Set-SzrState "in-progress/install"
                 Install-SzrPackage $PackageFile
                 if (-not (Test-Path "$InstallDir\src")) {
+                    Get-ChildItem "$InstallDir"
                     Throw "Installer completed without installing new files"
                 }
                 Set-SzrState "in-progress/restart"
