@@ -76,9 +76,14 @@ class UrlMeta(Meta):
         try:
             pr = urlparse.urlparse(self.base_url)
             socket.gethostbyname(pr.hostname)
-            return True
         except:
             return False
+        else:
+            try:
+                urllib2.urlopen(self.base_url)
+                return True
+            except:
+                return False
 
 
 class FileMeta(Meta):
@@ -106,6 +111,9 @@ class Ec2Meta(UrlMeta):
     platform = 'ec2'
     base_url = 'http://169.254.169.254/latest/meta-data'
     user_data_rel = '../user-data'
+
+    def supported(self):
+        return super(Ec2Meta, self).supported() and self._supported()
 
 
 class CloudStackMeta(UrlMeta):
@@ -148,6 +156,13 @@ class OpenStackMeta(UrlMeta):
                     timeout=self.socket_timeout).read().strip()
             self.cached = json.loads(data)
         return self.cached[key]
+
+    def supported(self):
+        try:
+            urllib2.urlopen(self.meta_data_url)
+            return True
+        except:
+            return False
 
 
 class GceMeta(UrlMeta):
