@@ -174,10 +174,10 @@ def meta(timeout=None):
                 OpenStackMeta(), 
                 FileMeta('C:\\Program Files\\Scalarizr\\etc\\private.d\\.user-data'))
     else:
-        pvds = (Ec2Meta(), 
-                OpenStackMeta(), 
+        pvds = (OpenStackMeta(), 
                 CloudStackMeta(), 
                 GceMeta(), 
+                Ec2Meta(),
                 FileMeta('/etc/.scalr-user-data'), 
                 FileMeta('/etc/scalr/private.d/.user-data'))
     for _ in range(0, timeout or 1):
