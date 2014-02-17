@@ -252,11 +252,12 @@ class UpdClientAPI(object):
                 ret = self.meta['instance-id']
             elif self.meta.platform == 'gce':
                 ret = self.meta['id']
+            elif self.meta.platform == 'openstack':
+                ret = self.meta['uuid']
             else:
                 LOG.debug("Don't know how to get instance-id on '%s' platform", self.meta.platform)
         if not ret:
-            LOG.debug('System UUID not detected')
-            raise NoSystemUUID()
+            raise NoSystemUUID('System UUID not detected')
         return ret
 
     def bootstrap(self, dry_run=False):

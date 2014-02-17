@@ -15,6 +15,10 @@ from scalarizr import linux
 
 
 LOG = logging.getLogger(__name__)
+if linux.os.windows:
+    FILE_META = ['C:\\Program Files\\Scalarizr\\etc\\private.d\\.user-data']
+else:
+    FILE_META = ['/etc/.scalr-user-data', '/etc/scalr/private.d/.user-data']
 
 
 class Error(Exception):
@@ -145,6 +149,7 @@ class OpenStackMeta(UrlMeta):
 
     def __init__(self, meta_data_url='http://169.254.169.254/openstack/latest/meta_data.json'):
         self.meta_data_url = meta_data_url
+        self.file_meta = None
         self.cached = None
 
     def __getitem__(self, key):
@@ -156,10 +161,24 @@ class OpenStackMeta(UrlMeta):
 
     def supported(self):
         try:
-            urllib2.urlopen(self.meta_data_url)
+            meta = urllib2.urlopen(self.meta_data_url).read()
             return True
         except:
             return False
+
+    def user_data(self):
+        try:
+            return self['meta']
+        except KeyError:
+            if not self.file_meta:
+                pvds = [FileMeta(f) for f in FILE_META]
+                for pvd in pvds:
+                    if pvd.supported():
+                        self.file_meta = pvd
+            if not self.file_meta:
+                msg = "user-data provider not found. We've tried those ones: {0}".format(pvds)
+                raise NoProviderError(msg)
+            return self.file_meta.user_data()
 
 
 class GceMeta(UrlMeta):
@@ -170,16 +189,15 @@ class GceMeta(UrlMeta):
 
 def meta(timeout=None):
     if linux.os.windows:
-        pvds = (Ec2Meta(), 
-                OpenStackMeta(), 
-                FileMeta('C:\\Program Files\\Scalarizr\\etc\\private.d\\.user-data'))
+        pvds = [Ec2Meta(), 
+                OpenStackMeta()]
     else:
-        pvds = (OpenStackMeta(), 
+        pvds = [OpenStackMeta(), 
                 CloudStackMeta(), 
                 GceMeta(), 
-                Ec2Meta(),
-                FileMeta('/etc/.scalr-user-data'), 
-                FileMeta('/etc/scalr/private.d/.user-data'))
+                Ec2Meta()]
+    pvds += [FileMeta(f) for f in FILE_META]
+
     for _ in range(0, timeout or 1):
         for obj in pvds:
             if obj.supported():
