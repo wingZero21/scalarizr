@@ -112,9 +112,6 @@ class Ec2Meta(UrlMeta):
     base_url = 'http://169.254.169.254/latest/meta-data'
     user_data_rel = '../user-data'
 
-    def supported(self):
-        return super(Ec2Meta, self).supported() and self._supported()
-
 
 class CloudStackMeta(UrlMeta):
     platform = 'cloudstack'
