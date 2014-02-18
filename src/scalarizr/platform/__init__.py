@@ -92,6 +92,7 @@ class ConnectionProxy(object):
                     self.conn_pool.dispose_local()
                     break
                 except:
+                    self.conn_pool.dispose_local()
                     num_retries += 1
                     continue
         finally:
@@ -113,6 +114,9 @@ class ConnectionProxy(object):
 
     def _raise_error(self, *exc_info):
         raise NotImplementedError()
+
+    def check_connection(self):
+        self.conn_pool.get()
 
 
 class PlatformFactory(object):

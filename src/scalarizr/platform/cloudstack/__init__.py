@@ -4,6 +4,7 @@ import os
 import urllib2
 import sys
 import logging
+import scalarizr.platform
 
 from scalarizr import node
 from scalarizr.bus import bus
@@ -18,6 +19,28 @@ def get_platform():
     return CloudStackPlatform()
 
 LOG = logging.getLogger(__name__)
+
+
+class CloudStackConnectionProxy(platform.ConnectionProxy):
+
+    def _create_connection(self):
+        platform = node.__node__['platform']
+        try:
+            conn = cloudstack.Client(
+                platform.get_access_data('api_url'),
+                apiKey=platform.get_access_data('api_key'),
+                secretKey=platform.get_access_data('secret_key'))
+        except PlatformError:
+            raise NoCredentialsError(sys.exc_info()[1])
+        return conn
+
+    def _raise_error(self, *exc_info):
+        t, e, tb = exc_info
+        if isinstance(e, ConnectionError):
+            raise
+        else:
+            raise ConnectionError(e)
+
 
 class CloudStackPlatform(Platform):
     name = 'cloudstack'
@@ -44,15 +67,13 @@ class CloudStackPlatform(Platform):
         self._router = router
 
         self._metadata = {}
-
+        self._conn_proxy = CloudStackConnectionProxy()
 
     def get_private_ip(self):
         return self.get_meta_data('local-ipv4')
 
-
     def get_public_ip(self):
         return self.get_meta_data('public-ipv4')
-
 
     def get_user_data(self, key=None):
         if self._userdata is None:
@@ -65,7 +86,6 @@ class CloudStackPlatform(Platform):
                     raise
         return Platform.get_user_data(self, key)
 
-
     def get_meta_data(self, key):
         if not key in self._metadata:
             try:
@@ -77,7 +97,6 @@ class CloudStackPlatform(Platform):
                                 " error: %s" % (url, exc_info[1]), exc_info[2]
         return self._metadata[key]
 
-
     def get_instance_id(self):
         ret = self.get_meta_data('instance-id')
         if len(ret) == 36:
@@ -86,7 +105,6 @@ class CloudStackPlatform(Platform):
         else:
             # CloudStack 2
             return self.get_meta_data('instance-id').split('-')[2]
-
 
     def get_avail_zone_id(self):
         conn = self.new_cloudstack_conn()
@@ -101,6 +119,9 @@ class CloudStackPlatform(Platform):
         except:
             return ''
 
+    def get_cloudstack_conn(self):
+        self._conn_proxy.check_connection()
+        return self._conn_proxy
 
     def new_cloudstack_conn(self):
         access_data = self.get_access_data()

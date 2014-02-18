@@ -312,12 +312,15 @@ class OpenstackPlatform(platform.Platform):
                              access_data["cloud_location"])
 
     def get_nova_conn(self):
+        self._nova_conn_proxy.check_connection()
         return self._nova_conn_proxy
 
     def get_cinder_conn(self):
+        self._cinder_conn_proxy.check_connection()
         return self._cinder_conn_proxy
 
     def get_swift_conn(self):
+        self._swift_conn_proxy.check_connection()
         return self._swift_conn_proxy
 
     def new_nova_connection(self):

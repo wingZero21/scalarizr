@@ -55,6 +55,8 @@ class Ec2ConnectionProxy(platform.ConnectionProxy):
                 aws_access_key_id=key_id,
                 aws_secret_access_key=key
             )
+            if not conn:
+                raise ConnectionError('Invalid region: %s' % region)
         except (NoCredentialsError, PlatformError, boto.exception.NoAuthHandlerFound):
             raise NoCredentialsError(sys.exc_info()[1])
         return conn
@@ -138,9 +140,11 @@ class Ec2Platform(Ec2LikePlatform):
         return self._ec2_cert
 
     def get_ec2_conn(self):
+        self._ec2_conn_proxy.check_connection()
         return self._ec2_conn_proxy
 
     def get_s3_conn(self):
+        self._s3_conn_proxy.check_connection()
         return self._s3_conn_proxy
 
     def new_ec2_conn(self):

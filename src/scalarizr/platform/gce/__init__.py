@@ -253,10 +253,12 @@ class GcePlatform(platform.Platform):
 
 
     def get_compute_conn(self):
+        self._compute_conn_proxy.check_connection()
         return self._compute_conn_proxy
 
 
     def get_storage_conn(self):
+        self._storage_conn_proxy.check_connection()
         return self._storage_conn_proxy
 
 
