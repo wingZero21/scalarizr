@@ -118,10 +118,9 @@ class ApacheAPI(object):
     """
     Basic API for configuring Apache VirtualHosts, querying statistics and controlling service status.
 
-    namespace::
+    Namespace::
 
         apache
-
     """
 
     service = None
@@ -137,7 +136,7 @@ class ApacheAPI(object):
     @rpc.command_method
     def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True, allow_port=False):
         """
-        Creates Name-Based Apache VirtualHost
+        Creates a Name-Based Apache VirtualHost.
 
         :param hostname: Server Name
         :type hostname: str
@@ -292,7 +291,7 @@ class ApacheAPI(object):
             ssl_certificate_id=None,
             reload=True):
         """
-        Changes settings of VirtualHost defined by @signature.
+        Changes settings of an existing VirtualHost. VirtualHost is defined by VH signature.
 
         :param signature: Hostname and Port to identidy VirtualHost for modifying.
         :type signature: tuple
@@ -325,7 +324,10 @@ class ApacheAPI(object):
 
             api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)
 
-        Please Note that Scalr does not use update_vhost API method thus it has not been tested properly.
+        .. warning::
+
+            Scalr does not use update_vhost API method so it has not been tested properly yet.
+
         """
 
         old_hostname, old_port = signature
@@ -370,7 +372,7 @@ class ApacheAPI(object):
     @rpc.command_method
     def delete_vhosts(self, vhosts, reload=True):
         """
-        Removes given VirtualHosts from Apache2 configuration.
+        Removes a set of VirtualHosts from Apache2 configuration.
 
         :param vhosts: [(hostname,password),]
         :type vhosts: list
@@ -409,8 +411,7 @@ class ApacheAPI(object):
     @rpc.command_method
     def reconfigure(self, vhosts, reload=True, rollback_on_error=True):
         """
-        Deploys multiple VirtualHosts and removes odds.
-
+        Resets current Scalr-managed VirtualHost configuration and deploys a new set of VirtualHosts.
         :param vhosts: list(dict(hostname:hostname1,port:port1,template:tpl1,..),..)
 
         :return: paths to reconfigured VirtualHosts
@@ -489,9 +490,9 @@ class ApacheAPI(object):
         Total accesses,
         CPU Usage.
 
-        The machine readable file can be accessed by using the following link:
+        Data are read from machine readable file which can be accessed by the following link:
 
-        http://your.server.name/server-status?auto
+        http://server.name/server-status?auto
 
         Data are available only when mod_stat is enabled.
 
@@ -537,7 +538,7 @@ class ApacheAPI(object):
     def list_served_virtual_hosts(self):
         """
         Returns all VirtualHosts deployed by Scalr
-        and available on web server
+        and available on web server.
 
         :return: Paths to available VirtualHosts
         :rtype: list
@@ -565,7 +566,7 @@ class ApacheAPI(object):
         """
         If the certificate with given ID already exists on disk
         this method adds it to the default SSL virtual host.
-        Otherwice default system certificate will be used.
+        Otherwise default system certificate will be used.
 
         :param id: SSL Certificate ID
         :type id: int
@@ -1050,7 +1051,7 @@ class ModSSL(object):
     def set_default_certificate(self, cert):
         """
         If certificate files exist on disk
-        this method adds this certificate to the default SSL virtual host.
+        this method adds that certificate to the default SSL virtual host.
         Otherwice default system certificate will be used.
         """
         ssl_conf_path = __apache__["ssl_conf_path"]

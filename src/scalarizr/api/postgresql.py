@@ -38,7 +38,13 @@ __postgresql__ = postgresql_svc.__postgresql__
 
 
 class PostgreSQLAPI(object):
+    """
+    Basic API for managing PostgreSQL 9.x service.
 
+    Namespace::
+
+        apache
+    """
     replication_status_query = '''SELECT
     CASE WHEN pg_last_xlog_receive_location() = pg_last_xlog_replay_location()
     THEN 0
@@ -52,7 +58,12 @@ class PostgreSQLAPI(object):
 
     @rpc.command_method
     def reset_password(self, new_password=None):
-        """ Reset password for PostgreSQL user 'scalr_master'. Return new password """
+        """
+        Resets password for PostgreSQL user 'scalr_master'.
+
+        :returns: New password
+        :rtype: str
+        """
         if not new_password:
             new_password = pwgen(10)
         pg = postgresql_svc.PostgreSql()
@@ -98,6 +109,25 @@ class PostgreSQLAPI(object):
 
     @rpc.query_method
     def replication_status(self):
+        """
+        :return: Postgresql replication status.
+        :rtype: dict
+
+        Examples::
+
+            On master:
+
+            {'master': {'status': 'up'}}
+
+            On broken slave:
+
+            {'slave': {'status': 'down','error': <errmsg>}}
+
+            On normal slave:
+
+            {'slave': {'status': 'up', 'xlog_delay': <xlog_delay>}}
+
+        """
         psql = postgresql_svc.PSQL()
         try:
             query_out = psql.execute(self.replication_status_query)
@@ -121,6 +151,9 @@ class PostgreSQLAPI(object):
 
     @rpc.command_method
     def create_databundle(self, async=True):
+        """
+        Creates a new data bundle of /mnt/pgstrage.
+        """
 
         def do_databundle(op):
             try:
@@ -167,6 +200,12 @@ class PostgreSQLAPI(object):
 
     @rpc.command_method
     def create_backup(self, async=True):
+        """
+        Creates a new backup of every available database and uploads gzipped data to the cloud storage.
+
+        .. Warning::
+            System database 'template0' is not included in backup.
+        """
 
         def do_backup(op):
             tmpdir = backup_path = None

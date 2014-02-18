@@ -65,11 +65,6 @@ HTTP layer::
 
 *_platform_access_data* - Секретные данные доступа к клауд платформе. Описаны в спецификациях каждой клауд платформы. Идентичны *body.platform_access_data* в мессаджинге.
 
-
-
-API
-===
-
 .. toctree::
    :maxdepth: 2
 
@@ -86,3 +81,44 @@ API
 		restart_service,
 		reload_service,
 		configtest
+
+.. autoclass:: scalarizr.api.storage.StorageAPI	
+	:members: create,
+		snapshot,
+		detach,
+		destroy,
+		grow
+
+.. autoclass:: scalarizr.api.system.SystemAPI	
+	:members: call_auth_shutdown_hook, 
+		set_hostname, 
+		get_hostname, 
+		block_devices, 
+		uname, 
+		dist, 
+		pythons, 
+		cpu_info, 
+		cpu_stat, 
+		mem_info, 
+		load_average, 
+		disk_stats, 
+		net_stats, 
+		statvfs, 
+		scaling_metrics, 
+		get_script_logs, 
+		get_debug_log, 
+		get_update_log, 
+		get_log
+
+.. autoclass:: scalarizr.api.postgresql.PostgreSQLAPI
+	:members: reset_password, 
+		replication_status, 
+		create_databundle, 
+		create_backup
+
+.. autoclass:: scalarizr.api.mongodb.MongoDBAPI
+	:members: reset_password,
+		enable_mms,
+		disable_mms
+
+		

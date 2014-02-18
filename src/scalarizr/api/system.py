@@ -1,11 +1,10 @@
 from __future__ import with_statement
-'''
+"""
 Created on Nov 25, 2011
 
 @author: marat
 
-Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(chef)
-'''
+"""
 
 
 import os
@@ -99,6 +98,14 @@ class _ScalingMetricStrategy(object):
 
 
 class SystemAPI(object):
+    """
+    Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(chef).
+
+    Namespace::
+
+        system
+
+    """
 
     _HOSTNAME = '/etc/hostname'
     _DISKSTATS = '/proc/diskstats'
@@ -115,11 +122,15 @@ class SystemAPI(object):
 
 
     def add_extension(self, extension):
-        '''
-        @param extension: Object with some callables to extend SysInfo public interface
-        @type extension: object
-        @note: Duplicates resolves by overriding old function with a new one
-        '''
+        """
+        :type extension: object
+        :param extension: Object with some callables to extend SysInfo public interface
+
+        Note::
+
+            Duplicates are resolved by overriding old function with a new one
+
+        """
 
         for name in dir(extension):
             attr = getattr(extension, name)
@@ -132,6 +143,10 @@ class SystemAPI(object):
 
     @rpc.query_method
     def call_auth_shutdown_hook(self):
+        """
+        .. warning::
+            Deprecated.
+        """
         script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
         LOG.debug("Executing %s" % script_path)
         if os.access(script_path, os.X_OK):
@@ -143,14 +158,20 @@ class SystemAPI(object):
 
     @rpc.command_method
     def set_hostname(self, hostname=None):
-        '''
-        Get/Update host FQDN
-        @param hostname: Fully Qualified Domain Name to set for this host
-        @rtype: str: Current FQDN
-        '''
+        """
+        Updates server's FQDN.
+
+        :param hostname: Fully Qualified Domain Name to set for this host
+        :type hostname: str
+
+        Example::
+
+            api.system.set_hostname(hostname = "myhostname.com")
+
+        """
         assert hostname
         system2(('hostname', hostname))
-        '''
+        """
         TODO: test and correct this code 
         # changing permanent hostname
         try:
@@ -179,22 +200,29 @@ class SystemAPI(object):
                                     hosts._hosts[index]['hostname'] == old_hn:
                         hosts._hosts[index]['hostname'] = hostname
                 hosts._flush()
-        '''
+        """
         return hostname
 
 
     @rpc.query_method
     def get_hostname(self):
+        """
+        :return: server's FQDN.
+        :rtype: list
+
+        Example::
+
+            "ec2-50-19-134-77.compute-1.amazonaws.com"
+        """
         return system2(('hostname', ))[0].strip()
 
 
     @rpc.query_method
     def block_devices(self):
-        '''
-        Block devices list
-        @return: List of block devices including ramX and loopX
-        @rtype: list
-        '''
+        """
+        :return: List of block devices including ramX and loopX
+        :rtype: list
+        """
 
         lines = self._readlines(self._DISKSTATS)
         devicelist = []
@@ -205,19 +233,21 @@ class SystemAPI(object):
 
     @rpc.query_method
     def uname(self):
-        '''
-        Return system information
-        @rtype: dict
+        """
+        :return: general system information.
+        :rtype: dict
         
-        Sample:
-        {'kernel_name': 'Linux',
-        'kernel_release': '2.6.41.10-3.fc15.x86_64',
-        'kernel_version': '#1 SMP Mon Jan 23 15:46:37 UTC 2012',
-        'nodename': 'marat.office.webta',           
-        'machine': 'x86_64',
-        'processor': 'x86_64',
-        'hardware_platform': 'x86_64'}
-        '''
+        Example::
+
+            {'kernel_name': 'Linux',
+            'kernel_release': '2.6.41.10-3.fc15.x86_64',
+            'kernel_version': '#1 SMP Mon Jan 23 15:46:37 UTC 2012',
+            'nodename': 'marat.office.webta',
+            'machine': 'x86_64',
+            'processor': 'x86_64',
+            'hardware_platform': 'x86_64'}
+
+        """
 
         uname = disttool.uname()
         return {
@@ -233,15 +263,17 @@ class SystemAPI(object):
 
     @rpc.query_method
     def dist(self):
-        '''
-        Return Linux distribution information 
-        @rtype: dict
+        """
+        :return: Linux distribution info.
+        :rtype: dict
 
-        Sample:
-        {'distributor': 'ubuntu',
-        'release': '12.04',
-        'codename': 'precise'}
-        '''
+        Example::
+
+            {'distributor': 'ubuntu',
+            'release': '12.04',
+            'codename': 'precise'}
+
+        """
         return {
             'distributor': linux.os['name'].lower(),
             'release': str(linux.os['release']),
@@ -251,13 +283,15 @@ class SystemAPI(object):
 
     @rpc.query_method
     def pythons(self):
-        '''
-        Return installed Python versions
-        @rtype: list
+        """
+        :return: installed Python versions
+        :rtype: list
 
-        Sample:
-        ['2.7.2+', '3.2.2']
-        '''
+        Example::
+
+            ['2.7.2+', '3.2.2']
+
+        """
 
         res = []
         for path in self._PATH:
@@ -279,10 +313,40 @@ class SystemAPI(object):
 
     @rpc.query_method
     def cpu_info(self):
-        '''
-        Return CPU info from /proc/cpuinfo
-        @rtype: list
-        '''
+        """
+        :return: CPU info from /proc/cpuinfo
+        :rtype: list
+
+        Example::
+
+            [
+               {
+                  "bogomips":"5319.98",
+                  "hlt_bug":"no",
+                  "fpu_exception":"yes",
+                  "stepping":"10",
+                  "cache_alignment":"64",
+                  "clflush size":"64",
+                  "microcode":"0xa07",
+                  "coma_bug":"no",
+                  "cache size":"6144 KB",
+                  "cpuid level":"13",
+                  "fpu":"yes",
+                  "model name":"Intel(R) Xeon(R) CPU           E5430  @ 2.66GHz",
+                  "address sizes":"38 bits physical, 48 bits virtual",
+                  "f00f_bug":"no",
+                  "cpu family":"6",
+                  "vendor_id":"GenuineIntel",
+                  "wp":"yes",
+                  "fdiv_bug":"no",
+                  "power management":"",
+                  "flags":"fpu tsc msr pae cx8",
+                  "model":"23",
+                  "processor":"0",
+                  "cpu MHz":"2659.994"
+               }
+            ]
+        """
 
         lines = self._readlines(self._CPUINFO)
         res = []
@@ -305,17 +369,20 @@ class SystemAPI(object):
     @rpc.query_method
     def cpu_stat(self):
 
-        '''
-        Return CPU stat from /proc/stat
-        @rtype: dict
+        """
+        :return: CPU stat from /proc/stat.
+        :rtype: dict
         
-        Sample: {
-            'user': 8416,
-            'nice': 0,
-            'system': 6754,
-            'idle': 147309
-        }
-        '''
+        Example::
+
+            {
+                'user': 8416,
+                'nice': 0,
+                'system': 6754,
+                'idle': 147309
+            }
+
+        """
         cpu = open('/proc/stat').readline().strip().split()
         return {
             'user': int(cpu[1]),
@@ -327,20 +394,22 @@ class SystemAPI(object):
 
     @rpc.query_method
     def mem_info(self):
-        '''
-        Return Memory information from /proc/meminfo
-        @rtype: dict
+        """
+        :return: Memory information from /proc/meminfo.
+        :rtype: dict
         
-        Sample: {
-            'total_swap': 0,
-            'avail_swap': 0,
-            'total_real': 604364,
-            'total_free': 165108,
-            'shared': 168,
-            'buffer': 17832,
-            'cached': 316756
-        }
-        '''
+        Example::
+
+             {
+                'total_swap': 0,
+                'avail_swap': 0,
+                'total_real': 604364,
+                'total_free': 165108,
+                'shared': 168,
+                'buffer': 17832,
+                'cached': 316756
+            }
+        """
         info = {}
         for line in open('/proc/meminfo'):
             pairs = line.split(':', 1)
@@ -358,18 +427,30 @@ class SystemAPI(object):
 
     @rpc.query_method
     def load_average(self):
-        '''
-        Return Load average (1, 5, 15) in 3 items list  
-        '''
+        """
+        :return: Load average (1, 5, 15) in 3 items list.
+        :rtype: list
+
+        Example::
+
+            [
+               0.0,      // LA1
+               0.01,     // LA5
+               0.05      // LA15
+            ]
+        """
 
         return os.getloadavg()
 
 
     @rpc.query_method
     def disk_stats(self):
-        '''
-        Disks I/O statistics
-        @rtype: {
+        """
+        :return: Disks I/O statistics.
+
+        Data format::
+
+            {
             <device>: {
                 <read>: {
                     <num>: total number of reads completed successfully
@@ -382,9 +463,11 @@ class SystemAPI(object):
                     <bytes>: total number of bytes written successfully
                 },
             ...
-        }
-        '''
-        #http://www.kernel.org/doc/Documentation/iostats.txt
+            }
+
+        See more at http://www.kernel.org/doc/Documentation/iostats.txt
+        """
+
 
         lines = self._readlines(self._DISKSTATS)
         devicelist = {}
@@ -408,24 +491,27 @@ class SystemAPI(object):
 
     @rpc.query_method
     def net_stats(self):
-        '''
-        Network I/O statistics
-        @rtype: {
-            <iface>: {
-                <receive>: {
-                    <bytes>: total received bytes
-                    <packets>: total received packets
-                    <errors>: total receive errors
-                }
-                <transmit>: {
-                    <bytes>: total transmitted bytes
-                    <packets>: total transmitted packets
-                    <errors>: total transmit errors
-                }
-            },
-            ...
-        }
-        '''
+        """
+        :return: Network I/O statistics.
+
+        Data format::
+
+            {
+                <iface>: {
+                    <receive>: {
+                        <bytes>: total received bytes
+                        <packets>: total received packets
+                        <errors>: total receive errors
+                    }
+                    <transmit>: {
+                        <bytes>: total transmitted bytes
+                        <packets>: total transmitted packets
+                        <errors>: total transmit errors
+                    }
+                },
+                ...
+            }
+        """
 
         lines = self._readlines(self._NETSTATS)
         res = {}
@@ -445,6 +531,33 @@ class SystemAPI(object):
 
     @rpc.query_method
     def statvfs(self, mpoints=None):
+        """
+        :return: Information about available mounted file systems (total size \ free space).
+
+        Request::
+
+            {
+                "mpoints": [
+                    "/mnt/dbstorage",
+                    "/media/mpoint",
+                    "/non/existing/mpoint"
+                ]
+            }
+
+        Response::
+
+            {
+               "/mnt/dbstorage": {
+                 "total" : 10000,
+                 "free" : 5000
+               },
+               "/media/mpoint": {
+                 "total" : 20000,
+                 "free" : 1000
+               },
+               "/non/existing/mpoint" : null
+            }
+        """
         if not isinstance(mpoints, list):
             raise Exception('Argument "mpoints" should be a list of strings, '
                         'not %s' % type(mpoints))
@@ -466,22 +579,24 @@ class SystemAPI(object):
 
     @rpc.query_method
     def scaling_metrics(self):
-        '''
-        @return list of scaling metrics
-        @rtype: list
+        """
+        :return: list of scaling metrics
+        :rtype: list
         
-        Sample: [{
-            'id': 101011, 
-            'name': 'jmx.scaling', 
-            'value': 1, 
-            'error': None
-        }, {
-            'id': 202020,
-            'name': 'app.poller',
-            'value': None,
-            'error': 'Couldnt connect to host'
-        }]
-        '''
+        Example::
+
+            [{
+                'id': 101011,
+                'name': 'jmx.scaling',
+                'value': 1,
+                'error': None
+            }, {
+                'id': 202020,
+                'name': 'app.poller',
+                'value': None,
+                'error': 'Couldnt connect to host'
+            }]
+        """
 
         # Obtain scaling metrics from Scalr.
         scaling_metrics = bus.queryenv_service.get_scaling_metrics()
@@ -502,10 +617,10 @@ class SystemAPI(object):
 
     @rpc.query_method
     def get_script_logs(self, exec_script_id, maxsize=max_log_size):
-        '''
-        :return: out and err logs
+        """
+        :return: stdout and stderr scripting logs
         :rtype: dict(stdout: base64encoded, stderr: base64encoded)
-        '''
+        """
         stdout_match = glob.glob(os.path.join(logs_dir, '*%s-out.log' % exec_script_id))
         stderr_match = glob.glob(os.path.join(logs_dir, '*%s-err.log' % exec_script_id))
 
@@ -524,14 +639,26 @@ class SystemAPI(object):
 
     @rpc.query_method
     def get_debug_log(self):
+        """
+        :return: scalarizr debug log (/var/log/scalarizr.debug.log on Linux)
+        :rtype: str
+        """
         return binascii.b2a_base64(_get_log(self._DEBUG_LOG_FILE, -1))
 
     @rpc.query_method
     def get_update_log(self):
+        """
+        :return: scalarizr update log (/var/log/scalarizr.update.log on Linux)
+        :rtype: str
+        """
         return binascii.b2a_base64(_get_log(self._UPDATE_LOG_FILE, -1))     
 
     @rpc.query_method
     def get_log(self):
+        """
+        :return: scalarizr info log (/var/log/scalarizr.log on Linux)
+        :rtype: str
+        """
         return binascii.b2a_base64(_get_log(self._LOG_FILE, -1))   
 
 

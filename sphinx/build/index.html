@@ -5,15 +5,27 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   </head>
-  <body role="document">  
+  <body role="document">
+  <ac:structured-macro ac:name="toc">
+  <ac:parameter ac:name="printable">true</ac:parameter>
+  <ac:parameter ac:name="style">none</ac:parameter>
+  <ac:parameter ac:name="maxLevel">3</ac:parameter>
+  <ac:parameter ac:name="indent">5px</ac:parameter>
+  <ac:parameter ac:name="minLevel">2</ac:parameter>
+  <ac:parameter ac:name="exclude">[1//2]</ac:parameter>
+  <ac:parameter ac:name="class">bigpink</ac:parameter>
+  <ac:parameter ac:name="type">list</ac:parameter>
+  <ac:parameter ac:name="outline">true</ac:parameter>
+  <ac:parameter ac:name="include">.*</ac:parameter>
+  </ac:structured-macro>  
             
-  <h1>Scalarizr API</h1>
-<h2>Базовая информация</h2>
+  <h1>Scalarizr API<ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr-api</ac:parameter></ac:structured-macro></h1>
+<h2>Базовая информация<ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">id1</ac:parameter></ac:structured-macro></h2>
 <p>Endpoint:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[http://{$hostname}:8010]]></ac:plain-text-body></ac:structured-macro>
 </div>
 <p>Protocol: <a class="reference external" href="http://jsonrpc.org/">JSON-RPC</a></p>
-<h3>Аутентификация</h3>
+<h3>Аутентификация<ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">id2</ac:parameter></ac:structured-macro></h3>
 <p>Запрос шифруется и подписывается ключом сервера:</p>
 <p>Шифорвание:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[request = JSON-RPC request
@@ -53,22 +65,20 @@ Connection: close
 
 SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Gop3kbYSsA840204hQ9/aiKbyiueugwbQhH0s42TNB8sO88OvM8qssmt7IF+VZw9CG//Jk5dgDAjcKbW87bnLij7+roUSvAsgv5FwuZ5Im2Y4p9zXrCTvFO/M9l0nmzsmM3Be9YioOdmXzHuzNN14ZihC+1AYRGZR47NAepqdWEnWn1Q9OTCwQhgaCFQJMlEWYVXKF9Q==]]></ac:plain-text-body></ac:structured-macro>
 </div>
-<h4>Мета параметры</h4>
+<h4>Мета параметры<ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">id3</ac:parameter></ac:structured-macro></h4>
 <p><em>_platform_access_data</em> - Секретные данные доступа к клауд платформе. Описаны в спецификациях каждой клауд платформы. Идентичны <em>body.platform_access_data</em> в мессаджинге.</p>
-<h2>API</h2>
 <div class="toctree-wrapper compound">
 </div>
-<div class="class">
 <h2 id="scalarizr.api.apache.ApacheAPI">
-<em class="property">class </em><span class="descclassname">scalarizr.api.apache.</span><span class="descname">ApacheAPI</span></h2>
+<em class="property">class </em><span class="descclassname">scalarizr.api.apache.</span><span class="descname">ApacheAPI</span><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI</ac:parameter></ac:structured-macro></h2>
 <div><p>Basic API for configuring Apache VirtualHosts, querying statistics and controlling service status.</p>
-<p>namespace:</p>
+<p>Namespace:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[apache]]></ac:plain-text-body></ac:structured-macro>
 </div>
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.create_vhost">
-<span class="descname">create_vhost</span><big>(</big><em>hostname</em>, <em>port</em>, <em>template</em>, <em>ssl</em>, <em>ssl_certificate_id=None</em>, <em>reload=True</em>, <em>allow_port=False</em><big>)</big></h2>
-<div><p>Creates Name-Based Apache VirtualHost</p>
+<h3>create_vhost</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.create_vhost">
+<span class="descname">create_vhost</span><big>(</big><em>hostname</em>, <em>port</em>, <em>template</em>, <em>ssl</em>, <em>ssl_certificate_id=None</em>, <em>reload=True</em>, <em>allow_port=False</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.create_vhost</ac:parameter></ac:structured-macro></h4>
+<div><p>Creates a Name-Based Apache VirtualHost.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -105,12 +115,10 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
 </div>
 <p>Please Note that VirtualHosts on custom ports feature requires testing.</p>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.update_vhost">
-<span class="descname">update_vhost</span><big>(</big><em>signature</em>, <em>hostname=None</em>, <em>port=80</em>, <em>template=None</em>, <em>ssl=False</em>, <em>ssl_certificate_id=None</em>, <em>reload=True</em><big>)</big></h2>
-<div><p>Changes settings of VirtualHost defined by &#64;signature.</p>
+</div><h3>update_vhost</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.update_vhost">
+<span class="descname">update_vhost</span><big>(</big><em>signature</em>, <em>hostname=None</em>, <em>port=80</em>, <em>template=None</em>, <em>ssl=False</em>, <em>ssl_certificate_id=None</em>, <em>reload=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.update_vhost</ac:parameter></ac:structured-macro></h4>
+<div><p>Changes settings of an existing VirtualHost. VirtualHost is defined by VH signature.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -135,13 +143,10 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 <p>Change ServerName to old.dima.com, switch port to 8080 and reload service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)]]></ac:plain-text-body></ac:structured-macro>
 </div>
-<p>Please Note that Scalr does not use update_vhost API method thus it has not been tested properly.</p>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.delete_vhosts">
-<span class="descname">delete_vhosts</span><big>(</big><em>vhosts</em>, <em>reload=True</em><big>)</big></h2>
-<div><p>Removes given VirtualHosts from Apache2 configuration.</p>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Scalr does not use update_vhost API method so it has not been tested properly yet.</ac:rich-text-body></ac:structured-macro></div><h3>delete_vhosts</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.delete_vhosts">
+<span class="descname">delete_vhosts</span><big>(</big><em>vhosts</em>, <em>reload=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.delete_vhosts</ac:parameter></ac:structured-macro></h4>
+<div><p>Removes a set of VirtualHosts from Apache2 configuration.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -158,21 +163,18 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.reconfigure">
-<span class="descname">reconfigure</span><big>(</big><em>vhosts</em>, <em>reload=True</em>, <em>rollback_on_error=True</em><big>)</big></h2>
-<div><p>Deploys multiple VirtualHosts and removes odds.</p>
+</div><h3>reconfigure</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.reconfigure">
+<span class="descname">reconfigure</span><big>(</big><em>vhosts</em>, <em>reload=True</em>, <em>rollback_on_error=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.reconfigure</ac:parameter></ac:structured-macro></h4>
+<div><p>Resets current Scalr-managed VirtualHost configuration and deploys a new set of VirtualHosts.
+:param vhosts: list(dict(hostname:hostname1,port:port1,template:tpl1,..),..)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>vhosts</strong> -- list(dict(hostname:hostname1,port:port1,template:tpl1,..),..)</td>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">paths to reconfigured VirtualHosts</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">paths to reconfigured VirtualHosts</td>
-</tr>
-<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">list</td>
 </tr>
 </tbody>
 </table>
@@ -181,11 +183,9 @@ Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Ap
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
 api.apache.service.reconfigure([vhost1,])]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.get_webserver_statistics">
-<span class="descname">get_webserver_statistics</span><big>(</big><big>)</big></h2>
+</div><h3>get_webserver_statistics</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.get_webserver_statistics">
+<span class="descname">get_webserver_statistics</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.get_webserver_statistics</ac:parameter></ac:structured-macro></h4>
 <div><p>Returns mod_stat data</p>
 <p>i.e.
 Current Time,
@@ -194,8 +194,8 @@ Parent Server Generation,
 Server uptime,
 Total accesses,
 CPU Usage.</p>
-<p>The machine readable file can be accessed by using the following link:</p>
-<p><a class="reference external" href="http://your.server.name/server-status?auto">http://your.server.name/server-status?auto</a></p>
+<p>Data are read from machine readable file which can be accessed by the following link:</p>
+<p><a class="reference external" href="http://server.name/server-status?auto">http://server.name/server-status?auto</a></p>
 <p>Data are available only when mod_stat is enabled.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -220,13 +220,11 @@ CPU Usage.</p>
      u'Total kBytes': u'2',
      u'Uptime': u'91981'}]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.list_served_virtual_hosts">
-<span class="descname">list_served_virtual_hosts</span><big>(</big><big>)</big></h2>
+</div><h3>list_served_virtual_hosts</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.list_served_virtual_hosts">
+<span class="descname">list_served_virtual_hosts</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.list_served_virtual_hosts</ac:parameter></ac:structured-macro></h4>
 <div><p>Returns all VirtualHosts deployed by Scalr
-and available on web server</p>
+and available on web server.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -241,14 +239,12 @@ and available on web server</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.list_served_virtual_hosts()
 ["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.set_default_ssl_certificate">
-<span class="descname">set_default_ssl_certificate</span><big>(</big><em>id</em><big>)</big></h2>
+</div><h3>set_default_ssl_certificate</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.set_default_ssl_certificate">
+<span class="descname">set_default_ssl_certificate</span><big>(</big><em>id</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.set_default_ssl_certificate</ac:parameter></ac:structured-macro></h4>
 <div><p>If the certificate with given ID already exists on disk
 this method adds it to the default SSL virtual host.
-Otherwice default system certificate will be used.</p>
+Otherwise default system certificate will be used.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -261,51 +257,623 @@ Otherwice default system certificate will be used.</p>
 Set Scalr Certificate ID#873 as default:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.set_default_ssl_certificate("873")]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.start_service">
-<span class="descname">start_service</span><big>(</big><big>)</big></h2>
+</div><h3>start_service</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.start_service">
+<span class="descname">start_service</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.start_service</ac:parameter></ac:structured-macro></h4>
 <div><p>Start Apache service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.start_service()]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.stop_service">
-<span class="descname">stop_service</span><big>(</big><em>reason=None</em><big>)</big></h2>
+</div><h3>stop_service</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.stop_service">
+<span class="descname">stop_service</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.stop_service</ac:parameter></ac:structured-macro></h4>
 <div><p>Stop Apache service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.stop_service("Configuring Apache2 service.")]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.restart_service">
-<span class="descname">restart_service</span><big>(</big><em>reason=None</em><big>)</big></h2>
+</div><h3>restart_service</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.restart_service">
+<span class="descname">restart_service</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.restart_service</ac:parameter></ac:structured-macro></h4>
 <div><p>Restart Apache service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.restart_service("Applying new service configuration preset.")]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.reload_service">
-<span class="descname">reload_service</span><big>(</big><em>reason=None</em><big>)</big></h2>
+</div><h3>reload_service</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.reload_service">
+<span class="descname">reload_service</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.reload_service</ac:parameter></ac:structured-macro></h4>
 <div><p>Reload Apache service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.reload_service("Applying RPAF proxy list.")]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
-
-<div class="method">
-<h2 id="scalarizr.api.apache.ApacheAPI.configtest">
-<span class="descname">configtest</span><big>(</big><big>)</big></h2>
+</div><h3>configtest</h3>
+<h4 id="scalarizr.api.apache.ApacheAPI.configtest">
+<span class="descname">configtest</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.configtest</ac:parameter></ac:structured-macro></h4>
 <div><p>Run Apache configtest:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.configtest()]]></ac:plain-text-body></ac:structured-macro>
 </div>
-</div></div>
+</div></div><h2 id="scalarizr.api.storage.StorageAPI">
+<em class="property">class </em><span class="descclassname">scalarizr.api.storage.</span><span class="descname">StorageAPI</span><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.storage.StorageAPI</ac:parameter></ac:structured-macro></h2>
+<div><p>A set of API methods for basic storage management.</p>
+<p>Namespace:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[storage]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>StorageAPI methods make use of &quot;volume configuration&quot; dict object, which contains the following:</p>
+<blockquote>
+<div><ul class="simple">
+<li>type (Type: string) -- disk type. Required parameter.</li>
+<li>id (Type: string) -- disk ID.</li>
+<li>mpoint (Type: string) -- Mount point.</li>
+<li>fstype (Type: string) Default: &quot;ext3&quot;</li>
+</ul>
+</div></blockquote>
+<h3>create</h3>
+<h4 id="scalarizr.api.storage.StorageAPI.create">
+<span class="descname">create</span><big>(</big><em>volume=None</em>, <em>mkfs=False</em>, <em>mount=False</em>, <em>fstab=False</em>, <em>async=False</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.storage.StorageAPI.create</ac:parameter></ac:structured-macro></h4>
+<div><p>Creates a volume from given volume configuration if such volume does not exists.
+Then attaches it to the instance
+and (optionally) creates filesystem and mounts it.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>volume</strong> (<a class="reference external" href="http://docs.python.org/library/stdtypes.html#dict" title="(in Python v2.7)"><em>dict</em></a>) -- Volume configuration object</li>
+<li><strong>mkfs</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- When true method will create filesystem on mounted volume device.
+IF volume already has filesystem no mkfs performed and result volume's &quot;fstype&quot; property updated with existed fstype value</li>
+<li><strong>mount</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- Whether mount volume device.
+Non blank <cite>mpoint</cite> in volume configuration required</li>
+<li><strong>fstab</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- Whether add device to /etc/fstab</li>
+<li><strong>async</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- Execute method in separate thread and report status
+with Operation/Steps mechanism</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">dict|string</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div><h3>snapshot</h3>
+<h4 id="scalarizr.api.storage.StorageAPI.snapshot">
+<span class="descname">snapshot</span><big>(</big><em>volume=None</em>, <em>description=None</em>, <em>tags=None</em>, <em>async=False</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.storage.StorageAPI.snapshot</ac:parameter></ac:structured-macro></h4>
+<div><p>Creates a snapshot of a volume.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>volume</strong> (<a class="reference external" href="http://docs.python.org/library/stdtypes.html#dict" title="(in Python v2.7)"><em>dict</em></a>) -- Volume configuration object</li>
+<li><strong>description</strong> (<a class="reference external" href="http://docs.python.org/library/string.html#module-string" title="(in Python v2.7)"><em>string</em></a>) -- Snapshot description</li>
+<li><strong>tags</strong> (<a class="reference external" href="http://docs.python.org/library/stdtypes.html#dict" title="(in Python v2.7)"><em>dict</em></a>) -- Key-value tagging. Only 'ebs' and 'gce_persistent'
+volume types support it.</li>
+<li><strong>async</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- When True, the method is being executed in a separate thread
+and reports status with Operation/Steps mechanism.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</div><h3>detach</h3>
+<h4 id="scalarizr.api.storage.StorageAPI.detach">
+<span class="descname">detach</span><big>(</big><em>volume=None</em>, <em>force=False</em>, <em>async=False</em>, <em>**kwds</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.storage.StorageAPI.detach</ac:parameter></ac:structured-macro></h4>
+<div><p>Detaches a volume from an instance.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>volume</strong> (<a class="reference external" href="http://docs.python.org/library/stdtypes.html#dict" title="(in Python v2.7)"><em>dict</em></a>) -- Volume configuration object</li>
+<li><strong>force</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- More aggressive.
+- 'ebs' will pass it to DetachVolume
+- 'raid' will pass it to underlying disks</li>
+<li><strong>async</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- Execute method in separate thread and report status
+with Operation/Steps mechanism</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</div><h3>destroy</h3>
+<h4 id="scalarizr.api.storage.StorageAPI.destroy">
+<span class="descname">destroy</span><big>(</big><em>volume</em>, <em>force=False</em>, <em>async=False</em>, <em>**kwds</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.storage.StorageAPI.destroy</ac:parameter></ac:structured-macro></h4>
+<div><p>Destroys a volume.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>volume</strong> (<a class="reference external" href="http://docs.python.org/library/stdtypes.html#dict" title="(in Python v2.7)"><em>dict</em></a>) -- Volume configuration object</li>
+<li><strong>force</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- More aggressive.
+- 'ebs' will pass it to DetachVolume
+- 'raid' will pass it to underlying disks</li>
+<li><strong>async</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- Execute method in separate thread and report status
+with Operation/Steps mechanism</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</div><h3>grow</h3>
+<h4 id="scalarizr.api.storage.StorageAPI.grow">
+<span class="descname">grow</span><big>(</big><em>volume</em>, <em>growth</em>, <em>async=False</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.storage.StorageAPI.grow</ac:parameter></ac:structured-macro></h4>
+<div><p>Extends volume capacity.
+Depending on volume type it can be size in GB or number of disks (e.g. for RAID volumes)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>volume</strong> (<a class="reference external" href="http://docs.python.org/library/stdtypes.html#dict" title="(in Python v2.7)"><em>dict</em></a>) -- Volume configuration object</li>
+<li><strong>growth</strong> (<a class="reference external" href="http://docs.python.org/library/stdtypes.html#dict" title="(in Python v2.7)"><em>dict</em></a>) -- size in GB for regular disks or number of volumes for RAID configuration.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<p>Growth keys:</p>
+<blockquote>
+<div><ul class="simple">
+<li>size (Type: int, Availability: ebs, csvol, cinder, gce_persistent) -- A new size for persistent volume.</li>
+<li>iops (Type: int, Availability: ebs) -- A new IOPS value for EBS volume.</li>
+<li>volume_type (Type: string, Availability: ebs) -- A new volume type for EBS volume. Values: &quot;standard&quot; | &quot;io1&quot;.</li>
+<li>disks (Type: Growth, Availability: raid) -- A growth dict for underlying RAID volumes.</li>
+<li>disks_count (Type: int, Availability: raid) - number of disks.</li>
+</ul>
+</div></blockquote>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>async</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#bool" title="(in Python v2.7)"><em>bool</em></a>) -- Execute method in a separate thread and report status
+with Operation/Steps mechanism.</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<p>Grow EBS volume to 50Gb:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[new_vol = api.grow(
+    volume={
+        'id': 'vol-e13aa63ef',
+    },
+    growth={
+        'size': 50
+    }
+)]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div><h2 id="scalarizr.api.system.SystemAPI">
+<em class="property">class </em><span class="descclassname">scalarizr.api.system.</span><span class="descname">SystemAPI</span><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI</ac:parameter></ac:structured-macro></h2>
+<div><p>Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(chef).</p>
+<p>Namespace:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[system]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<h3>call_auth_shutdown_hook</h3>
+<h4 id="scalarizr.api.system.SystemAPI.call_auth_shutdown_hook">
+<span class="descname">call_auth_shutdown_hook</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.call_auth_shutdown_hook</ac:parameter></ac:structured-macro></h4>
+<div><ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Deprecated.</ac:rich-text-body></ac:structured-macro></div><h3>set_hostname</h3>
+<h4 id="scalarizr.api.system.SystemAPI.set_hostname">
+<span class="descname">set_hostname</span><big>(</big><em>hostname=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.set_hostname</ac:parameter></ac:structured-macro></h4>
+<div><p>Updates server's FQDN.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>hostname</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- Fully Qualified Domain Name to set for this host</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.system.set_hostname(hostname = "myhostname.com")]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>get_hostname</h3>
+<h4 id="scalarizr.api.system.SystemAPI.get_hostname">
+<span class="descname">get_hostname</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.get_hostname</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">server's FQDN.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA["ec2-50-19-134-77.compute-1.amazonaws.com"]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>block_devices</h3>
+<h4 id="scalarizr.api.system.SystemAPI.block_devices">
+<span class="descname">block_devices</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.block_devices</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">List of block devices including ramX and loopX</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+</div><h3>uname</h3>
+<h4 id="scalarizr.api.system.SystemAPI.uname">
+<span class="descname">uname</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.uname</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">general system information.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[{'kernel_name': 'Linux',
+'kernel_release': '2.6.41.10-3.fc15.x86_64',
+'kernel_version': '#1 SMP Mon Jan 23 15:46:37 UTC 2012',
+'nodename': 'marat.office.webta',
+'machine': 'x86_64',
+'processor': 'x86_64',
+'hardware_platform': 'x86_64'}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>dist</h3>
+<h4 id="scalarizr.api.system.SystemAPI.dist">
+<span class="descname">dist</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.dist</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Linux distribution info.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[{'distributor': 'ubuntu',
+'release': '12.04',
+'codename': 'precise'}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>pythons</h3>
+<h4 id="scalarizr.api.system.SystemAPI.pythons">
+<span class="descname">pythons</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.pythons</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">installed Python versions</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[['2.7.2+', '3.2.2']]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>cpu_info</h3>
+<h4 id="scalarizr.api.system.SystemAPI.cpu_info">
+<span class="descname">cpu_info</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.cpu_info</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">CPU info from /proc/cpuinfo</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[[
+   {
+      "bogomips":"5319.98",
+      "hlt_bug":"no",
+      "fpu_exception":"yes",
+      "stepping":"10",
+      "cache_alignment":"64",
+      "clflush size":"64",
+      "microcode":"0xa07",
+      "coma_bug":"no",
+      "cache size":"6144 KB",
+      "cpuid level":"13",
+      "fpu":"yes",
+      "model name":"Intel(R) Xeon(R) CPU           E5430  @ 2.66GHz",
+      "address sizes":"38 bits physical, 48 bits virtual",
+      "f00f_bug":"no",
+      "cpu family":"6",
+      "vendor_id":"GenuineIntel",
+      "wp":"yes",
+      "fdiv_bug":"no",
+      "power management":"",
+      "flags":"fpu tsc msr pae cx8",
+      "model":"23",
+      "processor":"0",
+      "cpu MHz":"2659.994"
+   }
+]]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>cpu_stat</h3>
+<h4 id="scalarizr.api.system.SystemAPI.cpu_stat">
+<span class="descname">cpu_stat</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.cpu_stat</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">CPU stat from /proc/stat.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[{
+    'user': 8416,
+    'nice': 0,
+    'system': 6754,
+    'idle': 147309
+}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>mem_info</h3>
+<h4 id="scalarizr.api.system.SystemAPI.mem_info">
+<span class="descname">mem_info</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.mem_info</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Memory information from /proc/meminfo.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[ {
+    'total_swap': 0,
+    'avail_swap': 0,
+    'total_real': 604364,
+    'total_free': 165108,
+    'shared': 168,
+    'buffer': 17832,
+    'cached': 316756
+}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>load_average</h3>
+<h4 id="scalarizr.api.system.SystemAPI.load_average">
+<span class="descname">load_average</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.load_average</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Load average (1, 5, 15) in 3 items list.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[[
+   0.0,      // LA1
+   0.01,     // LA5
+   0.05      // LA15
+]]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>disk_stats</h3>
+<h4 id="scalarizr.api.system.SystemAPI.disk_stats">
+<span class="descname">disk_stats</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.disk_stats</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Disks I/O statistics.</td>
+</tr>
+</tbody>
+</table>
+<p>Data format:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[{
+<device>: {
+    <read>: {
+        <num>: total number of reads completed successfully
+        <sectors>: total number of sectors read successfully
+        <bytes>: total number of bytes read successfully
+    }
+    <write>: {
+        <num>: total number of writes completed successfully
+        <sectors>: total number of sectors written successfully
+        <bytes>: total number of bytes written successfully
+    },
+...
+}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>See more at <a class="reference external" href="http://www.kernel.org/doc/Documentation/iostats.txt">http://www.kernel.org/doc/Documentation/iostats.txt</a></p>
+</div><h3>net_stats</h3>
+<h4 id="scalarizr.api.system.SystemAPI.net_stats">
+<span class="descname">net_stats</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.net_stats</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Network I/O statistics.</td>
+</tr>
+</tbody>
+</table>
+<p>Data format:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[{
+    <iface>: {
+        <receive>: {
+            <bytes>: total received bytes
+            <packets>: total received packets
+            <errors>: total receive errors
+        }
+        <transmit>: {
+            <bytes>: total transmitted bytes
+            <packets>: total transmitted packets
+            <errors>: total transmit errors
+        }
+    },
+    ...
+}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>statvfs</h3>
+<h4 id="scalarizr.api.system.SystemAPI.statvfs">
+<span class="descname">statvfs</span><big>(</big><em>mpoints=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.statvfs</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Information about available mounted file systems (total size free space).</td>
+</tr>
+</tbody>
+</table>
+<p>Request:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[{
+    "mpoints": [
+        "/mnt/dbstorage",
+        "/media/mpoint",
+        "/non/existing/mpoint"
+    ]
+}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<p>Response:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[{
+   "/mnt/dbstorage": {
+     "total" : 10000,
+     "free" : 5000
+   },
+   "/media/mpoint": {
+     "total" : 20000,
+     "free" : 1000
+   },
+   "/non/existing/mpoint" : null
+}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>scaling_metrics</h3>
+<h4 id="scalarizr.api.system.SystemAPI.scaling_metrics">
+<span class="descname">scaling_metrics</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.scaling_metrics</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">list of scaling metrics</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[[{
+    'id': 101011,
+    'name': 'jmx.scaling',
+    'value': 1,
+    'error': None
+}, {
+    'id': 202020,
+    'name': 'app.poller',
+    'value': None,
+    'error': 'Couldnt connect to host'
+}]]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>get_script_logs</h3>
+<h4 id="scalarizr.api.system.SystemAPI.get_script_logs">
+<span class="descname">get_script_logs</span><big>(</big><em>exec_script_id</em>, <em>maxsize=5242880</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.get_script_logs</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">stdout and stderr scripting logs</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">dict(stdout: base64encoded, stderr: base64encoded)</td>
+</tr>
+</tbody>
+</table>
+</div><h3>get_debug_log</h3>
+<h4 id="scalarizr.api.system.SystemAPI.get_debug_log">
+<span class="descname">get_debug_log</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.get_debug_log</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">scalarizr debug log (/var/log/scalarizr.debug.log on Linux)</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">str</td>
+</tr>
+</tbody>
+</table>
+</div><h3>get_update_log</h3>
+<h4 id="scalarizr.api.system.SystemAPI.get_update_log">
+<span class="descname">get_update_log</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.get_update_log</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">scalarizr update log (/var/log/scalarizr.update.log on Linux)</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">str</td>
+</tr>
+</tbody>
+</table>
+</div><h3>get_log</h3>
+<h4 id="scalarizr.api.system.SystemAPI.get_log">
+<span class="descname">get_log</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.system.SystemAPI.get_log</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">scalarizr info log (/var/log/scalarizr.log on Linux)</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">str</td>
+</tr>
+</tbody>
+</table>
+</div></div><h2 id="scalarizr.api.postgresql.PostgreSQLAPI">
+<em class="property">class </em><span class="descclassname">scalarizr.api.postgresql.</span><span class="descname">PostgreSQLAPI</span><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.postgresql.PostgreSQLAPI</ac:parameter></ac:structured-macro></h2>
+<div><p>Basic API for managing PostgreSQL 9.x service.</p>
+<p>Namespace:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[apache]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<h3>reset_password</h3>
+<h4 id="scalarizr.api.postgresql.PostgreSQLAPI.reset_password">
+<span class="descname">reset_password</span><big>(</big><em>new_password=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.postgresql.PostgreSQLAPI.reset_password</ac:parameter></ac:structured-macro></h4>
+<div><p>Resets password for PostgreSQL user 'scalr_master'.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">New password</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">str</td>
+</tr>
+</tbody>
+</table>
+</div><h3>replication_status</h3>
+<h4 id="scalarizr.api.postgresql.PostgreSQLAPI.replication_status">
+<span class="descname">replication_status</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.postgresql.PostgreSQLAPI.replication_status</ac:parameter></ac:structured-macro></h4>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Postgresql replication status.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+<p>Examples:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[On master:
 
-</div></div>
+{'master': {'status': 'up'}}
 
+On broken slave:
 
+{'slave': {'status': 'down','error': <errmsg>}}
+
+On normal slave:
+
+{'slave': {'status': 'up', 'xlog_delay': <xlog_delay>}}]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>create_databundle</h3>
+<h4 id="scalarizr.api.postgresql.PostgreSQLAPI.create_databundle">
+<span class="descname">create_databundle</span><big>(</big><em>async=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.postgresql.PostgreSQLAPI.create_databundle</ac:parameter></ac:structured-macro></h4>
+<div><p>Creates a new data bundle of /mnt/pgstrage.</p>
+</div><h3>create_backup</h3>
+<h4 id="scalarizr.api.postgresql.PostgreSQLAPI.create_backup">
+<span class="descname">create_backup</span><big>(</big><em>async=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.postgresql.PostgreSQLAPI.create_backup</ac:parameter></ac:structured-macro></h4>
+<div><p>Creates a new backup of every available database and uploads gzipped data to the cloud storage.</p>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>System database 'template0' is not included in backup.</ac:rich-text-body></ac:structured-macro></div></div>
 
       <div class="clearer"></div>
     <div class="footer" role="contentinfo">

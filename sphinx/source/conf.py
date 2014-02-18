@@ -338,7 +338,7 @@ epub_copyright = u'2013, Dmytro Korsakov'
 intersphinx_mapping = {'http://docs.python.org/': None}
 
 autodoc_member_order = "bysource"
-html_add_permalinks = False
+html_add_permalinks = True  # set False to remove anchors
 html_show_copyright = False
 html_show_sphinx = False
 
