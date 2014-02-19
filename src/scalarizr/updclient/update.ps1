@@ -1,260 +1,332 @@
-
-# TODO: store update status as JSON to $StatusFile file
-
 param (
-    [string]$URL = $(throw "Specify package URL to install")
+    [string]$url = $(throw "Specify package URL to install")
 )
 
-$DebugPreference = "Continue"
-$ErrorActionPreference = "Stop"
+$debugPreference = "continue"
+$errorActionPreference = "stop"
 
-function TmpName () {
+
+$installDir = "$($env:PROGRAMFILES)\Scalarizr"
+$uninstallRegKey = "hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr"
+$logDir = "$installDir\var\log"
+$runDir = "$installDir\var\run"
+$logFile = "$logDir\scalarizr_update_win.log"
+$statusFile = "$installDir\etc\private.d\update_win.status"
+$backupCreatedLock = "$runDir\backup.created"
+$dirsToBackup = @("src", "Python27")
+$servicesToOperate = @("ScalrUpdClient", "Scalarizr")
+$installedVersion = ""
+$state = "in-progress"
+$prevState = $null
+
+
+function log {
 param (
-    [string]$Suffix
+    $message
 )
-    return [System.IO.Path]::GetTempPath() + [System.Guid]::NewGuid().ToString() + $Suffix
+    write-debug "$(get-date -format s) -  $message"
 }
 
-$InstallDir = "C:\Program Files\Scalarizr"
-$UninstallRegKey = "hklm:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Scalarizr"
-$LogDir = "$InstallDir\var\log"
-$RunDir = "$InstallDir\var\run"
-$LogFile = "$LogDir\scalarizr_update_win.log"
-$StatusFile = "$InstallDir\etc\private.d\update_win.status"
-$BackupCreatedLock = "$RunDir\backup.created"
-$DirsToBackup = @("src", "Python27")
-$ServicesToOperate = @("ScalrUpdClient", "Scalarizr")
-$InstalledVersion = ""
-$State = "in-progress"
-$PrevState = $Null
 
-
-function Log() {
+function tmpName {
 param (
-    $Message
+    $suffix
 )
-    #Add-Content $LogFile "$Message" 
-    Write-Debug $Message
+    return [system.io.path]::getTempPath() + [system.guid]::newGuid().toString() + $suffix
 }
 
-function Get-SzrVersion {
+
+function downloadFile {
 param (
-    [string]$Path = $InstallDir
+    $url
 )
-    return $(Get-Content "$Path\src\scalarizr\version").Trim()
+    $wc = new-object system.net.WebClient
+    $dst = tmpName -suffix $([system.io.path]::getExtension($url))
+    log "Downloading $url to $dst"
+    $wc.downloadFile($url, $dst)
+    return $dst
 }
 
-function Download-SzrPackage {
-param ($URL)
 
-    $WC = New-Object System.Net.WebClient
-    $Dst = TmpName -Suffix ".exe"
-    Log "Downloading $url"
-    $WC.DownloadFile($URL, $Dst)
-    Log "Saved to $Dst"
-    return $Dst
+function runInstaller {
+param (
+    $fileName
+)
+    log "Starting installer"
+    $proc = start-process -wait $fileName /S
+    if ($proc.exitCode) {
+        throw "Installer $(split-path -leaf $fileName) exited with code: $($proc.ExitCode)"
+    }
+    log "Installer completed"
+    sleep 2  # Give them time to think
 }
 
-function Create-SzrBackup {
-    if (Test-Path $InstallDir) {
-        Log "Backuping current installation $(Get-SzrVersion)"
-        $DirsToBackup | foreach {
-            for ($Cnt = 0; $Cnt -lt 5; $Cnt++) {
-                $Name = $_
-                Log "Renaming $InstallDir\$_ -> $Name-$InstalledVersion"
+
+function extractZipFile {
+param (
+    $fileName,
+    $destDir
+)
+    $FOF_NOCONFIRMATION = 0x10
+
+    log "Extracting ZIP $fileName to directory $destDir"
+    $shell = new-object -com shell.application
+    $source = $shell.namespace($fileName)
+    if (-not (test-path $destDir)) {
+        new-item $destDir -type directory
+    }
+    $dest = $shell.namespace($destDir)
+    $dest.copyHere($source.items(), $FOF_NOCONFIRMATION)
+}
+
+
+function acceptHandleUtilEula {
+    $path = "hkcu:\software\sysinternals\handle"
+    if (-not (test-path $path)) {
+        new-item $path
+    }
+    set-itemproperty $path "EulaAccepted" "1"
+}
+
+
+function ensureHandleUtil {
+    if (-not (get-command handle -errorAction silentlyContinue)) {
+        log "Installing Sysinternals Handle (By Mark Russinovich)"
+        $path = downloadFile -url "http://download.sysinternals.com/files/Handle.zip"
+        try {
+            extractZipFile -fileName $path -destDir $env:WINDIR
+            acceptHandleUtilEula    
+        } finally {
+            remove-item $path
+        }
+    }
+}
+
+
+function releaseHandles {
+param (
+    $path
+)
+    log "Releasing handles for: $path"
+    handle $path | foreach { 
+        if ($_ -match "[^\s]+\s+pid:\s(\d+)\s+type:\s[^\s]+\s+([^:]+):") { 
+            log $_
+            $pid_ = $matches[1]; 
+            $hnd = $matches[2]; 
+            handle -c $hnd -p $pid_ -y
+        }
+    }
+}
+
+
+function getSzrVersion {
+param (
+    [string]$path = $installDir
+)
+    return $(get-content "$path\src\scalarizr\version").trim()
+}
+
+
+function createSzrBackup {
+    if (test-path $installDir) {
+        log "Backuping current installation $(getSzrVersion)"
+        $dirsToBackup | foreach {
+            for ($cnt = 0; $cnt -lt 5; $cnt++) {
+                log "Renaming $installDir\$_ -> $_-$installedVersion"
                 try {
-                    Rename-Item -Path "$InstallDir\$Name" -NewName "$Name-$InstalledVersion"
+                    rename-item -path "$installDir\$_" -newName "$_-$installedVersion"
                     break
                 }
                 catch {
-                    Log "Finding a locker process"
-                    #handle "$InstallDir\$Name"
+                    releaseHandles $installDir
                 }
-                Start-Sleep -s 1
+                sleep 1
             }
         }
-        Echo $Null > $BackupCreatedLock
+        echo $null > $backupCreatedLock
     }
 }
 
-function Restore-SzrBackup {
-    if (Test-Path $BackupCreatedLock) {
-        Log "Restoring previous installation from backup"
-        $DirsToBackup | foreach {
-            $Path = "$InstallDir\$_-$InstalledVersion"
-            $NewName = "$InstallDir\$_"
-            if (Test-Path $NewName) {
-                Remove-Item $NewName -Force -Recurse
-            }
-            if (Test-Path $Path) {
-                Rename-Item -Path $Path -NewName $NewName
-            }
-        }
-        Remove-Item $BackupCreatedLock
 
-        Set-ItemProperty -Path $UninstallRegKey -Name DisplayVersion -Value $InstalledVersion
-        Set-ItemProperty -Path $UninstallRegKey -Name DisplayName -Value "Scalarizr $InstalledVersion-1"
-    }
-}
-
-function Delete-SzrBackup {
-    if (Test-Path $BackupCreatedLock) {
-        Log "Cleanuping"
-        $DirsToBackup | foreach {
-            $Path = "$InstallDir\$_-$InstalledVersion"
-            if (Test-Path $Path) {
-                Log "Remove $Path"
-                Remove-Item $Path -Force -Recurse
+function restoreSzrBackup {
+    if (test-path $backupCreatedLock) {
+        log "Restoring previous installation from backup"
+        $dirsToBackup | foreach {
+            $path = "$installDir\$_-$installedVersion"
+            $newName = "$installDir\$_"
+            if (test-path $newName) {
+                remove-item $newName -force -recurse
+            }
+            if (test-path $path) {
+                rename-item -path $path -newName $newName
             }
         }
-        Remove-Item $BackupCreatedLock
+        remove-item $backupCreatedLock
+
+        set-itemproperty $uninstallRegKey "DisplayVersion" $installedVersion
+        set-itemproperty $uninstallRegKey "DisplayName" "Scalarizr $installedVersion-1"
     }
 }
 
-function Install-SzrPackage {
-param ($PackageFile)
-    Log "Starting installer"
-    $Proc = Start-Process -Wait $PackageFile /S
-    if ($Proc.ExitCode) {
-        Throw "Scalarizr installer $(Split-Path -Leaf $PackageFile) exited with code: $($Proc.ExitCode)"
+
+function deleteSzrBackup {
+    if (test-path $backupCreatedLock) {
+        log "Cleanuping"
+        $dirsToBackup | foreach {
+            $path = "$installDir\$_-$installedVersion"
+            if (test-path $path) {
+                log "Remove $path"
+                try {
+                    remove-item $path -force -recurse
+                }
+                catch {
+                    releaseHandles $path
+                }
+            }
+        }
+        remove-item $backupCreatedLock
     }
-    Log "Installer completed"
-    Start-Sleep -s 2  # Give them time to think
 }
 
-function Stop-SzrService {
-param ($Name)
-    Log "Stopping $Name"
-    $Job = Start-Job -ScriptBlock {
-        $DebugPreference = "Continue"
-        $ErrorActionPreference = "Stop"
-        $Name = $using:Name
-        Stop-Service $using:Name
-        Write-Debug "Stop-Service $Name completed"
-        Get-WmiObject -Class Win32_Service -Filter "name = '$Name'"
+
+function stopSzrService {
+param (
+    $name
+)
+    log "Stopping $Name"
+    $job = start-job -scriptBlock {
+        $debugPreference = "continue"
+        $errorActionPreference = "stop"
+        stop-service $using:name
     }
-    Wait-Job $Job -Timeout 30
-    if ($Job.State -eq "Running") {
-        Log "Killing job $($Job.Id)"
-        Stop-Job $Job
+    wait-job $job -timeout 30
+    if ($job.state -eq "Running") {
+        log "Killing job $($job.Id)"
+        stop-job $job
     } else {
-        Receive-Job $Job
+        receive-job $job
     }
-    $Svs = Get-WmiObject -Class Win32_Service -Filter "Name = '$Name'"
-    if ($Svs -and $Svs.ProcessId) {
-        Stop-Process -Id $Svs.Processid -Force -ErrorAction Stop
+    $svs = get-wmiobject -class win32_service -filter "name = '$name'"
+    if ($svs -and $svs.processId) {
+        stop-process -id $svs.processId -force -errorAction stop
     }
 }
 
-function Stop-SzrServices {
-    Log "Stopping services"
-    $ServicesToOperate | foreach {
-        Stop-SzrService $_
+function stopAllSzrServices {
+    log "Stopping services"
+    $servicesToOperate | foreach {
+        stopSzrService $_
     }
-    Start-Sleep -s 2  # Give them time to shutdown
+    sleep 2  # Give them time to shutdown
 }
 
-function Start-SzrServices {
-param ($Certainly = $false)
 
-    if ($Certainly -or (Get-Service "ScalrUpdClient" -ErrorAction SilentlyContinue)) {
-        Log "Starting services"
-        $ServicesToOperate | foreach {
-            $Name = $_
-            Start-Service $Name
-            Log "Started $Name, sleeping"  
-            Start-Sleep -s 2
-            $Svs = Get-Service $Name
-            Log "Status: $($Svs.Status)"
-            if (-not ($Svs.Status -eq "Running")) {
-                Throw "Service started but failed a moment later: $Name"
+function startAllSzrServices {
+param (
+    [switch] $force
+)
+    if ($force -or (get-service "ScalrUpdClient" -errorAction silentlyContinue)) {
+        log "Starting services"
+        $servicesToOperate | foreach {
+            $name = $_
+            start-service $name
+            log "Service $name started, waiting"  
+            sleep 2
+            $svs = get-service $name
+            log "$name status: $($svs.status)"
+            if (-not ($svs.status -eq "Running")) {
+                throw "Service $name failed a moment after startup"
             }
         }
     }
 }
 
-function Set-SzrState {
-param ($State)
-    $script:PrevState = $script:State
-    $script:State = $State
+
+function setSzrState {
+param (
+    $state
+)
+    $script:prevState = $script:state
+    $script:state = $state
 }
 
-function Save-SzrStatus {
-    $Msg = @()
-    $Error | foreach { $Msg += [string]$_ }
-    $Msg = $Msg | Select -Uniq
-    if ($Msg) {  
+
+function saveSzrStatus {
+    $msg = @()
+    $error | foreach { $msg += [string]$_ }
+    $msg = $msg | select -uniq
+    if ($msg) {  
         # Empty arrays are not welcome: 
         # Exception calling "Reverse" with "1" argument(s): "Value cannot be null.
-        [array]::Reverse($Msg)
+        [array]::reverse($msg)
     }
-    $Version = $(Get-ItemProperty -Path $UninstallRegKey -Name DisplayVersion).DisplayVersion
-    $Release = $(Get-ItemProperty -Path $UninstallRegKey -Name DisplayRelease).DisplayRelease
-    $Installed = "$Version-$Release"
+    $version = $(get-itemproperty $uninstallRegKey "DisplayVersion").DisplayVersion
+    $release = $(get-itemproperty $uninstallRegKey "DisplayRelease").DisplayRelease
+    $installed = "$version-$release"
 
-    $Status = @{
-        error = $Msg -join "`n"; 
-        state = $State;
-        prev_state = $PrevState;
-        installed = $Installed
-    } | ConvertTo-Json
-    Log "Saving status: $Status"
-    Set-Content -Encoding Ascii -Path $StatusFile -Value $Status  
+    $status = @{
+        error = $msg -join "`n"; 
+        state = $state;
+        prev_state = $prevState;
+        installed = $installed
+    } | convertto-json
+    log "Saving status: $Status"
+    set-content -encoding ascii -path $statusFile -value $status  
 }
 
-function Main-Szr {
+
+function main {
     try {
-        Set-SzrState "in-progress/prepare"
-        if (Test-Path $StatusFile) {
-            Remove-Item $StatusFile
+        setSzrState "in-progress/prepare"
+        if (test-path $statusFile) {
+            remove-item $statusFile
         }
-        if (Test-Path $InstallDir) {
-            $script:InstalledVersion = Get-SzrVersion
+        if (test-path $installDir) {
+            $script:installedVersion = getSzrVersion
         }
-        Set-SzrState "in-progress/download-package"
-        $PackageFile = Download-SzrPackage $URL
-        Set-SzrState "in-progress/stop"
-        Stop-SzrServices
+        setSzrState "in-progress/download-package"
+        $packageFile = downloadFile $url
+        setSzrState "in-progress/stop"
+        stopAllSzrServices
         try {
-            Create-SzrBackup
+            createSzrBackup
             try {
-                Set-SzrState "in-progress/install"
-                Install-SzrPackage $PackageFile
-                if (-not (Test-Path "$InstallDir\src")) {
-                    Get-ChildItem "$InstallDir"
-                    Throw "Installer completed without installing new files"
+                setSzrState "in-progress/install"
+                runInstaller $packageFile
+                if (-not (test-path "$installDir\src")) {
+                    throw "Installer completed without installing new files"
                 }
-                Set-SzrState "in-progress/restart"
-                Save-SzrStatus
-                Start-SzrServices -Сertainly
-                Set-SzrState "completed"
+                setSzrState "in-progress/restart"
+                saveSzrStatus
+                startAllSzrServices -force
+                setSzrState "completed"
             }
             catch {
-                Write-Error $_ -ErrorAction Continue
-                Stop-SzrServices
-                Restore-SzrBackup
-                Set-SzrState "rollbacked"
+                write-error $_ -errorAction continue
+                stopAllSzrServices
+                restoreSzrBackup
+                setSzrState "rollbacked"
             }
             finally {
-                Delete-SzrBackup
+                deleteSzrBackup
             }
         }
         catch {
-            Write-Error $_ -ErrorAction Continue
-            Set-SzrState "error"
+            write-error $_ -errorAction continue
+            setSzrState "error"
         }
     }
     finally {
         try {
-            Save-SzrStatus
-            Start-SzrServices -ErrorAction Continue
-            Remove-Item $PackageFile  
+            saveSzrStatus
+            startAllSzrServices -errorAction continue
+            remove-Item $packageFile  
         } 
         catch {
-            Write-Error $_ -ErrorAction Continue
+            write-error $_ -errorAction continue
         }     
     }
 }
 
-Main-Szr -ErrorAction Continue 5>&1 2>&1 | Tee-Object -Append $LogFile
+main -errorAction continue 5>&1 2>&1 | tee-object -append $logFile
 
