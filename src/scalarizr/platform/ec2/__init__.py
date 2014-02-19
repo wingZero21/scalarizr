@@ -68,7 +68,8 @@ class Ec2ConnectionProxy(platform.ConnectionProxy):
         if isinstance(e, ConnectionError):
             raise
         else:
-            raise ConnectionError(e)
+            raise
+            #raise ConnectionError(e)
 
 
 class S3ConnectionProxy(platform.ConnectionProxy):
