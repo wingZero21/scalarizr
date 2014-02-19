@@ -74,7 +74,7 @@ class ConnectionProxy(object):
         self.local = threading.local()
 
     def __getattr__(self, name):
-        LOG.debug('__getattr__:%s' % name)
+        self._logger.debug('__getattr__:%s' % name)
         try:
             self.__dict__['local'].call_chain.append(name)
         except AttributeError:
