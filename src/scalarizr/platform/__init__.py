@@ -74,6 +74,7 @@ class ConnectionProxy(object):
         self.local = threading.local()
 
     def __getattr__(self, name):
+        LOG.debug('__getattr__:%s' % name)
         try:
             self.__dict__['local'].call_chain.append(name)
         except AttributeError:
@@ -81,6 +82,7 @@ class ConnectionProxy(object):
         return self
 
     def __call__(self, *args, **kwds):
+        self._logger.debug('__call__:%s' % self.local.call_chain)
         num_retries = 0
         try:
             while num_retries < self.num_reconnects:
@@ -108,8 +110,6 @@ class ConnectionProxy(object):
                 fn = getattr(fn, attr)
             return fn(*args, **kwds)
         except:
-            self._logger.debug(self.local.call_chain)
-            self._logger.debug(fn)
             self._raise_error(*sys.exc_info())
 
     def _create_connection(self):
