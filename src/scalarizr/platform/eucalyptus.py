@@ -4,8 +4,9 @@ Created on Aug 13, 2010
 
 @author: marat
 '''
+from scalarizr import node
 from scalarizr.bus import bus
-from scalarizr.platform import PlatformError
+from scalarizr.platform import PlatformError, NoCredentialsError
 from scalarizr.platform.ec2 import Ec2Platform
 from scalarizr.platform.ec2 import Ec2ConnectionProxy
 
