@@ -627,7 +627,7 @@ class Service(object):
             values = CmdLineIni.to_kvals(optparser.values.cnf)
             if not values.get('server_id'):
                 values['server_id'] = str(uuid.uuid4())
-            self._logger.info('Reconfiguring Scalarizr. This can take a few minutes...')
+            self._logger.info('Configuring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
         # Load INI files configuration
