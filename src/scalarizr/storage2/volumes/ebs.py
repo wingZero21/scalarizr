@@ -72,7 +72,7 @@ class FreeDeviceLetterMgr(object):
             msg = 'No free letters for block device name remains'
             raise storage2.StorageError(msg)
         else:
-            conn = __node__['ec2']['connect_ec2']()
+            conn = __node__['ec2']['connect_ec2']
             devices = list(vol.attach_data.device
                         for vol in conn.get_all_volumes(filters={'attachment.instance-id': __node__['ec2']['instance_id']}))
             acquired = list(device[-1] for device in devices)
