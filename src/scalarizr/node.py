@@ -404,11 +404,11 @@ node['ec2'] = Compound({
         'instance_type': Call('scalarizr.bus', 'bus.platform.get_instance_type'),
         'avail_zone': Call('scalarizr.bus', 'bus.platform.get_avail_zone'),
         'region': Call('scalarizr.bus', 'bus.platform.get_region'),
-        'connect_ec2': Attr('scalarizr.bus', 'bus.platform.get_ec2_conn'),
-        'connect_s3': Attr('scalarizr.bus', 'bus.platform.get_s3_conn')
+        'connect_ec2': Call('scalarizr.bus', 'bus.platform.get_ec2_conn'),
+        'connect_s3': Call('scalarizr.bus', 'bus.platform.get_s3_conn')
 })
 node['cloudstack'] = Compound({
-        'conn_cloudstack': Call('scalarizr.bus', 'bus.platform.get_cloudstack_conn'),
+        'connect_cloudstack': Call('scalarizr.bus', 'bus.platform.get_cloudstack_conn'),
         'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
         'zone_id': Call('scalarizr.bus', 'bus.platform.get_avail_zone_id'),
         'zone_name': Call('scalarizr.bus', 'bus.platform.get_avail_zone')

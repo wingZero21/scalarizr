@@ -268,3 +268,4 @@ class GcePlatform(platform.Platform):
 
     def new_storage_client(self):
         return self.storage_svs_mgr.get_service()
+

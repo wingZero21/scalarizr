@@ -92,6 +92,7 @@ class ConnectionProxy(object):
                     self.conn_pool.dispose_local()
                     break
                 except:
+                    # Remove current connection and retry
                     self.conn_pool.dispose_local()
                     num_retries += 1
                     continue
@@ -116,6 +117,9 @@ class ConnectionProxy(object):
         raise NotImplementedError()
 
     def check_connection(self):
+        '''
+        Force get or create connection to check NoCredentialsError
+        '''
         self.conn_pool.get()
 
 

@@ -131,7 +131,7 @@ class EbsMixin(object):
 
     def _connect_ec2(self):
         try:
-            return __node__['ec2']['connect_ec2']()
+            return __node__['ec2']['connect_ec2']
         except:
             if sys.exc_type.__name__ not in ('NoCredentialsError'):
                 raise

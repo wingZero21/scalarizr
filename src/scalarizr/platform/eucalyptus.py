@@ -53,6 +53,31 @@ class EucaEc2ConnectionProxy(Ec2ConnectionProxy):
         return conn
 
 
+class EucaS3ConnectionProxy(Ec2ConnectionProxy):
+
+    def _create_connection(self):
+        platform = node.__node__['platform']
+        self._logger.debug('Creating eucalyptus s3 connection')
+        if not hasattr(platform, '_s3_conn_params'):
+            url = platform._cnf.rawini.get(platform.name, OPT_S3_URL)
+            if not url:
+                raise NoCredentialsError('S3(Walrus) url is empty')
+            u = urlparse(url)
+            platform._s3_conn_params = dict(
+                    is_secure = u.scheme == 'https',
+                    port = u.port,
+                    path = '/'+u.path,
+                    host = u.hostname,
+                    calling_format = OrdinaryCallingFormat()
+            )
+        try:
+            key_id, key = platform.get_access_keys()
+            conn = boto.connect_s3(key_id, key, **platform._s3_conn_params)
+        except (NoCredentialsError, PlatformError, boto.exception.NoAuthHandlerFound):
+            raise NoCredentialsError(sys.exc_info()[1])
+        return conn
+
+
 class EucaPlatform(Ec2Platform):
     name = 'eucalyptus'
 
@@ -188,3 +213,4 @@ class EucaPlatform(Ec2Platform):
             )
 
         return boto.connect_s3(*self.get_access_keys(), **self._s3_conn_params)
+
