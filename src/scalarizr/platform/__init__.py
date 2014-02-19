@@ -108,6 +108,8 @@ class ConnectionProxy(object):
                 fn = getattr(fn, attr)
             return fn(*args, **kwds)
         except:
+            self._logger.debug(self.local.call_chain)
+            self._logger.debug(fn)
             self._raise_error(*sys.exc_info())
 
     def _create_connection(self):
