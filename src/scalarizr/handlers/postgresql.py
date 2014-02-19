@@ -57,7 +57,7 @@ __postgresql__.update({
 
 
 def get_handlers():
-    return PostgreSqlHander(),
+    return [PostgreSqlHander()] if postgresql_api.PostgreSQLAPI.last_check else []
 
 
 SSH_KEYGEN_SELINUX_MODULE = """

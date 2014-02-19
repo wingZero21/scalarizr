@@ -86,7 +86,7 @@ class MysqlMessages:
 
 
 def get_handlers():
-    return [MysqlHandler()]
+    return [MysqlHandler()] if mysql_api.MySQLAPI.last_check else []
 
 
 class DBMSRHandler(ServiceCtlHandler):

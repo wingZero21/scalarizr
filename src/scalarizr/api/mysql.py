@@ -16,12 +16,18 @@ from scalarizr.services import backup as backup_module
 from scalarizr.services import ServiceError
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.handlers import build_tags
+from scalarizr.util import Singleton, software
+from scalarizr import linux
+from scalarizr.linux import pkgmgr
+from scalarizr import exceptions
 
 
 class MySQLAPI(object):
     """
     @xxx: reporting is a pain
     """
+    __metaclass__ = Singleton
+    last_check = False
 
     error_messages = {
         'empty': "'%s' can't be blank",
@@ -178,4 +184,28 @@ class MySQLAPI(object):
                 func=do_backup, cancel_func=cancel_backup, 
                 func_kwds={'backup_conf': backup},
                 async=async, exclusive=True)
+
+    @classmethod
+    def check_software(cls, installed_packages=None):
+        try:
+            MySQLAPI.last_check = False
+            if linux.os.debian_family:
+                pkgmgr.check_dependency(
+                    ['mysql-client>=5.0,<5.6', 'mysql-server>5.0,<5.6'],
+                    installed_packages,
+                    ['apparmor']
+                )
+            elif linux.os.redhat_family or os.oracle_family:
+                pkgmgr.check_dependency(
+                    ['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'],
+                    installed_packages
+                )
+            else:
+                raise exceptions.UnsupportedBehavior('mysqldb2',
+                    "'mysqldb2' behavior is only supported on " +\
+                    "Debian, RedHat or Oracle operating system family"
+                )
+            MySQLAPI.last_check = True
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'mysql')
 

@@ -10,7 +10,7 @@ import pwd
 import logging
 
 from scalarizr.bus import bus
-from scalarizr.api import apache
+from scalarizr.api import apache as apache_api
 from scalarizr.node import __node__
 from scalarizr.linux import coreutils
 from scalarizr.handlers import Handler
@@ -28,7 +28,7 @@ __apache__ = __node__["apache"]
 
 
 def get_handlers():
-    return [ApacheHandler()]
+    return [ApacheHandler()] if apache_api.ApacheAPI.last_check else []
 
 
 class ApacheHandler(Handler):
@@ -45,7 +45,7 @@ class ApacheHandler(Handler):
         self._initial_v_hosts = []
 
         self._queryenv = bus.queryenv_service
-        self.api = apache.ApacheAPI()
+        self.api = apache_api.ApacheAPI()
 
         self.preset_provider = ApachePresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
@@ -106,7 +106,7 @@ class ApacheHandler(Handler):
             applied_vhosts = self.api.reconfigure(self._initial_v_hosts, reload=False, rollback_on_error=False)
 
             if len(applied_vhosts) != len(self._initial_v_hosts):
-                raise apache.ApacheError("%s Apache VirtualHosts were assigned to server but only %s were applied." % (
+                raise apache_api.ApacheError("%s Apache VirtualHosts were assigned to server but only %s were applied." % (
                     len(applied_vhosts),
                     len(self._initial_v_hosts),
                 ))
@@ -133,7 +133,7 @@ class ApacheHandler(Handler):
                 with open(mod_rpaf_path, "r") as fp:
                     mod_praf_body = fp.read()
 
-                mod_rpaf = apache.ModRPAF(mod_praf_body)
+                mod_rpaf = apache_api.ModRPAF(mod_praf_body)
                 mod_rpaf.add([message.local_ip])
 
                 with open(mod_rpaf_path, "w") as fp:
@@ -148,7 +148,7 @@ class ApacheHandler(Handler):
                 with open(mod_rpaf_path, "r") as fp:
                     mod_praf_body = fp.read()
 
-                mod_rpaf = apache.ModRPAF(mod_praf_body)
+                mod_rpaf = apache_api.ModRPAF(mod_praf_body)
                 mod_rpaf.remove([message.local_ip])
 
                 with open(mod_rpaf_path, "w") as fp:
@@ -170,7 +170,7 @@ class ApacheHandler(Handler):
             with open(mod_rpaf_path, "r") as fp:
                 mod_praf_body = fp.read()
 
-            mod_rpaf = apache.ModRPAF(mod_praf_body)
+            mod_rpaf = apache_api.ModRPAF(mod_praf_body)
             mod_rpaf.update(lb_hosts)
 
             with open(mod_rpaf_path, "w") as fp:
@@ -188,8 +188,8 @@ class ApacheConf(BaseConfig):
 class ApachePresetProvider(PresetProvider):
 
     def __init__(self):
-        api = apache.ApacheAPI()
-        config_mapping = {"apache.conf": ApacheConf(apache)}
+        api = apache_api.ApacheAPI()
+        config_mapping = {"apache.conf": ApacheConf(apache_api)}
         PresetProvider.__init__(self, api.service, config_mapping)
 
     def rollback_hook(self):

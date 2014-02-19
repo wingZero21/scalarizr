@@ -32,8 +32,10 @@ from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import system2, initdv2
 from scalarizr.util import wait_until, dynimp, PopenError
+from scalarizr.util import Singleton, software
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
+from scalarizr import exceptions
 
 
 LOG = logging.getLogger(__name__)
@@ -123,9 +125,12 @@ class ApacheAPI(object):
         apache
     """
 
+    __metaclass__ = Singleton
+
     service = None
     mod_ssl = None
     current_open_ports = None
+    last_check = False
 
     def __init__(self):
         self.service = initdv2.lookup("apache")
@@ -773,6 +778,23 @@ class ApacheAPI(object):
                 iptables.FIREWALL.ensure(rules)
         else:
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
+
+    @classmethod
+    def check_software(cls, installed_packages=None):
+        try:
+            ApacheAPI.last_check = False
+            if linux.os.debian_family:
+                pkgmgr.check_dependency(['apache2>=2.2,<2.3'], installed_packages)
+            elif linux.os.redhat_family or linux.os.oracle_family:
+                pkgmgr.check_dependency(['httpd>=2.2,<2.3'], installed_packages)
+            else:
+                raise exceptions.UnsupportedBehavior('app',
+                    "'app' behavior is only supported on " +\
+                    "Debian, RedHat or Oracle operating system family"
+                )
+            ApacheAPI.last_check = True
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'app')
 
 
 class BasicApacheConfiguration(object):

@@ -2,11 +2,15 @@ from __future__ import with_statement
 
 import os
 import re
+import sys
 import urllib2
 import logging
 
 from scalarizr.bus import bus
+from scalarizr import node
+from scalarizr import platform
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
+from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 from scalarizr.storage.transfer import Transfer
 from .storage import S3TransferProvider
 
@@ -38,6 +42,63 @@ UD_OPT_S3_BUCKET_NAME = "s3bucket"
 def get_platform():
     return Ec2Platform()
 
+
+class Ec2ConnectionProxy(platform.ConnectionProxy):
+
+    def _create_connection(self):
+        platform = node.__node__['platform']
+        region = platform.get_region()
+        try:
+            key_id, key = platform.get_access_keys()
+            conn = boto.ec2.connect_to_region(
+                region,
+                aws_access_key_id=key_id,
+                aws_secret_access_key=key
+            )
+            if not conn:
+                raise ConnectionError('Invalid region: %s' % region)
+        except (NoCredentialsError, PlatformError, boto.exception.NoAuthHandlerFound):
+            raise NoCredentialsError(sys.exc_info()[1])
+        return conn
+
+    def _raise_error(self, *exc_info):
+        t, e, tb = exc_info
+        if isinstance(e, boto.exception.EC2ResponseError) and e.args[0] == 401:
+            raise InvalidCredentialsError(e)
+        if isinstance(e, ConnectionError):
+            raise
+        else:
+            raise ConnectionError(e)
+
+
+class S3ConnectionProxy(platform.ConnectionProxy):
+
+    def _create_connection(self):
+        platform = node.__node__['platform']
+        region = platform.get_region()
+        endpoint = platform._s3_endpoint(region)
+        self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
+        try:
+            key_id, key = platform.get_access_keys()
+            conn = boto.connect_s3(
+                host=endpoint,
+                aws_access_key_id=key_id,
+                aws_secret_access_key=key
+            )
+        except (AttributeError, PlatformError, boto.exception.NoAuthHandlerFound):
+            raise NoCredentialsError(sys.exc_info()[1])
+        return conn
+
+    def _raise_error(self, *exc_info):
+        t, e, tb = exc_info
+        if isinstance(e, boto.exception.S3ResponseError) and e.args[0] == 401:
+            raise InvalidCredentialsError(e)
+        if isinstance(e, ConnectionError):
+            raise
+        else:
+            raise ConnectionError(e)
+
+
 class Ec2Platform(Ec2LikePlatform):
     name = "ec2"
 
@@ -57,6 +118,11 @@ class Ec2Platform(Ec2LikePlatform):
 
     features = [PlatformFeatures.SNAPSHOTS, PlatformFeatures.VOLUMES]
 
+    def __init__(self):
+        platform.Ec2LikePlatform.__init__(self)
+        self._ec2_conn_proxy = Ec2ConnectionProxy(conn_per_thread=False)
+        self._s3_conn_proxy = S3ConnectionProxy(conn_per_thread=False)
+
     def get_account_id(self):
         return self.get_access_data("account_id").encode("ascii")
 
@@ -73,6 +139,13 @@ class Ec2Platform(Ec2LikePlatform):
             self._ec2_cert = self._cnf.read_key(os.path.join(bus.etc_path, self._cnf.rawini.get(self.name, OPT_EC2_CERT_PATH)), title="EC2 certificate")
         return self._ec2_cert
 
+    def get_ec2_conn(self):
+        self._ec2_conn_proxy.check_connection()
+        return self._ec2_conn_proxy
+
+    def get_s3_conn(self):
+        self._s3_conn_proxy.check_connection()
+        return self._s3_conn_proxy
 
     def new_ec2_conn(self):
         """ @rtype: boto.ec2.connection.EC2Connection """

@@ -404,19 +404,19 @@ node['ec2'] = Compound({
         'instance_type': Call('scalarizr.bus', 'bus.platform.get_instance_type'),
         'avail_zone': Call('scalarizr.bus', 'bus.platform.get_avail_zone'),
         'region': Call('scalarizr.bus', 'bus.platform.get_region'),
-        'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
-        'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
+        'connect_ec2': Attr('scalarizr.bus', 'bus.platform.get_ec2_conn'),
+        'connect_s3': Attr('scalarizr.bus', 'bus.platform.get_s3_conn')
 })
 node['cloudstack'] = Compound({
-        'new_conn': Call('scalarizr.bus', 'bus.platform.new_cloudstack_conn'),
+        'conn_cloudstack': Call('scalarizr.bus', 'bus.platform.get_cloudstack_conn'),
         'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
         'zone_id': Call('scalarizr.bus', 'bus.platform.get_avail_zone_id'),
         'zone_name': Call('scalarizr.bus', 'bus.platform.get_avail_zone')
 })
 node['openstack'] = Compound({
-        'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
-        'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
-        'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
+        'connect_nova': Call('scalarizr.bus', 'bus.platform.get_nova_conn'),
+        'connect_cinder': Call('scalarizr.bus', 'bus.platform.get_cinder_conn'),
+        'connect_swift': Call('scalarizr.bus', 'bus.platform.get_swift_connection'),
         'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
 node['rackspace'] = Compound({
@@ -425,8 +425,8 @@ node['rackspace'] = Compound({
 })
 
 node['gce'] = Compound({
-        'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
-        'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),
+        'connect_compute': Call('scalarizr.bus', 'bus.platform.get_compute_conn'),
+        'connect_storage': Call('scalarizr.bus', 'bus.platform.get_storage_conn'),
         'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id'),
         'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
         'zone': Call('scalarizr.bus', 'bus.platform.get_zone')
@@ -441,7 +441,4 @@ node['messaging'] = Compound({
     'send': Attr('scalarizr.bus', 'bus.messaging_service.send')
 })
 __node__ = Compound(node)
-
-
-
 

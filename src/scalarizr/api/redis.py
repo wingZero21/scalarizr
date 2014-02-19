@@ -12,6 +12,7 @@ import logging
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.linux import iptables
 from scalarizr.api import operation
 from scalarizr.util import system2, PopenError
@@ -22,6 +23,9 @@ from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr import node
+from scalarizr.util import Singleton, software
+from scalarizr.linux import pkgmgr
+from scalarizr import exceptions
 
 
 BEHAVIOUR = config.BuiltinBehaviours.REDIS
@@ -32,6 +36,9 @@ LOG = logging.getLogger(__name__)
 
 
 class RedisAPI(object):
+
+    __metaclass__ = Singleton
+    last_check = False
 
     _cnf = None
     _queryenv = None
@@ -316,3 +323,30 @@ class RedisAPI(object):
                                 func_kwds={},
                                 async=async,
                                 exclusive=True)  #?
+
+    @classmethod
+    def check_software(cls, installed=None):
+        try:
+            RedisAPI.last_check = False
+            os_name = linux.os['name'].lower()
+            os_vers = linux.os['version']
+            if os_name == 'ubuntu':
+                if os_vers >= '12':
+                    pkgmgr.check_dependency(['redis-server>=2.2,<2.7'], installed)
+                elif os_vers >= '10':
+                    pkgmgr.check_dependency(['redis-server>=2.2,<2.3'], installed)
+            elif os_name == 'debian':
+                pkgmgr.check_dependency(['redis-server>=2.6,<2.7'], installed)
+            elif os_name == 'centos':
+                pkgmgr.check_dependency(['redis>=2.4,<2.7'], installed, ['centalt-release'])
+            elif linux.os.redhat_family or linux.os.oracle_family:
+                pkgmgr.check_dependency(['redis>=2.6,<2.7'], installed, ['centalt-release'])
+            else:
+                raise exceptions.UnsupportedBehavior('redis',
+                        "'redis' behavior is only supported on " +\
+                        "Debian, RedHat and Oracle operating system family"
+                        )
+            RedisAPI.last_check = True
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'redis')
+

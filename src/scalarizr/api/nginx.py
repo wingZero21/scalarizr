@@ -8,6 +8,7 @@ import time
 from hashlib import sha1
 
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.bus import bus
 from scalarizr.libs import metaconf
 import scalarizr.libs.metaconf.providers
@@ -15,9 +16,12 @@ from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
+from scalarizr.util import software
 from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
+from scalarizr.linux import pkgmgr
+from scalarizr import exceptions
 
 
 __nginx__ = __node__['nginx']
@@ -163,6 +167,7 @@ def _bool_from_scalr_str(bool_str):
 class NginxAPI(object):
 
     __metaclass__ = Singleton
+    last_check = False
 
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
         _logger.debug('Initializing nginx API.')
@@ -1450,3 +1455,19 @@ class NginxAPI(object):
                 self._save_proxies_inc()
             if reload_service:
                 self._reload_service()
+
+    @classmethod
+    def check_software(cls, installed_packages=None):
+        try:
+            NginxAPI.last_check = False
+            if linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family:
+                pkgmgr.check_dependency(['nginx'], installed_packages)
+            else:
+                raise exceptions.UnsupportedBehavior('www',
+                    "'www' behavior is only supported on " +\
+                    "Debian, RedHat or Oracle operating system family"
+                )
+            NginxAPI.last_check = True
+        except pkgmgr.DependencyError as e:
+            software.handle_dependency_error(e, 'www')
+

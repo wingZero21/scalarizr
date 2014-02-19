@@ -28,7 +28,23 @@ class UtilError(BaseException):
     pass
 
 
-class LocalObject:
+class NullPool(object):
+
+    def __init__(self, creator):
+        self._creator = creator
+        self._object = None
+
+    def get(self):
+        return self._object or self._creator()
+
+    def dispose_local(self):
+        self._object = None
+
+    def dispose_all(self):
+        self._object = None
+
+
+class LocalPool:
     def __init__(self, creator, pool_size=50):
         self._logger = logging.getLogger(__name__)
         self._creator = creator         
@@ -67,8 +83,15 @@ class LocalObject:
             self._logger.debug("Removing %s from connection pool", self._all_conns[:l])
             self._all_conns = self._all_conns[l:]
 
+    def dispose_local(self):
+        if hasattr(self._object, 'current'):
+            del self._object.current
 
-class SqliteLocalObject(LocalObject):
+    def dispose_all(self):
+        self._object = threading.local()
+
+
+class SqliteLocalObject(LocalPool):
     def do_create(self):
         return _SqliteConnection(self, self._creator)
 
@@ -619,9 +642,9 @@ def import_class(import_str):
     except ImportError:
         pass
     else:
-        loader.load_module('')
+        m = loader.load_module(loader.fullname)
         try:
-            return getattr(sys.modules[mod_str], class_str)
+            return getattr(m, class_str)
         except (ValueError, AttributeError):
             pass
     raise exceptions.NotFound('Class %s cannot be found' % import_str)

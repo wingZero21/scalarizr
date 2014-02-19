@@ -7,6 +7,7 @@ Created on Sep 10, 2010
 
 from scalarizr.util import system2
 from scalarizr import linux
+from scalarizr import exceptions
 from scalarizr.linux import coreutils, pkgmgr
 import os, re, zipfile, glob, platform
 
@@ -493,3 +494,83 @@ def postgresql_software_info():
         raise SoftwareError
 
 explore('postgresql', postgresql_software_info)
+
+
+def handle_dependency_error(e, behavior):
+    beh_map = {
+        'app': 'Apache',
+        'apache': 'Apache',
+        'chef': 'Chef',
+        'haproxy': 'Haproxy',
+        'mariadb': 'MariaDB',
+        'mongodb': 'MongoDB',
+        'memcached': 'Memcached',
+        'mysql': 'MySQL',
+        'mysql2': 'MySQL',
+        'nginx': 'Nginx',
+        'percona': 'Percona',
+        'postgresql': 'PostgreSQL',
+        'rabbitmq': 'RabbitMQ',
+        'redis': 'Redis',
+        'tomcat': 'Tomcat',
+        'www': 'Nginx',
+    }
+    if isinstance(e, pkgmgr.NotInstalledError):
+        msg = '%s %s is not installed on %s' % (beh_map[behavior], e.args[1], linux.os['name'])
+    elif isinstance(e, pkgmgr.ConflictError):
+        msg = '%s conflicts with %s-%s on %s'
+        msg = msg % (beh_map[behavior], e.args[0], e.args[1], linux.os['name'])
+    elif isinstance(e, pkgmgr.VersionMismatchError):
+        msg = '%s %s is not supported on %s.\nSupported:'
+        msg = msg % (beh_map[behavior], e.args[1], linux.os['name'])
+        if behavior in ['app', 'apache', 'chef', 'haproxy', 'memcached', 'nginx', 'www']:
+            msg = '%s\n\t%s' % (msg,
+                'Ubuntu, Debian, CentOS, OEL, RHEL, Amazon: %s' % e.args[2]
+            )
+        elif behavior == 'mariadb':
+            msg = '%s\n\t%s' % (msg,
+                'Debian, RedHat, Oracle: %s' % e.args[2]
+            )
+        elif behavior == 'mongodb':
+            msg = '%s\n\t%s' % (msg, 
+                'Ubuntu 10.04, CentOS 5, Oracle: >=2.0,<2.1\n' +\
+                'Ubuntu 12.04, CentOS 6, RedHat, Amazon: >=2.0,<2.5'
+            )
+        elif behavior in ['mysql', 'mysql2']:
+            msg = '%s\n\t%s' % (msg, 
+                'Ubuntu 10.04, CentOS 6, RedHat: >=5.1,<5.2\n' +\
+                'Ubuntu 12.04, Debian 7, Amazon: >=5.5,<5.6\n' +\
+                'Debian 6: >=5.1,<5.6\n' +\
+                'CentOS 5: >=5.0,<5.1\n' +\
+                'Oracle: >=5.0,<5.1'
+            )
+        elif behavior == 'percona':
+            msg = '%s\n\t%s' % (msg, 
+                'Ubuntu 12.04, Debian, RedHat, Oracle: >=5.1,<5.6'
+            )
+        elif behavior == 'postgresql':
+            msg = '%s\n\t%s' % (msg, 
+                'Ubuntu 10.04: >=9.1,<9.2\n' +\
+                'Ubuntu 12.04, CentOS 6: >=9.1,<9.3\n' +\
+                'Debian, CentOS 5, Oracle, RedHat, Amazon: >=9.2,<9.3'
+            )
+        elif behavior == 'rabbitmq':
+            msg = '%s\n\t%s' % (msg, 
+                'Ubuntu 10.04 >=2.6,<2.7\n' +\
+                'Ubuntu 12.04, Debian: >=3.0,<3.2 on Ubuntu-12.04\n' +\
+                'CentOS-6, RedHat-6, Amazon: >=3.1,<3.2'
+            )
+        elif behavior == 'redis':
+            msg = '%s\n\t%s' % (msg, 
+                'Ubuntu 10.04: >=2.2,<2.3\n' +\
+                'Ubuntu 12.04: >=2.2,<2.7\n' +\
+                'Debian, RedHat, Oracle, Amazon: >=2.6,<2.7\n' +\
+                'CentOS: >=2.4,<2.7'
+            )
+        elif behavior == 'tomcat':
+            msg = '%s\n\t%s' % (msg, 
+                'Ubuntu 10.04, CentOS, RedHat, Oracle, Amazon: ==6\n' +\
+                'Ubuntu 12.04, Debian: ==7'
+            )
+    raise exceptions.UnsupportedBehavior(behavior, msg)
+                    

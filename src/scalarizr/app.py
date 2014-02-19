@@ -9,7 +9,7 @@ except ImportError:
 
 # Core
 from scalarizr import __version__
-from scalarizr import config, rpc, linux
+from scalarizr import config, rpc, linux, api
 from scalarizr import node
 from scalarizr.linux import coreutils
 
@@ -30,6 +30,7 @@ else:
     from scalarizr.snmp.agent import SnmpServer
 
 # Utils
+from scalarizr import util
 from scalarizr.util import initdv2, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
 from scalarizr.util import wait_until, sqlite_server
@@ -51,6 +52,7 @@ import select
 import wsgiref.simple_server
 import SocketServer
 
+from scalarizr import exceptions
 
 
 class ScalarizrError(BaseException):
@@ -143,22 +145,6 @@ Next time when SNMP process should be forked
 '''
 
 _logging_configured = False
-
-
-_api_routes = {
-    'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
-    'sysinfo': 'scalarizr.api.system.SystemAPI',
-    'system': 'scalarizr.api.system.SystemAPI',
-    'storage': 'scalarizr.api.storage.StorageAPI',
-    'service': 'scalarizr.api.service.ServiceAPI',
-    'redis': 'scalarizr.api.redis.RedisAPI',
-    'apache': 'scalarizr.api.apache.ApacheAPI',
-    'nginx': 'scalarizr.api.apache.NginxAPI',
-    'mysql': 'scalarizr.api.mysql.MySQLAPI',
-    'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
-    'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI',
-    'operation': 'scalarizr.api.operation.OperationAPI'
-}
 
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
@@ -641,6 +627,7 @@ class Service(object):
             values = CmdLineIni.to_kvals(optparser.values.cnf)
             if not values.get('server_id'):
                 values['server_id'] = str(uuid.uuid4())
+            self._logger.info('Reconfiguring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
         # Load INI files configuration
@@ -738,6 +725,12 @@ class Service(object):
 
         # Initialize scalarizr services
         self._init_services()
+
+        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
+            node.__node__['messaging'].send(
+                'HostUpdate',
+                body={'scalarizr': {'version': __version__}}
+            )
 
         if cnf.state == ScalarizrState.RUNNING:
             # ReSync user-data
@@ -856,6 +849,26 @@ class Service(object):
         except (BaseException, Exception):
             raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
 
+        if linux.os['family'] != 'Windows':
+            installed_packages = pkgmgr.package_mgr().list()
+            for behavior in node.__node__['behavior']:
+                if behavior == 'base' or behavior not in api.api_routes.keys():
+                    continue
+                try:
+                    api_cls = util.import_class(api.api_routes[behavior])
+                    api_cls.check_software(installed_packages)
+                except exceptions.NotFound as e:
+                    logger.error(e)
+                except exceptions.UnsupportedBehavior as e:
+                    logger.error(e)
+                    node.__node__['messaging'].send(
+                        'OutOfTheService',
+                        body={
+                            'error':'Software error',
+                            'details':str(e)
+                        }
+                    )
+
         logger.debug('Initialize message handlers')
         consumer = msg_service.get_consumer()
         consumer.listeners.append(MessageListener())
@@ -876,7 +889,7 @@ class Service(object):
             except socket.error:
                 pass
             STATE['global.api_port'] = api_port
-            api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes),
+            api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(api.api_routes),
                                                 cnf.key_path(cnf.DEFAULT_KEY))
             class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
                 pass

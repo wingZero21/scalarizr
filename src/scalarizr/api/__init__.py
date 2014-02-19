@@ -1,0 +1,25 @@
+
+api_routes = {
+    'apache': 'scalarizr.api.apache.ApacheAPI',
+    'app': 'scalarizr.api.apache.ApacheAPI',
+    'chef': 'scalarizr.api.chef.ChefAPI',
+    'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
+    'mariadb': 'scalarizr.api.mysql.MariaDBAPI',
+    'memcached': 'scalarizr.api.memcached.MemcachedAPI',
+    'mongodb': 'scalarizr.api.mongodb.MongoDBAPI',
+    'mysql': 'scalarizr.api.mysql.MySQLAPI',
+    'mysql2': 'scalarizr.api.mysql.MySQLAPI',
+    'nginx': 'scalarizr.api.nginx.NginxAPI',
+    'operation': 'scalarizr.api.operation.OperationAPI',
+    'percona': 'scalarizr.api.mysql.PerconaAPI',
+    'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
+    'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI',
+    'redis': 'scalarizr.api.redis.RedisAPI',
+    'sysinfo': 'scalarizr.api.system.SystemAPI',
+    'system': 'scalarizr.api.system.SystemAPI',
+    'storage': 'scalarizr.api.storage.StorageAPI',
+    'service': 'scalarizr.api.service.ServiceAPI',
+    'tomcat': 'scalarizr.api.tomcat.TomcatAPI',
+    'www': 'scalarizr.api.nginx.NginxAPI',
+}
+

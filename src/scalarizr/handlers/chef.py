@@ -14,6 +14,7 @@ import logging
 import tempfile
 
 from scalarizr import linux
+from scalarizr.api import chef as chef_api
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.util import system2, initdv2, PopenError
@@ -42,7 +43,7 @@ file_cache_path "{0}"
 '''
 
 def get_handlers():
-    return (ChefHandler(), )
+    return [ChefHandler()] if chef_api.ChefAPI.last_check else []
 
 
 PID_FILE = '/var/run/chef-client.pid'

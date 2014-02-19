@@ -14,10 +14,13 @@ import platform
 import sys
 import struct
 import array
+import threading
 import ConfigParser
 
+from scalarizr import node
 from scalarizr.bus import bus
 from scalarizr import linux
+from scalarizr.util import LocalPool, NullPool
 if linux.os.windows_family:
     import win32com.client
 else:
@@ -27,8 +30,6 @@ else:
 class PlatformError(BaseException):
     pass
 
-class NoAccessDataError(Exception):
-    pass
 
 class UserDataOptions:
     FARM_ID = "farmid"
@@ -46,6 +47,77 @@ class UserDataOptions:
     REGION = 'region'
     MESSAGE_FORMAT = 'message_format'
     OWNER_EMAIL = 'owner_email'
+
+
+class ConnectionError(Exception):
+    pass
+
+
+class NoCredentialsError(ConnectionError):
+    pass
+
+
+class InvalidCredentialsError(ConnectionError):
+    pass
+
+
+class ConnectionProxy(object):
+
+    _logger = logging.getLogger(__name__)
+
+    def __init__(self, conn_per_thread=True, num_reconnects=1):
+        if conn_per_thread:
+            self.conn_pool = LocalPool(self._create_connection)
+        else:
+            self.conn_pool = NullPool(self._create_connection)
+        self.num_reconnects = num_reconnects
+        self.local = threading.local()
+
+    def __getattr__(self, name):
+        try:
+            self.__dict__['local'].call_chain.append(name)
+        except AttributeError:
+            self.__dict__['local'].call_chain = [name]
+        return self
+
+    def __call__(self, *args, **kwds):
+        num_retries = 0
+        try:
+            while num_retries < self.num_reconnects:
+                try:
+                    return self._do_call(*args, **kwds)
+                except NoCredentialsError:
+                    # We haven't credentials, so we don't need reconnect,
+                    # only remove invalid connection and reraise exception
+                    self.conn_pool.dispose_local()
+                    break
+                except:
+                    self.conn_pool.dispose_local()
+                    num_retries += 1
+                    continue
+        finally:
+            self.local.call_chain = []
+        raise
+
+    def _do_call(self, *args, **kwds):
+        try:
+            conn = self.conn_pool.get()
+            fn = conn
+            for attr in self.local.call_chain:
+                fn = getattr(fn, attr)
+            return fn(*args, **kwds)
+        except:
+            self._raise_error(*sys.exc_info())
+
+    def _create_connection(self):
+        raise NotImplementedError()
+
+    def _raise_error(self, *exc_info):
+        raise NotImplementedError()
+
+    def check_connection(self):
+        self.conn_pool.get()
+
 
 class PlatformFactory(object):
     _platforms = {}
@@ -66,7 +138,6 @@ class PlatformFeatures:
 class Platform():
     name = None
     _arch = None
-    _access_data = None
     _userdata = None
     _logger = logging.getLogger(__name__)
     features = []
@@ -74,7 +145,7 @@ class Platform():
 
     def __init__(self):
         self.scalrfs = self._scalrfs(self)
-        self._access_data = {} 
+        node.__node__['access_data'] = {}
 
     def get_private_ip(self):
         return self.get_public_ip()
@@ -99,19 +170,19 @@ class Platform():
             return self._userdata
 
     def set_access_data(self, access_data):
-        self._access_data = access_data
+        node.__node__['access_data'] = access_data
 
     def get_access_data(self, prop=None):
         if prop:
             try:
-                return self._access_data[prop]
+                return node.__node__['access_data'][prop]
             except (TypeError, KeyError):
                 raise PlatformError("Platform access data property '%s' doesn't exists" % (prop,))
         else:
-            return self._access_data
+            return node.__node__['access_data']
 
     def clear_access_data(self):
-        self._access_data = {}
+        node.__node__['access_data'] = {}
 
     def get_architecture(self):
         """
@@ -149,7 +220,7 @@ class Platform():
 
     def _raise_no_access_data(self):
         msg = 'There are no credentials from cloud services: %s' % self.name
-        raise NoAccessDataError(msg)
+        raise NoCredentialsError(msg)
 
 
     class _scalrfs(object):

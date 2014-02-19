@@ -6,6 +6,7 @@ Created on Nov 25, 2011
 
 from scalarizr import rpc, storage2
 from scalarizr.api import operation
+from scalarizr.util import Singleton
 
 
 class StorageAPI(object):
@@ -23,6 +24,8 @@ class StorageAPI(object):
         - mpoint (Type: string) -- Mount point.
         - fstype (Type: string) Default: "ext3"
     """
+
+    __metaclass__ = Singleton
 
     error_messages = {
             'empty': "'%s' can't be blank",

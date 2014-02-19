@@ -6,12 +6,14 @@ Created on Aug 16, 2012
 
 from __future__ import with_statement
 from scalarizr import rpc
+from scalarizr.util import Singleton
 
 services = {}
 
 
 class ServiceAPI(object):
 
+    __metaclass__ = Singleton
 
     @rpc.query_method
     def get_preset(self, behavior):

@@ -21,6 +21,7 @@ from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, software, dns, cryptotool
 from scalarizr.node import __node__
 from scalarizr.linux import iptables
+from scalarizr.api import rabbitmq as rabbitmq_api
 import scalarizr.services.rabbitmq as rabbitmq_svc
 
 
@@ -50,7 +51,7 @@ class RabbitMQMessages:
 
 
 def get_handlers():
-    return (RabbitMQHandler(), )
+    return [RabbitMQHandler()] if rabbitmq_api.RabbitMQAPI.last_check else []
 
 
 class RabbitMQHandler(ServiceCtlHandler):

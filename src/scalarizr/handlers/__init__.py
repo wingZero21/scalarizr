@@ -1,12 +1,12 @@
 from __future__ import with_statement
 
-from scalarizr import config
+from scalarizr import config, util, linux, api, exceptions
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
 from scalarizr.util import initdv2, disttool, software
-from scalarizr.linux import iptables
+from scalarizr.linux import iptables, pkgmgr
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 
 import os
@@ -26,9 +26,7 @@ class Handler(object):
     _logger = logging.getLogger(__name__)
 
     def __init__(self):
-        if self._service_name and self._service_name not in self.get_ready_behaviours():
-            msg = 'Cannot load handler %s. Missing software.' % self._service_name
-            raise HandlerError(msg)
+        pass
 
     def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
         srv = srv or bus.messaging_service
@@ -105,53 +103,26 @@ class Handler(object):
 
 
     def get_ready_behaviours(self):
-        handlers = list()
-        info = software.system_info(verbose=True)
-        if 'software' in info:
-            Version = distutils.version.LooseVersion
-            for entry in info['software']:
-                if not ('name' in entry and 'version' in entry):
+        possible_behaviors = config.BuiltinBehaviours.values()
+
+        ready_behaviors = list()
+        if linux.os['family'] != 'Windows':
+            installed_packages = pkgmgr.package_mgr().list()
+            for behavior in possible_behaviors:
+                if behavior == 'base' or behavior not in api.api_routes.keys():
                     continue
-                name = entry['name']
-
-                version = Version(entry['version'])
-
-                str_ver = entry['string_version'] if 'string_version' in entry else ''
-                if name == 'nginx':
-                    handlers.append(config.BuiltinBehaviours.WWW)
-                elif name == 'chef':
-                    handlers.append(config.BuiltinBehaviours.CHEF)
-                elif name == 'memcached':
-                    handlers.append(config.BuiltinBehaviours.MEMCACHED)
-
-                elif name == 'postgresql' and Version('9.0') <= version < Version('9.3'):
-                    handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-                elif name == 'redis' and Version('2.2') <= version < Version('2.9'):
-                    handlers.append(config.BuiltinBehaviours.REDIS)
-                elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.2'):
-                    handlers.append(config.BuiltinBehaviours.RABBITMQ)
-                elif name == 'mongodb' and Version('2.0') <= version < Version('2.5'):
-                    handlers.append(config.BuiltinBehaviours.MONGODB)
-                elif name == 'apache' and Version('2.0') <= version < Version('2.3'):
-                    handlers.append(config.BuiltinBehaviours.APP)
-                elif name == 'haproxy' and Version('1.3') < version < Version('1.5'):
-                    handlers.append(config.BuiltinBehaviours.HAPROXY)
-                elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
-                    handlers.append(config.BuiltinBehaviours.MYSQL)
-                    if 'Percona' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.PERCONA)
-                    elif 'Maria' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.MARIADB)
-                    else:
-                        handlers.append(config.BuiltinBehaviours.MYSQL2)
-                elif name == 'tomcat':
-                    handlers.append(config.BuiltinBehaviours.TOMCAT)
-
-        return handlers
+                try:
+                    api_cls = util.import_class(api.api_routes[behavior])
+                    api_cls.check_software(installed_packages)
+                    ready_behaviors.append(behavior)
+                except (exceptions.NotFound, exceptions.UnsupportedBehavior, ImportError):
+                    continue
+        return ready_behaviors
 
 
 class HandlerError(BaseException):
     pass
+
 
 class MessageListener:
     _accept_kwargs = {}

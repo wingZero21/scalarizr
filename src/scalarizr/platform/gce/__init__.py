@@ -3,6 +3,7 @@ from __future__ import with_statement
 __author__ = 'Nick Demyanchuk'
 
 import os
+import sys
 import base64
 import logging
 import urllib2
@@ -18,7 +19,10 @@ except ImportError:
 from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
 
-from scalarizr.platform import Platform
+from scalarizr import node
+from scalarizr import platform
+from scalarizr.platform import PlatformError
+from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 
 
 COMPUTE_RW_SCOPE = ('https://www.googleapis.com/auth/compute', "https://www.googleapis.com/auth/compute.readonly")
@@ -131,19 +135,52 @@ class GoogleServiceManager(object):
         return cred.authorize(http)
 
 
+class GCEConnectionProxy(platform.ConnectionProxy):
 
-class GcePlatform(Platform):
+    def __init__(self, service_name, api_version, scope):
+        super(GCEConnectionProxy, self).__init__()
+        self.service_name = service_name
+        self.api_version = api_version
+        self.scope = list(scope)
+
+    def _create_connection(self):
+        platform = node.__node__['platform']
+        http = httplib2.Http()
+        try:
+            email = platform.get_access_data('service_account_name')
+            pk = base64.b64decode(platform.get_access_data('key'))
+        except PlatformError:
+            raise NoCredentialsError(sys.exc_info()[1])
+        try:
+            cred = SignedJwtAssertionCredentials(email, pk, scope=self.scope)
+            conn = build(self.service_name, self.api_version, http=cred.authorize(http))
+        except:
+            raise InvalidCredentialsError(sys.exc_info()[1])
+        return BadStatusLineHandler(conn)
+
+    def _raise_error(self, *exc_info):
+        t, e, tb = exc_info
+        if isinstance(e, ConnectionError):
+            raise
+        else:
+            raise ConnectionError(e)
+
+
+class GcePlatform(platform.Platform):
     compute_api_version = 'v1'
     metadata_url = 'http://metadata/computeMetadata/v1/'
     _metadata = None
 
     def __init__(self):
-        Platform.__init__(self)
+        platform.Platform.__init__(self)
         self.compute_svc_mgr = GoogleServiceManager(
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
                 self, 'storage', 'v1beta2', *STORAGE_FULL_SCOPE)
-
+        self._compute_conn_proxy = GCEConnectionProxy(
+                'compute', 'v1', COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
+        self._storage_conn_proxy = GCEConnectionProxy(
+                'storage', 'v1beta2', STORAGE_FULL_SCOPE)
 
     def get_user_data(self, key=None):
         if self._userdata is None:
@@ -213,6 +250,16 @@ class GcePlatform(Platform):
 
     def get_image(self):
         return self._get_metadata('instance/image')
+
+
+    def get_compute_conn(self):
+        self._compute_conn_proxy.check_connection()
+        return self._compute_conn_proxy
+
+
+    def get_storage_conn(self):
+        self._storage_conn_proxy.check_connection()
+        return self._storage_conn_proxy
 
 
     def new_compute_client(self):

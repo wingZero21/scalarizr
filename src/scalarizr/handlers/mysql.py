@@ -29,6 +29,7 @@ from scalarizr.linux import iptables
 from scalarizr.linux import coreutils
 from scalarizr.linux.rsync import rsync
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
+from scalarizr.api import mysql as mysql_api
 
 # Stdlibs
 import logging, os, re, sys, tarfile, tempfile
@@ -203,7 +204,7 @@ DEFAULT_DATADIR                 = "/var/lib/mysql"
 
 
 def get_handlers ():
-    return [MysqlHandler()]
+    return [MysqlHandler()] if mysql_api.MySQLAPI.last_check else []
 
 
 

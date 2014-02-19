@@ -106,7 +106,7 @@ class NginxOptions(Configurator.Container):
 
 
 def get_handlers():
-    return [NginxHandler()]
+    return [NginxHandler()] if nginx_api.NginxAPI.last_check else []
 
 
 class NginxCnfController(CnfController):
@@ -121,10 +121,9 @@ class NginxCnfController(CnfController):
 
 class NginxHandler(ServiceCtlHandler):
 
-    _nginx_v2_flag_filepath = os.path.join(bus.etc_path, "private.d/nginx_v2")
-
     def __init__(self):
         self._cnf = bus.cnf
+        self._nginx_v2_flag_filepath = os.path.join(bus.etc_path, "private.d/nginx_v2")
         ServiceCtlHandler.__init__(self, BEHAVIOUR, initdv2.lookup('nginx'), NginxCnfController())
 
         self._logger = logging.getLogger(__name__)
