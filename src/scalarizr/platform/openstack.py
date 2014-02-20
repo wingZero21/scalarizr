@@ -20,6 +20,7 @@ from scalarizr import node
 from scalarizr import platform
 from scalarizr.bus import bus
 from scalarizr import linux
+from scalarizr.util import LocalPool
 from scalarizr.platform import PlatformError
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 from scalarizr.storage.transfer import Transfer, TransferProvider
@@ -29,105 +30,124 @@ from scalarizr.storage2.cloudfs import swift as swiftcloudfs
 LOG = logging.getLogger(__name__)
 
 
+def _create_nova_connection():
+    try:
+        platform = node.__node__['platform']
+        kwds = dict(
+            auth_url=platform.get_access_data('keystone_url'),
+            region_name=platform.get_access_data('cloud_location'),
+            service_type='compute'
+        )
+        import novaclient # NameError: name 'novaclient' is not defined
+        if hasattr(novaclient, '__version__') and os.environ.get('OS_AUTH_SYSTEM'):
+            try:
+                import novaclient.auth_plugin
+                auth_plugin = novaclient.auth_plugin.load_plugin(os.environ['OS_AUTH_SYSTEM'])
+                kwds['auth_plugin'] = auth_plugin
+            except ImportError:
+                pass
+        conn = nova_client.Client(
+            platform.get_access_data('username'),
+            platform.get_access_data('api_key') or platform.get_access_data('password'),
+            platform.get_access_data('tenant_name'),
+            **kwds
+        )
+    except PlatformError:
+        raise NoCredentialsError(sys.exc_info()[1])
+    return conn
+
+
+def _create_cinder_connection():
+    try:
+        platform = node.__node__['platform']
+        conn = cinder_client.Client(
+            platform.get_access_data('username'),
+            platform.get_access_data('api_key') or platform.get_access_data('password'),
+            platform.get_access_data('tenant_name'),
+            auth_url=platform.get_access_data('keystone_url'),
+            region_name=platform.get_access_data('cloud_location'),
+        )
+    except PlatformError:
+        raise NoCredentialsError(sys.exc_info()[1])
+    return conn
+
+
+def _create_swift_connection():
+    try:
+        platform = node.__node__['platform']
+        api_key = platform.get_access_data("api_key")
+        password = platform.get_access_data("password")
+        auth_url = platform.get_access_data("keystone_url")
+        kwds = {}
+        if 'rackspacecloud' in auth_url:
+            auth_url = re.sub(r'v2\.\d$', 'v1.0', auth_url)
+            kwds['auth_version'] = '1'
+        else:
+            kwds['auth_version'] = '2'
+            kwds['tenant_name'] = platform.get_access_data("tenant_name")
+        conn = swiftclient.Connection(
+            authurl=auth_url,
+            user=platform.get_access_data('username'),
+            key=password or api_key,
+            **kwds
+        )
+    except PlatformError:
+        raise NoCredentialsError(sys.exc_info()[1])
+    return conn
+
+
 class NovaConnectionProxy(platform.ConnectionProxy):
 
-    def _create_connection(self):
-        try:
-            platform = node.__node__['platform']
-            kwds = dict(
-                auth_url=platform.get_access_data('keystone_url'),
-                region_name=platform.get_access_data('cloud_location'),
-                service_type='compute'
-            )
-            import novaclient # NameError: name 'novaclient' is not defined
-            if hasattr(novaclient, '__version__') and os.environ.get('OS_AUTH_SYSTEM'):
-                try:
-                    import novaclient.auth_plugin
-                    auth_plugin = novaclient.auth_plugin.load_plugin(os.environ['OS_AUTH_SYSTEM'])
-                    kwds['auth_plugin'] = auth_plugin
-                except ImportError:
-                    pass
-            conn = nova_client.Client(
-                platform.get_access_data('username'),
-                platform.get_access_data('api_key') or platform.get_access_data('password'),
-                platform.get_access_data('tenant_name'),
-                **kwds
-            )
-        except PlatformError:
-            raise NoCredentialsError(sys.exc_info()[1])
-        return conn
-
-    def _raise_error(self, *exc_info):
-        t, e, tb = exc_info
-        if isinstance(e, (novaclient.exceptions.Unauthorized, novaclient.exceptions.Forbidden)):
-            raise InvalidCredentialsError(e)
-        if isinstance(e, ConnectionError):
-            raise
-        else:
-            raise ConnectionError(e)
+    def __call__(self, *args, **kwargs):
+        for retry in range(2):
+            try:
+                return self.obj(*args, **kwds)
+            except:
+                e = sys.exc_info()[1]
+                if isinstance(e, (
+                        novaclient.exceptions.Unauthorized,
+                        novaclient.exceptions.Forbidden)):
+                    self.conn_pool.dispose_local()
+                    raise InvalidCredentialsError(e)
+                continue
+        self.conn_pool.dispose_local()
+        raise ConnectionError(e)
 
 
 class CinderConnectionProxy(platform.ConnectionProxy):
 
-    def _create_connection(self):
-        try:
-            platform = node.__node__['platform']
-            conn = cinder_client.Client(
-                platform.get_access_data('username'),
-                platform.get_access_data('api_key') or platform.get_access_data('password'),
-                platform.get_access_data('tenant_name'),
-                auth_url=platform.get_access_data('keystone_url'),
-                region_name=platform.get_access_data('cloud_location'),
-            )
-        except PlatformError:
-            raise NoCredentialsError(sys.exc_info()[1])
-        return conn
-
-    def _raise_error(self, *exc_info):
-        t, e, tb = exc_info
-        if isinstance(e, (cinderclient.exceptions.Unauthorized, cinderclient.exceptions.Forbidden)):
-            raise InvalidCredentialsError(e)
-        if isinstance(e, ConnectionError):
-            raise
-        else:
-            raise ConnectionError(e)
+    def __call__(self, *args, **kwargs):
+        for retry in range(2):
+            try:
+                return self.obj(*args, **kwds)
+            except:
+                e = sys.exc_info()[1]
+                if isinstance(e, (
+                        cinderclient.exceptions.Unauthorized,
+                        cinderclient.exceptions.Forbidden)):
+                    self.conn_pool.dispose_local()
+                    raise InvalidCredentialsError(e)
+                continue
+        self.conn_pool.dispose_local()
+        raise ConnectionError(e)
 
 
 class SwiftConnectionProxy(platform.ConnectionProxy):
 
-    def _create_connection(self):
-        try:
-            platform = node.__node__['platform']
-            api_key = platform.get_access_data("api_key")
-            password = platform.get_access_data("password")
-            auth_url = platform.get_access_data("keystone_url")
-            kwds = {}
-            if 'rackspacecloud' in auth_url:
-                auth_url = re.sub(r'v2\.\d$', 'v1.0', auth_url)
-                kwds['auth_version'] = '1'
-            else:
-                kwds['auth_version'] = '2'
-                kwds['tenant_name'] = platform.get_access_data("tenant_name")
-            conn = swiftclient.Connection(
-                authurl=auth_url,
-                user=platform.get_access_data('username'),
-                key=password or api_key,
-                **kwds
-            )
-        except PlatformError:
-            raise NoCredentialsError(sys.exc_info()[1])
-        return conn
-
-    def _raise_error(self, *exc_info):
-        t, e, tb = exc_info
-        if isinstance(e, swiftclient.ClientException) and (
-                re.search(r'.*Unauthorised.*', e.msg) or \
-                re.search(r'.*Authorization Failure.*', e.msg)):
-            raise InvalidCredentialsError(e)
-        if isinstance(e, ConnectionError):
-            raise
-        else:
-            raise ConnectionError(e)
+    def __call__(self, *args, **kwargs):
+        for retry in range(2):
+            try:
+                return self.obj(*args, **kwds)
+            except:
+                e = sys.exc_info()[1]
+                if isinstance(e, swiftclient.ClientException) and (
+                        re.search(r'.*Unauthorised.*', e.msg) or \
+                        re.search(r'.*Authorization Failure.*', e.msg)):
+                    self.conn_pool.dispose_local()
+                    raise InvalidCredentialsError(e)
+                continue
+        self.conn_pool.dispose_local()
+        raise ConnectionError(e)
 
 
 class OpenstackServiceWrapper(object):
@@ -210,9 +230,9 @@ class OpenstackPlatform(platform.Platform):
             # Work over [Errno -3] Temporary failure in name resolution
             # http://bugs.centos.org/view.php?id=4814
             os.chmod('/etc/resolv.conf', 0755)
-        self._nova_conn_proxy = NovaConnectionProxy()
-        self._swift_conn_proxy = SwiftConnectionProxy()
-        self._cinder_conn_proxy = CinderConnectionProxy()
+        self._nova_conn_pool = LocalPool(_create_nova_connection)
+        self._swift_conn_pool = LocalPool(_create_swift_connection)
+        self._cinder_conn_pool = LocalPool(_create_cinder_connection)
 
     def get_private_ip(self):
         if self._private_ip is None:
@@ -312,16 +332,16 @@ class OpenstackPlatform(platform.Platform):
                              access_data["cloud_location"])
 
     def get_nova_conn(self):
-        self._nova_conn_proxy.check_connection()
-        return self._nova_conn_proxy
+        conn = self._nova_conn_pool.get()
+        return NovaConnectionProxy(conn, self._nova_conn_pool)
 
     def get_cinder_conn(self):
-        self._cinder_conn_proxy.check_connection()
-        return self._cinder_conn_proxy
+        conn = self._cinder_conn_pool.get()
+        return CinderConnectionProxy(conn, self._cinder_conn_pool)
 
     def get_swift_conn(self):
-        self._swift_conn_proxy.check_connection()
-        return self._swift_conn_proxy
+        conn = self._swift_conn_pool.get()
+        return SwiftConnectionProxy(conn, self._swift_conn_pool)
 
     def new_nova_connection(self):
         access_data = self.get_access_data()

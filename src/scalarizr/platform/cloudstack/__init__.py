@@ -4,11 +4,13 @@ import os
 import urllib2
 import sys
 import logging
-import scalarizr.platform
 
+from scalarizr import platform
 from scalarizr import node
 from scalarizr.bus import bus
+from scalarizr.util import LocalPool
 from scalarizr.platform import Platform, PlatformFeatures, PlatformError
+from scalarizr.platform import ConnectionError, NoCredentialsError, InvalidCredentialsError
 from . import storage
 from scalarizr import util
 
@@ -21,25 +23,32 @@ def get_platform():
 LOG = logging.getLogger(__name__)
 
 
+def _create_connection():
+    platform = node.__node__['platform']
+    try:
+        conn = cloudstack.Client(
+            platform.get_access_data('api_url'),
+            apiKey=platform.get_access_data('api_key'),
+            secretKey=platform.get_access_data('secret_key'))
+    except PlatformError:
+        raise NoCredentialsError(sys.exc_info()[1])
+    return conn
+
+
 class CloudStackConnectionProxy(platform.ConnectionProxy):
 
-    def _create_connection(self):
-        platform = node.__node__['platform']
-        try:
-            conn = cloudstack.Client(
-                platform.get_access_data('api_url'),
-                apiKey=platform.get_access_data('api_key'),
-                secretKey=platform.get_access_data('secret_key'))
-        except PlatformError:
-            raise NoCredentialsError(sys.exc_info()[1])
-        return conn
-
-    def _raise_error(self, *exc_info):
-        t, e, tb = exc_info
-        if isinstance(e, ConnectionError):
-            raise
-        else:
-            raise ConnectionError(e)
+    def __call__(self, *args, **kwargs):
+        for retry in range(2):
+            try:
+                return self.obj(*args, **kwds)
+            except:
+                e = sys.exc_info()[1]
+                if isinstance(e, ConnectionError):
+                    self.conn_pool.dispose_local()
+                    raise
+                continue
+        self.conn_pool.dispose_local()
+        raise ConnectionError(e)
 
 
 class CloudStackPlatform(Platform):
@@ -67,7 +76,7 @@ class CloudStackPlatform(Platform):
         self._router = router
 
         self._metadata = {}
-        self._conn_proxy = CloudStackConnectionProxy()
+        self._conn_pool = LocalPool(_create_connection)
 
     def get_private_ip(self):
         return self.get_meta_data('local-ipv4')
@@ -120,8 +129,8 @@ class CloudStackPlatform(Platform):
             return ''
 
     def get_cloudstack_conn(self):
-        self._conn_proxy.check_connection()
-        return self._conn_proxy
+        conn = self._conn_pool.get()
+        return CloudStackConnectionProxy(conn, self._conn_pool) 
 
     def new_cloudstack_conn(self):
         access_data = self.get_access_data()
