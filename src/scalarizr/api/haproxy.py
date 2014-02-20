@@ -6,6 +6,7 @@ Created on Nov 25, 2011
 '''
 
 from pprint import pformat
+import logging
 
 from scalarizr import exceptions
 from scalarizr.libs import validate
@@ -17,7 +18,6 @@ from scalarizr.handlers import get_role_servers
 from scalarizr.util import Singleton, software
 from scalarizr import exceptions
 
-import logging
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
     'timeout': {'check': '3s'},
@@ -65,6 +65,25 @@ class HAProxyAPI(object):
         else:
             raise TypeError("server must be a dict or a string")
 
+    @rpc.command_method
+    def start_service(self):
+        self.svc.start()
+
+    @rpc.command_method
+    def stop_service(self):
+        self.svc.stop()
+
+    @rpc.command_method
+    def reload_service(self):
+        self.svc.reload()
+
+    @rpc.command_method
+    def restart_service(self):
+        self.svc.restart()
+
+    @rpc.command_method
+    def get_service_status(self):
+        return self.svc.status()
 
     def make_proxy(self, port, backend_port=None, backends=None,
                 check_timeout=None, maxconn=None, **default_server_params):

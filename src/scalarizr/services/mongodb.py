@@ -38,9 +38,6 @@ STORAGE_PATH = "/mnt/mongodb-storage"
 
 DEFAULT_USER = 'mongodb' if disttool.is_debian_based() else 'mongod'
 LOG_DIR = '/var/log/mongodb'
-if not os.path.isdir(LOG_DIR):
-    os.makedirs(LOG_DIR)
-chown_r(LOG_DIR, DEFAULT_USER)
 
 LOG_PATH_DEFAULT = os.path.join(LOG_DIR, 'mongodb.shardsrv.log') 
 DEFAULT_UBUNTU_DB_PATH = '/var/lib/mongodb'

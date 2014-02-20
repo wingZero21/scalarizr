@@ -6,7 +6,7 @@ Created on Sep 30, 2011
 '''
 from __future__ import with_statement
 
-from scalarizr.linux import iptables, pkgmgr
+from scalarizr.linux import iptables, pkgmgr, coreutils
 from scalarizr.util import disttool, system2
 
 import os
@@ -242,6 +242,9 @@ class MongoDBHandler(ServiceCtlHandler):
 
         if self._cnf.state in (ScalarizrState.INITIALIZING, ScalarizrState.BOOTSTRAPPING):
             self.mongodb.stop_default_init_script()
+            if not os.path.isdir(mongo_svc.LOG_DIR):
+                os.makedirs(mongo_svc.LOG_DIR)
+                coreutils.chown_r(mongo_svc.LOG_DIR, mongo_svc.DEFAULT_USER)
 
         if self._cnf.state == ScalarizrState.RUNNING:
             storage_vol = __mongodb__['volume']

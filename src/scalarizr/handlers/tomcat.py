@@ -12,20 +12,12 @@ from scalarizr.messaging import Messages
 from scalarizr.util import initdv2, firstmatched
 from scalarizr.node import __node__
 from scalarizr.api import tomcat as tomcat_api
+from scalarizr.api.tomcat import augtool, augload
 
 
 LOG = logging.getLogger(__name__)
 
 __tomcat__ = __node__['tomcat']
-__tomcat__.update({
-    'catalina_home_dir': None,
-    'java_home': firstmatched(lambda path: os.access(path, os.X_OK), [
-            linux.system('echo $JAVA_HOME', shell=True)[0].strip(),
-            '/usr/java/default'], 
-            '/usr'),
-    'config_dir': None,
-    'install_type': None
-})
 
 def get_handlers():
     return [TomcatHandler()] if tomcat_api.TomcatAPI.last_check else []
@@ -45,45 +37,6 @@ class KeytoolExec(execute.BaseExec):
         return ['-{0}'.format(cmd_args[-1])] + cmd_args[0:-1]
 
 
-class CatalinaInitScript(initdv2.ParametrizedInitScript):
-    def __init__(self):
-        initdv2.ParametrizedInitScript.__init__(self, 'tomcat', 
-                __tomcat__['catalina_home_dir'] + '/bin/catalina.sh')
-        self.server_port = None
-
-    def status(self):
-        if not self.server_port:
-            out = augtool(['print /files{0}/server.xml/Server/#attribute/port'.format(__tomcat__['config_dir'])])
-            self.server_port = out.split(' = ')[-1]
-
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            sock.connect(('', self.server_port))
-            return initdv2.Status.RUNNING
-        except:
-            return initdv2.Status.NOT_RUNNING
-        finally:
-            try:
-                sock.close()
-            except:
-                pass
-
-
-def augload():
-    path = __tomcat__['config_dir']
-    return [
-        'set /augeas/load/Xml/incl[last()+1] "{0}/*.xml"'.format(path),
-        'load',
-        'defvar service /files{0}/server.xml/Server/Service'.format(path)                       
-    ]
-
-def augtool(script_lines):
-    augscript = augload() + script_lines
-    augscript = '\n'.join(augscript)
-    LOG.debug('augscript: %s', augscript)
-    return linux.system(('augtool', ), stdin=augscript)[0].strip()
-
-
 class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
     def __init__(self):
@@ -93,37 +46,8 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             init=self.on_init, 
             start=self.on_start
         )
-
-        # try to read CATALINA_HOME from environment
-        __tomcat__['catalina_home_dir'] = linux.system('echo $CATALINA_HOME', shell=True)[0].strip()
-        if not __tomcat__['catalina_home_dir']:
-            # try to locate CATALINA_HOME in /opt/apache-tomcat*
-            try:
-                __tomcat__['catalina_home_dir'] = glob.glob('/opt/apache-tomcat*')[0]
-            except IndexError:
-                pass
-
-        if __tomcat__['catalina_home_dir']:
-            __tomcat__['install_type'] = 'binary'
-            __tomcat__['config_dir'] = '{0}/conf'.format(__tomcat__['catalina_home_dir'])
-            init_script_path = '/etc/init.d/tomcat'
-            if os.path.exists(init_script_path):
-                self.service = initdv2.ParametrizedInitScript('tomcat', init_script_path)
-            else:
-                self.service = CatalinaInitScript()
-        else:
-            __tomcat__['install_type'] = 'package'
-            if linux.os.debian_family:
-                if (linux.os['name'] == 'Ubuntu' and linux.os['version'] >= (12, 4)) or \
-                    (linux.os['name'] == 'Debian' and linux.os['version'] >= (7, 0)):
-                    tomcat_version = 7
-                else:
-                    tomcat_version = 6
-            else:
-                tomcat_version = 6
-            __tomcat__['config_dir'] = '/etc/tomcat{0}'.format(tomcat_version)
-            init_script_path = '/etc/init.d/tomcat{0}'.format(tomcat_version)  
-            self.service = initdv2.ParametrizedInitScript('tomcat', init_script_path)
+        self.api = tomcat_api.TomcatAPI()
+        self.service = self.api.service
 
     def on_init(self):
         bus.on(

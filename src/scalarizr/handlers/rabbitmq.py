@@ -286,7 +286,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 
         # Use RABBITMQ_NODENAME instead of setting actual hostname
         #with open('/etc/hostname', 'w') as f:
-        #    f.write(hostname)
+        # f.write(hostname)
         #system2(('hostname', '-F', '/etc/hostname'))
 
         volume_config = rabbitmq_data.pop('volume_config')
@@ -319,9 +319,9 @@ class RabbitMQHandler(ServiceCtlHandler):
             nodes_to_cluster_with.append(hostname)
             dns.ScalrHosts.set(ip, hostname)
             try:
-                self.send_int_message(ip, 
+                self.send_int_message(ip,
                     RabbitMQMessages.INT_RABBITMQ_HOST_INIT,
-                    msg_body, 
+                    msg_body,
                     broadcast=True)
             except:
                 e = sys.exc_info()[1]

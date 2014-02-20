@@ -44,7 +44,7 @@ class _MMSAgent(object):
         """
 
         if not os.path.exists('%s/mms-agent' % _MMSAgent.install_dir):
-            _MMSAgent._download()
+            self._download()
             out, err, returncode = util.system2(
                     ['tar', '-xf', '/tmp/10gen-mms-agent.tar.gz', '-C', _MMSAgent.install_dir])
 
@@ -102,14 +102,24 @@ class _MMSAgent(object):
 
 class MongoDBAPI:
     """
-    MongoDB API class
+    Basic API for managing MongoDB 2.x service.
+
+    Namespace::
+
+        mongodb
     """
+
     __metaclass__ = Singleton
     last_check = False
 
     @rpc.command_method
     def reset_password(self):
-        """ Reset password for Mongo user 'scalr'. Return new password  """
+        """
+         Resets password for MongoDB user 'scalr'.
+
+         :return: new 10-char password.
+         :rtype: str
+        """
         #TODO: review and finish this method
         new_password = pwgen(10)
         mdb = mongo_svc.MongoDB()
@@ -121,14 +131,16 @@ class MongoDBAPI:
     @rpc.command_method
     def enable_mms(self, api_key, secret_key):
         """
+        Enables MongoDB Management Service (MMS).
+
         :type api_key: string
         :param api_key: MMS api key
 
         :type secret_key: string
         :param secret_key: MMS secret key
 
-        rtype: dict
-        returns: dictionary {'status':Ok|Fail, 'error':ErrorString}
+        :rtype: dict
+        :return: dictionary {'status':Ok|Fail, 'error':ErrorString}
         """
 
         status = 'Ok'
@@ -149,8 +161,10 @@ class MongoDBAPI:
     @rpc.command_method
     def disable_mms(self):
         """
-        rtype: dict
-        returns: dictionary {'status':Ok|Fail, 'error':ErrorString}
+        Disables MongoDB Management Service (MMS).
+
+        :rtype: dict
+        :return: dictionary {'status':Ok|Fail, 'error':ErrorString}
         """
 
         status = 'Ok'
@@ -167,6 +181,10 @@ class MongoDBAPI:
 
     @classmethod
     def check_software(cls, installed_packages=None):
+        """
+        Asserts MongoDB version.
+        :raises: scalarizr.exceptions.UnsupportedBehavior
+        """
         try:
             MongoDBAPI.last_check = False
             os_name = linux.os['name'].lower()

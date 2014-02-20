@@ -186,6 +186,7 @@ def unpatch_node(feature):
 @before.each_scenario
 def create_api(feature=None):
     world.api = nginx.NginxAPI()
+    world.api.init_service()
     world.api._add_noapp_handler = lambda x: None
     world.api.error_pages_inc = '/etc/nginx/error-pages.include'
 
