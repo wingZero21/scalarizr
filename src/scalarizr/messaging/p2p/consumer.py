@@ -56,13 +56,15 @@ class P2pMessageConsumer(MessageConsumer):
             if self._server is None:
                 r = urlparse(self.endpoint)
                 msg_port = r.port
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                try:
-                    sock.connect(('0.0.0.0', msg_port))
-                    msg_port = 8011
-                    sock.close()
-                except socket.error:
-                    pass
+                if msg_port == 8013:
+                    # An auto-fix for problem with API port inheritance by controlled service.
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    try:
+                        sock.connect(('0.0.0.0', msg_port))
+                        msg_port = 8011
+                        sock.close()
+                    except socket.error:
+                        pass
                 STATE['global.msg_port'] = msg_port
                 self._logger.info('Building message consumer server on %s:%s', r.hostname, msg_port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25

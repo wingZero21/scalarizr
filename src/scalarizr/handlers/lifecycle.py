@@ -330,11 +330,18 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
     def _check_control_ports(self):
         if STATE['global.api_port'] != 8010 or STATE['global.msg_port'] != 8013:
+            # @deprecated. expires 2014/04
             # API or Messaging on non-default port
             self.send_message(Messages.UPDATE_CONTROL_PORTS, {
                 'api': STATE['global.api_port'],
                 'messaging': STATE['global.msg_port'],
                 'snmp': 8014
+            })
+            self.send_message('HostUpdate', {
+                'base': {
+                    'api_port': STATE['global.api_port'],
+                    'messaging_port': STATE['global.msg_port']
+                }
             })
 
 
