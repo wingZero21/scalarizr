@@ -61,6 +61,26 @@ class InvalidCredentialsError(ConnectionError):
     pass
 
 
+class Proxy(object):
+
+    _logger = logging.getLogger(__name__)
+
+    def __init__(self, obj):
+        self.obj = obj
+
+    def __getattribute__(self, name):
+        if re.search('^__.*__$', name):
+            return getattr(object.__getattribute__(self, 'obj'), name)
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            return Proxy(getattr(object.__getattribute__(self, 'obj'), name))
+
+    def __call__(self, *args, **kwds):
+        return self.obj(*args, **kwds)
+
+
+
 class ConnectionProxy(object):
 
     _logger = logging.getLogger(__name__)

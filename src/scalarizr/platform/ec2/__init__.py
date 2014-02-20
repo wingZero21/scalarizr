@@ -43,6 +43,42 @@ def get_platform():
     return Ec2Platform()
 
 
+def _create_ec2_connection():
+    platform = node.__node__['platform']
+    region = platform.get_region()
+    try:
+        key_id, key = platform.get_access_keys()
+        conn = boto.ec2.connect_to_region(
+            region,
+            aws_access_key_id=key_id,
+            aws_secret_access_key=key
+        )
+        if not conn:
+            raise ConnectionError('Invalid region: %s' % region)
+    except (NoCredentialsError, PlatformError, boto.exception.NoAuthHandlerFound):
+        raise NoCredentialsError(sys.exc_info()[1])
+    return conn
+
+
+class Ec2ConnectionProxy(platform.Proxy):
+
+    def __call__(self, *args, **kwargs):
+        for retry in range(2):
+            try:
+                return self.obj(*args, **kwds)
+            except:
+                e = sys.exc_info()[1]
+                if isinstance(e, boto.exception.EC2ResponseError) and e.args[0] == 401:
+                    platform = node.__node__['platform']
+                    platform._ec2_conn_pool.dispose_local()
+                    raise InvalidCredentialsError(e)
+                continue
+        platform = node.__node__['platform']
+        platform._ec2_conn_pool.dispose_local()
+        raise ConnectionError(e)
+
+
+'''
 class Ec2ConnectionProxy(platform.ConnectionProxy):
 
     def _create_connection(self):
@@ -70,6 +106,7 @@ class Ec2ConnectionProxy(platform.ConnectionProxy):
         else:
             raise
             #raise ConnectionError(e)
+'''
 
 
 class S3ConnectionProxy(platform.ConnectionProxy):
@@ -121,7 +158,8 @@ class Ec2Platform(Ec2LikePlatform):
 
     def __init__(self):
         platform.Ec2LikePlatform.__init__(self)
-        self._ec2_conn_proxy = Ec2ConnectionProxy(conn_per_thread=False)
+        self._ec2_conn_pool = NullPool(_create_ec2_connection)
+        #self._ec2_conn_proxy = Ec2ConnectionProxy(conn_per_thread=False)
         self._s3_conn_proxy = S3ConnectionProxy(conn_per_thread=False)
 
     def get_account_id(self):
@@ -141,8 +179,8 @@ class Ec2Platform(Ec2LikePlatform):
         return self._ec2_cert
 
     def get_ec2_conn(self):
-        self._ec2_conn_proxy.check_connection()
-        return self._ec2_conn_proxy
+        conn = self._ec2_conn_pool.get()
+        return Ec2ConnectionProxy(conn)
 
     def get_s3_conn(self):
         self._s3_conn_proxy.check_connection()
