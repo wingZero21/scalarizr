@@ -414,8 +414,6 @@ class NginxAPI(object):
             msg = "Can't add proxy %s: %s" % (proxy_parms['name'], e)
             raise Exception(msg)
 
-
-
     def _main_config_contains_server(self):
         config_dir = os.path.dirname(self.app_inc_path)
         nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
@@ -434,8 +432,6 @@ class NginxAPI(object):
             pass
 
         return result
-
-
 
     def make_default_proxy(self, roles):
         # actually list_virtual_hosts() returns only 1 virtual host if it's
@@ -523,7 +519,6 @@ class NginxAPI(object):
             if file_path.startswith('https.include'):
                 _logger.debug('Removing %s' % file_path)
                 os.remove(file_path)
-
 
     def _update_main_config(self, remove_server_section=True, reload_service=True):
         config_dir = os.path.dirname(self.app_inc_path)
