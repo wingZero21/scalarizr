@@ -108,6 +108,7 @@ param (
     $path
 )
     log "Releasing handles for: $path"
+    ensureHandleUtil
     handle $path | foreach { 
         if ($_ -match "[^\s]+\s+pid:\s(\d+)\s+type:\s[^\s]+\s+([^:]+):") { 
             log $_
