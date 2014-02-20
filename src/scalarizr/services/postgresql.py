@@ -622,13 +622,7 @@ class PSQL(object):
                     
     
 class ClusterDir(object):
-    try:
-        base_path = glob.glob(pg_pathname_pattern)[0]
-        default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
-    except IndexError:
-        base_path = None
-        default_path = None
-    
+
     def __init__(self, path=None):
         self.path = path
         self.user = DEFAULT_USER

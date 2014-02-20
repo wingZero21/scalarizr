@@ -103,15 +103,15 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 </table>
 <p>Examples:</p>
 <p>Configure VirtualHost &quot;www.dima.com&quot; on port 80 without SSL enabled and reload Apache2 service:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.create_vhost("www.dima.com", 80, "<template>", False)
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.create_vhost("www.dima.com", 80, "<template>", False)
 "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
 </div>
 <p>ADD VirtualHost &quot;secure.dima.com&quot; on port 443 with SSL enabled, reload Apache2 and allow port 443 in IPTables:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.create_vhost("secure.dima.com", 443, "<template>", False)
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.create_vhost("secure.dima.com", 443, "<template>", False)
 "/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
 </div>
 <p>Configure VirtualHost &quot;old.dima.com&quot; on port 8080 without SSL enabled and without reloading Apache2 service:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.create_vhost("old.dima.com", 8080, "<template>", reload=False)
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.create_vhost("old.dima.com", 8080, "<template>", reload=False)
 "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]></ac:plain-text-body></ac:structured-macro>
 </div>
 <p>Please Note that VirtualHosts on custom ports feature requires testing.</p>
@@ -141,7 +141,7 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 </table>
 <p>Example:</p>
 <p>Change ServerName to old.dima.com, switch port to 8080 and reload service:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)]]></ac:plain-text-body></ac:structured-macro>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)]]></ac:plain-text-body></ac:structured-macro>
 </div>
 <ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Scalr does not use update_vhost API method so it has not been tested properly yet.</ac:rich-text-body></ac:structured-macro></div><h3>delete_vhosts</h3>
 <h4 id="scalarizr.api.apache.ApacheAPI.delete_vhosts">
@@ -161,7 +161,7 @@ SPtWJrFw680SHyxut73xHf8nfu9piUgipoENF/NYaEEIhPshippxiDxZPFZvsoSJtwYaNrM0UEnNm1Go
 </table>
 <p>Example:
 Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])]]></ac:plain-text-body></ac:structured-macro>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div><h3>reconfigure</h3>
 <h4 id="scalarizr.api.apache.ApacheAPI.reconfigure">
@@ -181,7 +181,7 @@ Remove 2 VirtualHosts from Apache2 configuration without removing website conten
 <p>Example:
 Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service:</p>
 <div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
-api.apache.service.reconfigure([vhost1,])]]></ac:plain-text-body></ac:structured-macro>
+api.apache.reconfigure([vhost1,])]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div><h3>get_webserver_statistics</h3>
 <h4 id="scalarizr.api.apache.ApacheAPI.get_webserver_statistics">
@@ -236,7 +236,7 @@ and available on web server.</p>
 </tbody>
 </table>
 <p>Example:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.service.list_served_virtual_hosts()
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[>>> api.apache.list_served_virtual_hosts()
 ["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div><h3>set_default_ssl_certificate</h3>
@@ -255,37 +255,66 @@ Otherwise default system certificate will be used.</p>
 </table>
 <p>Example:
 Set Scalr Certificate ID#873 as default:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.set_default_ssl_certificate("873")]]></ac:plain-text-body></ac:structured-macro>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.set_default_ssl_certificate("873")]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div><h3>start_service</h3>
 <h4 id="scalarizr.api.apache.ApacheAPI.start_service">
 <span class="descname">start_service</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.start_service</ac:parameter></ac:structured-macro></h4>
-<div><p>Start Apache service:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.start_service()]]></ac:plain-text-body></ac:structured-macro>
+<div><p>Starts Apache service.</p>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.start_service()]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div><h3>stop_service</h3>
 <h4 id="scalarizr.api.apache.ApacheAPI.stop_service">
 <span class="descname">stop_service</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.stop_service</ac:parameter></ac:structured-macro></h4>
-<div><p>Stop Apache service:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.stop_service("Configuring Apache2 service.")]]></ac:plain-text-body></ac:structured-macro>
+<div><p>Stops Apache service.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>reason</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- Message to appear in log before service is stopped.</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.stop_service("Configuring Apache2 service.")]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div><h3>restart_service</h3>
 <h4 id="scalarizr.api.apache.ApacheAPI.restart_service">
 <span class="descname">restart_service</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.restart_service</ac:parameter></ac:structured-macro></h4>
-<div><p>Restart Apache service:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.restart_service("Applying new service configuration preset.")]]></ac:plain-text-body></ac:structured-macro>
+<div><p>Restarts Apache service.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>reason</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- Message to appear in log before service is restarted.</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.restart_service("Applying new service configuration preset.")]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div><h3>reload_service</h3>
 <h4 id="scalarizr.api.apache.ApacheAPI.reload_service">
 <span class="descname">reload_service</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.reload_service</ac:parameter></ac:structured-macro></h4>
-<div><p>Reload Apache service:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.reload_service("Applying RPAF proxy list.")]]></ac:plain-text-body></ac:structured-macro>
+<div><p>Reloads Apache service.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>reason</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- Message to appear in log before service is reloaded.</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.reload_service("Applying RPAF proxy list.")]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div><h3>configtest</h3>
 <h4 id="scalarizr.api.apache.ApacheAPI.configtest">
 <span class="descname">configtest</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.apache.ApacheAPI.configtest</ac:parameter></ac:structured-macro></h4>
-<div><p>Run Apache configtest:</p>
-<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.service.configtest()]]></ac:plain-text-body></ac:structured-macro>
+<div><p>Performs Apache configtest.</p>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.apache.configtest()]]></ac:plain-text-body></ac:structured-macro>
 </div>
 </div></div><h2 id="scalarizr.api.storage.StorageAPI">
 <em class="property">class </em><span class="descclassname">scalarizr.api.storage.</span><span class="descname">StorageAPI</span><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.storage.StorageAPI</ac:parameter></ac:structured-macro></h2>
@@ -873,7 +902,235 @@ On normal slave:
 <h4 id="scalarizr.api.postgresql.PostgreSQLAPI.create_backup">
 <span class="descname">create_backup</span><big>(</big><em>async=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.postgresql.PostgreSQLAPI.create_backup</ac:parameter></ac:structured-macro></h4>
 <div><p>Creates a new backup of every available database and uploads gzipped data to the cloud storage.</p>
-<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>System database 'template0' is not included in backup.</ac:rich-text-body></ac:structured-macro></div></div>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>System database 'template0' is not included in backup.</ac:rich-text-body></ac:structured-macro></div></div><h2 id="scalarizr.api.mongodb.MongoDBAPI">
+<em class="property">class </em><span class="descclassname">scalarizr.api.mongodb.</span><span class="descname">MongoDBAPI</span><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.mongodb.MongoDBAPI</ac:parameter></ac:structured-macro></h2>
+<div><p>Basic API for managing MongoDB 2.x service.</p>
+<p>Namespace:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[mongodb]]></ac:plain-text-body></ac:structured-macro>
+</div>
+<h3>reset_password</h3>
+<h4 id="scalarizr.api.mongodb.MongoDBAPI.reset_password">
+<span class="descname">reset_password</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.mongodb.MongoDBAPI.reset_password</ac:parameter></ac:structured-macro></h4>
+<div><p>Resets password for MongoDB user 'scalr'.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">new 10-char password.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">str</td>
+</tr>
+</tbody>
+</table>
+</div><h3>enable_mms</h3>
+<h4 id="scalarizr.api.mongodb.MongoDBAPI.enable_mms">
+<span class="descname">enable_mms</span><big>(</big><em>api_key</em>, <em>secret_key</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.mongodb.MongoDBAPI.enable_mms</ac:parameter></ac:structured-macro></h4>
+<div><p>Enables MongoDB Management Service (MMS).</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>api_key</strong> (<a class="reference external" href="http://docs.python.org/library/string.html#module-string" title="(in Python v2.7)"><em>string</em></a>) -- MMS api key</li>
+<li><strong>secret_key</strong> (<a class="reference external" href="http://docs.python.org/library/string.html#module-string" title="(in Python v2.7)"><em>string</em></a>) -- MMS secret key</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first">dict</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">dictionary {'status':Ok|Fail, 'error':ErrorString}</p>
+</td>
+</tr>
+</tbody>
+</table>
+</div><h3>disable_mms</h3>
+<h4 id="scalarizr.api.mongodb.MongoDBAPI.disable_mms">
+<span class="descname">disable_mms</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.mongodb.MongoDBAPI.disable_mms</ac:parameter></ac:structured-macro></h4>
+<div><p>Disables MongoDB Management Service (MMS).</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">dictionary {'status':Ok|Fail, 'error':ErrorString}</td>
+</tr>
+</tbody>
+</table>
+</div></div><h2 id="scalarizr.api.nginx.NginxAPI">
+<em class="property">class </em><span class="descclassname">scalarizr.api.nginx.</span><span class="descname">NginxAPI</span><big>(</big><em>app_inc_dir=None</em>, <em>proxies_inc_dir=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI</ac:parameter></ac:structured-macro></h2>
+<div><h3>start_service</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.start_service">
+<span class="descname">start_service</span><big>(</big><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.start_service</ac:parameter></ac:structured-macro></h4>
+<div><p>Starts Nginx service.</p>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.nginx.start_service()]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>stop_service</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.stop_service">
+<span class="descname">stop_service</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.stop_service</ac:parameter></ac:structured-macro></h4>
+<div><p>Stops Nginx service.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>reason</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- Message to appear in log before service is stopped.</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.nginx.stop_service("Configuring Nginx service.")]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>reload_service</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.reload_service">
+<span class="descname">reload_service</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.reload_service</ac:parameter></ac:structured-macro></h4>
+<div><p>Reloads Nginx service.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>reason</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- Message to appear in log before service is reloaded.</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.nginx.reload("Applying proxy settings.")]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>restart_service</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.restart_service">
+<span class="descname">restart_service</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.restart_service</ac:parameter></ac:structured-macro></h4>
+<div><p>Restarts Nginx service.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>reason</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- Message to appear in log before service is restarted.</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.nginx.stop_service("Applying new service configuration preset.")]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>configtest</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.configtest">
+<span class="descname">configtest</span><big>(</big><em>reason=None</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.configtest</ac:parameter></ac:structured-macro></h4>
+<div><p>Performs Nginx configtest.</p>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[api.nginx.configtest()]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>recreate_proxying</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.recreate_proxying">
+<span class="descname">recreate_proxying</span><big>(</big><em>proxy_list</em>, <em>reload_service=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.recreate_proxying</ac:parameter></ac:structured-macro></h4>
+<div><p>Recreates Nginx proxy configuration.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>proxy_list</strong> (<a class="reference external" href="http://docs.python.org/library/stdtypes.html#dict" title="(in Python v2.7)"><em>dict</em></a>) -- Proxy parameters.</td>
+</tr>
+</tbody>
+</table>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Example TBD.</ac:rich-text-body></ac:structured-macro></div><h3>reconfigure</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.reconfigure">
+<span class="descname">reconfigure</span><big>(</big><em>proxy_list</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.reconfigure</ac:parameter></ac:structured-macro></h4>
+<div><p>Descr.</p>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Documentation and Examples TBD</ac:rich-text-body></ac:structured-macro></div><h3>remove_proxy</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.remove_proxy">
+<span class="descname">remove_proxy</span><big>(</big><em>hostname</em>, <em>reload_service=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.remove_proxy</ac:parameter></ac:structured-macro></h4>
+<div><p>Removes proxy with given hostname. Removes created server and its backends.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>hostname</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- server`s FQDN.</td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[TBD]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>make_proxy</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.make_proxy">
+<span class="descname">make_proxy</span><big>(</big><em>hostname</em>, <em>**kwds</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.make_proxy</ac:parameter></ac:structured-macro></h4>
+<div><p>RPC method for adding or updating proxy configuration.
+Removes proxy with given hostname if exists and recreates it with given
+parameters. If some exception occures, changes are reverted.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>hostname</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- server`s FQDN.</td>
+</tr>
+</tbody>
+</table>
+<p>See add_proxy() for detailed kwds description.</p>
+<p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[TBD]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>add_server</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.add_server">
+<span class="descname">add_server</span><big>(</big><em>backend</em>, <em>server</em>, <em>update_conf=True</em>, <em>reload_service=True</em>, <em>update_backend_table=False</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.add_server</ac:parameter></ac:structured-macro></h4>
+<div><p>Adds server to backend with given name pattern.
+Parameter server can be dict or string (ip addr)</p>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Parameters descr. TBD</ac:rich-text-body></ac:structured-macro><p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[TBD.]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>remove_server</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.remove_server">
+<span class="descname">remove_server</span><big>(</big><em>backend</em>, <em>server</em>, <em>update_conf=True</em>, <em>reload_service=True</em>, <em>update_backend_table=False</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.remove_server</ac:parameter></ac:structured-macro></h4>
+<div><p>Removes server from backend with given name pattern.
+Parameter server can be dict or string (ip addr)</p>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Parameters descr. TBD</ac:rich-text-body></ac:structured-macro><p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[TBD.]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>add_server_to_role</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.add_server_to_role">
+<span class="descname">add_server_to_role</span><big>(</big><em>server</em>, <em>role_id</em>, <em>update_conf=True</em>, <em>reload_service=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.add_server_to_role</ac:parameter></ac:structured-macro></h4>
+<div><p>Adds server to each backend that uses given role. If role isn't used in
+any backend, does nothing</p>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Parameters descr. TBD</ac:rich-text-body></ac:structured-macro><p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[TBD.]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>remove_server_from_role</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.remove_server_from_role">
+<span class="descname">remove_server_from_role</span><big>(</big><em>server</em>, <em>role_id</em>, <em>update_conf=True</em>, <em>reload_service=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.remove_server_from_role</ac:parameter></ac:structured-macro></h4>
+<div><p>Removes server from each backend that uses given role. If role isn't
+used in any backend, does nothing</p>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Parameters descr. TBD</ac:rich-text-body></ac:structured-macro><p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[TBD.]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>remove_server_from_all_backends</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.remove_server_from_all_backends">
+<span class="descname">remove_server_from_all_backends</span><big>(</big><em>server</em>, <em>update_conf=True</em>, <em>reload_service=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.remove_server_from_all_backends</ac:parameter></ac:structured-macro></h4>
+<div><p>Method is used to remove stand-alone servers, that aren't belong
+to any role. If role isn't used in any backend, does nothing</p>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Parameters descr. TBD</ac:rich-text-body></ac:structured-macro><p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[TBD.]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>enable_ssl</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.enable_ssl">
+<span class="descname">enable_ssl</span><big>(</big><em>hostname</em>, <em>ssl_port=None</em>, <em>ssl_certificate_id=None</em>, <em>update_conf=True</em>, <em>reload_service=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.enable_ssl</ac:parameter></ac:structured-macro></h4>
+<div><p>Enables SSL support on Nginx server.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>hostname</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) -- server`s FQDN.</td>
+</tr>
+</tbody>
+</table>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Full descr. TBD</ac:rich-text-body></ac:structured-macro><p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[TBD.]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div><h3>disable_ssl</h3>
+<h4 id="scalarizr.api.nginx.NginxAPI.disable_ssl">
+<span class="descname">disable_ssl</span><big>(</big><em>hostname</em>, <em>update_conf=True</em>, <em>reload_service=True</em><big>)</big><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">scalarizr.api.nginx.NginxAPI.disable_ssl</ac:parameter></ac:structured-macro></h4>
+<div><p>Disables SSL support on Nginx server.</p>
+<ac:structured-macro ac:name="warning"><ac:parameter ac:name="icon">true</ac:parameter><ac:rich-text-body>Parameters descr. TBD</ac:rich-text-body></ac:structured-macro><p>Example:</p>
+<div class="highlight-python"><ac:structured-macro ac:name="code"><ac:plain-text-body><![CDATA[TBD.]]></ac:plain-text-body></ac:structured-macro>
+</div>
+</div></div>
 
       <div class="clearer"></div>
     <div class="footer" role="contentinfo">

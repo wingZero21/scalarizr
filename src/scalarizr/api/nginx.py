@@ -95,15 +95,17 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
         if 'failed' in out.lower():
             raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 
-    def stop(self):
+    def stop(self, reason=None):
         if not self.running:
             return True
+        _logger.info("Stopping Nginx: %s" % str(reason) if reason else '')
         ret = initdv2.ParametrizedInitScript.stop(self)
         time.sleep(1)
         return ret
 
-    def restart(self):
+    def restart(self, reason=None):
         self.configtest()
+        _logger.info("Restarting Nginx: %s" % str(reason) if reason else '')
         ret = initdv2.ParametrizedInitScript.restart(self)
         time.sleep(1)
         return ret
@@ -127,7 +129,8 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
         self._wait_workers()
 
-    def reload(self):
+    def reload(self, reason=None):
+        _logger.info("Reloading Nginx: %s" % str(reason) if reason else '')
         try:
             initdv2.ParametrizedInitScript.reload(self)
         except initdv2.InitdError, e:
@@ -170,6 +173,13 @@ class NginxAPI(object):
     last_check = False
 
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
+        """
+        Basic API for configuring and managing Nginx service.
+
+        Namespace::
+
+            nginx
+        """
         _logger.debug('Initializing nginx API.')
         self.service = NginxInitScript()
         self.error_pages_inc = None
@@ -273,22 +283,80 @@ class NginxAPI(object):
 
     @rpc.command_method
     def start_service(self):
+        """
+        Starts Nginx service.
+
+        Example::
+
+            api.nginx.start_service()
+        """
         self.service.start()
 
     @rpc.command_method
-    def stop_service(self):
-        self.service.stop()
+    def stop_service(self, reason=None):
+        """
+        Stops Nginx service.
+
+        :param reason: Message to appear in log before service is stopped.
+        :type reason: str
+
+        Example::
+
+            api.nginx.stop_service("Configuring Nginx service.")
+        """
+        self.service.stop(reason)
 
     @rpc.command_method
-    def reload_service(self):
-        self.service.reload()
+    def reload_service(self, reason=None):
+        """
+        Reloads Nginx service.
+
+        :param reason: Message to appear in log before service is reloaded.
+        :type reason: str
+
+        Example::
+
+            api.nginx.reload("Applying proxy settings.")
+        """
+        self.service.reload(reason)
 
     @rpc.command_method
-    def restart_service(self):
-        self.service.restart()
+    def restart_service(self, reason=None):
+        """
+        Restarts Nginx service.
+
+        :param reason: Message to appear in log before service is restarted.
+        :type reason: str
+
+        Example::
+
+            api.nginx.stop_service("Applying new service configuration preset.")
+        """
+        self.service.restart(reason)
+
+    @rpc.command_method
+    def configtest(self, reason=None):
+        """
+        Performs Nginx configtest.
+
+        Example::
+
+            api.nginx.configtest()
+        """
+        self.service.configtest()
 
     @rpc.command_method
     def recreate_proxying(self, proxy_list, reload_service=True):
+        """
+        Recreates Nginx proxy configuration.
+
+        :param proxy_list: Proxy parameters.
+        :type proxy_list: dict
+
+        .. warning::
+
+            Example TBD.
+        """
         if not proxy_list:
             proxy_list = []
 
@@ -318,6 +386,14 @@ class NginxAPI(object):
 
     @rpc.service_method
     def reconfigure(self, proxy_list):
+        """
+        Descr.
+
+        .. warning::
+
+            Documentation and Examples TBD
+
+        """
         # TODO: much like recreate_proxying() but with specs described in
         # https://scalr-labs.atlassian.net/browse/SCALARIZR-481?focusedCommentId=17428&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-17428
         # saving backend configuration table
@@ -1072,6 +1148,13 @@ class NginxAPI(object):
     def remove_proxy(self, hostname, reload_service=True):
         """
         Removes proxy with given hostname. Removes created server and its backends.
+
+        :param hostname: server`s FQDN.
+        :type hostname: str
+
+        Example::
+
+            TBD
         """
         reload_service = _bool_from_scalr_str(reload_service)
 
@@ -1099,7 +1182,15 @@ class NginxAPI(object):
         RPC method for adding or updating proxy configuration.
         Removes proxy with given hostname if exists and recreates it with given
         parameters. If some exception occures, changes are reverted.
+
+        :param hostname: server`s FQDN.
+        :type hostname: str
+
         See add_proxy() for detailed kwds description.
+
+        Example::
+
+            TBD
         """
         _logger.debug('making proxy: %s' % hostname)
         try:
@@ -1170,6 +1261,14 @@ class NginxAPI(object):
         """
         Adds server to backend with given name pattern.
         Parameter server can be dict or string (ip addr)
+
+        .. warning::
+
+            Parameters descr. TBD
+
+        Example::
+
+            TBD.
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1216,6 +1315,14 @@ class NginxAPI(object):
         """
         Removes server from backend with given name pattern.
         Parameter server can be dict or string (ip addr)
+
+        .. warning::
+
+            Parameters descr. TBD
+
+        Example::
+
+            TBD.
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1260,6 +1367,14 @@ class NginxAPI(object):
         """
         Adds server to each backend that uses given role. If role isn't used in
         any backend, does nothing
+
+        .. warning::
+
+            Parameters descr. TBD
+
+        Example::
+
+            TBD.
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1305,6 +1420,14 @@ class NginxAPI(object):
         """
         Removes server from each backend that uses given role. If role isn't
         used in any backend, does nothing
+
+        .. warning::
+
+            Parameters descr. TBD
+
+        Example::
+
+            TBD.
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1344,6 +1467,14 @@ class NginxAPI(object):
         """
         Method is used to remove stand-alone servers, that aren't belong
         to any role. If role isn't used in any backend, does nothing
+
+        .. warning::
+
+            Parameters descr. TBD
+
+        Example::
+
+            TBD.
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1375,6 +1506,21 @@ class NginxAPI(object):
                    ssl_certificate_id=None,
                    update_conf=True,
                    reload_service=True):
+        """
+        Enables SSL support on Nginx server.
+
+        :param hostname: server`s FQDN.
+        :type hostname: str
+
+
+        .. warning::
+
+            Full descr. TBD
+
+        Example::
+
+            TBD.
+        """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
 
@@ -1423,6 +1569,17 @@ class NginxAPI(object):
 
     @rpc.command_method
     def disable_ssl(self, hostname, update_conf=True, reload_service=True):
+        """
+        Disables SSL support on Nginx server.
+
+        .. warning::
+
+            Parameters descr. TBD
+
+        Example::
+
+            TBD.
+        """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
 

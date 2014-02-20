@@ -168,17 +168,17 @@ class ApacheAPI(object):
 
         Configure VirtualHost "www.dima.com" on port 80 without SSL enabled and reload Apache2 service::
 
-            >>> api.apache.service.create_vhost("www.dima.com", 80, "<template>", False)
+            >>> api.apache.create_vhost("www.dima.com", 80, "<template>", False)
             "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
 
         ADD VirtualHost "secure.dima.com" on port 443 with SSL enabled, reload Apache2 and allow port 443 in IPTables::
 
-            >>> api.apache.service.create_vhost("secure.dima.com", 443, "<template>", False)
+            >>> api.apache.create_vhost("secure.dima.com", 443, "<template>", False)
             "/etc/scalr/private.d/vhosts/secure.dima.com-443.vhost.conf"
 
         Configure VirtualHost "old.dima.com" on port 8080 without SSL enabled and without reloading Apache2 service::
 
-            >>> api.apache.service.create_vhost("old.dima.com", 8080, "<template>", reload=False)
+            >>> api.apache.create_vhost("old.dima.com", 8080, "<template>", reload=False)
             "/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"
 
         Please Note that VirtualHosts on custom ports feature requires testing.
@@ -327,7 +327,7 @@ class ApacheAPI(object):
 
         Change ServerName to old.dima.com, switch port to 8080 and reload service::
 
-            api.apache.service.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)
+            api.apache.update_vhost(("www.dima.com", 80), "old.dima.com", 8080)
 
         .. warning::
 
@@ -388,7 +388,7 @@ class ApacheAPI(object):
         Example:
         Remove 2 VirtualHosts from Apache2 configuration without removing website content, and reload service::
 
-            api.apache.service.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])
+            api.apache.delete_vhosts([("www.dima.com", 80), ("old.dima.com", 8080)])
 
         """
         LOG.info("Removing Apache VirtualHosts: %s" % str(vhosts))
@@ -426,7 +426,7 @@ class ApacheAPI(object):
         Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service::
 
             vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
-            api.apache.service.reconfigure([vhost1,])
+            api.apache.reconfigure([vhost1,])
 
         """
         ports = []
@@ -550,7 +550,7 @@ class ApacheAPI(object):
 
         Example::
 
-            >>> api.apache.service.list_served_virtual_hosts()
+            >>> api.apache.list_served_virtual_hosts()
             ["/etc/scalr/private.d/vhosts/www.dima.com-80.vhost.conf"]
 
         """
@@ -579,7 +579,7 @@ class ApacheAPI(object):
         Example:
         Set Scalr Certificate ID#873 as default::
 
-            api.apache.service.set_default_ssl_certificate("873")
+            api.apache.set_default_ssl_certificate("873")
 
         """
         cert = SSLCertificate(id)
@@ -588,36 +588,53 @@ class ApacheAPI(object):
     @rpc.command_method
     def start_service(self):
         """
-        Start Apache service::
+        Starts Apache service.
 
-            api.apache.service.start_service()
+        Example::
+
+            api.apache.start_service()
         """
         self.service.start()
 
     @rpc.command_method
     def stop_service(self, reason=None):
         """
-        Stop Apache service::
+        Stops Apache service.
 
-            api.apache.service.stop_service("Configuring Apache2 service.")
+        :param reason: Message to appear in log before service is stopped.
+        :type reason: str
+
+        Example::
+
+            api.apache.stop_service("Configuring Apache2 service.")
         """
         self.service.stop(reason)
 
     @rpc.command_method
     def restart_service(self, reason=None):
         """
-        Restart Apache service::
+        Restarts Apache service.
 
-            api.apache.service.restart_service("Applying new service configuration preset.")
+        :param reason: Message to appear in log before service is restarted.
+        :type reason: str
+
+        Example::
+
+            api.apache.restart_service("Applying new service configuration preset.")
         """
         self.service.restart(reason)
 
     @rpc.command_method
     def reload_service(self, reason=None):
         """
-        Reload Apache service::
+        Reloads Apache service.
 
-            api.apache.service.reload_service("Applying RPAF proxy list.")
+        :param reason: Message to appear in log before service is reloaded.
+        :type reason: str
+
+        Example::
+
+            api.apache.reload_service("Applying RPAF proxy list.")
         """
         try:
             self.service.reload(reason)
@@ -632,9 +649,11 @@ class ApacheAPI(object):
     @rpc.command_method
     def configtest(self):
         """
-        Run Apache configtest::
+        Performs Apache configtest.
 
-            api.apache.service.configtest()
+        Example::
+
+            api.apache.configtest()
         """
         self.service.configtest()
 

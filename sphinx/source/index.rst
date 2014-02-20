@@ -121,4 +121,21 @@ HTTP layer::
 		enable_mms,
 		disable_mms
 
+.. autoclass:: scalarizr.api.nginx.NginxAPI
+	:members: start_service,
+		stop_service,
+		restart_service,
+		reload_service,
+		configtest,
+		recreate_proxying,
+		reconfigure,
+		make_proxy,
+		remove_proxy,
+		add_server,
+		remove_server,
+		add_server_to_role,
+		remove_server_from_role,
+		remove_server_from_all_backends,
+		enable_ssl,
+		disable_ssl
 		
