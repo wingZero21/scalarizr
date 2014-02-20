@@ -849,10 +849,17 @@ class Service(object):
         bus.queryenv_service = queryenv
         bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 
+        default_api_port = 8010
+        default_messaging_port = 8013
+        lfrp = queryenv.list_farm_role_params(node.__node__['farm_role_id'])['params']
+        api_port = lfrp.get('base', {}).get('api_port', default_api_port) or default_api_port
+        messaging_port = lfrp.get('base', {}).get('messaging_port', default_messaging_port) or default_messaging_port
+
         logger.debug("Initialize messaging")
         factory = MessageServiceFactory()
         try:
             params = dict(ini.items("messaging_" + messaging_adp))
+            params[P2pConfigOptions.CONSUMER_URL] = 'http://0.0.0.0:{0}'.format(messaging_port)
             params[P2pConfigOptions.SERVER_ID] = server_id
             params[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.key_path(cnf.DEFAULT_KEY)
 
@@ -872,14 +879,15 @@ class Service(object):
         Storage.maintain_volume_table = True
 
         if not bus.api_server:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            api_port = 8010
-            try:
-                sock.connect(('0.0.0.0', api_port))
-                api_port = 8009
-                sock.close()
-            except socket.error:
-                pass
+            if api_port == default_api_port:
+                # An auto-fix for problem with API port inheritance by controlled service.
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    sock.connect(('0.0.0.0', api_port))
+                    api_port = 8009
+                    sock.close()
+                except socket.error:
+                    pass
             STATE['global.api_port'] = api_port
             api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes),
                                                 cnf.key_path(cnf.DEFAULT_KEY))
