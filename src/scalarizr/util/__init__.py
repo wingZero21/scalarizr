@@ -45,6 +45,7 @@ class NullPool(object):
 
 
 class LocalPool(object):
+
     def __init__(self, creator, pool_size=50):
         self._logger = logging.getLogger(__name__)
         self._creator = creator         

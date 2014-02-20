@@ -144,7 +144,7 @@ class GCEConnectionPool(LocalPool):
         self.api_version = api_version
         self.scope = list(scope)
 
-    def _create_connection():
+    def _create_connection(self):
         platform = node.__node__['platform']
         http = httplib2.Http()
         try:
