@@ -9,6 +9,7 @@ import logging
 from scalarizr.bus import bus
 from scalarizr import node
 from scalarizr import platform
+from scalarizr.util import NullPool
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 from scalarizr.storage.transfer import Transfer
