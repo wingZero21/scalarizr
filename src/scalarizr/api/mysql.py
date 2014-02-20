@@ -5,6 +5,7 @@ Created on Dec 04, 2011
 '''
 import sys
 import string
+import os
 
 from scalarizr.node import __node__
 from scalarizr.services.mysql2 import __mysql__
@@ -37,6 +38,26 @@ class MySQLAPI(object):
     def __init__(self):
         self._mysql_init = mysql_svc.MysqlInitScript()
         self._op_api = operation.OperationAPI()
+
+    @rpc.command_method
+    def start_service(self):
+        self._mysql_init.start()
+
+    @rpc.command_method
+    def stop_service(self):
+        self._mysql_init.stop()
+
+    @rpc.command_method
+    def reload_service(self):
+        self._mysql_init.reload()
+
+    @rpc.command_method
+    def restart_service(self):
+        self._mysql_init.restart()
+
+    @rpc.command_method
+    def get_service_status(self):
+        return self._mysql_init.status()
 
     @rpc.command_method
     def grow_volume(self, volume, growth, async=False):
@@ -195,7 +216,7 @@ class MySQLAPI(object):
                     installed_packages,
                     ['apparmor']
                 )
-            elif linux.os.redhat_family or os.oracle_family:
+            elif linux.os.redhat_family or linux.os.oracle_family:
                 pkgmgr.check_dependency(
                     ['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'],
                     installed_packages

@@ -375,3 +375,9 @@ else:
 
 def is_private_ip(ipaddr):
     return any(map(lambda x: ipaddr.startswith(x), ('10.', '172.', '192.168.')))
+
+def is_local_ip(ipaddr):
+    return ipaddr.startswith('127.')
+
+def is_public_ip(ipaddr):
+    return not (is_private_ip(ipaddr) or is_local_ip(ipaddr))

@@ -219,8 +219,7 @@ class OpenstackPlatform(platform.Platform):
     _metadata = {}
     _userdata = None
 
-    _private_ip = None
-    _public_ip = None
+    _ip_addr = None
 
     features = ['volumes', 'snapshots']
 
@@ -234,18 +233,21 @@ class OpenstackPlatform(platform.Platform):
         self._swift_conn_pool = LocalPool(_create_swift_connection)
         self._cinder_conn_pool = LocalPool(_create_cinder_connection)
 
-    def get_private_ip(self):
-        if self._private_ip is None:
-            for iface in platform.net_interfaces():
-                if platform.is_private_ip(iface['ipv4']):
-                    self._private_ip = iface['ipv4']
-                    break
-
-        return self._private_ip
-
-
-    def get_public_ip(self):
-        return self.get_private_ip()
+    def _get_ip_addr(self):
+        if not self._ip_addr:
+            ifaces = platform.net_interfaces()
+            try:
+                self._ip_addr = [iface['ipv4'] for iface in ifaces 
+                        if platform.is_private_ip(iface['ipv4'])][0]
+            except IndexError:
+                try:
+                    self._ip_addr = [iface['ipv4'] for iface in ifaces 
+                            if platform.is_public_ip(iface['ipv4'])][0]
+                except IndexError:
+                    pass
+        return self._ip_addr
+    get_public_ip = _get_ip_addr
+    get_private_ip = _get_ip_addr
 
     def _get_property(self, name):
         if not name in self._userdata:
