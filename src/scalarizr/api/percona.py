@@ -17,7 +17,7 @@ class PerconaAPI(mysql.MySQLAPI):
     last_check = False
 
     def __init__(self):
-        super(MariaDBAPI, self).__init__()
+        super(PerconaAPI, self).__init__()
 
     @classmethod
     def check_software(cls, installed_packages=None):

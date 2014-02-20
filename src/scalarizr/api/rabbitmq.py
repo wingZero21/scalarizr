@@ -60,7 +60,7 @@ class RabbitMQAPI(object):
                     pkgmgr.check_dependency(['rabbitmq-server>=2.6,<2.7'], installed_packages)
             elif os_name == 'debian':
                 pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.2'], installed_packages)
-            elif linus.os.redhat_family:
+            elif linux.os.redhat_family:
                 if os_vers >= '6':
                     pkgmgr.check_dependency(['rabbitmq>=3.1,<3.2', 'erlang'], installed_packages)
                 elif os_vers >= '5':

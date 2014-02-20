@@ -5,6 +5,7 @@ Created on Dec 04, 2011
 '''
 import sys
 import string
+import os
 
 from scalarizr.node import __node__
 from scalarizr.services.mysql2 import __mysql__
@@ -215,7 +216,7 @@ class MySQLAPI(object):
                     installed_packages,
                     ['apparmor']
                 )
-            elif linux.os.redhat_family or os.oracle_family:
+            elif linux.os.redhat_family or linux.os.oracle_family:
                 pkgmgr.check_dependency(
                     ['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'],
                     installed_packages

@@ -138,6 +138,7 @@ class ApacheAPI(object):
         self.mod_ssl = DebianBasedModSSL() if linux.os.debian_family else RedHatBasedModSSL()
         self.current_open_ports = []
         self._query_env = bus.queryenv_service
+        self._op_api = operation.OperationAPI()
 
     @rpc.command_method
     def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True, allow_port=False):

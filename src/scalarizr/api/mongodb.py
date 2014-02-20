@@ -44,7 +44,7 @@ class _MMSAgent(object):
         """
 
         if not os.path.exists('%s/mms-agent' % _MMSAgent.install_dir):
-            _MMSAgent._download()
+            self._download()
             out, err, returncode = util.system2(
                     ['tar', '-xf', '/tmp/10gen-mms-agent.tar.gz', '-C', _MMSAgent.install_dir])
 
