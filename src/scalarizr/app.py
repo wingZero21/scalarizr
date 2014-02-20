@@ -852,8 +852,8 @@ class Service(object):
         default_api_port = 8010
         default_messaging_port = 8013
         lfrp = queryenv.list_farm_role_params(node.__node__['farm_role_id'])['params']
-        api_port = lfrp.get('base', {}).get('api_port', default_api_port) or default_api_port
-        messaging_port = lfrp.get('base', {}).get('messaging_port', default_messaging_port) or default_messaging_port
+        api_port = int(lfrp.get('base', {}).get('api_port', default_api_port) or default_api_port)
+        messaging_port = int(lfrp.get('base', {}).get('messaging_port', default_messaging_port) or default_messaging_port)
 
         logger.debug("Initialize messaging")
         factory = MessageServiceFactory()
