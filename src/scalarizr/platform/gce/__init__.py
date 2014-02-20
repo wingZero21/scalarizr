@@ -21,6 +21,7 @@ from apiclient.discovery import build
 
 from scalarizr import node
 from scalarizr import platform
+from scalarizr.util import LocalPool
 from scalarizr.platform import PlatformError
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 

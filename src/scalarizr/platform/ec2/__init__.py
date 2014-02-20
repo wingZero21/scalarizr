@@ -77,7 +77,7 @@ def _create_s3_connection():
     return conn
 
 
-class Ec2ConnectionProxy(platform.Proxy):
+class Ec2ConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwargs):
         for retry in range(2):
@@ -93,7 +93,7 @@ class Ec2ConnectionProxy(platform.Proxy):
         raise ConnectionError(e)
 
 
-class S3ConnectionProxy(platform.Proxy):
+class S3ConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwargs):
         for retry in range(2):
