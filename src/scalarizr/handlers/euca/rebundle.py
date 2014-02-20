@@ -29,6 +29,9 @@ def get_handlers ():
 
 class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
     def run(self):
+        if not linux.which('euca-bundle-vol'):
+            raise HandlerError('euca-bundle-vol command not found, please install "euca2ools" package')
+
         cert_path = pk_path = cloud_cert_path = fstab_path = None
         try:
             cert, pk = self._platform.get_cert_pk()

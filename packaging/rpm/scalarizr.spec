@@ -80,6 +80,7 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr Eucalyptus edition
 Group:          Applications/Internet
 Requires:		scalarizr-ec2 = %{version}-%{release}
+Requires:       euca2ools
 
 %description -n scalarizr-eucalyptus
 Scalarizr converts any server to Scalr-manageable node
