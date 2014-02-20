@@ -75,7 +75,7 @@ class ConnectionProxy(object):
         try:
             return object.__getattribute__(self, name)
         except AttributeError:
-            return Proxy(
+            return ConnectionProxy(
                 getattr(object.__getattribute__(self, 'obj'), name),
                 self.conn_pool
             )
