@@ -103,7 +103,10 @@ class ApacheHandler(Handler):
             op_log.info("Configuring VirtualHosts.")
             LOG.debug("VirtualHosts to configure: %s" % self._initial_v_hosts)
 
-            applied_vhosts = self.api.reconfigure(self._initial_v_hosts, reload=False, rollback_on_error=False)
+            applied_vhosts = self.api.reconfigure(self._initial_v_hosts,
+                                                  reload=False,
+                                                  rollback_on_error=False,
+                                                  async=False)
 
             if len(applied_vhosts) != len(self._initial_v_hosts):
                 raise apache_api.ApacheError("%s Apache VirtualHosts were assigned to server but only %s were applied." % (

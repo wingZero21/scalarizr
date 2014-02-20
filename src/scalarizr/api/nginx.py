@@ -3,8 +3,9 @@ from __future__ import with_statement
 import os
 import shutil
 import logging
-from telnetlib import Telnet
 import time
+import cStringIO
+from telnetlib import Telnet
 from hashlib import sha1
 
 from scalarizr import rpc
@@ -22,6 +23,9 @@ from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
+from scalarizr.api import operation
+from scalarizr.config import BuiltinBehaviours
+from scalarizr.util import disttool
 
 
 __nginx__ = __node__['nginx']
@@ -84,7 +88,13 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
             if 'server: nginx' in telnet.read_all().lower():
                 return initdv2.Status.RUNNING
             return initdv2.Status.UNKNOWN
-        return status
+        else:
+            args = [self.initd_script, 'status']
+            _, _, returncode = system2(args, raise_exc=False)
+            if returncode == 0:
+                return initdv2.Status.RUNNING
+            else:
+                return initdv2.Status.NOT_RUNNING
 
     def configtest(self, path=None):
         args = '%s -t' % self._nginx_binary
@@ -95,23 +105,23 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
         if 'failed' in out.lower():
             raise initdv2.InitdError("Configuration isn't valid: %s" % out)
 
-    def stop(self, reason=None):
+    def stop(self):
         if not self.running:
-            return True
-        _logger.info("Stopping Nginx: %s" % str(reason) if reason else '')
+            return
         ret = initdv2.ParametrizedInitScript.stop(self)
         time.sleep(1)
-        return ret
 
-    def restart(self, reason=None):
+    def restart(self):
         self.configtest()
-        _logger.info("Restarting Nginx: %s" % str(reason) if reason else '')
         ret = initdv2.ParametrizedInitScript.restart(self)
         time.sleep(1)
-        return ret
 
     def start(self):
         self.configtest()
+
+        if self.running:
+            return
+
         try:
             args = [self.initd_script] \
                 if isinstance(self.initd_script, basestring) \
@@ -129,8 +139,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
         self._wait_workers()
 
-    def reload(self, reason=None):
-        _logger.info("Reloading Nginx: %s" % str(reason) if reason else '')
+    def reload(self):
         try:
             initdv2.ParametrizedInitScript.reload(self)
         except initdv2.InitdError, e:
@@ -167,6 +176,92 @@ def _bool_from_scalr_str(bool_str):
     return int(bool_str) == 1
 
 
+def _replace_string_in_file(file_path, s, new_s):
+    raw = None
+    with open(file_path, 'r') as fp:
+        raw = fp.read()
+        raw = raw.replace(s, new_s)
+    with open(file_path, 'w') as fp:
+        fp.write(raw)
+
+
+def get_all_app_roles():
+    _queryenv = bus.queryenv_service
+    return _queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
+
+
+def _fix_ssl_keypaths(vhost_template):
+    bad_keydir = '/etc/aws/keys/ssl/'
+    good_keydir = os.path.join(bus.etc_path, "private.d/keys/")
+    return vhost_template.replace(bad_keydir, good_keydir)
+
+    
+def _dump_config(obj):
+    output = cStringIO.StringIO()
+    obj.write_fp(output, close = False)
+    return output.getvalue()
+
+
+def get_role_servers(role_id=None, role_name=None):
+    """ Method is used to get role servers from scalr """
+    if type(role_id) is int:
+        role_id = str(role_id)
+
+    server_location = __node__['cloud_location']
+    _queryenv = bus.queryenv_service
+    roles = _queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
+    servers = []
+    for role in roles:
+        ips = [h.internal_ip if server_location == h.cloud_location else
+               h.external_ip
+               for h in role.hosts]
+        servers.extend(ips)
+
+    return servers
+
+
+def update_ssl_certificate(ssl_certificate_id, cert, key, cacert):
+    """
+    Updates ssl certificate. Returns paths to updated or created .key and
+    .crt files
+    """
+    if not cert or not key:
+        return (None, None)
+
+    _logger.debug('Updating ssl certificate with id: %s' % ssl_certificate_id)
+
+    if cacert:
+        cert = cert + '\n' + cacert
+    if ssl_certificate_id:
+        ssl_certificate_id = '_' + str(ssl_certificate_id)
+    else:
+        ssl_certificate_id = ''
+
+    keys_dir_path = os.path.join(bus.etc_path, "private.d/keys")
+    if not os.path.exists(keys_dir_path):
+        os.mkdir(keys_dir_path)
+
+    cert_path = os.path.join(keys_dir_path, 'https%s.crt' % ssl_certificate_id)
+    with open(cert_path, 'w') as fp:
+        fp.write(cert)
+
+    key_path = os.path.join(keys_dir_path, 'https%s.key' % ssl_certificate_id)
+    with open(key_path, 'w') as fp:
+        fp.write(key)
+
+    return (cert_path, key_path)
+
+
+def _fetch_ssl_certificate(ssl_certificate_id):
+    """
+    Gets ssl certificate and key from Scalr, writes them to files and
+    returns paths to files.
+    """
+    _queryenv = bus.queryenv_service
+    cert, key, cacert = _queryenv.get_ssl_certificate(ssl_certificate_id)
+    return update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
+
+
 class NginxAPI(object):
 
     __metaclass__ = Singleton
@@ -182,22 +277,30 @@ class NginxAPI(object):
         """
         _logger.debug('Initializing nginx API.')
         self.service = NginxInitScript()
+        self._op_api = operation.OperationAPI()
         self.error_pages_inc = None
         self.backend_table = {}
+        self.app_inc_path = None
+        self.proxies_inc_dir = proxies_inc_dir
+        self.proxies_inc_path = None
 
-        if not app_inc_dir:
+        if not app_inc_dir and __nginx__ and __nginx__['app_include_path']:
             app_inc_dir = os.path.dirname(__nginx__['app_include_path'])
-        self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
+        if app_inc_dir:
+            self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
+
+        if not proxies_inc_dir and __nginx__ and __nginx__['app_include_path']:
+            self.proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
+        if self.proxies_inc_dir:
+            self.proxies_inc_path = os.path.join(self.proxies_inc_dir, 'proxies.include')
+
+    def init_service(self):
+        _logger.debug('Initializing nginx API.')
         self._load_app_servers_inc()
         self.fix_app_servers_inc()
-
-        if not proxies_inc_dir:
-            proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
-        self.proxies_inc_dir = proxies_inc_dir
-        self.proxies_inc_path = os.path.join(proxies_inc_dir, 'proxies.include')
         self._load_proxies_inc()
-
         self._make_error_pages_include()
+        self._queryenv = bus.queryenv_service
 
     def _make_error_pages_include(self):
 
@@ -293,7 +396,7 @@ class NginxAPI(object):
         self.service.start()
 
     @rpc.command_method
-    def stop_service(self, reason=None):
+    def stop_service(self):
         """
         Stops Nginx service.
 
@@ -304,10 +407,10 @@ class NginxAPI(object):
 
             api.nginx.stop_service("Configuring Nginx service.")
         """
-        self.service.stop(reason)
+        self.service.stop()
 
     @rpc.command_method
-    def reload_service(self, reason=None):
+    def reload_service(self):
         """
         Reloads Nginx service.
 
@@ -318,10 +421,10 @@ class NginxAPI(object):
 
             api.nginx.reload("Applying proxy settings.")
         """
-        self.service.reload(reason)
+        self.service.reload()
 
     @rpc.command_method
-    def restart_service(self, reason=None):
+    def restart_service(self):
         """
         Restarts Nginx service.
 
@@ -332,7 +435,7 @@ class NginxAPI(object):
 
             api.nginx.stop_service("Applying new service configuration preset.")
         """
-        self.service.restart(reason)
+        self.service.restart()
 
     @rpc.command_method
     def configtest(self, reason=None):
@@ -344,6 +447,10 @@ class NginxAPI(object):
             api.nginx.configtest()
         """
         self.service.configtest()
+
+    @rpc.command_method
+    def get_service_status(self):
+        return self.service.status()
 
     @rpc.command_method
     def recreate_proxying(self, proxy_list, reload_service=True):
@@ -376,52 +483,215 @@ class NginxAPI(object):
             msg = "Can't add proxy %s: %s" % (proxy_parms['name'], e)
             raise Exception(msg)
 
-    def _replace_string_in_file(self, file_path, s, new_s):
-        raw = None
-        with open(file_path, 'r') as fp:
-            raw = fp.read()
-            raw = raw.replace(s, new_s)
-        with open(file_path, 'w') as fp:
-            fp.write(raw)
+    def _main_config_contains_server(self):
+        config_dir = os.path.dirname(self.app_inc_path)
+        nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
 
-    @rpc.service_method
-    def reconfigure(self, proxy_list):
-        """
-        Descr.
+        config = None
+        result = False
+        try:
+            config = metaconf.Configuration('nginx')
+            config.read(nginx_conf_path)
+        except (Exception, BaseException), e:
+            raise Exception('Cannot read/parse nginx main configuration file: %s' % str(e))
 
-        .. warning::
+        try:
+            result = config.get('http/server') != None
+        except:
+            pass
 
-            Documentation and Examples TBD
+        return result
 
-        """
-        # TODO: much like recreate_proxying() but with specs described in
-        # https://scalr-labs.atlassian.net/browse/SCALARIZR-481?focusedCommentId=17428&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-17428
-        # saving backend configuration table
+    def make_default_proxy(self, roles):
+        # actually list_virtual_hosts() returns only 1 virtual host if it's
+        # ssl virtual host. If there are no ssl vhosts in farm, it returns
+        # empty list
+        ssl_vhosts = self._queryenv.list_virtual_hosts()
+        _logger.info('Making default proxy with roles: %s' % roles)
+        servers = []
+        for role in roles:
+            servers_ips = []
+            if type(role) is str:
+                servers_ips = get_role_servers(role) or \
+                    get_role_servers(role_name=role)
+            else:
+                cl = __node__['cloud_location']
+                servers_ips = [h.internal_ip if cl == h.cloud_location else
+                               h.external_ip
+                               for h in role.hosts]
+            servers.extend({'host': srv} for srv in servers_ips)
+
+        if not servers:
+            _logger.debug('No app roles in farm, making mock backend')
+            servers = [{'host': '127.0.0.1',
+                        'port': '80'}]
+
+        _logger.debug('Clearing backend table')
+        self.backend_table = {}
+        
+        _logger.debug('backend table is %s' % self.backend_table)
+        write_proxies = not self._main_config_contains_server()
+        self.add_proxy('backend',
+                        backends=servers,
+                        ssl=False,
+                        backend_ip_hash=True,
+                        hash_backend_name=False,
+                        reload_service=False,
+                        write_proxies=write_proxies)
+
+        with open(self.proxies_inc_path, 'w') as fp:
+            cert, key, cacert = self._queryenv.get_https_certificate()
+            _logger.debug('updating certificates')
+            update_ssl_certificate('', cert, key, cacert)
+
+            if ssl_vhosts and cert and key:
+                _logger.info('Writing SSL server configuration to proxies.conf. SSL on')
+                raw_conf = _fix_ssl_keypaths(ssl_vhosts[0].raw)
+                fp.write(raw_conf)
+            else:
+                _logger.info('Clearing SSL server configuration. SSL off')
+                fp.write('')
+
+        self._reload_service()
+
+        # Uncomment if you want to ssl proxy to be generated and not be taken from template
+        # if ssl_vhosts:
+        #     _logger.debug('adding default ssl nginx server')
+        #     write_proxies = not self._https_config_exists()
+        #     self.make_proxy('backend.ssl',
+        #                         backends=servers,
+        #                         port=None,
+        #                         ssl=True,
+        #                         backend_ip_hash=True,
+        #                         hash_backend_name=False,
+        #                         write_proxies=write_proxies)
+        # else:
+        #     self.remove_proxy('backend.ssl')
+        _logger.debug('After making proxy backend table is %s' % self.backend_table)
+        _logger.debug('Default proxy is made')
+
+    def _recreate_compat_mode(self):
+        _logger.debug('Compatibility mode proxying recreation')
+        roles_for_proxy = []
+        if __nginx__['upstream_app_role']:
+            roles_for_proxy = [__nginx__['upstream_app_role']]
+        else:
+            roles_for_proxy = get_all_app_roles()
+
+        self.fix_app_servers_inc()
+        self.make_default_proxy(roles_for_proxy)
+
+        https_inc_path = os.path.join(os.path.dirname(self.app_inc_path),
+                                      'https.include')
+        nginx_dir = os.path.dirname(https_inc_path)
+        for file_path in os.listdir(nginx_dir):
+            if file_path.startswith('https.include'):
+                _logger.debug('Removing %s' % file_path)
+                os.remove(file_path)
+
+    def _update_main_config(self, remove_server_section=True, reload_service=True):
+        config_dir = os.path.dirname(self.app_inc_path)
+        nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
+
+        config = None
+        try:
+            config = metaconf.Configuration('nginx')
+            config.read(nginx_conf_path)
+        except (Exception, BaseException), e:
+            raise Exception('Cannot read/parse nginx main configuration file: %s' % str(e))
+
+        _logger.debug('Update main configuration file')
+        dump = _dump_config(config)
+
+        gzip_vary = config.get_list('http/gzip_vary')
+        if not gzip_vary:
+            config.add('http/gzip_vary', 'on')
+        gzip_proxied = config.get_list('http/gzip_proxied')
+        if not gzip_proxied:
+            config.add('http/gzip_proxied', 'any')
+        gzip_types = config.get_list('http/gzip_types')
+        if not gzip_types:
+            types = 'text/plain text/css application/json application/x-javascript' \
+                'text/xml application/xml application/xml+rss text/javascript'
+            config.add('http/gzip_types', types)
+
+        include_list = config.get_list('http/include')
+        if not self.app_inc_path in include_list:
+            _logger.debug('adding app-servers.include path to main config')
+            config.add('http/include', self.app_inc_path)
+        if not self.proxies_inc_path in include_list:
+            _logger.debug('adding proxies.include path to main config')
+            config.add('http/include', self.proxies_inc_path)
+        else:
+            _logger.debug('config contains proxies.include: %s \n%s' %
+                               (self.proxies_inc_path, include_list))
+
+        if remove_server_section:
+            _logger.debug('removing http/server section')
+            try:
+                config.remove('http/server')
+            except (ValueError, IndexError):
+                _logger.debug('no http/server section')
+        else:
+            _logger.debug('Do not removing http/server section')
+            if not config.get_list('http/server'):
+                config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
+
+        if disttool.is_debian_based():
+        # Comment /etc/nginx/sites-enabled/*
+            try:
+                i = config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
+                config.comment('http/include[%d]' % (i+1))
+                _logger.debug('comment site-enabled include')
+            except (ValueError, IndexError):
+                _logger.debug('site-enabled include already commented')
+        elif disttool.is_redhat_based():
+            def_host_path = '/etc/nginx/conf.d/default.conf'
+            if os.path.exists(def_host_path):
+                default_host = metaconf.Configuration('nginx')
+                default_host.read(def_host_path)
+                default_host.comment('server')
+                default_host.write(def_host_path)
+
+        if dump == _dump_config(config):
+            _logger.debug("Main nginx config wasn`t changed")
+        else:
+            # Write new nginx.conf
+            shutil.copy(nginx_conf_path, nginx_conf_path + '.bak')
+            config.write(nginx_conf_path)
+            if reload_service:
+                self._reload_service()
+
+    def do_reconfigure(self, op, proxies):
         backend_table_bak = self.backend_table.copy()
+        main_conf_path = self.proxies_inc_dir + '/nginx.conf'
         try:
             self.app_inc_path = self.app_inc_path + '.new'
             self.proxies_inc_path = self.proxies_inc_path + '.new'
-            self.recreate_proxying(proxy_list, reload_service=False)
 
-            main_conf_path = self.proxies_inc_dir + '/nginx.conf'
-            self._replace_string_in_file(main_conf_path,
-                                         'proxies.include',
-                                         'proxies.include.new')
-            self._replace_string_in_file(main_conf_path,
-                                         'app-servers.include',
-                                         'app-servers.include.new')
-
+            _replace_string_in_file(main_conf_path,
+                                    'proxies.include',
+                                    'proxies.include.new')
+            _replace_string_in_file(main_conf_path,
+                                    'app-servers.include',
+                                    'app-servers.include.new')
+            self._update_main_config(remove_server_section=proxies!=None, reload_service=False)
+            if proxies:
+                self.recreate_proxying(proxies, reload_service=False)
+            else:
+                self._recreate_compat_mode()
             self.service.configtest()
+
         except:
             os.remove(self.app_inc_path)
             os.remove(self.proxies_inc_path)
             self.backend_table = backend_table_bak
-            self._replace_string_in_file(main_conf_path,
-                                         'proxies.include.new',
-                                         'proxies.include')
-            self._replace_string_in_file(main_conf_path,
-                                         'app-servers.include.new',
-                                         'app-servers.include')
+            _replace_string_in_file(main_conf_path,
+                                    'proxies.include.new',
+                                    'proxies.include')
+            _replace_string_in_file(main_conf_path,
+                                    'app-servers.include.new',
+                                    'app-servers.include')
             self.app_inc_path = self.app_inc_path[:-4]
             self.proxies_inc_path = self.proxies_inc_path[:-4]
             raise
@@ -432,73 +702,26 @@ class NginxAPI(object):
             shutil.copyfile(self.proxies_inc_path, self.proxies_inc_path[:-4])
             os.remove(self.app_inc_path)
             os.remove(self.proxies_inc_path)
-            self._replace_string_in_file(main_conf_path,
-                                         'proxies.include.new',
-                                         'proxies.include')
-            self._replace_string_in_file(main_conf_path,
-                                         'app-servers.include.new',
-                                         'app-servers.include')
+            _replace_string_in_file(main_conf_path,
+                                    'proxies.include.new',
+                                    'proxies.include')
+            _replace_string_in_file(main_conf_path,
+                                    'app-servers.include.new',
+                                    'app-servers.include')
             self._reload_service()
             self.app_inc_path = self.app_inc_path[:-4]
             self.proxies_inc_path = self.proxies_inc_path[:-4]
-        
 
-    def get_role_servers(self, role_id=None, role_name=None):
-        """ Method is used to get role servers from scalr """
-        if type(role_id) is int:
-            role_id = str(role_id)
+    @rpc.service_method
+    def reconfigure(self, proxies, async=True):
+        self._op_api.run('api.nginx.reconfigure',
+                         func=self.do_reconfigure,
+                         func_kwds={'proxies': proxies},
+                         async=async,
+                         exclusive=True)
 
-        server_location = __node__['cloud_location']
-        queryenv = bus.queryenv_service
-        roles = queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
-        servers = []
-        for role in roles:
-            ips = [h.internal_ip if server_location == h.cloud_location else
-                   h.external_ip
-                   for h in role.hosts]
-            servers.extend(ips)
 
-        return servers
 
-    def update_ssl_certificate(self, ssl_certificate_id, cert, key, cacert):
-        """
-        Updates ssl certificate. Returns paths to updated or created .key and
-        .crt files
-        """
-        if not cert or not key:
-            return (None, None)
-
-        _logger.debug('Updating ssl certificate with id: %s' % ssl_certificate_id)
-
-        if cacert:
-            cert = cert + '\n' + cacert
-        if ssl_certificate_id:
-            ssl_certificate_id = '_' + str(ssl_certificate_id)
-        else:
-            ssl_certificate_id = ''
-
-        keys_dir_path = os.path.join(bus.etc_path, "private.d/keys")
-        if not os.path.exists(keys_dir_path):
-            os.mkdir(keys_dir_path)
-
-        cert_path = os.path.join(keys_dir_path, 'https%s.crt' % ssl_certificate_id)
-        with open(cert_path, 'w') as fp:
-            fp.write(cert)
-
-        key_path = os.path.join(keys_dir_path, 'https%s.key' % ssl_certificate_id)
-        with open(key_path, 'w') as fp:
-            fp.write(key)
-
-        return (cert_path, key_path)
-
-    def _fetch_ssl_certificate(self, ssl_certificate_id):
-        """
-        Gets ssl certificate and key from Scalr, writes them to files and
-        returns paths to files.
-        """
-        queryenv = bus.queryenv_service
-        cert, key, cacert = queryenv.get_ssl_certificate(ssl_certificate_id)
-        return self.update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
 
     def _normalize_destinations(self, destinations):
         """
@@ -544,7 +767,7 @@ class NginxAPI(object):
             dest['servers'] = []
             if 'farm_role_id' in dest:
                 dest['id'] = str(dest['farm_role_id'])
-                dest['servers'].extend(self.get_role_servers(dest['id']))
+                dest['servers'].extend(get_role_servers(dest['id']))
             if 'host' in dest:
                 dest['servers'].append(dest['host'])
 
@@ -821,7 +1044,7 @@ class NginxAPI(object):
 
         if old_style_ssl:
             config.add('%s/ssl' % server_xpath, 'on')
-        ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
+        ssl_cert_path, ssl_cert_key_path = _fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 
@@ -1138,7 +1361,7 @@ class NginxAPI(object):
     def _get_any_port(self, config):
         port = None
         try:
-            addr = self.proxies_inc.get('server[1]/listen' % server_xpath)
+            addr = self.proxies_inc.get('server[1]/listen')
             port = addr.split()[0]
         except metaconf.NoPathError:
             pass

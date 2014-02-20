@@ -39,6 +39,26 @@ class MySQLAPI(object):
         self._op_api = operation.OperationAPI()
 
     @rpc.command_method
+    def start_service(self):
+        self._mysql_init.start()
+
+    @rpc.command_method
+    def stop_service(self):
+        self._mysql_init.stop()
+
+    @rpc.command_method
+    def reload_service(self):
+        self._mysql_init.reload()
+
+    @rpc.command_method
+    def restart_service(self):
+        self._mysql_init.restart()
+
+    @rpc.command_method
+    def get_service_status(self):
+        return self._mysql_init.status()
+
+    @rpc.command_method
     def grow_volume(self, volume, growth, async=False):
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')

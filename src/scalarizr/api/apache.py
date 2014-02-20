@@ -36,6 +36,7 @@ from scalarizr.util import Singleton, software
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 from scalarizr import exceptions
+from scalarizr.api import operation
 
 
 LOG = logging.getLogger(__name__)
@@ -412,26 +413,11 @@ class ApacheAPI(object):
             else:
                 self.reload_service('%s VirtualHosts removed.' % len(vhosts))
 
-
-    @rpc.command_method
-    def reconfigure(self, vhosts, reload=True, rollback_on_error=True):
-        """
-        Resets current Scalr-managed VirtualHost configuration and deploys a new set of VirtualHosts.
-        :param vhosts: list(dict(hostname:hostname1,port:port1,template:tpl1,..),..)
-
-        :return: paths to reconfigured VirtualHosts
-        :rtype: list
-
-        Example:
-        Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service::
-
-            vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
-            api.apache.reconfigure([vhost1,])
-
-        """
+    def do_reconfigure(self, op, vhosts=None, reload=True, rollback_on_error=True):
         ports = []
         applied_vhosts = []
-
+        if vhosts == None:
+            vhosts = self._fetch_virtual_hosts()
         old_files = []
         LOG.info("Started reconfiguring Apache VirtualHosts.")
 
@@ -481,6 +467,30 @@ class ApacheAPI(object):
             LOG.info("Apache configuration has been changed without service reload.")
 
         return applied_vhosts
+
+    @rpc.command_method
+    def reconfigure(self, vhosts=None, reload=True, rollback_on_error=True, async=True):
+        """
+        Resets current Scalr-managed VirtualHost configuration and deploys a new set of VirtualHosts.
+        :param vhosts: list(dict(hostname:hostname1,port:port1,template:tpl1,..),..)
+
+        :return: paths to reconfigured VirtualHosts
+        :rtype: list
+
+        Example:
+        Change Apache2 configuration to single VirtualHost www.dima.com:80 and reload Apache service::
+
+            vhost1 = dict(hostname="www.dima.com", port=80, template="<tpl1>", ssl=False)
+            api.apache.reconfigure([vhost1,])
+
+        """
+        return self._op_api.run('api.apache.reconfigure',
+                                func=self.do_reconfigure,
+                                func_kwds={'vhosts': vhosts,
+                                           'reload': reload,
+                                           'rollback_on_error': rollback_on_error},
+                                async=async,
+                                exclusive=True)
 
     @rpc.query_method
     def get_webserver_statistics(self):
@@ -645,6 +655,10 @@ class ApacheAPI(object):
                 self.service.start()
             else:
                 raise
+
+    @rpc.command_method
+    def get_service_status(self):
+        return self.service.status()
 
     @rpc.command_method
     def configtest(self):

@@ -180,13 +180,12 @@ class Redisd(object):
 
     @property
     def running(self):
-        process_matches = False
         for config_path in get_redis_processes():
-            if config_path == self.config_path:
-                process_matches = True
-            elif config_path == __redis__['defaults']['redis.conf'] and int(self.port) == __redis__['defaults']['port']:
-                process_matches = True
-        return process_matches
+            is_default_conf = config_path == __redis__['defaults']['redis.conf']
+            is_default_port = int(self.port) == __redis__['defaults']['port']
+            if config_path == self.config_path or (is_default_conf and is_default_port):
+                return True
+        return False
 
     @property
     def pid(self):

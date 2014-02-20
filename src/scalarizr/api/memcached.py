@@ -1,6 +1,7 @@
-from __future__ import with_statement
-
 import logging
+
+from scalarizr import rpc
+from scalarizr.handlers.memcached import MemcachedInitScript
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton, software
@@ -14,6 +15,29 @@ class MemcachedAPI(object):
 
     __metaclass__ = Singleton
     last_check = False
+
+    def __init__(self):
+        self.service = MemcachedInitScript()
+
+    @rpc.command_method
+    def start_service(self):
+        self.service.start()
+
+    @rpc.command_method
+    def stop_service(self):
+        self.service.stop()
+
+    @rpc.command_method
+    def reload_service(self):
+        self.service.reload()
+
+    @rpc.command_method
+    def restart_service(self):
+        self.service.restart()
+
+    @rpc.command_method
+    def get_service_status(self):
+        return self.service.status()
 
     @classmethod
     def check_software(cls, installed_packages=None):
