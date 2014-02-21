@@ -21,6 +21,7 @@ from apiclient.discovery import build
 
 from scalarizr import node
 from scalarizr import platform
+from scalarizr.util import LocalPool
 from scalarizr.platform import PlatformError
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 
@@ -135,10 +136,10 @@ class GoogleServiceManager(object):
         return cred.authorize(http)
 
 
-class GCEConnectionProxy(platform.ConnectionProxy):
+class GCEConnectionPool(LocalPool):
 
     def __init__(self, service_name, api_version, scope):
-        super(GCEConnectionProxy, self).__init__()
+        super(GCEConnectionPool, self).__init__(self._create_connection)
         self.service_name = service_name
         self.api_version = api_version
         self.scope = list(scope)
@@ -158,12 +159,21 @@ class GCEConnectionProxy(platform.ConnectionProxy):
             raise InvalidCredentialsError(sys.exc_info()[1])
         return BadStatusLineHandler(conn)
 
-    def _raise_error(self, *exc_info):
-        t, e, tb = exc_info
-        if isinstance(e, ConnectionError):
-            raise
-        else:
-            raise ConnectionError(e)
+
+class GCEConnectionProxy(platform.ConnectionProxy):
+
+    def __call__(self, *args, **kwargs):
+        for retry in range(2):
+            try:
+                return self.obj(*args, **kwds)
+            except:
+                e = sys.exc_info()[1]
+                if isinstance(e, ConnectionError):
+                    self.conn_pool.dispose_local()
+                    raise
+                continue
+        self.conn_pool.dispose_local()
+        raise ConnectionError(e)
 
 
 class GcePlatform(platform.Platform):
@@ -177,9 +187,9 @@ class GcePlatform(platform.Platform):
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
                 self, 'storage', 'v1beta2', *STORAGE_FULL_SCOPE)
-        self._compute_conn_proxy = GCEConnectionProxy(
+        self._compute_conn_pool = GCEConnectionPool(
                 'compute', 'v1', COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
-        self._storage_conn_proxy = GCEConnectionProxy(
+        self._storage_conn_pool = GCEConnectionPool(
                 'storage', 'v1beta2', STORAGE_FULL_SCOPE)
 
     def get_user_data(self, key=None):
@@ -253,13 +263,13 @@ class GcePlatform(platform.Platform):
 
 
     def get_compute_conn(self):
-        self._compute_conn_proxy.check_connection()
-        return self._compute_conn_proxy
+        conn = self._compute_conn_pool.get()
+        return GCEConnectionProxy(conn, self._compute_conn_pool) 
 
 
     def get_storage_conn(self):
-        self._storage_conn_proxy.check_connection()
-        return self._storage_conn_proxy
+        conn = self._storage_conn_pool.get()
+        return GCEConnectionProxy(conn, self._storage_conn_pool) 
 
 
     def new_compute_client(self):

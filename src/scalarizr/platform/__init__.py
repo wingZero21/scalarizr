@@ -61,12 +61,13 @@ class InvalidCredentialsError(ConnectionError):
     pass
 
 
-class Proxy(object):
+class ConnectionProxy(object):
 
     _logger = logging.getLogger(__name__)
 
-    def __init__(self, obj):
+    def __init__(self, obj, conn_pool):
         self.obj = obj
+        self.conn_pool = conn_pool
 
     def __getattribute__(self, name):
         if re.search('^__.*__$', name):
@@ -74,75 +75,13 @@ class Proxy(object):
         try:
             return object.__getattribute__(self, name)
         except AttributeError:
-            return Proxy(getattr(object.__getattribute__(self, 'obj'), name))
+            return ConnectionProxy(
+                getattr(object.__getattribute__(self, 'obj'), name),
+                self.conn_pool
+            )
 
     def __call__(self, *args, **kwds):
         return self.obj(*args, **kwds)
-
-
-
-class ConnectionProxy(object):
-
-    _logger = logging.getLogger(__name__)
-
-    def __init__(self, conn_per_thread=True, num_reconnects=1):
-        if conn_per_thread:
-            self.conn_pool = LocalPool(self._create_connection)
-        else:
-            self.conn_pool = NullPool(self._create_connection)
-        self.num_reconnects = num_reconnects
-        self.local = threading.local()
-
-    def __getattr__(self, name):
-        self._logger.debug('__getattr__:%s' % name)
-        try:
-            self.__dict__['local'].call_chain.append(name)
-        except AttributeError:
-            self.__dict__['local'].call_chain = [name]
-        return self
-
-    def __call__(self, *args, **kwds):
-        self._logger.debug('__call__:%s' % self.local.call_chain)
-        num_retries = 0
-        try:
-            while num_retries < self.num_reconnects:
-                try:
-                    return self._do_call(*args, **kwds)
-                except NoCredentialsError:
-                    # We haven't credentials, so we don't need reconnect,
-                    # only remove invalid connection and reraise exception
-                    self.conn_pool.dispose_local()
-                    break
-                except:
-                    # Remove current connection and retry
-                    self.conn_pool.dispose_local()
-                    num_retries += 1
-                    continue
-        finally:
-            self.local.call_chain = []
-        raise
-
-    def _do_call(self, *args, **kwds):
-        try:
-            conn = self.conn_pool.get()
-            fn = conn
-            for attr in self.local.call_chain:
-                fn = getattr(fn, attr)
-            return fn(*args, **kwds)
-        except:
-            self._raise_error(*sys.exc_info())
-
-    def _create_connection(self):
-        raise NotImplementedError()
-
-    def _raise_error(self, *exc_info):
-        raise NotImplementedError()
-
-    def check_connection(self):
-        '''
-        Force get or create connection to check NoCredentialsError
-        '''
-        self.conn_pool.get()
 
 
 class PlatformFactory(object):

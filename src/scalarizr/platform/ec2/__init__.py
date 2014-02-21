@@ -61,7 +61,7 @@ def _create_ec2_connection():
     return conn
 
 
-def _create_s3_connection(self):
+def _create_s3_connection():
     platform = node.__node__['platform']
     region = platform.get_region()
     endpoint = platform._s3_endpoint(region)
@@ -77,7 +77,7 @@ def _create_s3_connection(self):
     return conn
 
 
-class Ec2ConnectionProxy(platform.Proxy):
+class Ec2ConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwargs):
         for retry in range(2):
@@ -86,16 +86,14 @@ class Ec2ConnectionProxy(platform.Proxy):
             except:
                 e = sys.exc_info()[1]
                 if isinstance(e, boto.exception.EC2ResponseError) and e.args[0] == 401:
-                    platform = node.__node__['platform']
-                    platform._ec2_conn_pool.dispose_local()
+                    self.conn_pool.dispose_local()
                     raise InvalidCredentialsError(e)
                 continue
-        platform = node.__node__['platform']
-        platform._ec2_conn_pool.dispose_local()
+        self.conn_pool.dispose_local()
         raise ConnectionError(e)
 
 
-class S3ConnectionProxy(platform.Proxy):
+class S3ConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwargs):
         for retry in range(2):
@@ -104,12 +102,10 @@ class S3ConnectionProxy(platform.Proxy):
             except:
                 e = sys.exc_info()[1]
                 if isinstance(e, boto.exception.S3ResponseError) and e.args[0] == 401:
-                    platform = node.__node__['platform']
-                    platform._s3_conn_pool.dispose_local()
+                    self.conn_pool.dispose_local()
                     raise InvalidCredentialsError(e)
                 continue
-        platform = node.__node__['platform']
-        platform._s3_conn_pool.dispose_local()
+        self.conn_pool.dispose_local()
         raise ConnectionError(e)
 
 
@@ -155,11 +151,11 @@ class Ec2Platform(Ec2LikePlatform):
 
     def get_ec2_conn(self):
         conn = self._ec2_conn_pool.get()
-        return Ec2ConnectionProxy(conn)
+        return Ec2ConnectionProxy(conn, self._ec2_conn_pool)
 
     def get_s3_conn(self):
         conn = self._s3_conn_pool.get()
-        return S3ConnectionProxy(conn)
+        return S3ConnectionProxy(conn, self._s3_conn_pool)
 
     def new_ec2_conn(self):
         """ @rtype: boto.ec2.connection.EC2Connection """
@@ -168,14 +164,12 @@ class Ec2Platform(Ec2LikePlatform):
         key_id, key = self.get_access_keys()
         return boto.ec2.connect_to_region(region, aws_access_key_id=key_id, aws_secret_access_key=key)
 
-
     def new_s3_conn(self):
         region = self.get_region()
         endpoint = self._s3_endpoint(region)
         key_id, key = self.get_access_keys()
         self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
         return boto.connect_s3(host=endpoint, aws_access_key_id=key_id, aws_secret_access_key=key)
-
 
     @property
     def cloud_storage_path(self):
