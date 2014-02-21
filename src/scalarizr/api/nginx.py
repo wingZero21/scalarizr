@@ -711,7 +711,7 @@ class NginxAPI(object):
         config.add('server/listen', str(port))
         config.add('server/server_name', hostname)
 
-        redirect_regex = '^(.*)$ https://%s:%s$request_uri? permanent' % (hostname, ssl_port)
+        redirect_regex = '^(.*)$ https://$host:%s$request_uri$is_args$args? permanent' % ssl_port
         config.add('server/rewrite', redirect_regex)
 
         return config
