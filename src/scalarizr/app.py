@@ -818,6 +818,39 @@ class Service(object):
                 raise ex
 
 
+    def _port_busy(self, port):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.connect(('0.0.0.0', port))
+            sock.close()
+            return True
+        except socket.error:
+            return False
+
+
+    def _select_control_ports(self):
+        defaults = node.__node__['defaults']['base']
+
+        lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
+        api_port = int(lfrp.get('base', {}).get('api_port', defaults['api_port']) \
+                        or defaults['api_port'])
+        messaging_port = int(lfrp.get('base', {}).get('messaging_port', defaults['messaging_port']) \
+                                or defaults['messaging_port'])
+
+        if messaging_port == defaults['messaging_port'] and self._port_busy(messaging_port):
+            messaging_port = 8011
+        if api_port == defaults['api_port'] and self._port_busy(api_port):
+            api_port = 8009
+
+        node.__node__['base'].update({
+            'api_port': api_port,
+            'messaging_port': messaging_port
+            })  
+
+        return api_port != defaults['api_port'] or messaging_port != defaults['messaging_port']    
+
+
+
     def _init_services(self):
         logger = logging.getLogger(__name__)
         cnf = bus.cnf; ini = cnf.rawini
@@ -849,17 +882,12 @@ class Service(object):
         bus.queryenv_service = queryenv
         bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 
-        default_api_port = 8010
-        default_messaging_port = 8013
-        lfrp = queryenv.list_farm_role_params(node.__node__['farm_role_id'])['params']
-        api_port = int(lfrp.get('base', {}).get('api_port', default_api_port) or default_api_port)
-        messaging_port = int(lfrp.get('base', {}).get('messaging_port', default_messaging_port) or default_messaging_port)
+        ports_non_default = self._select_control_ports()
 
         logger.debug("Initialize messaging")
         factory = MessageServiceFactory()
         try:
             params = dict(ini.items("messaging_" + messaging_adp))
-            params[P2pConfigOptions.CONSUMER_URL] = 'http://0.0.0.0:{0}'.format(messaging_port)
             params[P2pConfigOptions.SERVER_ID] = server_id
             params[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.key_path(cnf.DEFAULT_KEY)
 
@@ -879,27 +907,25 @@ class Service(object):
         Storage.maintain_volume_table = True
 
         if not bus.api_server:
-            if api_port == default_api_port:
-                # An auto-fix for problem with API port inheritance by controlled service.
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                try:
-                    sock.connect(('0.0.0.0', api_port))
-                    api_port = 8009
-                    sock.close()
-                except socket.error:
-                    pass
-            STATE['global.api_port'] = api_port
             api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes),
                                                 cnf.key_path(cnf.DEFAULT_KEY))
             class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
                 pass
             bus.api_server = wsgiref.simple_server.make_server('0.0.0.0',
-                                                api_port, api_app, server_class=ThreadingWSGIServer)
+                                node.__node__['api_port'], 
+                                api_app, 
+                                server_class=ThreadingWSGIServer)
+
+        if ports_non_default:
+            msg_service.get_producer().send_message('HostUpdate', {
+                'base': {
+                    'api_port': node.__node__['base']['api_port'],
+                    'messaging_port': node.__node__['base']['messaging_port']}})
 
 
     def _check_snmp(self):
         if self._running and linux.os['family'] != 'Windows' \
-                                    and not self._snmp_pid and time.time() >= _snmp_scheduled_start_time:
+                and not self._snmp_pid and time.time() >= _snmp_scheduled_start_time:
             self._start_snmp_server()
 
 
