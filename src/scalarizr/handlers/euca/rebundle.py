@@ -70,7 +70,7 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
                     '--exclude', ','.join(image.excludes),
                     '--fstab', fstab_path,
                     '--prefix', self._image_name,
-                    '/'
+                    '--volume', '/'
                 ),
                 env=environ
             )[0]
