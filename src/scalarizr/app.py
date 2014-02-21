@@ -912,7 +912,7 @@ class Service(object):
             class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
                 pass
             bus.api_server = wsgiref.simple_server.make_server('0.0.0.0',
-                                node.__node__['api_port'], 
+                                node.__node__['base']['api_port'], 
                                 api_app, 
                                 server_class=ThreadingWSGIServer)
 
