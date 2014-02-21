@@ -11,6 +11,7 @@ from scalarizr.util import Singleton, software
 from scalarizr import exceptions
 from scalarizr.util import initdv2
 from scalarizr.util import firstmatched
+from scalarizr.api import BehaviorAPI
 
 LOG = logging.getLogger(__name__)
 
@@ -68,10 +69,11 @@ class CatalinaInitScript(initdv2.ParametrizedInitScript):
                 pass
 
 
-class TomcatAPI(object):
+class TomcatAPI(BehaviorAPI):
 
     __metaclass__ = Singleton
-    last_check = False
+
+    behavior = 'tomcat'
 
     def _find_service(self):
         # try to read CATALINA_HOME from environment
@@ -129,28 +131,36 @@ class TomcatAPI(object):
         return self.service.status()
 
     @classmethod
-    def check_software(cls, installed_packages=None):
-        try:
-            TomcatAPI.last_check = False
-            os_name = linux.os['name'].lower()
-            os_vers = linux.os['version']
-            if os_name == 'ubuntu':
-                if os_vers >= '12':
-                    pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
-                elif os_vers >= '10':
-                    pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed_packages)
-            elif os_name == 'debian':
-                if os_vers >= '7':
-                    pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
-                elif os_vers >= '6':
-                    pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed_packages)
-            elif linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin-webapps'], installed_packages)
-            else:
-                raise exceptions.UnsupportedBehavior('tomcat',
-                    "'tomcat' behavior is only supported on " +\
-                    "Debian, RedHat and Oracle operating system family"
-                )
-            TomcatAPI.last_check = True
-        except pkgmgr.DependencyError as e:
-            software.handle_dependency_error(e, 'tomcat')
+    def do_check_software(cls, installed_packages=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '12':
+                pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
+            elif os_vers >= '10':
+                pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed_packages)
+        elif os_name == 'debian':
+            if os_vers >= '7':
+                pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
+            elif os_vers >= '6':
+                pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed_packages)
+        elif linux.os.redhat_family or linux.os.oracle_family:
+            pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin-webapps'], installed_packages)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, (
+                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+            )
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        if isinstance(e, pkgmgr.VersionMismatchError):
+            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
+            msg = (
+                '{pkg}-{ver} is not supported on {os}. Supported:\n'
+                '\tUbuntu 10.04, CentOS, RedHat, Oracle, Amazon: ==6\n'
+                '\tUbuntu 12.04, Debian: ==7').format(
+                        pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
+            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, e)
+

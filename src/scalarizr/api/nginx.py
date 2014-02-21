@@ -26,6 +26,7 @@ from scalarizr import exceptions
 from scalarizr.api import operation
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import disttool
+from scalarizr.api import BehaviorAPI
 
 
 __nginx__ = __node__['nginx']
@@ -262,10 +263,11 @@ def _fetch_ssl_certificate(ssl_certificate_id):
     return update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
 
 
-class NginxAPI(object):
+class NginxAPI(BehaviorAPI):
 
     __metaclass__ = Singleton
-    last_check = False
+
+    behavior = 'www'
 
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
         """
@@ -1837,17 +1839,10 @@ class NginxAPI(object):
                 self._reload_service()
 
     @classmethod
-    def check_software(cls, installed_packages=None):
-        try:
-            NginxAPI.last_check = False
-            if linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(['nginx'], installed_packages)
-            else:
-                raise exceptions.UnsupportedBehavior('www',
-                    "'www' behavior is only supported on " +\
-                    "Debian, RedHat or Oracle operating system family"
-                )
-            NginxAPI.last_check = True
-        except pkgmgr.DependencyError as e:
-            software.handle_dependency_error(e, 'www')
+    def do_check_software(cls, installed_packages=None):
+        pkgmgr.check_dependency(['nginx'], installed_packages)
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

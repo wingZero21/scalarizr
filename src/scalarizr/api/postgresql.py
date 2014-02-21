@@ -29,6 +29,7 @@ from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.util import Singleton, software
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 
 
 LOG = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ OPT_REPLICATION_MASTER = postgresql_svc.OPT_REPLICATION_MASTER
 __postgresql__ = postgresql_svc.__postgresql__
 
 
-class PostgreSQLAPI(object):
+class PostgreSQLAPI(BehaviorAPI):
     """
     Basic API for managing PostgreSQL 9.x service.
 
@@ -50,7 +51,8 @@ class PostgreSQLAPI(object):
         apache
     """
     __metaclass__ = Singleton
-    last_check = False
+
+    behavior = 'postgresql'
 
     replication_status_query = '''SELECT
     CASE WHEN pg_last_xlog_receive_location() = pg_last_xlog_replay_location()
@@ -384,4 +386,72 @@ class PostgreSQLAPI(object):
             PostgreSQLAPI.last_check = True
         except pkgmgr.DependencyError as e:
             software.handle_dependency_error(e, 'postgresql')
+
+    @classmethod
+    def do_check_software(cls, installed_packages=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '12':
+                required_list = [
+                    ['postgresql-9.1', 'postgresql-client-9.1'],
+                    ['postgresql>=9.1,<9.3', 'postgresql-client>=9.1,<9.3'],
+                ]
+            elif os_vers >= '10':
+                required_list = [
+                    ['postgresql-9.1', 'postgresql-client-9.1'],
+                    ['postgresql>=9.1,<9.2', 'postgresql-client>=9.1,<9.2'],
+                ]
+        elif os_name == 'debian':
+                required_list = [
+                    ['postgresql-9.2', 'postgresql-client-9.2'],
+                    ['postgresql>=9.2,<9.3', 'postgresql-client>=9.2,<9.3'],
+                ]
+        elif os_name == 'centos':
+            if os_vers >= '6':
+                required_list = [
+                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                    [
+                        'postgresql>=9.1,<9.3',
+                        'postgresql-server>=9.1,<9.3',
+                        'postgresql-devel>=9.1,<9.3'
+                    ]
+                ]
+            elif os_vers >= '5':
+                required_list = [
+                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                    [
+                        'postgresql>=9.2,<9.3',
+                        'postgresql-server>=9.2,<9.3',
+                        'postgresql-devel>=9.2,<9.3'
+                    ]
+                ]
+        elif linux.os.redhat_family or linux.os.oracle_family:
+            required_list = [
+                ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                [
+                    'postgresql>=9.2,<9.3',
+                    'postgresql-server>=9.2,<9.3',
+                    'postgresql-devel>=9.2,<9.3'
+                ]
+            ]
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, (
+                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+            )
+        pkgmgr.check_any_dependency(required_list, installed_packages)
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        if isinstance(e, pkgmgr.VersionMismatchError):
+            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
+            msg = (
+                '{pkg}-{ver} is not supported on {os}. Supported:\n'
+                '\tUbuntu 10.04: >=9.1,<9.2\n'
+                '\tUbuntu 12.04, CentOS 6: >=9.1,<9.3\n'
+                '\tDebian, CentOS 5, Oracle, RedHat, Amazon: >=9.2,<9.3').format(
+                        pkg=pkg, ver=ver, os=linux.os['name'])
+            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

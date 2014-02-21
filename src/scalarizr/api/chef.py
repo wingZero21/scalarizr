@@ -6,6 +6,7 @@ from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton, software, initdv2
 from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 
 
 class ChefInitScript(initdv2.ParametrizedInitScript):
@@ -68,10 +69,11 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
 initdv2.explore('chef', ChefInitScript)
 
 
-class ChefAPI(object):
+class ChefAPI(BehaviorAPI):
 
     __metaclass__ = Singleton
-    last_check = False
+
+    behavior = 'chef'
 
     def __init__(self):
         self.service = ChefInitScript()
@@ -97,17 +99,10 @@ class ChefAPI(object):
         return self.service.status()
 
     @classmethod
-    def check_software(cls, installed_packages=None):
-        try:
-            ChefAPI.last_check = False
-            if linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(['chef'], installed_packages)
-            else:
-                raise exceptions.UnsupportedBehavior('chef',
-                    "'chef' behavior is only supported on " +\
-                    "Debian, RedHat or Oracle operating system family"
-                )
-            ChefAPI.last_check = True
-        except pkgmgr.DependencyError as e:
-            software.handle_dependency_error(e, 'chef')
+    def do_check_software(cls, installed_packages=None):
+        pkgmgr.check_dependency(['chef'], installed_packages)
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

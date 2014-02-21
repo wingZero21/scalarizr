@@ -21,14 +21,16 @@ from scalarizr.util import Singleton, software
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 
 
-class MySQLAPI(object):
+class MySQLAPI(BehaviorAPI):
     """
     @xxx: reporting is a pain
     """
     __metaclass__ = Singleton
-    last_check = False
+
+    behavior = ['mysql', 'mysql2']
 
     error_messages = {
         'empty': "'%s' can't be blank",
@@ -207,26 +209,35 @@ class MySQLAPI(object):
                 async=async, exclusive=True)
 
     @classmethod
-    def check_software(cls, installed_packages=None):
-        try:
-            MySQLAPI.last_check = False
-            if linux.os.debian_family:
-                pkgmgr.check_dependency(
-                    ['mysql-client>=5.0,<5.6', 'mysql-server>5.0,<5.6'],
-                    installed_packages,
-                    ['apparmor']
-                )
-            elif linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(
-                    ['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'],
-                    installed_packages
-                )
-            else:
-                raise exceptions.UnsupportedBehavior('mysqldb2',
-                    "'mysqldb2' behavior is only supported on " +\
-                    "Debian, RedHat or Oracle operating system family"
-                )
-            MySQLAPI.last_check = True
-        except pkgmgr.DependencyError as e:
-            software.handle_dependency_error(e, 'mysql')
+    def do_check_software(cls, installed_packages=None):
+        if linux.os.debian_family:
+            pkgmgr.check_dependency(
+                ['mysql-client>=5.0,<5.6', 'mysql-server>5.0,<5.6'],
+                installed_packages,
+                ['apparmor']
+            )
+        elif linux.os.redhat_family or linux.os.oracle_family:
+            pkgmgr.check_dependency(
+                ['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'],
+                installed_packages
+            )
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, (
+                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+            )
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        if isinstance(e, pkgmgr.VersionMismatchError):
+            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
+            msg = (
+                '{pkg}-{ver} is not supported on {os}. Supported:\n'
+                '\tUbuntu 10.04, CentOS 6, RedHat: >=5.1,<5,2\n'
+                '\tUbuntu 12.04, Debian 7, Amazon: >=5.5,<5.6\n'
+                '\tDebian 6: >=5.1,<5.6\n'
+                '\tCentOS 5: >=5.0,<5.1\n'
+                '\tOracle: >=5.0,<5.1').format(pkg=pkg, ver=ver, os=linux.os['name'])
+            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

@@ -6,15 +6,17 @@ from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton, software
 from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 
 
 LOG = logging.getLogger(__name__)
 
 
-class MemcachedAPI(object):
+class MemcachedAPI(BehaviorAPI):
 
     __metaclass__ = Singleton
-    last_check = False
+
+    behavior = 'memcached'
 
     def __init__(self):
         self.service = MemcachedInitScript()
@@ -40,17 +42,10 @@ class MemcachedAPI(object):
         return self.service.status()
 
     @classmethod
-    def check_software(cls, installed_packages=None):
-        try:
-            MemcachedAPI.last_check = False
-            if linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(['memcached'], installed_packages)
-            else:
-                raise exceptions.UnsupportedBehavior('memcached',
-                    "'memcached' behavior is only supported on " +\
-                    "Debian, RedHat or Oracle operating system family"
-                )
-            MemcachedAPI.last_check = True
-        except pkgmgr.DependencyError as e:
-            software.handle_dependency_error(e, 'memcached')
+    def do_check_software(cls, installed_packages=None):
+        pkgmgr.check_dependency(['memcached'], installed_packages)
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

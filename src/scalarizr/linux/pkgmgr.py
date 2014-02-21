@@ -50,7 +50,7 @@ class PackageMgr(object):
         :returns: dict
         Example:
             {
-                'python':'2.6.7-ubuntu1',
+                'python': '2.6.7-ubuntu1',
             }
         '''
         raise NotImplementedError()
@@ -511,24 +511,22 @@ def check_dependency(required, installed_packages=None, conflicted_packages=None
     :param conflicted_packages: list
         Same as required
     '''
-    if installed_packages == None:
-        installed_packages = package_mgr().list()
-    if conflicted_packages == None:
-        conflicted_packages = list()
+    installed_packages = installed_packages or package_mgr().list()
+    conflicted_packages = conflicted_packages or list()
     for conflict in parse_requirements(conflicted_packages):
         name = conflict.project_name
-        if name in installed_packages and installed_packages[name] in conflict:
-            raise ConflictError(name, installed_packages[name])
+        if name in installed_packages:
+            vers = installed_packages[name]
+            if vers in conflict:
+                raise ConflictError(name, vers)
     for requirement in parse_requirements(required):
         name = requirement.project_name
+        required_vers = ','.join([''.join(_) for _ in requirement.specs])
         if name not in installed_packages:
-            raise NotInstalledError(name, ','.join([''.join(_) for _ in requirement.specs]))
-        if installed_packages[name] not in requirement:
-            raise VersionMismatchError(
-                name,
-                installed_packages[name],
-                ','.join([''.join(_) for _ in requirement.specs])
-            )
+            raise NotInstalledError(name, required_vers)
+        vers = installed_packages[name]
+        if vers not in requirement:
+            raise VersionMismatchError(name, vers, required_vers)
 
 
 def check_any_dependency(required_list, installed_packages=None, conflicted_packages=None):

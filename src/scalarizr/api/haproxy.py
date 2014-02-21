@@ -17,6 +17,7 @@ from scalarizr import linux
 from scalarizr.handlers import get_role_servers
 from scalarizr.util import Singleton, software
 from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
@@ -45,12 +46,13 @@ _rule_backend = validate.rule(re=r'^role:\d+$')
 _rule_hc_target = validate.rule(re='^[tcp|http]+:\d+$')
 
 
-class HAProxyAPI(object):
+class HAProxyAPI(BehaviorAPI):
     """
     Placeholder
     """
     __metaclass__ = Singleton
-    last_check = False
+
+    behavior = 'haproxy'
 
     def __init__(self, path=None):
         self.path_cfg = path
@@ -582,17 +584,10 @@ class HAProxyAPI(object):
         return res
 
     @classmethod
-    def check_software(cls, installed_packages=None):
-        try:
-            HAProxyAPI.last_check = False
-            if linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(['haproxy'], installed_packages)
-            else:
-                raise exceptions.UnsupportedBehavior('haproxy',
-                    "'haproxy' behavior is only supported on " +\
-                    "Debian, RedHat or Oracle operating system family"
-                )
-            HAProxyAPI.last_check = True
-        except pkgmgr.DependencyError as e:
-            software.handle_dependency_error(e, 'haproxy')
+    def do_check_software(cls, installed_packages=None):
+        pkgmgr.check_dependency(['haproxy'], installed_packages)
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

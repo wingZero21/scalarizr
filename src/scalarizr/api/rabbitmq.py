@@ -6,12 +6,14 @@ from scalarizr import linux
 from scalarizr.util import Singleton, software
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 
 
-class RabbitMQAPI(object):
+class RabbitMQAPI(BehaviorAPI):
 
     __metaclass__ = Singleton
-    last_check = False
+
+    behavior = 'rabbitmq'
 
     def __init__(self):
         self.service = rabbitmq_module.RabbitMQInitScript()
@@ -48,30 +50,38 @@ class RabbitMQAPI(object):
         return new_password
 
     @classmethod
-    def check_software(cls, installed_packages=None):
-        try:
-            RabbitMQAPI.last_check = False
-            os_name = linux.os['name'].lower()
-            os_vers = linux.os['version']
-            if os_name == 'ubuntu':
-                if os_vers >= '12':
-                    pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.2'], installed_packages)
-                elif os_vers >= '10':
-                    pkgmgr.check_dependency(['rabbitmq-server>=2.6,<2.7'], installed_packages)
-            elif os_name == 'debian':
+    def do_check_software(cls, installed_packages=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '12':
                 pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.2'], installed_packages)
-            elif linux.os.redhat_family:
-                if os_vers >= '6':
-                    pkgmgr.check_dependency(['rabbitmq>=3.1,<3.2', 'erlang'], installed_packages)
-                elif os_vers >= '5':
-                    raise exceptions.UnsupportedBehavior('rabbitmq',
-                            "RabbitMQ doesn't supported on %s-5" % linux.os['name'])
-            else:
-                raise exceptions.UnsupportedBehavior('rabbitmg',
-                        "'rabbitmq' behavior is only supported on " +\
-                        "Debian and RedHat operating system family"
-                )
-            RabbitMQAPI.last_check = True
-        except pkgmgr.DependencyError as e:
-            software.handle_dependency_error(e, 'rabbitmq')
+            elif os_vers >= '10':
+                pkgmgr.check_dependency(['rabbitmq-server>=2.6,<2.7'], installed_packages)
+        elif os_name == 'debian':
+            pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.2'], installed_packages)
+        elif linux.os.redhat_family:
+            if os_vers >= '6':
+                pkgmgr.check_dependency(['rabbitmq>=3.1,<3.2', 'erlang'], installed_packages)
+            elif os_vers >= '5':
+                raise exceptions.UnsupportedBehavior(cls.behavior,
+                        "RabbitMQ doesn't supported on %s-5" % linux.os['name'])
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, (
+                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+            )
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        if isinstance(e, pkgmgr.VersionMismatchError):
+            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
+            msg = (
+                '{pkg}-{ver} is not supported on {os}. Supported:\n'
+                '\tUbuntu 10.04 >=2.6,<2.7\n'
+                '\tUbuntu 12.04, Debian: >=3.0,<3.2\n'
+                '\tCentOS-6, RedHat-6, Amazon: >=3.1,<3.2').format(
+                    pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
+            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

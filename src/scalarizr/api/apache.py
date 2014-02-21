@@ -36,6 +36,7 @@ from scalarizr.util import Singleton, software
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 from scalarizr.api import operation
 
 
@@ -117,7 +118,7 @@ class ApacheError(BaseException):
     pass
 
 
-class ApacheAPI(object):
+class ApacheAPI(BehaviorAPI):
     """
     Basic API for configuring Apache VirtualHosts, querying statistics and controlling service status.
 
@@ -128,10 +129,11 @@ class ApacheAPI(object):
 
     __metaclass__ = Singleton
 
+    behavior = 'app'
+
     service = None
     mod_ssl = None
     current_open_ports = None
-    last_check = False
 
     def __init__(self):
         self.service = initdv2.lookup("apache")
@@ -814,21 +816,27 @@ class ApacheAPI(object):
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
 
     @classmethod
-    def check_software(cls, installed_packages=None):
-        try:
-            ApacheAPI.last_check = False
-            if linux.os.debian_family:
-                pkgmgr.check_dependency(['apache2>=2.2,<2.3'], installed_packages)
-            elif linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(['httpd>=2.2,<2.3'], installed_packages)
-            else:
-                raise exceptions.UnsupportedBehavior('app',
-                    "'app' behavior is only supported on " +\
-                    "Debian, RedHat or Oracle operating system family"
-                )
-            ApacheAPI.last_check = True
-        except pkgmgr.DependencyError as e:
-            software.handle_dependency_error(e, 'app')
+    def do_check_software(cls, installed_packages=None):
+        if linux.os.debian_family:
+            pkgmgr.check_dependency(['apache2>=2.2,<2.3'], installed_packages)
+        elif linux.os.redhat_family or linux.os.oracle_family:
+            pkgmgr.check_dependency(['httpd>=2.2,<2.3'], installed_packages)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, (
+                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+            )
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        if isinstance(e, pkgmgr.VersionMismatchError):
+            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
+            msg = (
+                '{pkg}-{ver} is not supported on {os}. Supported:\n'
+                '\tUbuntu, Debian, CentOS, OEL, RHEL, Amazon: {req_ver}').format(
+                    pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
+            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, e)
 
 
 class BasicApacheConfiguration(object):
