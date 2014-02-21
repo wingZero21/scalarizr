@@ -917,10 +917,13 @@ class Service(object):
                                 server_class=ThreadingWSGIServer)
 
         if ports_non_default:
-            msg_service.get_producer().send_message('HostUpdate', {
+            msg = msg_service.new_message('HostUpdate', None, {
                 'base': {
                     'api_port': node.__node__['base']['api_port'],
-                    'messaging_port': node.__node__['base']['messaging_port']}})
+                    'messaging_port': node.__node__['base']['messaging_port']
+                }
+            })
+            msg_service.get_producer().send(Queues.CONTROL, msg)
 
 
     def _check_snmp(self):
