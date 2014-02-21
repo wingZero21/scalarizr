@@ -423,6 +423,26 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if message.local_ip != __node__['private_ip']:
             return
 
+        if __node__['platform'] == 'cloudstack':
+            # Important!
+            # After following code run, server will loose network for some time
+            # Fixes: SMNG-293
+            conn = __node__['cloudstack']['new_conn']
+            vm = conn.listVirtualMachines(id=__node__['cloudstack']['instance_id'])[0]
+            result = conn.listPublicIpAddresses(ipAddress=vm.publicip)
+            if result:
+                try:
+                    conn.disableStaticNat(result[0].id)
+                except:
+                    self._logger.warn('Failed to disable static NAT: %s',
+                            str(sys.exc_info()[1]))
+
+        suspend = message.body.get('suspend')
+        suspend = suspend and int(suspend) or False
+
+        if suspend:
+            return
+
         volumes = message.body.get('volumes', [])
         volumes = volumes or []
         
@@ -434,20 +454,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             except:
                 self._logger.warn('Failed to detach volume %s: %s', 
                         volume.id, sys.exc_info()[1])
-
-        if __node__['platform'] == 'cloudstack':
-            # Important! 
-            # After following code run, server will loose network for some time
-            # Fixes: SMNG-293
-            conn = __node__['cloudstack']['new_conn']
-            vm = conn.listVirtualMachines(id=__node__['cloudstack']['instance_id'])[0]
-            result = conn.listPublicIpAddresses(ipAddress=vm.publicip)
-            if result:
-                try:
-                    conn.disableStaticNat(result[0].id)
-                except:
-                    self._logger.warn('Failed to disable static NAT: %s', 
-                            str(sys.exc_info()[1]))
 
         elif __node__['platform'] == 'openstack':
             conn = __node__['openstack']['new_nova_connection']
