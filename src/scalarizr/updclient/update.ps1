@@ -53,7 +53,7 @@ param (
     $fileName
 )
     log "Starting installer"
-    $proc = start-process -wait $fileName /S
+    $proc = start-process -wait -noNewWindow $fileName /S
     if ($proc.exitCode) {
         throw "Installer $(split-path -leaf $fileName) exited with code: $($proc.ExitCode)"
     }
@@ -83,6 +83,7 @@ param (
 function acceptHandleUtilEula {
     $path = "hkcu:\software\sysinternals\handle"
     if (-not (test-path $path)) {
+        new-item $(split-path $path -parent)
         new-item $path
     }
     set-itemproperty $path "EulaAccepted" "1"
