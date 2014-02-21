@@ -455,7 +455,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                 self._logger.warn('Failed to detach volume %s: %s', 
                         volume.id, sys.exc_info()[1])
 
-        elif __node__['platform'] == 'openstack':
+        if __node__['platform'] == 'openstack':
             conn = __node__['openstack']['new_nova_connection']
             conn.reconnect()
 
