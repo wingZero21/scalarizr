@@ -294,7 +294,9 @@ function main {
             try {
                 setSzrState "in-progress/install"
                 runInstaller $packageFile
+                sleep 1  # cause sometimes we've got false positives
                 if (-not (test-path "$installDir\src")) {
+                    dir $installDir
                     throw "Installer completed without installing new files"
                 }
                 setSzrState "in-progress/restart"
