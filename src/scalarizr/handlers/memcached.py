@@ -61,26 +61,11 @@ def get_cache_size():
             return '400'
 
 
-class MemcachedInitScript(initdv2.ParametrizedInitScript):
-    def __init__(self):
-
-        pid_file = None
-        if disttool.is_redhat_based():
-            pid_file = "/var/run/memcached/memcached.pid"
-        elif disttool.is_debian_based():
-            pid_file = "/var/run/memcached.pid"
-
-        initd_script = '/etc/init.d/memcached'
-        if not os.path.exists(initd_script):
-            raise HandlerError("Cannot find Memcached init script at %s. Make sure that memcached is installed" % initd_script)
-
-        initdv2.ParametrizedInitScript.__init__(self, 'memcached', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
-
-initdv2.explore('memcached', MemcachedInitScript)
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MEMCACHED
 
+
 def get_handlers():
-    return [MemcachedHandler()] if memcached_api.MemcachedAPI.last_check else []
+    return [MemcachedHandler()] if memcached_api.MemcachedAPI.software_supported else []
 
 class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 

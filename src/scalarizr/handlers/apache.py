@@ -28,7 +28,7 @@ __apache__ = __node__["apache"]
 
 
 def get_handlers():
-    return [ApacheHandler()] if apache_api.ApacheAPI.last_check else []
+    return [ApacheHandler()] if apache_api.ApacheAPI.software_supported else []
 
 
 class ApacheHandler(Handler):

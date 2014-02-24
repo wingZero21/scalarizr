@@ -51,7 +51,7 @@ class RabbitMQMessages:
 
 
 def get_handlers():
-    return [RabbitMQHandler()] if rabbitmq_api.RabbitMQAPI.last_check else []
+    return [RabbitMQHandler()] if rabbitmq_api.RabbitMQAPI.software_supported else []
 
 
 class RabbitMQHandler(ServiceCtlHandler):

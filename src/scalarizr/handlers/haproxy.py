@@ -20,7 +20,7 @@ import hashlib
 
 
 def get_handlers():
-    return [HAProxyHandler()] if haproxy_api.HAProxyAPI.last_check else []
+    return [HAProxyHandler()] if haproxy_api.HAProxyAPI.software_supported else []
 
 LOG = logging.getLogger(__name__)
 
