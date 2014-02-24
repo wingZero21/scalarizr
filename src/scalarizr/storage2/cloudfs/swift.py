@@ -18,7 +18,7 @@ LOG = logging.getLogger(__name__)
 class SwiftFileSystem(CloudFileSystem):
 
     def _get_connection(self):
-        return __node__['openstack']['connect_swift']
+        return __node__['openstack'].connect_swift()
 
 
     def ls(self, remote_path):

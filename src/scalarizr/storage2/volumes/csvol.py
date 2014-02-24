@@ -68,7 +68,7 @@ class CSVolume(base.Volume):
             'to perform this operation'})
 
     def _new_conn(self):
-        return __cloudstack__['connect_cloudstack']
+        return __cloudstack__.connect_cloudstack()
 
     def _check_connection(self):
         self._conn = self._new_conn()
@@ -381,7 +381,7 @@ class CSSnapshot(base.Snapshot):
 
     def _new_conn(self):
         try:
-            return __cloudstack__['connect_cloudstack']
+            return __cloudstack__.connect_cloudstack()
         except:
             pass
 

@@ -56,7 +56,7 @@ def _create_ec2_connection():
         )
         if not conn:
             raise ConnectionError('Invalid region: %s' % region)
-    except (NoCredentialsError, PlatformError, boto.exception.NoAuthHandlerFound):
+    except (PlatformError, boto.exception.NoAuthHandlerFound):
         raise NoCredentialsError(sys.exc_info()[1])
     return conn
 

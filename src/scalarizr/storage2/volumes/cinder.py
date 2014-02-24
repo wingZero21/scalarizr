@@ -50,11 +50,11 @@ class CinderVolume(base.Volume):
 
     def _check_cinder_connection(self):
         if not self._cinder:
-            self._cinder = __openstack__['connect_cinder']
+            self._cinder = __openstack__.connect_cinder()
 
     def _check_nova_connection(self):
         if not self._nova:
-            self._nova = __openstack__['connect_nova']
+            self._nova = __openstack__.connect_nova()
 
     def __init__(self,
                  size=None,
@@ -76,8 +76,8 @@ class CinderVolume(base.Volume):
         self.error_messages.update({
             'no_connection': 'Cinder connection should be available '
             'to perform this operation'})
-        self._cinder = __openstack__['connect_cinder']
-        self._nova = __openstack__['connect_nova']
+        self._cinder = __openstack__.connect_cinder()
+        self._nova = __openstack__.connect_nova()
         # http://www.linux-kvm.org/page/Hotadd_pci_devices
         for mod in ('acpiphp', 'pci_hotplug'):
             try:
@@ -389,7 +389,7 @@ class CinderSnapshot(base.Snapshot):
 
     def __init__(self, **kwds):
         base.Snapshot.__init__(self, **kwds)
-        self._cinder = __openstack__['connect_cinder']
+        self._cinder = __openstack__.connect_cinder()
 
     def _status(self):
         self._check_cinder_connection()
