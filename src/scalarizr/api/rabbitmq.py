@@ -3,7 +3,7 @@ from scalarizr.services.rabbitmq import rabbitmq as rabbitmq_sgt
 from scalarizr.services import rabbitmq as rabbitmq_module
 from scalarizr import rpc
 from scalarizr import linux
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI

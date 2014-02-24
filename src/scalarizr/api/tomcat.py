@@ -7,7 +7,7 @@ from scalarizr import rpc
 from scalarizr.node import __node__
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr import exceptions
 from scalarizr.util import initdv2
 from scalarizr.util import firstmatched

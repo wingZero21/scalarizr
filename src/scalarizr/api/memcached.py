@@ -1,10 +1,10 @@
 import logging
 
 from scalarizr import rpc
-from scalarizr.handlers.memcached import MemcachedInitScript
 from scalarizr import linux
+from scalarizr.util import system2, initdv2, disttool
 from scalarizr.linux import pkgmgr
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
 
@@ -48,4 +48,24 @@ class MemcachedAPI(BehaviorAPI):
     @classmethod
     def do_handle_check_software_error(cls, e):
         raise exceptions.UnsupportedBehavior(cls.behavior, e)
+
+
+class MemcachedInitScript(initdv2.ParametrizedInitScript):
+
+    def __init__(self):
+        pid_file = None
+        if disttool.is_redhat_based():
+            pid_file = "/var/run/memcached/memcached.pid"
+        elif disttool.is_debian_based():
+            pid_file = "/var/run/memcached.pid"
+
+        initd_script = '/etc/init.d/memcached'
+        if not os.path.exists(initd_script):
+            msg = "Cannot find Memcached init script at %s. Make sure that memcached is installed"
+            raise HandlerError(msg % initd_script)
+
+        initdv2.ParametrizedInitScript.__init__(self,
+                'memcached', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
+
+initdv2.explore('memcached', MemcachedInitScript)
 

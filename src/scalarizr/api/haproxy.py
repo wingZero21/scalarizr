@@ -15,7 +15,7 @@ from scalarizr.linux import iptables, pkgmgr
 from scalarizr import rpc
 from scalarizr import linux
 from scalarizr.handlers import get_role_servers
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
 

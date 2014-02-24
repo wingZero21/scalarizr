@@ -15,7 +15,7 @@ from scalarizr import util
 from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.util.cryptotool import pwgen
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr.linux import pkgmgr
 from scalarizr.services import mongodb as mongo_svc
 from scalarizr import exceptions

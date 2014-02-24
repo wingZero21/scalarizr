@@ -26,7 +26,7 @@ from scalarizr.api import operation
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services.postgresql import PSQL, PG_DUMP, SU_EXEC
 from scalarizr.storage2.cloudfs import LargeTransfer
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI

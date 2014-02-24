@@ -4,7 +4,7 @@ import signal
 from scalarizr import rpc
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
-from scalarizr.util import Singleton, software, initdv2
+from scalarizr.util import Singleton, initdv2
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
 

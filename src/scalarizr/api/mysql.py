@@ -17,7 +17,7 @@ from scalarizr.services import backup as backup_module
 from scalarizr.services import ServiceError
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.handlers import build_tags
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions

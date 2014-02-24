@@ -32,7 +32,7 @@ from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import system2, initdv2
 from scalarizr.util import wait_until, dynimp, PopenError
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 from scalarizr import exceptions

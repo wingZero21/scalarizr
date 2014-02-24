@@ -24,7 +24,7 @@ from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr import node
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI

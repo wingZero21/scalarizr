@@ -4,7 +4,7 @@ import logging
 from scalarizr import linux
 from scalarizr.api import mysql
 from scalarizr.linux import pkgmgr
-from scalarizr.util import Singleton, software
+from scalarizr.util import Singleton
 from scalarizr import exceptions
 
 

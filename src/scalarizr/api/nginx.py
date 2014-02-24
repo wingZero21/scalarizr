@@ -17,7 +17,6 @@ from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
-from scalarizr.util import software
 from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
