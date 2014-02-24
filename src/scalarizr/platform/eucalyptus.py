@@ -170,14 +170,6 @@ class EucaPlatform(Ec2Platform):
             self._ec2_cert = cnf.read_key(CLOUD_CERT, private=False)
         return self._ec2_cert
 
-    def get_ec2_conn(self):
-        conn = self._ec2_conn_pool.get()
-        return Ec2ConnectionProxy(conn, self._ec2_conn_pool)
-
-    def get_s3_conn(self):
-        conn = self._s3_conn_pool.get()
-        return S3ConnectionProxy(conn, self._s3_conn_pool)
-
     def new_ec2_conn(self):
         ''' @rtype: boto.ec2.connection.EC2Connection '''
         self._logger.debug('Creating eucalyptus ec2 connection')
