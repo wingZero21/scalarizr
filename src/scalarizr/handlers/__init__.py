@@ -132,7 +132,7 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.RABBITMQ)
                 elif name == 'mongodb' and Version('2.0') <= version < Version('2.5'):
                     handlers.append(config.BuiltinBehaviours.MONGODB)
-                elif name == 'apache' and Version('2.0') <= version < Version('2.3'):
+                elif name == 'apache' and Version('2.0') <= version < Version('2.5'):  # experimental for ubuntu1304
                     handlers.append(config.BuiltinBehaviours.APP)
                 elif name == 'haproxy' and Version('1.3') < version < Version('1.5'):
                     handlers.append(config.BuiltinBehaviours.HAPROXY)

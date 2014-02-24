@@ -136,7 +136,7 @@ def mysql_software_info():
 explore('mysql', mysql_software_info)
 
 def nginx_software_info():
-    binary = which('nginx', '/usr/local/nginx/sbin')
+    binary = which('nginx', path_append='/usr/local/nginx/sbin')
     if not binary:
         raise SoftwareError("Can't find executable for Nginx server")
 
@@ -442,7 +442,7 @@ def chef_software_info():
     if not binary:
         raise SoftwareError("Can't find executable for chef client")
 
-    version_string = linux.system((binary, '-v'), shell=True)[0].strip()
+    version_string = linux.system((binary, '-v'))[0].strip()
     if not version_string:
         raise SoftwareError
 

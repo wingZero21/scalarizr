@@ -798,9 +798,14 @@ class Service(object):
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
                                  "SYSTEM\\Setup\\Status\\SysprepStatus", 0,
                                  winreg.KEY_READ) as key:
+                gen_prev_state = gen_state = None
                 while True:
+                    gen_prev_state = gen_state
                     gen_state = winreg.QueryValueEx(key, "GeneralizationState")[0]
                     if gen_state == 7:
+                        if gen_prev_state:
+                            # Waiting for shutdown
+                            time.sleep(600)
                         break
                     time.sleep(1)
                     self._logger.debug('Waiting for sysprep completion. '
@@ -1173,6 +1178,8 @@ if 'Windows' == linux.os['family']:
 
 
         def SvcShutdown(self):
+            if node.__node__['state'] != 'running':
+                return          
             Flag.set(Flag.REBOOT)
             srv = bus.messaging_service
             message = srv.new_message(Messages.WIN_HOST_DOWN)

@@ -159,6 +159,15 @@ class SystemAPI(object):
         '''
         assert hostname
         system2(('hostname', hostname))
+        with open(self._HOSTNAME, 'w+') as fp:
+            fp.write(hostname) 
+        hosts = dns.HostsFile()
+        if not hosts.resolve('localhost'):
+            hosts.map('127.0.0.1', 'localhost', hostname)
+        else:
+            hosts.alias('localhost', hostname)
+
+
         '''
         TODO: test and correct this code 
         # changing permanent hostname
