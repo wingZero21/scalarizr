@@ -862,10 +862,10 @@ class Service(object):
                 except exceptions.UnsupportedBehavior as e:
                     logger.error(e)
                     node.__node__['messaging'].send(
-                        'OutOfTheService',
+                        'RuntimeError',
                         body={
-                            'error':'Software error',
-                            'details':str(e)
+                            'code': 'UnsupportedBehavior',
+                            'message': str(e)
                         }
                     )
 
