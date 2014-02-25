@@ -3,6 +3,7 @@
 !addplugindir "plugins"
 !include "EnvVarUpdate.nsh"
 !include "x64.nsh"
+!include "explode.nsh"
 !include "VerCmp.nsh"
 !include "TextFunc.nsh"
 !insertmacro ConfigWrite
@@ -50,6 +51,22 @@ InstallDir "$PROGRAMFILES64\Scalarizr"
 ShowInstDetails show
 ShowUnInstDetails show
 
+!macro GetVersion Version
+    Var /GLOBAL new_version
+    StrCpy $new_version ""
+
+    Explode $0 "." ${Version}
+    ${For} $1 1 $0
+        Pop $2
+        ${If} $1 < 4
+            StrCpy $new_version "$new_version.$2"
+        ${EndIf}
+    ${Next}
+
+    ${StrRep} $new_version $new_version "b" ""
+    Push `$new_version`
+!macroend
+
 Function .onInit
   ${IfNot} ${RunningX64}
     MessageBox MB_OK "Scalarizr only supports 64 bit systems." /SD IDOK
@@ -60,14 +77,23 @@ Function .onInit
 
   Var /GLOBAL installed_version
   Var /GLOBAL installed_release
+
   ReadRegStr $installed_version ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion"
   ReadRegStr $installed_release ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayRelease"
 
   StrCmp $installed_version "" not_installed
+
+
   ${StrRep} $0 ${PRODUCT_VERSION} "r" ""
-  ${StrRep} $0 $0 "b" ""
   ${StrRep} $1 $installed_version "r" ""
-  ${StrRep} $1 $1 "b" ""
+
+  !insertmacro GetVersion $0
+  Pop $0
+  !insertmacro GetVersion $1
+  Pop $1
+
+  MessageBox MB_OK|MB_ICONINFORMATION "$1 $2" /SD IDOK
+
   ${VersionCompare} $0 $1 $R0
     
   ${If} $R0 == 2
