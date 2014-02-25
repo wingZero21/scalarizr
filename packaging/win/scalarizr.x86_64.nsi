@@ -64,7 +64,9 @@ Function .onInit
 
   StrCmp $installed_version "" not_installed
   ${StrRep} $0 ${PRODUCT_VERSION} "r" ""
+  ${StrRep} $0 $0 "b" ""
   ${StrRep} $1 $installed_version "r" ""
+  ${StrRep} $1 $1 "b" ""
   ${VersionCompare} $0 $1 $R0
     
   ${If} $R0 == 2
