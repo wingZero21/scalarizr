@@ -61,7 +61,7 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
             except IndexError:
                 pass
             if linux.os.redhat_family or linux.os.oracle_family:
-                excludes.append('/selinux')
+                excludes.append('/selinux/*')
 
             LOG.info('Executing euca-bundle-vol')
             out = linux.system((
