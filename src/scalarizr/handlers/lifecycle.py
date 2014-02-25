@@ -165,14 +165,15 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _fetch_globals(self):
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
-        os.environ.update(glob_vars)
+        os.environ.update(glob_vars['public'])
+        os.environ.update(glob_vars['private'])
 
         if 'Windows' == os_dist['family']:
             pass
         else:
             globals_path = '/etc/profile.d/scalr_globals.sh'
             with open(globals_path, 'w') as fp:
-                for k, v in glob_vars.items():
+                for k, v in glob_vars['public'].items():
                     v = v.replace('"', '\\"')
                     fp.write('export %s="%s"\n' % (k, v))
             os.chmod(globals_path, 0644)
