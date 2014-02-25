@@ -9,6 +9,7 @@ Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(ch
 
 
 import os
+import re
 import glob
 import logging
 import platform
@@ -483,6 +484,19 @@ class SystemAPI(object):
 
 
     @rpc.query_method
+    def mounts(self):
+        skip_mpoint_re = re.compile(r'/(sys|proc|dev|selinux)')
+        skip_fstype = ('tmpfs', 'devfs')
+        ret = {}
+        for m in mount.mounts():
+            if not (skip_mpoint_re.search(m.mpoint) or m.fstype in skip_fstype):
+                entry = dict(m.__dict__)
+                entry.update(self.statvfs([m.mpoint])[m.mpoint])
+                ret[m.mpoint] = entry
+        return ret
+
+
+    @rpc.query_method
     def scaling_metrics(self):
         '''
         @return list of scaling metrics
@@ -711,16 +725,36 @@ if linux.os.windows_family:
             if not isinstance(mpoints, list):
                 raise Exception('Argument "mpoints" should be a list of strings, '
                             'not %s' % type(mpoints))
-
-            ret = dict()
+            ret = {}
             for disk in wmi.InstancesOf('Win32_LogicalDisk'):
                 letter = disk.DeviceId[0].lower()
                 if letter in mpoints:
-                    ret[letter] = dict(
-                        total=int(disk.Size) / 1024,  # Kb
-                        free=int(disk.FreeSpace) / 1024  # Kb
-                    )
+                    ret[letter] = self._format_statvfs(disk)
             return ret
+
+
+        @coinitialized
+        @rpc.query_method
+        def mounts(self):
+            wmi = client.GetObject('winmgmts:') 
+
+            ret = {}
+            for disk in wmi.InstancesOf('Win32_LogicalDisk'):
+                letter = disk.DeviceId[0].lower()
+                entry = {
+                    'device': letter,
+                    'mpoint': letter       
+                }
+                entry.update(self._format_statvfs(disk))
+                ret[letter] = entry
+            return ret
+
+        def _format_statvfs(self, disk):
+            return {
+                'total': int(disk.Size) / 1024,  # Kb
+                'free': int(disk.FreeSpace) / 1024  # Kb        
+            }
+
 
     SystemAPI = WindowsSystemAPI
 
