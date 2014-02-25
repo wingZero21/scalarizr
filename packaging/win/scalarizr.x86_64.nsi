@@ -93,6 +93,7 @@ Function .onInit
 
   MessageBox MB_OK|MB_ICONINFORMATION "$1 $2" /SD IDOK
 
+
   ${VersionCompare} $0 $1 $R0
     
   ${If} $R0 == 2
