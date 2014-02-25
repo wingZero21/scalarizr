@@ -992,7 +992,7 @@ class Service(object):
 
         # Start API server
         api_server = bus.api_server
-        self._logger.info('Starting API server on http://0.0.0.0:8010')
+        self._logger.info('Starting API server on http://0.0.0.0:%s', node.__node__['base']['api_port'])
         api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
         api_thread.start()
 
