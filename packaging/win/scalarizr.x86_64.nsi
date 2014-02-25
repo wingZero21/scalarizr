@@ -65,7 +65,7 @@ Var /GLOBAL new_version
     ${Next}
 
     ${StrRep} $new_version $new_version "b" ""
-    Push `$new_version`
+    Push $new_version
 !macroend
 
 Function .onInit
