@@ -16,7 +16,7 @@ import boto.exception
 from scalarizr import linux
 from scalarizr import storage2
 from scalarizr import util
-from scalarizr.platform import NoCredentialsError, ConnectionError
+from scalarizr.platform import NoCredentialsError
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
@@ -135,12 +135,7 @@ class EbsMixin(object):
         try:
             return __node__['ec2'].connect_ec2()
         except NoCredentialsError:
-            msg = (
-                    "Can't proceed operation: current Scalarizr session "
-                    "has no credentials from cloud service")
-            logger.error(msg)
-        except ConnectionError, e:
-            logger.exception("Something bad happen: %s", e)
+            return False
 
 
     def _avail_zone(self):
@@ -162,7 +157,7 @@ class EbsMixin(object):
                 LOG.debug('Applying tags to EBS volume %s (tags: %s)', obj_id, tags)
                 ec2_conn.create_tags([obj_id], tags)
                 break
-            except boto.exception.EC2ResponseError,e:
+            except boto.exception.EC2ResponseError, e:
                 if e.errno == 400:
                     LOG.debug('Failed to apply tags. Retrying in 10s.')
                     time.sleep(10)
