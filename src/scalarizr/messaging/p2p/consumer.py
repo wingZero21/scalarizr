@@ -6,6 +6,7 @@ Created on Dec 5, 2009
 '''
 
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 
 # Core
 from scalarizr.messaging import MessageConsumer, MessagingError
@@ -55,20 +56,12 @@ class P2pMessageConsumer(MessageConsumer):
         try:
             if self._server is None:
                 r = urlparse(self.endpoint)
-                msg_port = r.port
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                try:
-                    sock.connect(('0.0.0.0', msg_port))
-                    msg_port = 8011
-                    sock.close()
-                except socket.error:
-                    pass
-                STATE['global.msg_port'] = msg_port
-                self._logger.info('Building message consumer server on %s:%s', r.hostname, msg_port)
+                port = __node__['base']['messaging_port']
+                self._logger.info('Building message consumer server on %s:%s', r.hostname, port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-                self._server = HTTPServer((r.hostname, msg_port), self._get_request_handler_class())
+                self._server = HTTPServer((r.hostname, port), self._get_request_handler_class())
         except (BaseException, Exception), e:
-            self._logger.error("Cannot build server on port %s. %s", msg_port, e)
+            self._logger.error("Cannot build server on port %s. %s", port, e)
             return
 
         self._logger.debug('Starting message consumer %s', self.endpoint)
@@ -128,6 +121,16 @@ class P2pMessageConsumer(MessageConsumer):
                     msg_copy.id = message.id
                     if 'platform_access_data' in msg_copy.body:
                         del msg_copy.body['platform_access_data']
+                    if 'global_variables' in msg_copy.body:
+                        glob_vars = msg_copy.body['global_variables']
+                        i = 0
+                        for v in list(glob_vars):
+                            if v.get('private'):
+                                del glob_vars[i]
+                                i -= 1
+                            elif 'private' in v:
+                                del glob_vars[i]['private']
+                            i += 1
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
 
