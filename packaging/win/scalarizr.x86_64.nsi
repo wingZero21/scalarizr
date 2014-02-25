@@ -37,6 +37,7 @@ SetCompress off
 ; Finish page
 !insertmacro MUI_PAGE_FINISH
 
+
 ; Uninstaller pages
 !insertmacro MUI_UNPAGE_INSTFILES
 
