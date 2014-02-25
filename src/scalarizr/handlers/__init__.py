@@ -136,7 +136,7 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.APP)
                 elif name == 'haproxy' and Version('1.3') < version < Version('1.5'):
                     handlers.append(config.BuiltinBehaviours.HAPROXY)
-                elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
+                elif name == 'mysql' and Version('5.0') <= version < Version('5.7'):
                     handlers.append(config.BuiltinBehaviours.MYSQL)
                     if 'Percona' in str_ver:
                         handlers.append(config.BuiltinBehaviours.PERCONA)
