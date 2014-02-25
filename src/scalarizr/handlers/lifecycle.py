@@ -170,10 +170,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if 'Windows' == os_dist['family']:
             pass
         else:
-            with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
+            globals_path = '/etc/profile.d/scalr_globals.sh'
+            with open(globals_path, 'w') as fp:
                 for k, v in glob_vars.items():
                     v = v.replace('"', '\\"')
                     fp.write('export %s="%s"\n' % (k, v))
+            os.chmod(globals_path, 0644)
 
     def _assign_hostname(self):
         if not __node__.get('hostname'):
