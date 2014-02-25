@@ -171,6 +171,8 @@ class ChefHandler(Handler):
                 finally:
                     os.remove(self._validator_key_path)
 
+                self.send_message('HostUpdate', dict(chef=self._chef_data))
+
                 if self._with_json_attributes:
                     try:
                         log.info('Applying Chef run list %s',
@@ -239,7 +241,7 @@ class ChefHandler(Handler):
                         pass
 
             else:
-                raise HandlerError('Neither chef server not cookbook url were specified')
+                raise HandlerError('Neither chef server nor cookbook url were specified')
             msg.chef = self._chef_data
         finally:
             self._chef_data = None

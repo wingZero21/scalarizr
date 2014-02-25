@@ -22,7 +22,8 @@ from multiprocessing import pool
 
 from scalarizr import rpc, linux
 from scalarizr.bus import bus
-from scalarizr.util import system2, disttool
+from scalarizr import util
+from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
 from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
@@ -160,6 +161,14 @@ class SystemAPI(object):
 
 
     @rpc.command_method
+    def reboot(self):
+        if os.fork():
+            return
+        util.daemonize()
+        system2(('reboot',))
+        exit(0)
+
+    @rpc.command_method
     def set_hostname(self, hostname=None):
         """
         Updates server's FQDN.
@@ -174,7 +183,16 @@ class SystemAPI(object):
         """
         assert hostname
         system2(('hostname', hostname))
-        """
+
+        with open(self._HOSTNAME, 'w+') as fp:
+            fp.write(hostname) 
+        hosts = dns.HostsFile()
+        if not hosts.resolve('localhost'):
+            hosts.map('127.0.0.1', 'localhost', hostname)
+        else:
+            hosts.alias('localhost', hostname)
+
+        '''
         TODO: test and correct this code 
         # changing permanent hostname
         try:
@@ -203,7 +221,7 @@ class SystemAPI(object):
                                     hosts._hosts[index]['hostname'] == old_hn:
                         hosts._hosts[index]['hostname'] = hostname
                 hosts._flush()
-        """
+        '''
         return hostname
 
 
@@ -685,6 +703,13 @@ if linux.os.windows_family:
         _LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr.log'
         _DEBUG_LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr_debug.log'
         _UPDATE_LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr_update.log'  
+
+        @coinitialized
+        @rpc.command_method
+        def reboot(self):
+            wmi = client.GetObject('winmgmts:')
+            for opsys in wmi.InstancesOf('Win32_OperatingSystem'):
+                opsys.Reboot()
 
         @coinitialized
         @rpc.command_method

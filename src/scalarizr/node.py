@@ -354,7 +354,7 @@ node['redis'] = Compound({
 node['rabbitmq'] = Compound({
         'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'rabbitmq'),
                         'scalarizr.storage2.volume'),
-        'password,server_index,node_type,cookie,hostname': Ini(
+        'password,node_type,cookie,hostname': Ini(
                                                 '%s/%s.ini' % (private_dir, 'rabbitmq'), 'rabbitmq')
 
 })
