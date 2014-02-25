@@ -83,7 +83,6 @@ Function .onInit
 
   StrCmp $installed_version "" not_installed
 
-
   ${StrRep} $0 ${PRODUCT_VERSION} "r" ""
   ${StrRep} $1 $installed_version "r" ""
 
