@@ -123,6 +123,11 @@ class Queryenv(Command):
         table_data = [[d.hostname, d.https, d.type, d.raw] for d in out]
         print make_table(table_data, headers)
 
+    def _display_list_global_variables(self, out):
+        headers = ['key', 'value']
+        table_data = out['public'].items()
+        print make_table(table_data, headers)
+
     def _display_out(self, method, out):
         """
         General display method. Searches for certain display method and calls it
