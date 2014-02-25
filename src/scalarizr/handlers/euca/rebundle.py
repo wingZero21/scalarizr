@@ -54,6 +54,14 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
             image = rebundle_hdlr.LinuxImage('/', 
                         os.path.join(self._destination, self._image_name), 
                         self._excludes)
+            
+            excludes = list(image.excludes)
+            try:
+                excludes.append(glob.glob('/var/lib/dhcp*')[0])
+            except IndexError:
+                pass
+            if linux.os.redhat_family or linux.os.oracle_family:
+                excludes.append('/selinux')
 
             LOG.info('Executing euca-bundle-vol')
             out = linux.system((
@@ -61,7 +69,7 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
                     '--arch', linux.os['arch'],
                     '--size', str(self._image_size),
                     '--destination', self._destination,
-                    '--exclude', ','.join(image.excludes),
+                    '--exclude', ','.join(excludes),
                     '--fstab', fstab_path,
                     '--prefix', self._image_name,
                     '--volume', '/'
