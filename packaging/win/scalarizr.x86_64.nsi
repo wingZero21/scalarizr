@@ -51,8 +51,9 @@ InstallDir "$PROGRAMFILES64\Scalarizr"
 ShowInstDetails show
 ShowUnInstDetails show
 
+Var /GLOBAL new_version
+
 !macro GetVersion Version
-    Var /GLOBAL new_version
     StrCpy $new_version ""
 
     ${Explode} $0 "." ${Version}
