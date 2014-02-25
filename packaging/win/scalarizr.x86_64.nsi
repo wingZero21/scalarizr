@@ -55,7 +55,7 @@ ShowUnInstDetails show
     Var /GLOBAL new_version
     StrCpy $new_version ""
 
-    Explode $0 "." ${Version}
+    ${Explode} $0 "." ${Version}
     ${For} $1 1 $0
         Pop $2
         ${If} $1 < 4
