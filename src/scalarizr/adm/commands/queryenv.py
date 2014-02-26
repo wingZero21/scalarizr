@@ -2,6 +2,7 @@ import inspect
 import re
 import os
 import itertools
+import sys
 
 from scalarizr.util import system2
 from scalarizr.adm.command import Command
@@ -140,7 +141,7 @@ class Queryenv(Command):
             i = 0
             for _ in xrange(len(glob_vars)):
                 var = glob_vars[i]
-                if int(var.attrib.get['private']) == 1:
+                if int(var.attrib.get('private', 0)) == 1:
                     glob_vars.remove(var)
                     continue
                 i += 1
