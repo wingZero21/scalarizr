@@ -52,15 +52,19 @@ ShowInstDetails show
 ShowUnInstDetails show
 
 Var /GLOBAL new_version
+Var /GLOBAL len
+Var /GLOBAL part
+Var /GLOBAL i
 
 !macro GetVersion Version
-    StrCpy $new_version ""
+    ${Explode} $len "." ${Version}
+    Pop $new_version
+    IntOp $len $len - 1
 
-    ${Explode} $0 "." ${Version}
-    ${For} $1 1 $0
-        Pop $2
-        ${If} $1 < 4
-            StrCpy $new_version "$new_version.$2"
+    ${For} $i 1 $len
+        Pop $part
+        ${If} $i < 4
+            StrCpy $new_version "$new_version.$part"
         ${EndIf}
         MessageBox MB_OK "Piece $2 New version $new_version"
     ${Next}
@@ -90,14 +94,14 @@ Function .onInit
   ${StrRep} $1 $installed_version "r" ""
 
   !insertmacro GetVersion $0
-  Pop $0
+  Pop $R8
   !insertmacro GetVersion $1
-  Pop $1
+  Pop $R9
 
-  MessageBox MB_OK|MB_ICONINFORMATION "$1 $2" /SD IDOK
+  MessageBox MB_OK|MB_ICONINFORMATION "$R8 $R9" /SD IDOK
 
 
-  ${VersionCompare} $0 $1 $R0
+  ${VersionCompare} $R8 $R9 $R0
     
   ${If} $R0 == 2
   ${OrIf} $R0 == 0
