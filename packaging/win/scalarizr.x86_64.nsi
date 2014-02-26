@@ -66,11 +66,9 @@ Var /GLOBAL i
         ${If} $i < 3
             StrCpy $new_version "$new_version.$part"
         ${EndIf}
-        MessageBox MB_OK "Piece $2 New version $new_version"
     ${Next}
 
     ${StrRep} $new_version $new_version "b" ""
-    MessageBox MB_OK "without b: $new_version"
     Push $new_version
 !macroend
 
