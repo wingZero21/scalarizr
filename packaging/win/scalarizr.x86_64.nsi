@@ -92,23 +92,13 @@ Function .onInit
   ${StrRep} $1 $installed_version "r" ""
 
   !insertmacro GetVersion $0
-  Pop $R8
   !insertmacro GetVersion $1
-  Pop $R9
 
-  MessageBox MB_OK|MB_ICONINFORMATION "$R8 $R9" /SD IDOK
-
-
-  ${VersionCompare} $R8 $R9 $R0
+  Call CompareVersions
+  Pop $R0
     
-  ${If} $R0 == 2
-  ${OrIf} $R0 == 0
-  ${AndIf} $installed_release > ${PRODUCT_RELEASE}
-    MessageBox MB_OK|MB_ICONINFORMATION "You already have a newer version ($installed_version-$installed_release) of ${PRODUCT_NAME} installed." /SD IDOK
-    Quit
-  ${ElseIf} $R0 == 0
-  ${AndIf} $installed_release == ${PRODUCT_RELEASE}
-    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} $installed_version-$installed_release installed." /SD IDOK
+  ${If} $R0 == 1
+    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} version ($installed_version-$installed_release) installed." /SD IDOK
     Quit
   ${EndIf}
   
