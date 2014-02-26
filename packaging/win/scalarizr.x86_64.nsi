@@ -51,11 +51,11 @@ InstallDir "$PROGRAMFILES64\Scalarizr"
 ShowInstDetails show
 ShowUnInstDetails show
 
+
 Var /GLOBAL new_version
 Var /GLOBAL len
 Var /GLOBAL part
 Var /GLOBAL i
-
 !macro GetVersion Version
     ${Explode} $len "." ${Version}
     Pop $new_version
@@ -71,6 +71,7 @@ Var /GLOBAL i
     ${StrRep} $new_version $new_version "b" ""
     Push $new_version
 !macroend
+
 
 Function .onInit
   ${IfNot} ${RunningX64}
