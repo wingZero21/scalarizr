@@ -63,7 +63,7 @@ Var /GLOBAL i
 
     ${For} $i 1 $len
         Pop $part
-        ${If} $i < 4
+        ${If} $i < 3
             StrCpy $new_version "$new_version.$part"
         ${EndIf}
         MessageBox MB_OK "Piece $2 New version $new_version"
