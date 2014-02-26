@@ -436,10 +436,10 @@ class Mountpoint(object):
 
     def __repr__(self):
         return "name = " + str(self.name) \
-+ "; dir = " + str(self.dir) \
-+ "; create_fs = " + str(self.create_fs) \
-+ "; is_array = " + str(self.is_array) \
-+ "; volumes = " + str(self.volumes)
+            + "; dir = " + str(self.dir) \
+            + "; create_fs = " + str(self.create_fs) \
+            + "; is_array = " + str(self.is_array) \
+            + "; volumes = " + str(self.volumes)
 
 class Volume(object):
     volume_id  = None
@@ -454,7 +454,7 @@ class Volume(object):
 
     def __repr__(self):
         return 'volume_id = ' + str(self.volume_id) \
-+ "; device = " + str(self.device)
+            + "; device = " + str(self.device)
 
 class Role(object):
     behaviour = None
@@ -474,9 +474,9 @@ class Role(object):
 
     def __repr__(self):
         return 'behaviour = ' + str(self.behaviour) \
-+ "; name = " + str(self.name) \
-+ "; hosts = " + str(self.hosts) \
-+ "; farm_role_id = " + str(self.farm_role_id) + ";"
+            + "; name = " + str(self.name) \
+            + "; hosts = " + str(self.hosts) \
+            + "; farm_role_id = " + str(self.farm_role_id) + ";"
 
 
 class QueryEnvResult(object):

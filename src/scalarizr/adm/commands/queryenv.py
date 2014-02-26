@@ -12,6 +12,11 @@ from scalarizr.adm.util import make_table
 from scalarizr.adm.util import new_queryenv
 from scalarizr.node import __node__
 
+if sys.version_info[0:2] >= (2, 7):
+    from xml.etree import ElementTree as ET
+else:
+    from scalarizr.externals.etree import ElementTree as ET
+
 
 def transpose(l):
     return map(list, zip(*l))
@@ -127,6 +132,21 @@ class Queryenv(Command):
         headers = ['key', 'value']
         table_data = out['public'].items()
         print make_table(table_data, headers)
+
+    def _display_fetch(self, out):
+        try:
+            xml = ET.XML(out)
+            glob_vars = xml[0]
+            i = 0
+            for _ in xrange(len(glob_vars)):
+                var = glob_vars[i]
+                if int(var.attrib.get['private']) == 1:
+                    glob_vars.remove(var)
+                    continue
+                i += 1
+            print ET.tostring(xml)
+        except:
+            self._display_out(out)
 
     def _display_out(self, method, out):
         """
