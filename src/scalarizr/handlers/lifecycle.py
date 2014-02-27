@@ -195,8 +195,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             iptables.save()
 
         optparser = bus.optparser
-        self._logger.info("on_start() is running")
-        self._logger.info("Saved file exists? %s" % os.path.exists(self.saved_boot_id_file))
+        
         if os.path.exists(self.saved_boot_id_file):
             saved_boot_id = None
             current_boot_id = None
@@ -204,9 +203,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                 current_boot_id = fp.read()
             with open(self.saved_boot_id_file, 'r') as fp:
                 saved_boot_id = fp.read()
-
-            self._logger.info("Saved boot_id: %s" % saved_boot_id)
-            self._logger.info("Current boot_id: %s" % current_boot_id)
 
             if saved_boot_id and saved_boot_id != current_boot_id:
                 Flag.set(Flag.REBOOT)
