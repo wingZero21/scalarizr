@@ -831,16 +831,20 @@ class Service(object):
     def _select_control_ports(self):
         defaults = node.__node__['defaults']['base']
 
-        lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
-        api_port = int(lfrp.get('base', {}).get('api_port', defaults['api_port']) \
-                        or defaults['api_port'])
-        messaging_port = int(lfrp.get('base', {}).get('messaging_port', defaults['messaging_port']) \
-                                or defaults['messaging_port'])
+        if node.__node__['state'] != 'importing':
+            lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
+            api_port = int(lfrp.get('base', {}).get('api_port', defaults['api_port']) \
+                            or defaults['api_port'])
+            messaging_port = int(lfrp.get('base', {}).get('messaging_port', defaults['messaging_port']) \
+                                    or defaults['messaging_port'])
 
-        if messaging_port == defaults['messaging_port'] and self._port_busy(messaging_port):
-            messaging_port = 8011
-        if api_port == defaults['api_port'] and self._port_busy(api_port):
-            api_port = 8009
+            if messaging_port == defaults['messaging_port'] and self._port_busy(messaging_port):
+                messaging_port = 8011
+            if api_port == defaults['api_port'] and self._port_busy(api_port):
+                api_port = 8009
+        else:
+            api_port = defaults['api_port']
+            messaging_port = defaults['messaging_port']
 
         node.__node__['base'].update({
             'api_port': api_port,
