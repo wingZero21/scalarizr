@@ -830,6 +830,13 @@ class Service(object):
         bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
         logger.debug("Got scalr url: '%s'" % bus.scalr_url)
 
+        if node.__node__['platform'].name == 'eucalyptus':
+            try:
+                urllib2.urlopen(bus.scalr_url).read()
+            except urllib2.URLError:
+                with open('/etc/resolv.conf', 'w+') as fp:
+                    fp.write('nameserver 8.8.8.8\n')
+
         # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
         bus.periodical_executor = PeriodicalExecutor()
 
