@@ -195,7 +195,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             iptables.save()
 
         optparser = bus.optparser
-
+        self._logger.info("on_start() is running")
+        self._logger.info("Saved file exists? %s" % os.path.exists(self.saved_boot_id_file))
         if os.path.exists(self.saved_boot_id_file):
             saved_boot_id = None
             current_boot_id = None
@@ -204,13 +205,16 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             with open(self.saved_boot_id_file, 'r') as fp:
                 saved_boot_id = fp.read()
 
+            self._logger.info("Saved boot_id: %s" % saved_boot_id)
+            self._logger.info("Current boot_id: %s" % current_boot_id)
+
             if saved_boot_id and saved_boot_id != current_boot_id:
                 Flag.set(Flag.REBOOT)
-        else:
-            with open(self.boot_id_file, 'r') as fp:
-                current_boot_id = fp.read()
-                with open(self.saved_boot_id_file, 'w') as saved_fp:
-                    saved_fp.write(current_boot_id)
+
+        with open(self.boot_id_file, 'r') as fp:
+            current_boot_id = fp.read()
+            with open(self.saved_boot_id_file, 'w') as saved_fp:
+                saved_fp.write(current_boot_id)
 
         if Flag.exists(Flag.REBOOT) or Flag.exists(Flag.HALT):
             self._logger.info("Scalarizr resumed after reboot")
