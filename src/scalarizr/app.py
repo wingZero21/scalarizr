@@ -36,7 +36,6 @@ from scalarizr.util import wait_until, sqlite_server
 from scalarizr.util.flag import Flag
 
 # Stdlibs
-import ctypes
 import cStringIO
 import logging
 import logging.config
@@ -52,6 +51,10 @@ import select
 import wsgiref.simple_server
 import SocketServer
 
+
+if not linux.os.windows:
+    import ctypes
+    libc = ctypes.CDLL('libc.so.6')
 
 
 class ScalarizrError(BaseException):
@@ -834,7 +837,6 @@ class Service(object):
                     raise
 
                 # reload resolver 
-                libc = ctypes.cdll.LoadLibrary('libc.so.6')
                 libc.__res_init()
             else:
                 raise 
@@ -852,7 +854,7 @@ class Service(object):
         bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
         logger.debug("Got scalr url: '%s'" % bus.scalr_url)
 
-        if node.__node__['platform'].name in ('eucalyptus', 'openstack'):
+        if not linux.os.windows and node.__node__['platform'].name in ('eucalyptus', 'openstack'):
             self._try_resolver(bus.scalr_url)
 
         # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
