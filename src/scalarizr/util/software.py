@@ -7,8 +7,7 @@ Created on Sep 10, 2010
 
 from scalarizr.util import system2
 from scalarizr import linux
-from scalarizr import exceptions
-from scalarizr.linux import coreutils, pkgmgr
+from scalarizr.linux import coreutils, pkgmgr, which
 import os, re, zipfile, glob, platform
 
 __all__ = ('all_installed', 'software_info', 'explore', 'which')
@@ -33,20 +32,6 @@ def explore(name, lookup_fn):
 
         raise Exception("'%s' software has been already explored" % name)
     software_list[name] = lookup_fn
-
-
-def which(name, *extra_dirs):
-    '''
-    Search executable in /bin /sbin /usr/bin /usr/sbin /usr/libexec /usr/local/bin /usr/local/sbin
-    @rtype: tuple
-    '''
-    try:
-        places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
-        places.extend(extra_dirs)
-        return [os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))][0]
-    except IndexError:
-        return False
-        #raise LookupError("Command '%s' not found" % name)
 
 
 def system_info(verbose=False):
@@ -151,7 +136,7 @@ def mysql_software_info():
 explore('mysql', mysql_software_info)
 
 def nginx_software_info():
-    binary = which('nginx', '/usr/local/nginx/sbin')
+    binary = which('nginx', path_append='/usr/local/nginx/sbin')
     if not binary:
         raise SoftwareError("Can't find executable for Nginx server")
 
@@ -457,7 +442,7 @@ def chef_software_info():
     if not binary:
         raise SoftwareError("Can't find executable for chef client")
 
-    version_string = system2((binary, '-v'))[0].strip()
+    version_string = linux.system((binary, '-v'))[0].strip()
     if not version_string:
         raise SoftwareError
 

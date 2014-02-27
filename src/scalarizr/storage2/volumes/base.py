@@ -371,7 +371,7 @@ storage2.snapshot_types['base'] = Snapshot
 
 def taken_devices():
     devs = glob.glob('/dev/xvd*') + glob.glob('/dev/vd*') + glob.glob('/dev/sd*')
-    devs = [x for x in devs if x[-1] in string.ascii_lowercase]
+    devs = [os.path.realpath(x) for x in devs if x[-1] in string.ascii_lowercase]
     return set(devs)
 
 def taken_letters():

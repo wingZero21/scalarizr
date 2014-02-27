@@ -96,7 +96,6 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
         run_detached(RABBITMQ_SERVER, args=['-detached'], env=env)
         initdv2.wait_sock(self.socks[0])
 
-
     def status(self):
         if self._running:
             return initdv2.Status.RUNNING
@@ -118,10 +117,8 @@ class RabbitMQ(object):
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
-            cls._instance = super(RabbitMQ, cls).__new__(
-                                                    cls, *args, **kwargs)
+            cls._instance = super(RabbitMQ, cls).__new__(cls, *args, **kwargs)
         return cls._instance
-
 
     def __init__(self):
         self._logger = logging.getLogger(__name__)

@@ -104,7 +104,6 @@ class Handler(object):
 
     def get_ready_behaviours(self):
         possible_behaviors = config.BuiltinBehaviours.values()
-
         ready_behaviors = list()
         if linux.os['family'] != 'Windows':
             installed_packages = pkgmgr.package_mgr().list()

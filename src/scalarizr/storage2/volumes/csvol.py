@@ -15,6 +15,7 @@ import uuid
 from scalarizr import node, linux
 from scalarizr.linux import coreutils
 from scalarizr import util
+from scalarizr.platform import NoCredentialsError
 from scalarizr import storage2
 from scalarizr.storage2.volumes import base
 
@@ -68,7 +69,10 @@ class CSVolume(base.Volume):
             'to perform this operation'})
 
     def _new_conn(self):
-        return __cloudstack__.connect_cloudstack()
+        try:
+            return __cloudstack__.connect_cloudstack()
+        except NoCredentialsError:
+            return False
 
     def _check_connection(self):
         self._conn = self._new_conn()
@@ -382,8 +386,8 @@ class CSSnapshot(base.Snapshot):
     def _new_conn(self):
         try:
             return __cloudstack__.connect_cloudstack()
-        except:
-            pass
+        except NoCredentialsError:
+            return False
 
     def _check_connection(self):
         self._conn = self._new_conn()

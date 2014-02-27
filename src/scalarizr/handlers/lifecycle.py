@@ -165,15 +165,18 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _fetch_globals(self):
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
-        os.environ.update(glob_vars)
+        os.environ.update(glob_vars['public'])
+        os.environ.update(glob_vars['private'])
 
         if 'Windows' == os_dist['family']:
             pass
         else:
-            with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
-                for kv in glob_vars.items():
-                    fp.write('export %s="%s"\n' % kv)
-
+            globals_path = '/etc/profile.d/scalr_globals.sh'
+            with open(globals_path, 'w') as fp:
+                for k, v in glob_vars['public'].items():
+                    v = v.replace('"', '\\"')
+                    fp.write('export %s="%s"\n' % (k, v))
+            os.chmod(globals_path, 0644)
 
     def _assign_hostname(self):
         if not __node__.get('hostname'):
@@ -326,12 +329,16 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             t = threading.Thread(name='IntMessageConsumer', target=srv.get_consumer().start)
             t.start()
 
+
     def _check_control_ports(self):
-        if STATE['global.api_port'] != 8010 or STATE['global.msg_port'] != 8013:
-            # API or Messaging on non-default port
+        defaults = __node__['defaults']['base']
+        ports_changed = __node__['base']['api_port'] != defaults['api_port'] \
+                or __node__['base']['messaging_port'] != defaults['messaging_port']
+        if ports_changed:
+            # @deprecated. expires 2014/04
             self.send_message(Messages.UPDATE_CONTROL_PORTS, {
-                'api': STATE['global.api_port'],
-                'messaging': STATE['global.msg_port'],
+                'api': __node__['base']['api_port'],
+                'messaging': __node__['base']['messaging_port'],
                 'snmp': 8014
             })
 

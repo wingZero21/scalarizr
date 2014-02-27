@@ -791,9 +791,14 @@ class Service(object):
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
                                  "SYSTEM\\Setup\\Status\\SysprepStatus", 0,
                                  winreg.KEY_READ) as key:
+                gen_prev_state = gen_state = None
                 while True:
+                    gen_prev_state = gen_state
                     gen_state = winreg.QueryValueEx(key, "GeneralizationState")[0]
                     if gen_state == 7:
+                        if gen_prev_state:
+                            # Waiting for shutdown
+                            time.sleep(600)
                         break
                     time.sleep(1)
                     self._logger.debug('Waiting for sysprep completion. '
@@ -804,6 +809,39 @@ class Service(object):
                           'skipping sysprep completion check.')
             else:
                 raise ex
+
+
+    def _port_busy(self, port):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.connect(('0.0.0.0', port))
+            sock.close()
+            return True
+        except socket.error:
+            return False
+
+
+    def _select_control_ports(self):
+        defaults = node.__node__['defaults']['base']
+
+        lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
+        api_port = int(lfrp.get('base', {}).get('api_port', defaults['api_port']) \
+                        or defaults['api_port'])
+        messaging_port = int(lfrp.get('base', {}).get('messaging_port', defaults['messaging_port']) \
+                                or defaults['messaging_port'])
+
+        if messaging_port == defaults['messaging_port'] and self._port_busy(messaging_port):
+            messaging_port = 8011
+        if api_port == defaults['api_port'] and self._port_busy(api_port):
+            api_port = 8009
+
+        node.__node__['base'].update({
+            'api_port': api_port,
+            'messaging_port': messaging_port
+            })  
+
+        return api_port != defaults['api_port'] or messaging_port != defaults['messaging_port']    
+
 
 
     def _init_services(self):
@@ -836,6 +874,8 @@ class Service(object):
 
         bus.queryenv_service = queryenv
         bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
+
+        ports_non_default = self._select_control_ports()
 
         logger.debug("Initialize messaging")
         factory = MessageServiceFactory()
@@ -894,12 +934,23 @@ class Service(object):
             class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
                 pass
             bus.api_server = wsgiref.simple_server.make_server('0.0.0.0',
-                                                api_port, api_app, server_class=ThreadingWSGIServer)
+                                node.__node__['base']['api_port'], 
+                                api_app, 
+                                server_class=ThreadingWSGIServer)
+
+        if ports_non_default:
+            msg = msg_service.new_message('HostUpdate', None, {
+                'base': {
+                    'api_port': node.__node__['base']['api_port'],
+                    'messaging_port': node.__node__['base']['messaging_port']
+                }
+            })
+            msg_service.get_producer().send(Queues.CONTROL, msg)
 
 
     def _check_snmp(self):
         if self._running and linux.os['family'] != 'Windows' \
-                                    and not self._snmp_pid and time.time() >= _snmp_scheduled_start_time:
+                and not self._snmp_pid and time.time() >= _snmp_scheduled_start_time:
             self._start_snmp_server()
 
 
@@ -963,7 +1014,7 @@ class Service(object):
 
         # Start API server
         api_server = bus.api_server
-        self._logger.info('Starting API server on http://0.0.0.0:8010')
+        self._logger.info('Starting API server on http://0.0.0.0:%s', node.__node__['base']['api_port'])
         api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
         api_thread.start()
 
@@ -1186,6 +1237,8 @@ if 'Windows' == linux.os['family']:
 
 
         def SvcShutdown(self):
+            if node.__node__['state'] != 'running':
+                return          
             Flag.set(Flag.REBOOT)
             srv = bus.messaging_service
             message = srv.new_message(Messages.WIN_HOST_DOWN)
