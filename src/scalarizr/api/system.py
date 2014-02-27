@@ -490,7 +490,7 @@ class SystemAPI(object):
         ret = {}
         for m in mount.mounts():
             if not (skip_mpoint_re.search(m.mpoint) or m.fstype in skip_fstype):
-                entry = dict(m.__dict__)
+                entry = m._asdict()
                 entry.update(self.statvfs([m.mpoint])[m.mpoint])
                 ret[m.mpoint] = entry
         return ret
