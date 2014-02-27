@@ -36,6 +36,7 @@ from scalarizr.util import wait_until, sqlite_server
 from scalarizr.util.flag import Flag
 
 # Stdlibs
+import ctypes
 import cStringIO
 import logging
 import logging.config
@@ -818,6 +819,27 @@ class Service(object):
                 raise ex
 
 
+    def _try_resolver(self, url):
+        try:
+            urllib2.urlopen(url).read()
+        except urllib2.URLError, e:
+            if isinstance(e.args[0], socket.gaierror):
+                eai = e.args[0]
+                if eai.errno == socket.EAI_NONAME:
+                    with open('/etc/resolv.conf', 'w+') as fp:
+                        fp.write('nameserver 8.8.8.8\n')
+                elif eai.errno == socket.EAI_AGAIN:
+                    os.chmod('/etc/resolv.conf', 0755)
+                else:
+                    raise
+
+                # reload resolver 
+                libc = ctypes.cdll.LoadLibrary('libc.so.6')
+                libc.__res_init()
+            else:
+                raise 
+
+
     def _init_services(self):
         logger = logging.getLogger(__name__)
         cnf = bus.cnf; ini = cnf.rawini
@@ -830,12 +852,8 @@ class Service(object):
         bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
         logger.debug("Got scalr url: '%s'" % bus.scalr_url)
 
-        if node.__node__['platform'].name == 'eucalyptus':
-            try:
-                urllib2.urlopen(bus.scalr_url).read()
-            except urllib2.URLError:
-                with open('/etc/resolv.conf', 'w+') as fp:
-                    fp.write('nameserver 8.8.8.8\n')
+        if node.__node__['platform'].name in ('eucalyptus', 'openstack'):
+            self._try_resolver(bus.scalr_url)
 
         # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
         bus.periodical_executor = PeriodicalExecutor()
