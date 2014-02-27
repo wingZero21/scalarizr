@@ -206,23 +206,23 @@ class MongoDBAPI(BehaviorAPI):
         elif os_name == 'centos':
             if linux.os['version'] >= '6':
                 required_list = [
-                    ['mongodb-10gen-server>=2.0,<2.5'],
-                    ['mongodb-server>=2.0,<2.5']
+                    ['mongo-10gen-server>=2.0,<2.5'],
+                    ['mongo-server>=2.0,<2.5']
                 ]
             elif linux.os['version'] >= '5':
                 required_list = [
-                    ['mongodb-10gen-server>=2.0,<2.1'],
-                    ['mongodb-server>=2.0,<2.1']
+                    ['mongo-10gen-server>=2.0,<2.1'],
+                    ['mongo-server>=2.0,<2.1']
                 ]
         elif linux.os.redhat_family:
             required_list = [
-                ['mongodb-10gen-server>=2.4,<2.5'],
-                ['mongodb-server>=2.4,<2.5']
+                ['mongo-10gen-server>=2.4,<2.5'],
+                ['mongo-server>=2.4,<2.5']
             ]
         elif linux.os.oracle_family:
             required_list = [
-                ['mongodb-10gen-server>=2.0,<2.1'],
-                ['mongodb-server>=2.0,<2.1']
+                ['mongo-10gen-server>=2.0,<2.1'],
+                ['mongo-server>=2.0,<2.1']
             ]
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (

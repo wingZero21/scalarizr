@@ -328,66 +328,6 @@ class PostgreSQLAPI(BehaviorAPI):
 
                             
     @classmethod
-    def check_software(cls, installed_packages=None):
-        try:
-            PostgreSQLAPI.last_check = False
-            os_name = linux.os['name'].lower()
-            os_vers = linux.os['version']
-            if os_name == 'ubuntu':
-                if os_vers >= '12':
-                    required_list = [
-                        ['postgresql-9.1', 'postgresql-client-9.1'],
-                        ['postgresql>=9.1,<9.3', 'postgresql-client>=9.1,<9.3'],
-                    ]
-                elif os_vers >= '10':
-                    required_list = [
-                        ['postgresql-9.1', 'postgresql-client-9.1'],
-                        ['postgresql>=9.1,<9.2', 'postgresql-client>=9.1,<9.2'],
-                    ]
-            elif os_name == 'debian':
-                    required_list = [
-                        ['postgresql-9.2', 'postgresql-client-9.2'],
-                        ['postgresql>=9.2,<9.3', 'postgresql-client>=9.2,<9.3'],
-                    ]
-            elif os_name == 'centos':
-                if os_vers >= '6':
-                    required_list = [
-                        ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                        [
-                            'postgresql>=9.1,<9.3',
-                            'postgresql-server>=9.1,<9.3',
-                            'postgresql-devel>=9.1,<9.3'
-                        ]
-                    ]
-                elif os_vers >= '5':
-                    required_list = [
-                        ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                        [
-                            'postgresql>=9.2,<9.3',
-                            'postgresql-server>=9.2,<9.3',
-                            'postgresql-devel>=9.2,<9.3'
-                        ]
-                    ]
-            elif linux.os.redhat_family or linux.os.oracle_family:
-                required_list = [
-                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                    [
-                        'postgresql>=9.2,<9.3',
-                        'postgresql-server>=9.2,<9.3',
-                        'postgresql-devel>=9.2,<9.3'
-                    ]
-                ]
-            else:
-                raise exceptions.UnsupportedBehavior('postgresql',
-                    "'postgresql' behavior is only supported on " +\
-                    "Debian, RedHat or Oracle operating system family"
-                )
-            pkgmgr.check_any_dependency(required_list, installed_packages)
-            PostgreSQLAPI.last_check = True
-        except pkgmgr.DependencyError as e:
-            software.handle_dependency_error(e, 'postgresql')
-
-    @classmethod
     def do_check_software(cls, installed_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']

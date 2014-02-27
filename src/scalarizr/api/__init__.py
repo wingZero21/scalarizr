@@ -9,7 +9,7 @@ api_routes = {
     'app': 'scalarizr.api.apache.ApacheAPI',
     'chef': 'scalarizr.api.chef.ChefAPI',
     'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
-    'mariadb': 'scalarizr.api.mysql.MariaDBAPI',
+    'mariadb': 'scalarizr.api.mariadb.MariaDBAPI',
     'memcached': 'scalarizr.api.memcached.MemcachedAPI',
     'mongodb': 'scalarizr.api.mongodb.MongoDBAPI',
     'mysql': 'scalarizr.api.mysql.MySQLAPI',
