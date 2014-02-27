@@ -10,6 +10,7 @@ from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr.handlers.ec2 import rebundle as ec2_rebundle_hdlr
 from scalarizr.handlers import HandlerError
 from scalarizr import linux
+from scalarizr.linux import coreutils
 
 import os
 import glob
@@ -49,6 +50,9 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
             with open('/etc/fstab') as fp:
                 fstab_path = bus.cnf.write_key('euca-fstab', fp.read())
             self._fix_fstab(filename=fstab_path)
+
+            coreutils.touch('/.autorelabel')
+            coreutils.touch('/.autofsck')
 
             # Create image object for gathering directories exclude list
             image = rebundle_hdlr.LinuxImage('/', 
