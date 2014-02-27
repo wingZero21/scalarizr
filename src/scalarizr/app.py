@@ -56,6 +56,9 @@ if not linux.os.windows:
     import ctypes
     libc = ctypes.CDLL('libc.so.6')
 
+    def res_init():
+        return libc.__res_init()
+
 
 class ScalarizrError(BaseException):
     pass
@@ -837,7 +840,7 @@ class Service(object):
                     raise
 
                 # reload resolver 
-                libc.__res_init()
+                res_init()
             else:
                 raise 
 
