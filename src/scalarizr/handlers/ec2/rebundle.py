@@ -231,7 +231,7 @@ class RebundleStratery:
                 with open(motd_filename, 'w') as fp:
                     fp.write(motd)
 
-    def _fix_fstab(self, image_mpoint=None, filename=None):
+    def _fix_fstab(self, image_mpoint=None, filename=None, disable_root_fsck=True):
         assert image_mpoint or filename
         if image_mpoint:
             filename = os.path.join(image_mpoint, 'etc/fstab')
@@ -264,10 +264,11 @@ class RebundleStratery:
                 del fstab[entry.device]
 
         # Disable fsck on root filesystem
-        root_entry = fstab['/']
-        del fstab['/']
-        fstab.add(root_entry.device, root_entry.mpoint, root_entry.fstype,
-                          root_entry.options, root_entry.dump, 0)
+        if disable_root_fsck:
+            root_entry = fstab['/']
+            del fstab['/']
+            fstab.add(root_entry.device, root_entry.mpoint, root_entry.fstype,
+                              root_entry.options, root_entry.dump, 0)
 
         # Ubuntu 10.04 mountall workaround
         # @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591

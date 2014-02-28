@@ -49,7 +49,12 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
 
             with open('/etc/fstab') as fp:
                 fstab_path = bus.cnf.write_key('euca-fstab', fp.read())
-            self._fix_fstab(filename=fstab_path)
+            # disable_root_fsck=False - cause current fstab wrapper adds updated entry 
+            # to the end of the file, and this breaks CentOS boot 
+            # because 'mount -a' process fstab sequentically
+            self._fix_fstab(
+                filename=fstab_path, 
+                disable_root_fsck=False)
 
             coreutils.touch('/.autorelabel')
             coreutils.touch('/.autofsck')
@@ -76,7 +81,8 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
                     '--exclude', ','.join(excludes),
                     '--fstab', fstab_path,
                     '--prefix', self._image_name,
-                    '--volume', '/'
+                    '--volume', '/',
+                    '--debug'
                 ),
                 env=environ
             )[0]
