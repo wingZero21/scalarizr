@@ -196,21 +196,22 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         optparser = bus.optparser
         
-        if os.path.exists(self.saved_boot_id_file):
-            saved_boot_id = None
-            current_boot_id = None
+        if os_dist['family'] != 'Windows':
+            if os.path.exists(self.saved_boot_id_file):
+                saved_boot_id = None
+                current_boot_id = None
+                with open(self.boot_id_file, 'r') as fp:
+                    current_boot_id = fp.read()
+                with open(self.saved_boot_id_file, 'r') as fp:
+                    saved_boot_id = fp.read()
+
+                if saved_boot_id and saved_boot_id != current_boot_id:
+                    Flag.set(Flag.REBOOT)
+
             with open(self.boot_id_file, 'r') as fp:
                 current_boot_id = fp.read()
-            with open(self.saved_boot_id_file, 'r') as fp:
-                saved_boot_id = fp.read()
-
-            if saved_boot_id and saved_boot_id != current_boot_id:
-                Flag.set(Flag.REBOOT)
-
-        with open(self.boot_id_file, 'r') as fp:
-            current_boot_id = fp.read()
-            with open(self.saved_boot_id_file, 'w') as saved_fp:
-                saved_fp.write(current_boot_id)
+                with open(self.saved_boot_id_file, 'w') as saved_fp:
+                    saved_fp.write(current_boot_id)
 
         if Flag.exists(Flag.REBOOT) or Flag.exists(Flag.HALT):
             self._logger.info("Scalarizr resumed after reboot")
