@@ -76,7 +76,7 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
                 
     def __init__(self):
         initd_script = None
-        if linux.os.ubuntu and linux.os.['version'] >= (10, 4):
+        if linux.os.ubuntu and linux.os['version'] >= (10, 4):
             initd_script = ('/usr/sbin/service', 'mongodb')
         else:
             initd_script = firstmatched(os.path.exists, ('/etc/init.d/mongodb', '/etc/init.d/mongod'))
