@@ -14,6 +14,7 @@ from scalarizr.linux import coreutils
 
 import os
 import glob
+import subprocess
 
 
 LOG = ec2_rebundle_hdlr.LOG
@@ -42,57 +43,87 @@ class EucaRebundleStrategy(ec2_rebundle_hdlr.RebundleInstanceStoreStrategy):
                 'EC2_PRIVATE_KEY': pk_path,
                 'EC2_USER_ID': self._platform.get_account_id(),
                 'EC2_ACCESS_KEY': access_key,
+                'AWS_ACCESS_KEY': access_key,
                 'EC2_SECRET_KEY': secret_key,
+                'AWS_SECRET_KEY': secret_key,
                 'EC2_URL': self._platform.get_access_data('ec2_url'),
                 'S3_URL': self._platform.get_access_data('s3_url')
             })
+            # LOG.info('environ: %s', environ)
+            # LOG.info('============')
+            # LOG.info('EC2_PRIVATE_KEY: %s', open(pk_path).read())
+            # LOG.info('============')
+            # LOG.info('EC2_CERT: %s', open(cert_path).read())
+            # LOG.info('============')
+            # LOG.info('EUCALYPTUS_CERT: %s', open(cloud_cert_path).read())
+            # LOG.info('============')
 
-            with open('/etc/fstab') as fp:
-                fstab_path = bus.cnf.write_key('euca-fstab', fp.read())
-            # disable_root_fsck=False - cause current fstab wrapper adds updated entry 
-            # to the end of the file, and this breaks CentOS boot 
-            # because 'mount -a' process fstab sequentically
-            self._fix_fstab(
-                filename=fstab_path, 
-                disable_root_fsck=False)
+            # with open('/etc/fstab') as fp:
+            #     fstab_path = bus.cnf.write_key('euca-fstab', fp.read())
+            # # disable_root_fsck=False - cause current fstab wrapper adds updated entry 
+            # # to the end of the file, and this breaks CentOS boot 
+            # # because 'mount -a' process fstab sequentically
+            # self._fix_fstab(
+            #     filename=fstab_path, 
+            #     disable_root_fsck=False)
 
             coreutils.touch('/.autorelabel')
             coreutils.touch('/.autofsck')
 
             # Create image object for gathering directories exclude list
-            image = rebundle_hdlr.LinuxImage('/', 
-                        os.path.join(self._destination, self._image_name), 
-                        self._excludes)
+            # image = rebundle_hdlr.LinuxImage('/', 
+            #             os.path.join(self._destination, self._image_name), 
+            #             self._excludes)
             
-            excludes = list(image.excludes)
-            try:
-                excludes.append(glob.glob('/var/lib/dhcp*')[0])
-            except IndexError:
-                pass
-            if linux.os.redhat_family or linux.os.oracle_family:
-                excludes.append('/selinux/*')
+            excludes = [
+                self._destination,
+                '/selinux/*',
+                '/var/lib/dhclient',
+                '/var/lib/dhcp',
+                '/var/lib/dhcp3'
+            ]
 
-            LOG.info('Executing euca-bundle-vol')
-            out = linux.system((
-                    linux.which('euca-bundle-vol'), 
-                    '--arch', linux.os['arch'],
-                    '--size', str(self._image_size),
-                    '--destination', self._destination,
-                    '--exclude', ','.join(excludes),
-                    '--fstab', fstab_path,
-                    '--prefix', self._image_name,
-                    '--volume', '/',
-                    '--debug'
-                ),
-                env=environ
-            )[0]
-            LOG.info(out)
+            LOG.info('Bundling image')
+            cmd = (
+                linux.which('euca-bundle-vol'), 
+                '--arch', linux.os['arch'],
+                '--size', str(self._image_size),
+                '--destination', self._destination,
+                '--exclude', ','.join(excludes),
+                #'--fstab', fstab_path,
+                '--prefix', self._image_name,
+                '--volume', '/',
+                '--debug'
+            )
+            LOG.info(' '.join(cmd))
+            LOG.info(linux.system(cmd, env=environ, stdout=subprocess.PIPE, 
+                    stderr=subprocess.STDOUT)[0])
 
-            LOG.info('Uploading image')
-            files_prefix = os.path.join(self._destination, self._image_name)
-            files = glob.glob(files_prefix + '*')
-            s3_manifest_path = self._upload_image_files(files, files_prefix + '.manifest.xml')
+            LOG.info('Uploading image (with euca-upload-bundle)')
+            #files_prefix = os.path.join(self._destination, self._image_name)
+            #files = glob.glob(files_prefix + '*')
+            #s3_manifest_path = self._upload_image_files(files, files_prefix + '.manifest.xml')
+            manifest = os.path.join(self._destination, self._image_name) + '.manifest.xml'
+            bucket = os.path.basename(self._platform.scalrfs.root())
+            cmd = (
+                linux.which('euca-upload-bundle'),
+                '--bucket', bucket,
+                '--manifest', manifest            
+            )
+            LOG.info(' '.join(cmd))
+            LOG.info(linux.system(cmd, env=environ)[0])
 
+            # LOG.info('Registering image (with euca-register)')
+            # cmd = (
+            #     linux.which('euca-register'),
+            #     '--name', self._image_name,
+            #     '{0}/{1}'.format(bucket, os.path.basename(manifest))
+            # )
+            # LOG.info(' '.join(cmd))
+            # LOG.info(linux.system(cmd, env=environ.copy())[0])
+
+            LOG.info('Registering image')
+            s3_manifest_path = '{0}/{1}'.format(bucket, os.path.basename(manifest))
             return self._register_image(s3_manifest_path)
 
         finally:
