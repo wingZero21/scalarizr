@@ -17,7 +17,7 @@ import sys
 import traceback
 import uuid
 import distutils.version
-import platform
+import platform as platform_module
 
 LOG = logging.getLogger(__name__)
 
@@ -138,8 +138,8 @@ class MessageListener:
         self._accept_kwargs = dict(
                 behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
                 platform = platform.name,
-                os = platform.uname(),
-                dist = platform.dist()
+                os = platform_module.uname(),
+                dist = platform_module.dist()
         )
         LOG.debug("Keywords for each Handler::accept\n%s", pprint.pformat(self._accept_kwargs))
 
