@@ -9,15 +9,18 @@ from scalarizr.handlers import Handler, HandlerError
 from scalarizr.handlers.rebundle import RebundleLogHandler
 from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrState
-from scalarizr.util import system2, software, cryptotool, disttool, wait_until
+from scalarizr.util import system2, software, cryptotool, wait_until
 from scalarizr.util.software import which
 from scalarizr.linux.coreutils import statvfs
 from scalarizr.linux.coreutils import truncate
 from scalarizr.linux.rsync import rsync
 from scalarizr.linux.tar import Tar
 from scalarizr.linux import mount
+from scalarizr import linux
 from datetime import datetime
 from tempfile import mkdtemp
+
+
 import logging
 import os
 import re
@@ -25,6 +28,7 @@ import time
 import shutil
 import pexpect
 import sys
+import platform
 
 # TODO: unrefactored
 
@@ -356,7 +360,7 @@ class NimbulaRebundleHandler(Handler):
     @property
     def adapter(self):
         if not hasattr(self, '_adapter'):
-            self._adapter = RedHatAdapter() if disttool._is_redhat_based else DebianAdapter()
+            self._adapter = RedHatAdapter() if linux.os.redhat_family else DebianAdapter()
         return self._adapter
 
     def _make_spec_dirs(self, root_path, excludes):
@@ -404,11 +408,11 @@ class NimbulaRebundleHandler(Handler):
         for name in ("etc/motd", "etc/motd.tail"):
             motd_filename = os.path.join(image_mpoint, name)
             if os.path.exists(motd_filename):
-                dist = disttool.linux_dist()
+                dist = platform.dist()
                 motd = MOTD % dict(
                         dist_name = dist[0],
                         dist_version = dist[1],
-                        bits = 64 if disttool.uname()[4] == "x86_64" else 32,
+                        bits = 64 if platform.uname()[4] == "x86_64" else 32,
                         role_name = role_name,
                         bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
                 )
@@ -451,7 +455,7 @@ class RedHatAdapter:
         """ Grub configuration """
         handler._logger.info('Configuring Grub')
         kernels = [file for file in os.listdir(os.path.join(handler.tmp_root_dir, 'boot')) if file.startswith('vmlinuz-')]
-        grubdir = os.path.join(handler.tmp_root_dir, 'usr', 'share', 'grub', '%s-redhat' % disttool.arch())
+        grubdir = os.path.join(handler.tmp_root_dir, 'usr', 'share', 'grub', '%s-redhat' % linux.os['arch'])
         boot_grub_path = os.path.join(handler.tmp_root_dir, 'boot', 'grub')
         for file in os.listdir(grubdir):
             shutil.copy(os.path.join(grubdir, file), boot_grub_path)
@@ -494,7 +498,7 @@ class DebianAdapter:
         if not os.path.exists(boot_grub_path):
             os.mkdir(boot_grub_path)
 
-        grub_dir = os.path.join(handler.tmp_root_dir, 'usr', 'lib', 'grub', '%s-pc' % disttool.arch())
+        grub_dir = os.path.join(handler.tmp_root_dir, 'usr', 'lib', 'grub', '%s-pc' % linux.os['arch'])
         for filename in os.listdir(grub_dir):
             shutil.copy(os.path.join(grub_dir, filename), boot_grub_path)
 

@@ -2,7 +2,7 @@ import logging
 
 from scalarizr import rpc
 from scalarizr import linux
-from scalarizr.util import system2, initdv2, disttool
+from scalarizr.util import system2, initdv2
 from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton
 from scalarizr import exceptions
@@ -54,9 +54,9 @@ class MemcachedInitScript(initdv2.ParametrizedInitScript):
 
     def __init__(self):
         pid_file = None
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             pid_file = "/var/run/memcached/memcached.pid"
-        elif disttool.is_debian_based():
+        elif linux.os.debian_family:
             pid_file = "/var/run/memcached.pid"
 
         initd_script = '/etc/init.d/memcached'

@@ -12,10 +12,11 @@ import logging
 from scalarizr.bus import bus
 from scalarizr.api import apache as apache_api
 from scalarizr.node import __node__
+from scalarizr import linux
 from scalarizr.linux import coreutils
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
-from scalarizr.util import disttool, initdv2
+from scalarizr.util import initdv2
 from scalarizr.api import service as preset_service
 from scalarizr.services import PresetProvider, BaseConfig
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
@@ -185,7 +186,7 @@ class ApacheHandler(Handler):
 class ApacheConf(BaseConfig):
 
     config_type = "app"
-    config_name = "apache2.conf" if disttool.is_debian_based() else "httpd.conf"
+    config_name = "apache2.conf" if linux.os.debian_family else "httpd.conf"
 
 
 class ApachePresetProvider(PresetProvider):

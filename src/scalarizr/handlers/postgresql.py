@@ -17,7 +17,8 @@ from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.linux.coreutils import chown_r
-from scalarizr.util import system2, disttool, software, cryptotool, initdv2
+from scalarizr import linux
+from scalarizr.util import system2, software, cryptotool, initdv2
 from scalarizr.linux import iptables
 from scalarizr.handlers import build_tags
 from scalarizr.api import service as preset_service
@@ -145,7 +146,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
         if __node__['state'] == ScalarizrState.BOOTSTRAPPING:
             
-            if disttool.is_redhat_based():      
+            if linux.os.redhat_family:      
                     
                 checkmodule_path = software.which('checkmodule')
                 semodule_package_path = software.which('semodule_package')

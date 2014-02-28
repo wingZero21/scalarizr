@@ -686,8 +686,8 @@ EOF
 	if dpkg --compare-versions "$installed_version" lt '0.7.143-1'; then
 		rm -f /etc/init.d/ec2-every-startup
 		python -c "
-from scalarizr.util import disttool
-if disttool.version_info() == (8, 4):
+from scalarizr import linux
+if linux.os['lsb_release'] == '8.04':
 	import os
 	import simplejson as json
 	cnf_path = '$priv_cnf_dir/storage/mysql.json'

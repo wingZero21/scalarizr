@@ -23,7 +23,7 @@ from multiprocessing import pool
 from scalarizr import rpc, linux
 from scalarizr.bus import bus
 from scalarizr import util
-from scalarizr.util import system2, dns, disttool
+from scalarizr.util import system2, dns
 from scalarizr.linux import mount
 from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
@@ -270,7 +270,7 @@ class SystemAPI(object):
 
         """
 
-        uname = disttool.uname()
+        uname = platform.uname()
         return {
             'kernel_name': uname[0],
             'nodename': uname[1],
@@ -278,7 +278,7 @@ class SystemAPI(object):
             'kernel_version': uname[3],
             'machine': uname[4],
             'processor': uname[5],
-            'hardware_platform': disttool.arch()
+            'hardware_platform': linux.os['arch']
         }
 
 

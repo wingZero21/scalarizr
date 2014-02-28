@@ -26,7 +26,7 @@ from pymysql import cursors
 from scalarizr import node
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import  BaseService, ServiceError, BaseConfig, lazy, PresetProvider
-from scalarizr.util import system2, disttool, firstmatched, initdv2, wait_until, PopenError, software
+from scalarizr.util import system2, firstmatched, initdv2, wait_until, PopenError, software
 from scalarizr.util.initdv2 import wait_sock, InitdError
 from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
@@ -71,7 +71,7 @@ class MySQL(BaseService):
         self._objects = {}
         self.service = initdv2.lookup(SERVICE_NAME)
         if not os.path.exists(MYCNF_PATH):
-            if disttool.is_redhat_based() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
+            if linux.os.redhat_family and os.path.exists('/usr/share/mysql/my-medium.cnf'):
                 shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF_PATH)
             else:
                 fp = open(MYCNF_PATH, 'w')
@@ -148,7 +148,7 @@ class MySQL(BaseService):
             self.my_cnf.set(directive, dirname)
             chown_r(dest, "mysql", "mysql")
             # Adding rules to apparmor config
-            if disttool.is_debian_based():
+            if linux.os.debian_family:
                 _add_apparmor_rules(dest)
 
 
@@ -669,7 +669,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
         self.mysql_cli = MySQLClient()
 
 
-        if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if linux.os.ubuntu and linux.os['version'] >= (10, 4):
             initd_script = ('/usr/sbin/service', 'mysql')
         else:
             initd_script = firstmatched(os.path.exists, ('/etc/init.d/mysqld', '/etc/init.d/mysql'))
@@ -710,7 +710,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                 wait_until(lambda: MYSQLD_PATH in system2(('ps', '-G', DEFAULT_OWNER, '-o', 'command', '--no-headers'))[0]
                         , timeout=10, sleep=1)
 
-        if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if action == 'start' and linux.os.ubuntu and linux.os['version'] >= (10, 4):
             try:
                 LOG.debug('waiting for mysql process')
                 wait_until(lambda: MYSQLD_PATH in system2(('ps', '-G', DEFAULT_OWNER, '-o', 'command', '--no-headers'))[0]

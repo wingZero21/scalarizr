@@ -15,7 +15,7 @@ import subprocess
 
 from M2Crypto import RSA
 
-from scalarizr.util import disttool, firstmatched, wait_until
+from scalarizr.util import firstmatched, wait_until
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, system2, PopenError, software
 from scalarizr.linux.coreutils import chown_r
@@ -68,7 +68,6 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
             
     def __init__(self):
         initd_script = None
-        # if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
         if linux.os.debian_family:
             initd_script = ('/usr/sbin/service', 'postgresql')
         else:
@@ -257,13 +256,13 @@ class PostgreSql(BaseService):
         if not wks or int(wks) < 32:
             self.postgresql_conf.wal_keep_segments = 32  # [TTM-8]
 
-        if disttool.is_ubuntu() and disttool.version_info() == (12, 4) and '9.1' == self.version:
+        if linux.os.ubuntu and linux.os['version'] == (12, 4) and '9.1' == self.version:
             #SEE: https://bugs.launchpad.net/ubuntu/+source/postgresql-9.1/+bug/1018307
             self.postgresql_conf.ssl_renegotiation_limit = 0
         
         self.cluster_dir.clean()
         
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             self.config_dir.move_to(self.unified_etc_path)
             make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
             self.postgresql_conf = PostgresqlConf.find(self.config_dir)
@@ -656,7 +655,7 @@ class ClusterDir(object):
         chown_r(dst, self.user)
         
         LOG.debug("Changing postgres user`s home directory")
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             #looks like ubuntu doesn`t need this
             system2([USERMOD, '-d', new_cluster_dir, self.user]) 
             

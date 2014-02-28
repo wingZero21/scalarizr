@@ -18,13 +18,13 @@ from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
 from scalarizr.util import Singleton
+from scalarizr import linux
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 from scalarizr.api import operation
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.util import disttool
 from scalarizr.api import BehaviorAPI
 
 
@@ -638,7 +638,7 @@ class NginxAPI(BehaviorAPI):
             if not config.get_list('http/server'):
                 config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
 
-        if disttool.is_debian_based():
+        if linux.os.debian_family:
         # Comment /etc/nginx/sites-enabled/*
             try:
                 i = config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
@@ -646,7 +646,7 @@ class NginxAPI(BehaviorAPI):
                 _logger.debug('comment site-enabled include')
             except (ValueError, IndexError):
                 _logger.debug('site-enabled include already commented')
-        elif disttool.is_redhat_based():
+        elif linux.os.redhat_family:
             def_host_path = '/etc/nginx/conf.d/default.conf'
             if os.path.exists(def_host_path):
                 default_host = metaconf.Configuration('nginx')

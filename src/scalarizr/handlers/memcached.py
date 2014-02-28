@@ -16,16 +16,17 @@ from scalarizr.api import service as preset_service
 from scalarizr.api import memcached as memcached_api
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, FarmSecurityMixin
 from scalarizr.messaging import Messages
+from scalarizr import linux
 
 # Libs
-from scalarizr.util import disttool, initdv2
+from scalarizr.util import initdv2
 
 
 # Stdlibs
 import logging, re, os
 
 
-if disttool._is_debian_based:
+if linux.os.debian_family:
     mcd_conf_path = '/etc/memcached.conf'
     expression = re.compile('^\s*-m\s*\d*$', re.M)
     mem_re = re.compile('^-m\s+(?P<memory>\d+)\s*$', re.M)
@@ -103,7 +104,7 @@ class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 class MemcachedConf(BaseConfig):
 
     config_type = 'app'
-    config_name = 'apache2.conf' if disttool.is_debian_based() else 'httpd.conf'
+    config_name = 'apache2.conf' if linux.os.debian_family else 'httpd.conf'
 
 
 class MemcachedPresetProvider(PresetProvider):

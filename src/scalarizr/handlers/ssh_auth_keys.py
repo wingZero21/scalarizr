@@ -1,17 +1,14 @@
 from __future__ import with_statement
 
-from __future__ import with_statement
+import re
+import os
+import sys
+import logging
 
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
 from scalarizr.util import firstmatched
-
-import re
-import os
-import sys
-import logging
-from scalarizr.util import disttool
 from scalarizr.util.initdv2 import ParametrizedInitScript
 from scalarizr import linux
 
@@ -34,9 +31,9 @@ class SSHKeys(Handler):
     def __init__(self):
         self._logger = logging.getLogger(__name__)
 
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             init_script = ('/sbin/service', 'sshd')
-        elif disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        elif linux.os.ubuntu and linux.os['version'] >= (10, 4):
             init_script = ('/usr/sbin/service', 'ssh')
         else:
             init_script = firstmatched(os.path.exists, ('/etc/init.d/ssh', '/etc/init.d/sshd'))

@@ -6,8 +6,9 @@ Created on Sep 30, 2011
 '''
 from __future__ import with_statement
 
+from scalarizr import linux
 from scalarizr.linux import iptables, pkgmgr, coreutils
-from scalarizr.util import disttool, system2
+from scalarizr.util import system2
 
 import os
 import sys
@@ -21,14 +22,15 @@ import threading
 
 mgr = pkgmgr.package_mgr()
 
-if disttool.is_redhat_based():
-    if disttool.version_info()[0] >= 6:
+if linux.os.redhat_family:
+    version = map(int, str(linux.os['release']).split('.'))
+    if version[0] >= 6:
         if mgr.info('python-pymongo').get('installed'):
             system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo',
                              'python-bson'))
         if not mgr.info('pymongo').get('installed'):
             mgr.install('pymongo', mgr.info('pymongo')['candidate'])
-    elif disttool.version_info()[0] == 5:
+    elif version[0] == 5:
         if not mgr.info('python26-pymongo').get('installed'):
             mgr.install('python26-pymongo', mgr.info('python26-pymongo')['candidate'])
 else:

@@ -7,8 +7,10 @@ Created on 22.03.2012
 import os
 import sys
 import tempfile
+import platform
 
-from scalarizr.util import disttool, dynimp
+from scalarizr.util import dynimp
+from scalarizr import linux
 
 import mock
 from nose.tools import raises, assert_equals
@@ -24,24 +26,24 @@ class TestImpLoader(object):
 
         self.manifest = os.path.dirname(__file__) + '/../../fixtures/util/dynimp-manifest.ini'
 
-        disttool.linux_dist = mock.Mock(return_value = ('', '', ''))
-        disttool.is_debian_based = mock.Mock(return_value=False)
-        disttool.is_redhat_based = mock.Mock(return_value=False)
-        disttool.is_fedora = mock.Mock(return_value=False)
+        platform.dist = mock.Mock(return_value = ('', '', ''))
+        linux.os.debian_family = False
+        linux.os.redhat_family = False
+        linux.os.fedora = False
 
     def teardown(self):
         shutil.rmtree(self.tmp)
 
     def env_ubuntu(self):
-        disttool.linux_dist.return_value = ('Ubuntu', '12.04', 'oneiric')
-        disttool.is_redhat_based.return_value = False
-        disttool.is_debian_based.return_value = True
+        platform.dist.return_value = ('Ubuntu', '12.04', 'oneiric')
+        linux.os.redhat_family.return_value = False
+        linux.os.debian_family.return_value = True
 
 
     def env_rhel5(self):
-        disttool.linux_dist.return_value = ('redhat', '5.6', 'final')
-        disttool.is_redhat_based.return_value = True
-        disttool.is_debian_based.return_value = False
+        platform.dist.return_value = ('redhat', '5.6', 'final')
+        linux.os.redhat_family.return_value = True
+        linux.os.debian_family.return_value = False
 
     def test_redhat_sections(self):
         self.env_rhel5()

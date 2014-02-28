@@ -5,7 +5,7 @@ from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool, software
+from scalarizr.util import initdv2, software
 from scalarizr.linux import iptables, pkgmgr
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 
@@ -17,6 +17,7 @@ import sys
 import traceback
 import uuid
 import distutils.version
+import platform
 
 LOG = logging.getLogger(__name__)
 
@@ -137,8 +138,8 @@ class MessageListener:
         self._accept_kwargs = dict(
                 behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
                 platform = platform.name,
-                os = disttool.uname(),
-                dist = disttool.linux_dist()
+                os = platform.uname(),
+                dist = platform.dist()
         )
         LOG.debug("Keywords for each Handler::accept\n%s", pprint.pformat(self._accept_kwargs))
 

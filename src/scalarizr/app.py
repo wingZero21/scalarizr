@@ -32,7 +32,7 @@ else:
 # Utils
 from scalarizr import util
 from scalarizr.util import initdv2, log, PeriodicalExecutor
-from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
+from scalarizr.util import SqliteLocalObject, daemonize, system2, firstmatched, format_size
 from scalarizr.util import wait_until, sqlite_server
 from scalarizr.util.flag import Flag
 

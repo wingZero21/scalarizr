@@ -22,7 +22,7 @@ from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
 from scalarizr.libs import metaconf
-from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool
+from scalarizr.util import system2, firstmatched, initdv2, software, cryptotool
 
 
 from scalarizr import storage2, linux
@@ -825,7 +825,7 @@ class MysqlHandler(DBMSRHandler):
             chcon = software.which('chcon')
         except LookupError:
             return
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             LOG.debug('Changing SELinux file security context for new mysql datadir')
             system2((chcon, '-R', '-u', 'system_u', '-r',
                      'object_r', '-t', 'mysqld_db_t', os.path.dirname(__mysql__['storage_dir'])), raise_exc=False)
@@ -1087,7 +1087,7 @@ class MysqlHandler(DBMSRHandler):
 
     def _copy_debian_cnf_back(self):
         debian_cnf = os.path.join(__mysql__['storage_dir'], 'debian.cnf')
-        if disttool.is_debian_based() and os.path.exists(debian_cnf):
+        if linux.os.debian_family and os.path.exists(debian_cnf):
             LOG.debug("Copying debian.cnf from storage to mysql configuration directory")
             shutil.copy(debian_cnf, '/etc/mysql/')
 

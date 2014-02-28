@@ -6,7 +6,7 @@ Created on 29.02.2012
 @author: sam
 '''
 
-from scalarizr.util import disttool
+from scalarizr import linux
 from scalarizr.util import system2, PopenError
 
 import logging
@@ -16,6 +16,7 @@ import sys, os
 import imp
 import time
 import ConfigParser as configparser
+import platform
 
 
 LOG = logging.getLogger(__name__)
@@ -245,7 +246,7 @@ class YumPackageMgr(PackageMgr):
         return self.yum_list(name)[0]
 
 def package_mgr():
-    return AptPackageMgr() if disttool.is_debian_based() else YumPackageMgr()
+    return AptPackageMgr() if lixux.os.debian_family else YumPackageMgr()
 
 class ImpLoader(object):
     '''
@@ -265,22 +266,22 @@ class ImpLoader(object):
     '''
 
     def __init__(self, manifest=None):
-        mgr_name = 'apt' if disttool.is_debian_based() else 'yum'
-        self.mgr = AptPackageMgr() if disttool.is_debian_based() else YumPackageMgr()
+        mgr_name = 'apt' if linux.os.debian_family else 'yum'
+        self.mgr = AptPackageMgr() if linux.os.debian_family else YumPackageMgr()
 
         self.manifest = os.path.abspath(manifest or self.DEFAULT_MANIFEST)
         self.conf = configparser.ConfigParser()
         self.conf.read(self.manifest)
 
-        dist_id, release = disttool.linux_dist()[0:2]
-        if disttool.is_redhat_based() and not disttool.is_fedora():
+        dist_id, release = platform.dist()[0:2]
+        if linux.os.redhat_family and not linux.os.fedora:
             dist_id = 'el'
         dist_id = dist_id.lower()
         major_release = release.split('.')[0]
         self.sections = [s % locals() for s in ('%(mgr_name)s',
-                                                                                '%(mgr_name)s:%(dist_id)s',
-                                                                                '%(mgr_name)s:%(dist_id)s%(major_release)s',
-                                                                                '%(mgr_name)s:%(dist_id)s%(release)s')]
+                                                '%(mgr_name)s:%(dist_id)s',
+                                                '%(mgr_name)s:%(dist_id)s%(major_release)s',
+                                                '%(mgr_name)s:%(dist_id)s%(release)s')]
         self.sections.reverse()
 
         LOG.debug('Initialized ImpLoader with such settings\n'
