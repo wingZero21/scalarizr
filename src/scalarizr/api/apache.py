@@ -218,7 +218,7 @@ class ApacheAPI(BehaviorAPI):
                 os.makedirs(docroot_parent_path, 0755)
                 LOG.info("Created parent directory of document root %s for %s" % (directory, name))
 
-            if not os.path.exists(directory) or not os.listdir(directory):
+            if not os.path.exists(directory):
                 shutil.copytree(os.path.join(bus.share_path, "apache/html"), directory)
                 files = ", ".join(os.listdir(directory))
                 LOG.debug("Copied document root files: %s" % files)
