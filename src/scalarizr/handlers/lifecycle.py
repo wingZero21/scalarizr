@@ -14,6 +14,7 @@ from scalarizr.api import operation
 from scalarizr.api import system as system_api
 from scalarizr import config, storage2
 from scalarizr.node import __node__
+from scalarizr import node 
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
@@ -50,7 +51,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     _cnf = None
     
     _new_crypto_key = None
-
+    boot_id_file = '/proc/sys/kernel/random/boot_id'
+    saved_boot_id_file = os.path.join(node.private_dir, 'boot_id')
 
     def __init__(self):
         super(LifeCycleHandler, self).__init__()
@@ -194,6 +196,23 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         optparser = bus.optparser
         
+        if os_dist['family'] != 'Windows':
+            if os.path.exists(self.saved_boot_id_file):
+                saved_boot_id = None
+                current_boot_id = None
+                with open(self.boot_id_file, 'r') as fp:
+                    current_boot_id = fp.read()
+                with open(self.saved_boot_id_file, 'r') as fp:
+                    saved_boot_id = fp.read()
+
+                if saved_boot_id and saved_boot_id != current_boot_id:
+                    Flag.set(Flag.REBOOT)
+
+            with open(self.boot_id_file, 'r') as fp:
+                current_boot_id = fp.read()
+                with open(self.saved_boot_id_file, 'w') as saved_fp:
+                    saved_fp.write(current_boot_id)
+
         if Flag.exists(Flag.REBOOT) or Flag.exists(Flag.HALT):
             self._logger.info("Scalarizr resumed after reboot")
             Flag.clear(Flag.REBOOT)

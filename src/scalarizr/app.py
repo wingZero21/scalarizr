@@ -54,6 +54,13 @@ import SocketServer
 
 from scalarizr import exceptions
 
+if not linux.os.windows:
+    import ctypes
+    libc = ctypes.CDLL('libc.so.6')
+
+    def res_init():
+        return libc.__res_init()
+
 
 class ScalarizrError(BaseException):
     pass
@@ -824,16 +831,20 @@ class Service(object):
     def _select_control_ports(self):
         defaults = node.__node__['defaults']['base']
 
-        lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
-        api_port = int(lfrp.get('base', {}).get('api_port', defaults['api_port']) \
-                        or defaults['api_port'])
-        messaging_port = int(lfrp.get('base', {}).get('messaging_port', defaults['messaging_port']) \
-                                or defaults['messaging_port'])
+        if node.__node__['state'] != 'importing':
+            lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
+            api_port = int(lfrp.get('base', {}).get('api_port', defaults['api_port']) \
+                            or defaults['api_port'])
+            messaging_port = int(lfrp.get('base', {}).get('messaging_port', defaults['messaging_port']) \
+                                    or defaults['messaging_port'])
 
-        if messaging_port == defaults['messaging_port'] and self._port_busy(messaging_port):
-            messaging_port = 8011
-        if api_port == defaults['api_port'] and self._port_busy(api_port):
-            api_port = 8009
+            if messaging_port == defaults['messaging_port'] and self._port_busy(messaging_port):
+                messaging_port = 8011
+            if api_port == defaults['api_port'] and self._port_busy(api_port):
+                api_port = 8009
+        else:
+            api_port = defaults['api_port']
+            messaging_port = defaults['messaging_port']
 
         node.__node__['base'].update({
             'api_port': api_port,
@@ -842,6 +853,25 @@ class Service(object):
 
         return api_port != defaults['api_port'] or messaging_port != defaults['messaging_port']    
 
+
+    def _try_resolver(self, url):
+        try:
+            urllib2.urlopen(url).read()
+        except urllib2.URLError, e:
+            if isinstance(e.args[0], socket.gaierror):
+                eai = e.args[0]
+                if eai.errno == socket.EAI_NONAME:
+                    with open('/etc/resolv.conf', 'w+') as fp:
+                        fp.write('nameserver 8.8.8.8\n')
+                elif eai.errno == socket.EAI_AGAIN:
+                    os.chmod('/etc/resolv.conf', 0755)
+                else:
+                    raise
+
+                # reload resolver 
+                res_init()
+            else:
+                raise 
 
 
     def _init_services(self):
@@ -855,6 +885,9 @@ class Service(object):
         pr = urlparse(queryenv_url)
         bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
         logger.debug("Got scalr url: '%s'" % bus.scalr_url)
+
+        if not linux.os.windows and node.__node__['platform'].name in ('eucalyptus', 'openstack'):
+            self._try_resolver(bus.scalr_url)
 
         # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
         bus.periodical_executor = PeriodicalExecutor()

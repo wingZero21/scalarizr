@@ -683,7 +683,7 @@ def main():
                 sys.exit()
 
             qe = new_queryenv()
-            xml = qe.fetch(*args, **kv)
+            xml = qe.fetch(*args, params=kv)
             print minidom.parseString(xml).toprettyxml(encoding='utf-8')
 
         if options.msgsnd:
