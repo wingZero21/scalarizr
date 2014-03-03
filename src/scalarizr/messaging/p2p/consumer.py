@@ -142,7 +142,7 @@ class P2pMessageConsumer(MessageConsumer):
                     else:
                         message.fromxml(rawmsg)
 
-                    msg_copy = self._msg_without_sensitive_data(msg)
+                    msg_copy = self._msg_without_sensitive_data(message)
 
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
