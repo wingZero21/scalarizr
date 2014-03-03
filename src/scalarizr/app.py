@@ -52,6 +52,13 @@ import wsgiref.simple_server
 import SocketServer
 
 
+if not linux.os.windows:
+    import ctypes
+    libc = ctypes.CDLL('libc.so.6')
+
+    def res_init():
+        return libc.__res_init()
+
 
 class ScalarizrError(BaseException):
     pass
@@ -854,6 +861,25 @@ class Service(object):
         return api_port != defaults['api_port'] or messaging_port != defaults['messaging_port']    
 
 
+    def _try_resolver(self, url):
+        try:
+            urllib2.urlopen(url).read()
+        except urllib2.URLError, e:
+            if isinstance(e.args[0], socket.gaierror):
+                eai = e.args[0]
+                if eai.errno == socket.EAI_NONAME:
+                    with open('/etc/resolv.conf', 'w+') as fp:
+                        fp.write('nameserver 8.8.8.8\n')
+                elif eai.errno == socket.EAI_AGAIN:
+                    os.chmod('/etc/resolv.conf', 0755)
+                else:
+                    raise
+
+                # reload resolver 
+                res_init()
+            else:
+                raise 
+
 
     def _init_services(self):
         logger = logging.getLogger(__name__)
@@ -866,6 +892,9 @@ class Service(object):
         pr = urlparse(queryenv_url)
         bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
         logger.debug("Got scalr url: '%s'" % bus.scalr_url)
+
+        if not linux.os.windows and node.__node__['platform'].name in ('eucalyptus', 'openstack'):
+            self._try_resolver(bus.scalr_url)
 
         # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
         bus.periodical_executor = PeriodicalExecutor()
