@@ -136,7 +136,7 @@ class QueryEnvService(object):
                                parameters,
                                self._read_list_farm_role_params_response,
                                log_response=False)
-        response_log_copy = dict(response)
+        response_log_copy = response.copy()
         try:
             del response_log_copy['chef']['validator_name']
             del response_log_copy['chef']['validator_key']
