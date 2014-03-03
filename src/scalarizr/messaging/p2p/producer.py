@@ -11,13 +11,14 @@ import time
 import uuid
 import httplib
 import urllib2
+import sys
 
 from scalarizr import messaging, util
 from scalarizr.bus import bus
 from scalarizr.messaging import p2p
 from scalarizr.util import urltool
 from scalarizr.node import __node__
-import sys
+from scalarizr.messaging.p2p import P2pMessage
 
 
 class P2pMessageProducer(messaging.MessageProducer):
@@ -108,14 +109,14 @@ class P2pMessageProducer(messaging.MessageProducer):
                                     'OperationDefinition',
                                     'OperationProgress',
                                     'OperationResult'):
-                data_copy = dict(message.body)
+                msg_copy = P2pMessage(message.name, message.meta.copy(), message.body.copy())
                 try:
-                    del data_copy['chef']['validator_name']
-                    del data_copy['chef']['validator_key']
+                    del msg_copy.body['chef']['validator_name']
+                    del msg_copy.body['chef']['validator_key']
                 except (KeyError, TypeError):
                     pass
                 self._logger.debug("Delivering message '%s' %s. Json: %s, Headers: %s",
-                                   message.name, data_copy, use_json, headers)
+                                   message.name, msg_copy.body, use_json, headers)
 
             for f in self.filters['protocol']:
                 data = f(self, queue, data, headers)
