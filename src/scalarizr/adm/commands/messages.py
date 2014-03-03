@@ -1,9 +1,9 @@
 import inspect
 
 try:
-    import json
+    import json_module
 except ImportError:
-    import simplejson as json
+    import simplejson as json_module
 import yaml
 
 from scalarizr.adm.command import Command
@@ -121,7 +121,7 @@ class MessageDetails(Command):
                             'body': msg.body})
 
             if json:
-                print json.dumps(mdict, indent=4, sort_keys=True)
+                print json_module.dumps(mdict, indent=4, sort_keys=True)
             else:
                 print yaml.dump(mdict, default_flow_style=False)
         else:
