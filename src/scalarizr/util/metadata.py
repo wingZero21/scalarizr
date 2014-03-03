@@ -3,22 +3,17 @@
 import urllib2
 import json
 import logging
-import socket
-import urlparse
 import re
 import os
 import posixpath
 import glob
-import time
+import operator
+from multiprocessing import pool as ppool
 
 from scalarizr import linux
 
 
 LOG = logging.getLogger(__name__)
-if linux.os.windows:
-    FILE_META = ['C:\\Program Files\\Scalarizr\\etc\\private.d\\.user-data']
-else:
-    FILE_META = ['/etc/.scalr-user-data', '/etc/scalr/private.d/.user-data']
 
 
 class Error(Exception):
@@ -31,106 +26,219 @@ class NoUserDataError(Error):
     pass
 
 
-def parse_user_data(data):
-    return dict(re.findall("([^=]+)=([^;]*);?", data))
+class Userdata(dict):
+    @classmethod
+    def from_string(cls, data):
+        return Userdata(re.findall("([^=]+)=([^;]*);?", data))
 
 
-class Meta(object):
-    platform = None
-    def __getitem__(self, name):
-        raise NotImplementedError()
+class VoteCapabilityDict(dict):
+    def incr_each(self, value=1):
+        for key in self:
+            self[key] += value
 
-    def user_data(self):
-        # Scalr encoded user-data
-        raise NotImplementedError()
-
-    def supported(self):
-        raise NotImplementedError()
-
-    def __repr__(self):
-        return self.__class__.__name__[:-4].lower()
+    def decr_each(self, value=1):
+        for key in self:
+            self[key] -= value
 
 
-class UrlMeta(Meta):
-    base_url = None
-    user_data_rel = None
-    socket_timeout = 5
-
-    def __getitem__(self, rel):
-        result = list(urlparse.urlparse(self.base_url))
-        result[2] = posixpath.normpath(result[2] + '/' + rel)
-        url = urlparse.urlunparse(result)
+class VoteDict(dict):
+    def __getitem__(self, key):
         try:
-            return urllib2.urlopen(url, timeout=self.socket_timeout).read().strip()
-        except urllib2.HTTPError, e:
-            if e.code == 404:
-                msg = "Such meta-data doesn't exists: {0}".format(url)
-                raise KeyError(msg)
+            return super(VoteDict, self).__getitem__(key)
+        except KeyError:
+            for cls, value in self.iteritems():
+                if cls.__class__.__name__ == key:
+                    return value
             raise
 
-    def user_data(self):
-        try:
-            user_data = self[self.user_data_rel]
-        except KeyError:
-            raise NoUserDataError()
-        else:
-            return parse_user_data(user_data)
 
-    def supported(self):
+class Metadata(object):
+
+    class NoDataPvd(object):
+        def __init__(self, metadata):
+            self.metadata = metadata
+
+        def instance_id(self):
+            return self.metadata['user_data']['serverid']
+
+        def user_data(self):
+            raise NoUserDataError()
+
+
+    def __init__(self, providers=None, capabilities=None):
+        self._cache = {}
+        self._provider_for_capability = {}
+        self._nodata_pvd = self.NoDataPvd(self)
+        self._providers_resolved = False
+        if not providers:
+            if linux.os.windows:
+                providers = [
+                    Ec2Pvd(),
+                    OpenStackQueryPvd(),
+                    FileDataPvd('C:\\Program Files\\Scalarizr\\etc\\private.d\\.user-data')
+                ]
+            else:
+                providers = [
+                    Ec2Pvd(),
+                    GcePvd(),
+                    OpenStackQueryPvd(),
+                    OpenStackXenStorePvd(),
+                    CloudStackPvd(),
+                    FileDataPvd('/etc/.scalr-user-data'),
+                    FileDataPvd('/etc/scalr/private.d/.user-data')
+                ]
+        self.providers = providers
+        self.capabilities = capabilities or ['instance_id', 'user_data']
+
+
+    def _resolve_once_providers(self):
+        if self._providers_resolved:
+            return  
+        votes = VoteDict()
+        for pvd in self.providers:
+            votes[pvd] = VoteCapabilityDict.fromkeys(self.capabilities, 0)
+        def vote(pvd):
+            pvd.vote(votes)
+        pool = ppool.ThreadPool(processes=len(self.providers))
+        pool.map(vote, self.providers)
+        for cap in self.capabilities:
+            cap_votes = ((pvd, votes[pvd][cap]) for pvd in votes)
+            cap_votes = sorted(cap_votes, key=operator.itemgetter(1))
+            pvd, vote = cap_votes[-1]
+            if not vote:
+                pvd = self._nodata_pvd
+            self._provider_for_capability[cap] = pvd
+        self._providers_resolved = True
+
+    def __getitem__(self, capability):
+        self._resolve_once_providers()
+        if not capability in self._cache:
+            try:
+                pvd = self._provider_for_capability[capability]
+            except KeyError:
+                msg = "Can't find a provider for '{0}'".format(capability)
+                raise NoProviderError(msg)
+            else:
+                self._cache[capability] = getattr(pvd, capability)()
+        return self._cache[capability]
+
+
+class Provider(object):
+    HTTP_TIMEOUT = 5
+    EC2_BASE_URL = 'http://169.254.169.254/latest'
+    base_url = None
+
+    def vote(self, votes):
+        raise NotImplementedError()
+
+    def try_url(self, url):
         try:
-            pr = urlparse.urlparse(self.base_url)
-            socket.gethostbyname(pr.hostname)
+            return self.get_url(url)
         except:
             return False
-        else:
-            try:
-                urllib2.urlopen(self.base_url)
-                return True
-            except:
-                return False
+
+    def get_url(self, url=None, rel=None):
+        if rel:
+            url = posixpath.join(url or self.base_url, rel)
+        return urllib2.urlopen(url, timeout=self.HTTP_TIMEOUT).read().strip()
+
+    def try_ec2_url(self):
+        return self.try_url(self.EC2_BASE_URL)
+
+    def try_file(self, path):
+        return os.access(path, os.R_OK)
+
+    def get_file(self, path):
+        with open(path) as fp:
+            return fp.read().strip() 
 
 
-class FileMeta(Meta):
-    # pylint: disable=W0223
+class Ec2Pvd(Provider):
+    def __init__(self):
+        self.base_url = Provider.EC2_BASE_URL
 
-    def __init__(self, filename):
-        self.filename = filename
+    def vote(self, votes):
+        if self.try_ec2_url():
+            votes[self].incr_each()
+
+    def instance_id(self):
+        return self.get_url(rel='meta-data/instance-id')
 
     def user_data(self):
-        try:
-            user_data = open(self.filename).read().strip()
-        except:
-            raise NoUserDataError()
-        else:
-            return parse_user_data(user_data)
+        return Userdata.from_string(
+                self.get_url(rel='user-data'))
+           
 
-    def supported(self):
-        return os.access(self.filename, os.R_OK)
+class GcePvd(Provider):
+    def __init__(self):
+        self.base_url = 'http://metadata/computeMetadata/v1beta1'    
 
-    def __repr__(self):
-        return 'file({0})'.format(self.filename)
+    def vote(self, votes):
+        if self.try_url(self.base_url):
+            votes[self].incr_each()
+
+    def instance_id(self):
+        return self.get_url(rel='instance/id')
+
+    def user_data(self):
+        return Userdata.from_string(
+                self.get_url(rel='instance/attributes/scalr'))
+        
+
+class OpenStackQueryPvd(Provider):
+
+    def __init__(self, 
+            metadata_json_url='http://169.254.169.254/openstack/latest/meta_data.json'):
+        self.metadata_json_url = metadata_json_url
+        self._cache = {}
+
+    def vote(self, votes):
+        meta = self.try_url(self.metadata_json_url)
+        if meta:
+            self._cache = json.loads(meta)
+            votes[self]['instance_id'] += 1
+            votes['Ec2Pvd'].decr_each()
+        if 'meta' in self._cache:
+            votes[self]['user_data'] += 1
+
+    def instance_id(self):
+        return self._cache['instance_id']
+
+    def user_data(self):
+        return self._cache['meta']
 
 
-class Ec2Meta(UrlMeta):
-    platform = 'ec2'
-    base_url = 'http://169.254.169.254/latest/meta-data'
-    user_data_rel = '../user-data'
+class OpenStackXenStorePvd(Provider):
+    def vote(self, votes):
+        if self.try_file('/proc/xen/xenbus') and linux.which('xenstore-ls') \
+                and linux.which('nova-agent'):
+            votes[self]['user_data'] += 1
+            votes['OpenStackQueryPvd']['user_data'] -= 1
+
+    def user_data(self):
+        keyvalue_re = re.compile(r'([^\s]+)\s+=\s+\"{2}([^\"]+)\"{2}')
+        ret = []
+        out = linux.system((linux.which('xenstore-ls'), 'vm-data/user-metadata'))[0]
+        for line in out.splitlines():
+            m = keyvalue_re.search(line)
+            if m:
+                ret.append(m.groups())
+        return dict(ret)
 
 
-class CloudStackMeta(UrlMeta):
-    platform = 'cloudstack'
+class CloudStackPvd(Provider):
+    def __init__(self, 
+            dhcp_server=None, 
+            dhcp_leases_pattern='/var/lib/dhc*/dhclient*.leases'):
+        if not dhcp_server:
+            dhcp_server = self.dhcp_server(dhcp_leases_pattern)
+        LOG.debug('Use DHCP server: %s', dhcp_server)
+        self.base_url = 'http://{0}/latest'.format(dhcp_server)
 
-    def __init__(self, router_host=None, 
-            leases_pattern='/var/lib/dhc*/dhclient*.leases'):
-        if not router_host:
-            router_host = CloudStackMeta.dhcp_server_identifier(leases_pattern)
-        LOG.debug('Use router_host: %s', router_host)
-        self.base_url = 'http://{0}/latest'.format(router_host)
-        self.user_data_rel = 'user-data'
-
-    @staticmethod
-    def dhcp_server_identifier(leases_pattern=None):
-        router_host = None
+    @classmethod
+    def dhcp_server(cls, leases_pattern=None):
+        router = None
         try:
             leases_file = glob.glob(leases_pattern)[0]
             LOG.debug('Use DHCP leases file: %s', leases_file)
@@ -139,72 +247,39 @@ class CloudStackMeta(UrlMeta):
             raise Error(msg)
         for line in open(leases_file):
             if 'dhcp-server-identifier' in line:
-                router_host = filter(None, line.split(';')[0].split(' '))[2]
-        return router_host
+                router = filter(None, line.split(';')[0].split(' '))[2]
+        return router
 
+    def vote(self, votes):
+        if self.try_url(self.base_url):
+            votes[self].incr_each()
+            if self.try_ec2_url():
+                votes['Ec2Pvd'].decr_each()
 
-class OpenStackMeta(UrlMeta):
-    platform = 'openstack'
-    user_data_rel = 'meta'
-
-    def __init__(self, meta_data_url='http://169.254.169.254/openstack/latest/meta_data.json'):
-        self.meta_data_url = meta_data_url
-        self.file_meta = None
-        self.cached = None
-
-    def __getitem__(self, key):
-        if not self.cached:
-            data = urllib2.urlopen(self.meta_data_url, 
-                    timeout=self.socket_timeout).read().strip()
-            self.cached = json.loads(data)
-        return self.cached[key]
-
-    def supported(self):
-        try:
-            meta = urllib2.urlopen(self.meta_data_url).read()
-            return True
-        except:
-            return False
+    def instance_id(self):
+        value = self.get_url(rel='instance-id')
+        if len(value) == 36:
+            # uuid-like (CloudStack 3)
+            return value
+        else:
+            # CloudStack 2 / IDCF
+            return value.split('-')[2]
 
     def user_data(self):
-        try:
-            return self['meta']
-        except KeyError:
-            if not self.file_meta:
-                pvds = [FileMeta(f) for f in FILE_META]
-                for pvd in pvds:
-                    if pvd.supported():
-                        self.file_meta = pvd
-            if not self.file_meta:
-                msg = "user-data provider not found. We've tried those ones: {0}".format(pvds)
-                raise NoProviderError(msg)
-            return self.file_meta.user_data()
+        return Userdata.from_string(self.get_url(rel='user-data'))
 
 
-class GceMeta(UrlMeta):
-    platform = 'gce'
-    base_url = 'http://metadata/computeMetadata/v1beta1/instance'
-    user_data_rel = 'attributes/scalr'
+class FileDataPvd(Provider):
+    def __init__(self, filename):
+        self.filename = filename
 
+    def vote(self, votes):
+        if self.try_file(self.filename):
+            votes[self]['user_data'] += 1
 
-def meta(timeout=None):
-    if linux.os.windows:
-        pvds = [Ec2Meta(), 
-                OpenStackMeta()]
-    else:
-        pvds = [OpenStackMeta(), 
-                CloudStackMeta(), 
-                GceMeta(), 
-                Ec2Meta()]
-    pvds += [FileMeta(f) for f in FILE_META]
+    def __repr__(self):
+        return '<FileDataPvd at {0} filename={1}>'.format(
+                hex(id(self)), self.filename)
 
-    for _ in range(0, timeout or 1):
-        for obj in pvds:
-            if obj.supported():
-                return obj
-        if timeout:
-            time.sleep(1)
-
-    msg = "meta-data provider not found. We've tried those ones: {0}".format(pvds)
-    raise NoProviderError(msg)
-
+    def user_data(self):
+        return Userdata.from_string(self.get_file(self.filename))

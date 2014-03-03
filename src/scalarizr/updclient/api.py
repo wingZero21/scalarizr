@@ -155,7 +155,7 @@ class UpdClientAPI(object):
         self.op_api = operation.OperationAPI()
         self.dist = '{name} {release} {codename}'.format(**linux.os)
         self.state = 'noop'
-        self.meta = metadata.meta()
+        self.meta = metadata.Metadata()
         self.shutdown_ev = threading.Event()
 
 
@@ -246,16 +246,8 @@ class UpdClientAPI(object):
                     LOG.debug('dmidecide returns empty UUID')
             except:
                 LOG.debug(sys.exc_info()[1])
-
         if not ret:
-            if self.meta.platform == 'ec2':
-                ret = self.meta['instance-id']
-            elif self.meta.platform == 'gce':
-                ret = self.meta['id']
-            elif self.meta.platform == 'openstack':
-                ret = self.meta['uuid']
-            else:
-                LOG.debug("Don't know how to get instance-id on '%s' platform", self.meta.platform)
+            ret = self.meta['instance_id']
         if not ret:
             raise NoSystemUUID('System UUID not detected')
         return ret
@@ -308,7 +300,7 @@ class UpdClientAPI(object):
                     return
         else:
             LOG.debug('Getting cloud user-data')
-            user_data = self.meta.user_data()
+            user_data = self.meta['user_data']
             norm_user_data(user_data)
             LOG.debug('Apply user-data settings')
             self._update_self_dict(user_data)
