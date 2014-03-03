@@ -1,7 +1,7 @@
 import inspect
 
 try:
-    import json_module
+    import json as json_module
 except ImportError:
     import simplejson as json_module
 import yaml
