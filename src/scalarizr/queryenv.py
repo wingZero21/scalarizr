@@ -33,6 +33,9 @@ class QueryEnvService(object):
     key_path = None
     server_id = None
 
+    def _log_parsed_response(self, response):
+        self._logger.debug("QueryEnv response (parsed): %s", response)
+
     def __init__(self, url, server_id=None, key_path=None, api_version='2012-04-17'):
         self._logger = logging.getLogger(__name__)
         self.url = url if url[-1] != "/" else url[0:-1]
@@ -136,7 +139,19 @@ class QueryEnvService(object):
         parameters = {}
         if farm_role_id:
             parameters["farm-role-id"] = farm_role_id
-        return {'params':self._request("list-farm-role-params", parameters, self._read_list_farm_role_params_response) or {}}
+        response = self._request("list-farm-role-params",
+                               parameters,
+                               self._read_list_farm_role_params_response,
+                               log_response=False)
+        response_log_copy = dict(response)
+        try:
+            del response_log_copy['chef']['validator_name']
+            del response_log_copy['chef']['validator_key']
+        except KeyError:
+            pass
+        self._log_parsed_response(response_log_copy)
+        self._log_parsed_response(response)  # DEBUG
+        return {'params': response or {}}
 
 
     def get_server_user_data(self):
@@ -231,7 +246,7 @@ class QueryEnvService(object):
                                   self._read_list_global_variables,
                                   log_response=False)
 
-        self._logger.debug("QueryEnv response (parsed): %s", glob_vars['public'])
+        self._log_parsed_response(glob_vars['public'])
         return glob_vars
 
 ###############################################################################
@@ -247,7 +262,7 @@ class QueryEnvService(object):
         try:
             parsed_response = response_reader(xml, *response_reader_args)
             if log_response:
-                self._logger.debug("QueryEnv response (parsed): %s", parsed_response)
+                self._log_parsed_response(parsed_response)
             return parsed_response
         except (Exception, BaseException), e:
             self._logger.debug("QueryEnv response: %s", xml)

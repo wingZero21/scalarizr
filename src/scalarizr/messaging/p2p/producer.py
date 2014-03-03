@@ -104,10 +104,18 @@ class P2pMessageProducer(messaging.MessageProducer):
             content_type = 'application/%s' % 'json' if use_json else 'xml'
             headers = {'Content-Type': content_type}
 
-            if message.name not in ('Log', 'OperationDefinition',
-                                                    'OperationProgress', 'OperationResult'):
+            if message.name not in ('Log',
+                                    'OperationDefinition',
+                                    'OperationProgress',
+                                    'OperationResult'):
+                data_copy = dict(data)
+                try:
+                    del data_copy['body']['chef']['validator_name']
+                    del data_copy['body']['chef']['validator_key']
+                except KeyError:
+                    pass
                 self._logger.debug("Delivering message '%s' %s. Json: %s, Headers: %s",
-                                   message.name, data, use_json, headers)
+                                   message.name, data_copy, use_json, headers)
 
             for f in self.filters['protocol']:
                 data = f(self, queue, data, headers)

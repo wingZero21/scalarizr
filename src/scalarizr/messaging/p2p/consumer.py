@@ -81,6 +81,32 @@ class P2pMessageConsumer(MessageConsumer):
             @type consumer: P2pMessageConsumer
             '''
 
+            def _msg_without_sensitive_data(self, message):
+                msg_copy = P2pMessage(message.name, message.meta.copy(), message.body.copy())
+                msg_copy.id = message.id
+
+                if 'platform_access_data' in msg_copy.body:
+                    del msg_copy.body['platform_access_data']
+
+                if 'global_variables' in msg_copy.body:
+                    glob_vars = msg_copy.body['global_variables']
+                    i = 0
+                    for v in list(glob_vars):
+                        if v.get('private'):
+                            del glob_vars[i]
+                            i -= 1
+                        elif 'private' in v:
+                            del glob_vars[i]['private']
+                        i += 1
+
+                if 'chef' in msg_copy.body:
+                    try:
+                        del msg_copy.body['chef']['validator_name']
+                        del msg_copy.body['chef']['validator_key']
+                    except KeyError:
+                        pass
+                return msg_copy
+
             def do_POST(self):
                 logger = logging.getLogger(__name__)
 
@@ -116,21 +142,8 @@ class P2pMessageConsumer(MessageConsumer):
                     else:
                         message.fromxml(rawmsg)
 
-                    # Create a message copy to log it without platform_access_data and with pretty identation  
-                    msg_copy = P2pMessage(message.name, message.meta.copy(), message.body.copy())
-                    msg_copy.id = message.id
-                    if 'platform_access_data' in msg_copy.body:
-                        del msg_copy.body['platform_access_data']
-                    if 'global_variables' in msg_copy.body:
-                        glob_vars = msg_copy.body['global_variables']
-                        i = 0
-                        for v in list(glob_vars):
-                            if v.get('private'):
-                                del glob_vars[i]
-                                i -= 1
-                            elif 'private' in v:
-                                del glob_vars[i]['private']
-                            i += 1
+                    msg_copy = self._msg_without_sensitive_data(msg)
+
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
 
