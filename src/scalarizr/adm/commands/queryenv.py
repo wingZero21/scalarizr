@@ -147,7 +147,7 @@ class Queryenv(Command):
                 i += 1
             print ET.tostring(xml)
         except:
-            self._display_out(out)
+            self._display_out('', out)
 
     def _display_out(self, method, out):
         """
