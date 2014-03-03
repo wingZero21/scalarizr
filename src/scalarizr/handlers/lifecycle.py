@@ -14,6 +14,7 @@ from scalarizr.api import operation
 from scalarizr.api import system as system_api
 from scalarizr import config, storage2
 from scalarizr.node import __node__
+from scalarizr import node 
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
@@ -27,7 +28,6 @@ if os_dist.windows_family:
     import win32timezone as os_time
 else:
     from datetime import datetime as os_time
-from scalarizr.libs import metaconf
 
 # Stdlibs
 import logging, os, sys, threading
@@ -51,7 +51,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     _cnf = None
     
     _new_crypto_key = None
-
+    boot_id_file = '/proc/sys/kernel/random/boot_id'
+    saved_boot_id_file = os.path.join(node.private_dir, 'boot_id')
 
     def __init__(self):
         super(LifeCycleHandler, self).__init__()
@@ -166,35 +167,18 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _fetch_globals(self):
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
-        os.environ.update(glob_vars)
+        os.environ.update(glob_vars['public'])
+        os.environ.update(glob_vars['private'])
 
         if 'Windows' == os_dist['family']:
             pass
         else:
-            env_file_path = '/etc/environment'
-            opening_label = \
-                '########## BEGINNGING OF SCALR-DEFINED VARIABLES. PLEASE DO NOT EDIT ##########\n'
-            closing_label = \
-                '############################ END OF SCALR VARIABLES ###########################\n'
-            env_conf = ''
-            with open(env_file_path, 'r') as fp:
-                env_conf = fp.read()
-            try:
-                # Removing outdated variables
-                start = env_conf.index(opening_label)
-                end = env_conf.index(closing_label) + len(closing_label)
-                env_conf = env_conf[:start] + env_conf[end:]
-            except ValueError:
-                pass
-
-            with open(env_file_path, 'w') as fp:
-                scalr_kv = ''
-                for kv in glob_vars.items():
-                    scalr_kv += '%s=%s\n' % kv
-                scalr_kv = opening_label + scalr_kv + closing_label
-                if not env_conf.endswith('\n'):
-                    scalr_kv = '\n' + scalr_kv
-                fp.write(env_conf + scalr_kv)
+            globals_path = '/etc/profile.d/scalr_globals.sh'
+            with open(globals_path, 'w') as fp:
+                for k, v in glob_vars['public'].items():
+                    v = v.replace('"', '\\"')
+                    fp.write('export %s="%s"\n' % (k, v))
+            os.chmod(globals_path, 0644)
 
     def _assign_hostname(self):
         if not __node__.get('hostname'):
@@ -212,6 +196,23 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         optparser = bus.optparser
         
+        if os_dist['family'] != 'Windows':
+            if os.path.exists(self.saved_boot_id_file):
+                saved_boot_id = None
+                current_boot_id = None
+                with open(self.boot_id_file, 'r') as fp:
+                    current_boot_id = fp.read()
+                with open(self.saved_boot_id_file, 'r') as fp:
+                    saved_boot_id = fp.read()
+
+                if saved_boot_id and saved_boot_id != current_boot_id:
+                    Flag.set(Flag.REBOOT)
+
+            with open(self.boot_id_file, 'r') as fp:
+                current_boot_id = fp.read()
+                with open(self.saved_boot_id_file, 'w') as saved_fp:
+                    saved_fp.write(current_boot_id)
+
         if Flag.exists(Flag.REBOOT) or Flag.exists(Flag.HALT):
             self._logger.info("Scalarizr resumed after reboot")
             Flag.clear(Flag.REBOOT)
@@ -347,12 +348,16 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             t = threading.Thread(name='IntMessageConsumer', target=srv.get_consumer().start)
             t.start()
 
+
     def _check_control_ports(self):
-        if STATE['global.api_port'] != 8010 or STATE['global.msg_port'] != 8013:
-            # API or Messaging on non-default port
+        defaults = __node__['defaults']['base']
+        ports_changed = __node__['base']['api_port'] != defaults['api_port'] \
+                or __node__['base']['messaging_port'] != defaults['messaging_port']
+        if ports_changed:
+            # @deprecated. expires 2014/04
             self.send_message(Messages.UPDATE_CONTROL_PORTS, {
-                'api': STATE['global.api_port'],
-                'messaging': STATE['global.msg_port'],
+                'api': __node__['base']['api_port'],
+                'messaging': __node__['base']['messaging_port'],
                 'snmp': 8014
             })
 

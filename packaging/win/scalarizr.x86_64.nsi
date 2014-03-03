@@ -118,17 +118,17 @@ Section "MainSection" SEC01
   StrCpy $start_scalarizr "0"
 
   ${If} $installed_version != ""
-	services::IsServiceRunning 'Scalarizr'
-	Pop $0
-	StrCmp $0 'No' stopped
-	StrCpy $start_scalarizr "1"
+  services::IsServiceRunning 'Scalarizr'
+  Pop $0
+  StrCmp $0 'No' stopped
+  StrCpy $start_scalarizr "1"
     services::SendServiceCommand 'stop' 'Scalarizr'
-	Pop $0
-	StrCmp $0 'Ok' stopped
-		MessageBox MB_OK|MB_ICONSTOP 'Failed to stop service. Reason: $0' /SD IDOK
-		SetErrorLevel 2
-		Abort
-	stopped:
+  Pop $0
+  StrCmp $0 'Ok' stopped
+    MessageBox MB_OK|MB_ICONSTOP 'Failed to stop service. Reason: $0' /SD IDOK
+    SetErrorLevel 2
+    Abort
+  stopped:
     RMDir /r $INSTDIR\src
     RMDir /r $INSTDIR\scripts
     RMDir /r $INSTDIR\share
@@ -241,7 +241,7 @@ Section -PostInstall
   
   ${If} $installed_version == ""
   ${AndIf} ${RunningX64}
-  	nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
+    nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
   ${EndIf}
   
   RMDir /r $INSTDIR\tmp
