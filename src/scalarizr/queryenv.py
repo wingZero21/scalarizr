@@ -143,6 +143,7 @@ class QueryEnvService(object):
         except (KeyError, TypeError):
             pass
         self._log_parsed_response(response_log_copy)
+        self._logger.debug("DEBUG QueryEnv")
         self._log_parsed_response(response)  # DEBUG
         return {'params': response or {}}
 
