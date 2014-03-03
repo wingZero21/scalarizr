@@ -142,10 +142,10 @@ class Szradm(command_module.Command):
                         'msgfile': msgfile,
                         'endpoint': endpoint,
                         'queue': queue}
-                return self.run_subcommand('msgsnd', args, kwds)
+                return self.run_subcommand('msgsnd', [command] + args, kwds)
 
             if fire_event:
-                return self.run_subcommand('fire-event', [fire_event]+args)
+                return self.run_subcommand('fire-event', [fire_event, command] + args)
 
             if not command:
                 return self(help=True)
