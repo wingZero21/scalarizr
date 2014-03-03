@@ -112,7 +112,7 @@ class P2pMessageProducer(messaging.MessageProducer):
                 try:
                     del data_copy['body']['chef']['validator_name']
                     del data_copy['body']['chef']['validator_key']
-                except KeyError:
+                except (KeyError, TypeError):
                     pass
                 self._logger.debug("Delivering message '%s' %s. Json: %s, Headers: %s",
                                    message.name, data_copy, use_json, headers)

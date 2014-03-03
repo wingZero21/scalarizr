@@ -157,7 +157,7 @@ class QueryEnvService(object):
         try:
             del response_log_copy['chef']['validator_name']
             del response_log_copy['chef']['validator_key']
-        except KeyError:
+        except (KeyError, TypeError):
             pass
         self._log_parsed_response(response_log_copy)
         self._log_parsed_response(response)  # DEBUG
