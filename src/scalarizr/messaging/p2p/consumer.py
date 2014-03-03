@@ -103,7 +103,7 @@ class P2pMessageConsumer(MessageConsumer):
                     try:
                         del msg_copy.body['chef']['validator_name']
                         del msg_copy.body['chef']['validator_key']
-                    except KeyError:
+                    except (KeyError, TypeError):
                         pass
                 return msg_copy
 
