@@ -108,10 +108,10 @@ class P2pMessageProducer(messaging.MessageProducer):
                                     'OperationDefinition',
                                     'OperationProgress',
                                     'OperationResult'):
-                data_copy = dict(data)
+                data_copy = dict(message.body)
                 try:
-                    del data_copy['body']['chef']['validator_name']
-                    del data_copy['body']['chef']['validator_key']
+                    del data_copy['chef']['validator_name']
+                    del data_copy['chef']['validator_key']
                 except (KeyError, TypeError):
                     pass
                 self._logger.debug("Delivering message '%s' %s. Json: %s, Headers: %s",
