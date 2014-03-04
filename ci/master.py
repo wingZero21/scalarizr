@@ -21,11 +21,11 @@ c["schedulers"].append(Triggerable(
 	builderNames=["deb_packaging", "rpm_packaging", "win_packaging"]
 ))
 
-c["schedulers"].append(Triggerable(
-	name="{0} omnibus packaging".format(project),
-	builderNames=["omnibus_centos510", "omnibus_centos510-i686", 
-				"omnibus_ubuntu1004", "omnibus_ubuntu1004-i686"]
-))
+# c["schedulers"].append(Triggerable(
+# 	name="{0} omnibus packaging".format(project),
+# 	builderNames=["omnibus_centos510", "omnibus_centos510-i686", 
+# 				"omnibus_ubuntu1004", "omnibus_ubuntu1004-i686"]
+# ))
 
 def push_to_github(__opts__):
 	cwd = 'sandboxes/{0}/public'.format(project)
