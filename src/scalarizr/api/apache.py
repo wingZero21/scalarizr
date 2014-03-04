@@ -26,7 +26,7 @@ from telnetlib import Telnet
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
-from scalarizr.util import system2, initdv2
+from scalarizr.util import system2, initdv2, software
 from scalarizr.util import wait_until, dynimp, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
@@ -116,11 +116,19 @@ class ApacheAPI(object):
     mod_ssl = None
     current_open_ports = None
 
+    _version = None
+
     def __init__(self):
         self.service = initdv2.lookup("apache")
         self.mod_ssl = DebianBasedModSSL() if linux.os.debian_family else RedHatBasedModSSL()
         self.current_open_ports = []
         self._query_env = bus.queryenv_service
+
+    @property
+    def version(self):
+        if not self._version:
+            self._version = software.apache_software_info().version
+        return self._version
 
     @rpc.command_method
     def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True, allow_port=False):
@@ -519,8 +527,9 @@ class ApacheAPI(object):
         with ApacheConfigManager(__apache__["httpd.conf"]) as apache_config:
             inc_mask = __apache__["vhosts_dir"] + "/*" + __apache__["vhost_extension"]
 
-            if not inc_mask in apache_config.get_list("Include"):
-                apache_config.add("Include", inc_mask)
+            opt_include = "Include" if self.version < (2,4) else "IncludeOptional"
+            if not inc_mask in apache_config.get_list(opt_include):
+                apache_config.add(opt_include, inc_mask)
                 LOG.info("VirtualHosts directory included in %s" % __apache__["httpd.conf"])
 
     def fix_default_virtual_host(self):
