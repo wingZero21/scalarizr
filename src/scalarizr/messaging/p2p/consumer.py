@@ -24,6 +24,8 @@ import os
 import time
 import socket
 import HTMLParser
+from copy import deepcopy
+
 
 class P2pMessageConsumer(MessageConsumer):
     endpoint = None
@@ -82,7 +84,7 @@ class P2pMessageConsumer(MessageConsumer):
             '''
 
             def _msg_without_sensitive_data(self, message):
-                msg_copy = P2pMessage(message.name, message.meta.copy(), message.body.copy())
+                msg_copy = P2pMessage(message.name, message.meta.copy(), deepcopy(message.body))
                 msg_copy.id = message.id
 
                 if 'platform_access_data' in msg_copy.body:
@@ -101,6 +103,7 @@ class P2pMessageConsumer(MessageConsumer):
 
                 if 'chef' in msg_copy.body:
                     try:
+                        # msg_copy.body['chef'] = msg_copy.body['chef'].copy()
                         del msg_copy.body['chef']['validator_name']
                         del msg_copy.body['chef']['validator_key']
                     except (KeyError, TypeError):
