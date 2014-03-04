@@ -140,7 +140,6 @@ class QueryEnvService(object):
 
         response_log_copy = deepcopy(response)
         try:
-            # response_log_copy['chef'] = response['chef'].copy()
             del response_log_copy['chef']['validator_name']
             del response_log_copy['chef']['validator_key']
         except (KeyError, TypeError):
