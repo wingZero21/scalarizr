@@ -138,12 +138,12 @@ class QueryEnvService(object):
                                log_response=False)
         self._logger.debug("DEBUG QueryEnv response before remove: %s" % response)
         response_log_copy = response.copy()
-        try:
-            response_log_copy['chef'] = response['chef'].copy()
-            del response_log_copy['chef']['validator_name']
-            del response_log_copy['chef']['validator_key']
-        except (KeyError, TypeError):
-            pass
+        # try:
+        #     response_log_copy['chef'] = response['chef'].copy()
+        #     del response_log_copy['chef']['validator_name']
+        #     del response_log_copy['chef']['validator_key']
+        # except (KeyError, TypeError):
+        #     pass
         self._log_parsed_response(response_log_copy)
         self._logger.debug("DEBUG QueryEnv")
         self._log_parsed_response(response)  # DEBUG
