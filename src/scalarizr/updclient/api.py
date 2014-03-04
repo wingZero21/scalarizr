@@ -502,6 +502,7 @@ class UpdClientAPI(object):
             else:
                 self.state = 'completed/wait-ack'
                 self.installed = self.candidate
+                self.candidate = None
 
             if not self.daemon.running:
                 self.daemon.start()
