@@ -585,7 +585,7 @@ class UpdClientAPI(object):
             return
         error = str(sys.exc_info()[1]) if not ok else ''                
         self.update_server.report(
-                ok=ok, package=self.package, version=self.candidate, 
+                ok=ok, package=self.package, version=self.candidate or self.installed, 
                 server_id=self.server_id, scalr_id=self.scalr_id, scalr_version=self.scalr_version, 
                 phase=self.state, dist=self.dist, error=error)   
 
