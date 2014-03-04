@@ -137,7 +137,7 @@ class QueryEnvService(object):
                                parameters,
                                self._read_list_farm_role_params_response,
                                log_response=False)
-        self._logger.debug("DEBUG QueryEnv response before remove: %s" % response)
+
         response_log_copy = deepcopy(response)
         try:
             # response_log_copy['chef'] = response['chef'].copy()
@@ -146,8 +146,6 @@ class QueryEnvService(object):
         except (KeyError, TypeError):
             pass
         self._log_parsed_response(response_log_copy)
-        self._logger.debug("DEBUG QueryEnv")
-        self._log_parsed_response(response)  # DEBUG
         return {'params': response or {}}
 
 
