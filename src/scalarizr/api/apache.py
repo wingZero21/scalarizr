@@ -36,6 +36,11 @@ LOG = logging.getLogger(__name__)
 
 etc_path = bus.etc_path or "/etc/scalr"
 
+
+def apache_version():
+    return software.apache_software_info().version
+
+
 apache = {
     "vhosts_dir":           os.path.join(etc_path, "private.d/vhosts"),
     "keys_dir":             os.path.join(etc_path, "private.d/keys"),
@@ -45,7 +50,8 @@ apache = {
 if linux.os.debian_family:
     apache.update({
         "httpd.conf":       "/etc/apache2/apache2.conf",
-        "ssl_conf_path":    "/etc/apache2/sites-available/default-ssl",
+        "ssl_conf_path":    "/etc/apache2/sites-available/default-ssl" if apache_version() < (2, 4) else
+                            "/etc/apache2/sites-available/default-ssl.conf",
         "default_vhost":    "/etc/apache2/sites-enabled/000-default",
         "ports_conf_deb":   "/etc/apache2/ports.conf",
         "ssl_load_deb":     "/etc/apache2/mods-enabled/ssl.load",
@@ -127,7 +133,7 @@ class ApacheAPI(object):
     @property
     def version(self):
         if not self._version:
-            self._version = software.apache_software_info().version
+            self._version = apache_version()
         return self._version
 
     @rpc.command_method
