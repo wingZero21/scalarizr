@@ -11,6 +11,7 @@ recursive-include bin *
 recursive-include scripts *
 recursive-include share *
 recursive-include packaging *
+recursive-include sphinx *
 recursive-include tests *
 recursive-include src/scalarizr *
 
