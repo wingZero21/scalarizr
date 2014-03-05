@@ -60,6 +60,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
                 e = sys.exc_info()[1]
                 LOG.warn('Gcimagebundle update failed: %s' % e)
 
+            if os_dist.redhat_family:
+                semanage = software.which('semanage')
+                if semanage:
+                    util.system2((semanage, 'permissive', '-a', 'rsync_t'))
+
             gc_img_bundle_bin = software.which('gcimagebundle')
 
             o, e, p = util.system2((gc_img_bundle_bin,
