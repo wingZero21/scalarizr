@@ -1434,9 +1434,9 @@ class NginxAPI(BehaviorAPI):
         Make proxy with name `test.com`::
 
             api.nginx.make_proxy('test.com', 
-                                     backends=[{'host': '123.321.111.1'}],
-                                     port='8080',
-                                     backend_port='80')
+                                 backends=[{'host': '123.321.111.1'}],
+                                 port='8080',
+                                 backend_port='80')
         """
         _logger.debug('making proxy: %s' % hostname)
         try:
@@ -1533,8 +1533,7 @@ class NginxAPI(BehaviorAPI):
 
         Adding server with non-standard port to backend `test`::
 
-            api.nginx.add_server('test',
-                                     {'host': '11.22.33.44', 'port': '8089'})
+            api.nginx.add_server('test', {'host': '11.22.33.44', 'port': '8089'})
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
