@@ -468,6 +468,7 @@ class NginxAPI(BehaviorAPI):
         Example:
 
             Recreating proxying with single proxy configuration::
+
             api.nginx.recreate_proxying([{'name': 'test.com',
                                           'backends': [{'host': '12.234.45.67', 'port': '80'}],
                                           'port': '80'}])
@@ -1389,9 +1390,11 @@ class NginxAPI(BehaviorAPI):
         Examples:
 
             Remove proxy with name `test.com`::
+
             api.nginx.remove_proxy('test.com')
 
             Remove proxy with name `test.com` without service reload::
+
             api.nginx.remove_proxy('test.com', reload_service=True)
         """
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1429,6 +1432,7 @@ class NginxAPI(BehaviorAPI):
         Example:
 
             Make proxy with name `test.com`::
+
             api.nginx.make_proxy('test.com', 
                                      backends=[{'host': '123.321.111.1'}],
                                      port='8080',
@@ -1524,9 +1528,11 @@ class NginxAPI(BehaviorAPI):
         Examples:
 
             Adding server without parameters to backend `backend`::
+
             api.nginx.add_server('backend', '123.321.111.19')
 
             Adding server with non-standard port to backend `test`::
+
             api.nginx.add_server('test',
                                      {'host': '11.22.33.44', 'port': '8089'})
         """
@@ -1595,6 +1601,7 @@ class NginxAPI(BehaviorAPI):
         Example:
 
             Removing server from backend `backend`::
+
             api.nginx.remove_server('backend', '123.321.111.19')
         """
         update_conf = _bool_from_scalr_str(update_conf)
@@ -1659,10 +1666,12 @@ class NginxAPI(BehaviorAPI):
 
             Adding server without parameters to backends that are contain role
                 `1234`::
+
             api.nginx.add_server_to_role('123.321.111.19', '1234')
 
             Adding server with non-standard port to backends that are contain
                 role `4321`::
+
             api.nginx.add_server_to_role({'host': '11.22.33.44', 'port': '8089'},
                                              '4321')
         """
@@ -1727,6 +1736,7 @@ class NginxAPI(BehaviorAPI):
         Example:
 
             Removing server from backends that are contain role `1234`::
+
             api.nginx.remove_server_from_role('123.321.111.19', '1234')
         """
         update_conf = _bool_from_scalr_str(update_conf)
@@ -1781,6 +1791,7 @@ class NginxAPI(BehaviorAPI):
         Example:
 
             Removing server from all backends::
+
             api.nginx.remove_server_from_all_backends('123.321.111.19')
         """
         update_conf = _bool_from_scalr_str(update_conf)
@@ -1833,9 +1844,10 @@ class NginxAPI(BehaviorAPI):
         :type reload_service: bool
 
 
-        Example::
+        Example:
 
             Enable ssl on server with name `test.com`::
+
             api.nginx.enable_ssl('test.com', '443', '12345')
         """
         update_conf = _bool_from_scalr_str(update_conf)
@@ -1899,9 +1911,10 @@ class NginxAPI(BehaviorAPI):
         :param reload_service: if True reloads nginx service after ssl disabling.
         :type reload_service: bool
 
-        Example::
+        Example:
 
             Disable ssl on server with name `test.com`::
+
             api.nginx.disable_ssl('test.com')
         """
         update_conf = _bool_from_scalr_str(update_conf)
