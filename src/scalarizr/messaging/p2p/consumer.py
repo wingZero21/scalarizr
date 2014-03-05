@@ -122,7 +122,7 @@ class P2pMessageConsumer(MessageConsumer):
                     if 'platform_access_data' in msg_copy.body:
                         del msg_copy.body['platform_access_data']
                     if 'global_variables' in msg_copy.body:
-                        glob_vars = msg_copy.body['global_variables']
+                        glob_vars = msg_copy.body.get('global_variables', []) or []
                         i = 0
                         for v in list(glob_vars):
                             if v.get('private'):
