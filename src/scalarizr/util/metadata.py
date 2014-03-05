@@ -8,7 +8,7 @@ import os
 import posixpath
 import glob
 import operator
-from multiprocessing import pool as ppool
+from multiprocessing import pool as process_pool
 
 from scalarizr import linux
 
@@ -100,8 +100,11 @@ class Metadata(object):
             votes[pvd] = VoteCapabilityDict.fromkeys(self.capabilities, 0)
         def vote(pvd):
             pvd.vote(votes)
-        pool = ppool.ThreadPool(processes=len(self.providers))
-        pool.map(vote, self.providers)
+        pool = process_pool.ThreadPool(processes=len(self.providers))
+        try:
+            pool.map(vote, self.providers)
+        finally:
+            pool.close()
         for cap in self.capabilities:
             cap_votes = ((pvd, votes[pvd][cap]) for pvd in votes)
             cap_votes = sorted(cap_votes, key=operator.itemgetter(1))
@@ -172,7 +175,7 @@ class Ec2Pvd(Provider):
 
 class GcePvd(Provider):
     def __init__(self):
-        self.base_url = 'http://metadata/computeMetadata/v1beta1'    
+        self.base_url = 'http://metadata/computeMetadata/v1'    
 
     def vote(self, votes):
         if self.try_url(self.base_url):
@@ -213,7 +216,7 @@ class OpenStackXenStorePvd(Provider):
     def vote(self, votes):
         if self.try_file('/proc/xen/xenbus') and linux.which('xenstore-ls') \
                 and linux.which('nova-agent'):
-            votes[self]['user_data'] += 1
+            votes[self]['user_data'] += 2
             votes['OpenStackQueryPvd']['user_data'] -= 1
 
     def user_data(self):
