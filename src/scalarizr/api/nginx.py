@@ -467,7 +467,7 @@ class NginxAPI(BehaviorAPI):
         
         Example:
 
-            Recreating proxying with single proxy configuration::
+        Recreating proxying with single proxy configuration::
 
             api.nginx.recreate_proxying([{'name': 'test.com',
                                           'backends': [{'host': '12.234.45.67', 'port': '80'}],
@@ -1389,11 +1389,11 @@ class NginxAPI(BehaviorAPI):
 
         Examples:
 
-            Remove proxy with name `test.com`::
+        Remove proxy with name `test.com`::
 
             api.nginx.remove_proxy('test.com')
 
-            Remove proxy with name `test.com` without service reload::
+        Remove proxy with name `test.com` without service reload::
 
             api.nginx.remove_proxy('test.com', reload_service=True)
         """
@@ -1431,7 +1431,7 @@ class NginxAPI(BehaviorAPI):
 
         Example:
 
-            Make proxy with name `test.com`::
+        Make proxy with name `test.com`::
 
             api.nginx.make_proxy('test.com', 
                                      backends=[{'host': '123.321.111.1'}],
@@ -1527,11 +1527,11 @@ class NginxAPI(BehaviorAPI):
 
         Examples:
 
-            Adding server without parameters to backend `backend`::
+        Adding server without parameters to backend `backend`::
 
             api.nginx.add_server('backend', '123.321.111.19')
 
-            Adding server with non-standard port to backend `test`::
+        Adding server with non-standard port to backend `test`::
 
             api.nginx.add_server('test',
                                      {'host': '11.22.33.44', 'port': '8089'})
@@ -1600,7 +1600,7 @@ class NginxAPI(BehaviorAPI):
 
         Example:
 
-            Removing server from backend `backend`::
+        Removing server from backend `backend`::
 
             api.nginx.remove_server('backend', '123.321.111.19')
         """
@@ -1664,12 +1664,11 @@ class NginxAPI(BehaviorAPI):
 
         Examples:
 
-            Adding server without parameters to backends that are contain role
-                `1234`::
+        Adding server without parameters to backends that are contain role `1234`::
 
             api.nginx.add_server_to_role('123.321.111.19', '1234')
 
-            Adding server with non-standard port to backends that are contain
+        Adding server with non-standard port to backends that are contain
                 role `4321`::
 
             api.nginx.add_server_to_role({'host': '11.22.33.44', 'port': '8089'},
@@ -1735,7 +1734,7 @@ class NginxAPI(BehaviorAPI):
 
         Example:
 
-            Removing server from backends that are contain role `1234`::
+        Removing server from backends that are contain role `1234`::
 
             api.nginx.remove_server_from_role('123.321.111.19', '1234')
         """
@@ -1790,7 +1789,7 @@ class NginxAPI(BehaviorAPI):
 
         Example:
 
-            Removing server from all backends::
+        Removing server from all backends::
 
             api.nginx.remove_server_from_all_backends('123.321.111.19')
         """
@@ -1846,7 +1845,7 @@ class NginxAPI(BehaviorAPI):
 
         Example:
 
-            Enable ssl on server with name `test.com`::
+        Enable ssl on server with name `test.com`::
 
             api.nginx.enable_ssl('test.com', '443', '12345')
         """
@@ -1913,7 +1912,7 @@ class NginxAPI(BehaviorAPI):
 
         Example:
 
-            Disable ssl on server with name `test.com`::
+        Disable ssl on server with name `test.com`::
 
             api.nginx.disable_ssl('test.com')
         """
