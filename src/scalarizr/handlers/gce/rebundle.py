@@ -2,7 +2,6 @@ from __future__ import with_statement
 
 __author__ = 'Nick Demyanchuk'
 
-import re
 import os
 import sys
 import glob
@@ -13,9 +12,10 @@ import shutil
 import tempfile
 
 from scalarizr import util
+from scalarizr.util import software
+from scalarizr.linux import pkgmgr, os as os_dist
 from scalarizr.bus import bus
 from scalarizr.storage2.cloudfs import FileTransfer
-from scalarizr.util import software
 from scalarizr.handlers import HandlerError, rebundle as rebundle_hndlr
 
 
@@ -35,6 +35,8 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
     exclude_files = ('/etc/ssh/.host_key_regenerated',
                      '/lib/udev/rules.d/75-persistent-net-generator.rules')
 
+    gcimagebundle_pkg_name = 'python-gcimagebundle' if os_dist.debian_family else 'gcimagebundle'
+
     def rebundle(self):
         rebundle_dir = tempfile.mkdtemp()
 
@@ -50,6 +52,13 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
             arch_name = '%s.tar.gz' % self._role_name.lower()
             arch_path = os.path.join(rebundle_dir, arch_name)
+
+            # update gcimagebundle
+            try:
+                pkgmgr.latest(self.gcimagebundle_pkg_name)
+            except:
+                e = sys.exc_info()[1]
+                LOG.warn('Gcimagebundle update failed: %s' % e)
 
             gc_img_bundle_bin = software.which('gcimagebundle')
 
