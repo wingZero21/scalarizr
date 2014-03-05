@@ -246,7 +246,7 @@ class YumPackageMgr(PackageMgr):
         return self.yum_list(name)[0]
 
 def package_mgr():
-    return AptPackageMgr() if lixux.os.debian_family else YumPackageMgr()
+    return AptPackageMgr() if linux.os.debian_family else YumPackageMgr()
 
 class ImpLoader(object):
     '''
