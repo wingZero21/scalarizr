@@ -456,14 +456,21 @@ class NginxAPI(BehaviorAPI):
     @rpc.command_method
     def recreate_proxying(self, proxy_list, reload_service=True):
         """
-        Recreates Nginx proxy configuration.
+        Recreates Nginx proxying configuration.
 
-        :param proxy_list: Proxy parameters.
-        :type proxy_list: dict
+        :param proxy_list: List of parameters for each proxy. Parameters are
+            kwds-dict that passed to self.add_proxy()
+        :type proxy_list: list
 
-        .. warning::
+        :param reload_service: If True reloads nginx service after recreation.
+        :type reload_service: bool
+        
+        Examples:
 
-            Example TBD.
+            Recreating proxying with single proxy configuration:
+            >>> api.nginx.recreate_proxying([{'name': 'test.com',
+                                              'backends': [{'host': '12.234.45.67', 'port': '80'}],
+                                              'port': '80'}])
         """
         if not proxy_list:
             proxy_list = []
@@ -726,7 +733,7 @@ class NginxAPI(BehaviorAPI):
 
     def _normalize_destinations(self, destinations):
         """
-        Parses list of destinations. They are dictionaries. Dictionary example:
+        Parses list of destinations. Dictionary example:
 
         .. code-block:: python
             {
@@ -1373,12 +1380,19 @@ class NginxAPI(BehaviorAPI):
         """
         Removes proxy with given hostname. Removes created server and its backends.
 
-        :param hostname: server`s FQDN.
+        :param hostname: nginx proxy server name.
         :type hostname: str
 
-        Example::
+        :param reload_service: If True reloads nginx service after proxy removal.
+        :type reload_service: bool
 
-            TBD
+        Example:
+
+            Remove proxy with name `test.com`.
+            >>> api.nginx.remove_proxy('test.com')
+
+            Remove proxy with name `test.com` without service reload.
+            >>> api.nginx.remove_proxy('test.com', reload_service=True)
         """
         reload_service = _bool_from_scalr_str(reload_service)
 
@@ -1405,16 +1419,20 @@ class NginxAPI(BehaviorAPI):
         """
         RPC method for adding or updating proxy configuration.
         Removes proxy with given hostname if exists and recreates it with given
-        parameters. If some exception occures, changes are reverted.
+        parameters. If some exception occures changes are reverted.
 
-        :param hostname: server`s FQDN.
+        :param hostname: nginx proxy server name.
         :type hostname: str
 
         See add_proxy() for detailed kwds description.
 
         Example::
 
-            TBD
+            Make proxy with name `test.com`.
+            >>> api.nginx.make_proxy('test.com', 
+                                     backends=[{'host': '123.321.111.1'}],
+                                     port='8080',
+                                     backend_port='80')
         """
         _logger.debug('making proxy: %s' % hostname)
         try:
@@ -1486,13 +1504,31 @@ class NginxAPI(BehaviorAPI):
         Adds server to backend with given name pattern.
         Parameter server can be dict or string (ip addr)
 
-        .. warning::
+        :param backend: backend's name to which server will be added.
+        :type backend: str
 
-            Parameters descr. TBD
+        :param server: server configuration. Can be just IP of the server or
+            dict of parameters (such as 'down', 'backup' or 'port')
+        :type server: dict or str
 
-        Example::
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing server addition.
+        :type update_conf: bool
 
-            TBD.
+        :param reload_service: if True reloads nginx service after server addition.
+        :type reload_service: bool
+
+        :param update_backend_table: if True updates self.backend_table after server addition.
+        :type update_backend_table: bool
+
+        Example:
+
+            Adding server without parameters to backend `backend`.
+            >>> api.nginx.add_server('backend', '123.321.111.19')
+
+            Adding server with non-standard port to backend `test`.
+            >>> api.nginx.add_server('test',
+                                     {'host': '11.22.33.44', 'port': '8089'})
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1540,13 +1576,26 @@ class NginxAPI(BehaviorAPI):
         Removes server from backend with given name pattern.
         Parameter server can be dict or string (ip addr)
 
-        .. warning::
+        :param backend: backend's name from which server will be removed.
+        :type backend: str
 
-            Parameters descr. TBD
+        :param server: server IP.
+        :type server: str
 
-        Example::
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing server removal.
+        :type update_conf: bool
 
-            TBD.
+        :param reload_service: if True reloads nginx service after server removal.
+        :type reload_service: bool
+
+        :param update_backend_table: if True updates self.backend_table after server removal.
+        :type update_backend_table: bool
+
+        Example:
+
+            Removing server from backend `backend`.
+            >>> api.nginx.remove_server('backend', '123.321.111.19')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1592,13 +1641,30 @@ class NginxAPI(BehaviorAPI):
         Adds server to each backend that uses given role. If role isn't used in
         any backend, does nothing
 
-        .. warning::
+        :param server: server configuration. Can be just IP of the server or
+            dict of parameters (such as 'down', 'backup' or 'port')
+        :type server: dict or str
 
-            Parameters descr. TBD
+        :param role_id: Id of the role in which new server is up.
+        :type role_id: str
 
-        Example::
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing server addition.
+        :type update_conf: bool
 
-            TBD.
+        :param reload_service: if True reloads nginx service after server addition.
+        :type reload_service: bool
+
+        Example:
+
+            Adding server without parameters to backends that are contain role
+                `1234`.
+            >>> api.nginx.add_server_to_role('123.321.111.19', '1234')
+
+            Adding server with non-standard port to backends that are contain
+                role `4321`.
+            >>> api.nginx.add_server_to_role({'host': '11.22.33.44', 'port': '8089'},
+                                             '4321')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1645,13 +1711,23 @@ class NginxAPI(BehaviorAPI):
         Removes server from each backend that uses given role. If role isn't
         used in any backend, does nothing
 
-        .. warning::
+        :param server: server IP
+        :type server: str
 
-            Parameters descr. TBD
+        :param role_id: Id of the role in which server is down.
+        :type role_id: str
 
-        Example::
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing server removal.
+        :type update_conf: bool
 
-            TBD.
+        :param reload_service: if True reloads nginx service after server removal.
+        :type reload_service: bool
+
+        Example:
+
+            Removing server from backends that are contain role `1234`.
+            >>> api.nginx.remove_server_from_role('123.321.111.19', '1234')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1692,13 +1768,20 @@ class NginxAPI(BehaviorAPI):
         Method is used to remove stand-alone servers, that aren't belong
         to any role. If role isn't used in any backend, does nothing
 
-        .. warning::
+        :param server: Server IP.
+        :type server: str
 
-            Parameters descr. TBD
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing server removal.
+        :type update_conf: bool
 
-        Example::
+        :param reload_service: if True reloads nginx service after server removal.
+        :type reload_service: bool
 
-            TBD.
+        Example:
+
+            Removing server from all backends.
+            >>> api.nginx.remove_server_from_all_backends('123.321.111.19')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1733,17 +1816,27 @@ class NginxAPI(BehaviorAPI):
         """
         Enables SSL support on Nginx server.
 
-        :param hostname: server`s FQDN.
+        :param hostname: nginx proxy server name.
         :type hostname: str
 
+        :param ssl_port: Port number.
+        :type ssl_port: str
 
-        .. warning::
+        :param ssl_certificate_id: Id of ssl certificate.
+        :type ssl_certificate_id: str
 
-            Full descr. TBD
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing ssl enabling.
+        :type update_conf: bool
+
+        :param reload_service: if True reloads nginx service after ssl enabling.
+        :type reload_service: bool
+
 
         Example::
 
-            TBD.
+            Enable ssl on server with name `test.com`.
+            >>> api.nginx.enable_ssl('test.com', '443', '12345')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1796,13 +1889,20 @@ class NginxAPI(BehaviorAPI):
         """
         Disables SSL support on Nginx server.
 
-        .. warning::
+        :param hostname: nginx proxy server name.
+        :type hostname: str
 
-            Parameters descr. TBD
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing ssl disabling.
+        :type update_conf: bool
+
+        :param reload_service: if True reloads nginx service after ssl disabling.
+        :type reload_service: bool
 
         Example::
 
-            TBD.
+            Disable ssl on server with name `test.com`.
+            >>> api.nginx.disable_ssl('test.com')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
