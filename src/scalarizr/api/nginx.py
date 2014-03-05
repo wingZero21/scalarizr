@@ -465,12 +465,12 @@ class NginxAPI(BehaviorAPI):
         :param reload_service: If True reloads nginx service after recreation.
         :type reload_service: bool
         
-        Examples:
+        Example:
 
-            Recreating proxying with single proxy configuration:
-            >>> api.nginx.recreate_proxying([{'name': 'test.com',
-                                              'backends': [{'host': '12.234.45.67', 'port': '80'}],
-                                              'port': '80'}])
+            Recreating proxying with single proxy configuration::
+            api.nginx.recreate_proxying([{'name': 'test.com',
+                                          'backends': [{'host': '12.234.45.67', 'port': '80'}],
+                                          'port': '80'}])
         """
         if not proxy_list:
             proxy_list = []
@@ -1386,13 +1386,13 @@ class NginxAPI(BehaviorAPI):
         :param reload_service: If True reloads nginx service after proxy removal.
         :type reload_service: bool
 
-        Example:
+        Examples:
 
-            Remove proxy with name `test.com`.
-            >>> api.nginx.remove_proxy('test.com')
+            Remove proxy with name `test.com`::
+            api.nginx.remove_proxy('test.com')
 
-            Remove proxy with name `test.com` without service reload.
-            >>> api.nginx.remove_proxy('test.com', reload_service=True)
+            Remove proxy with name `test.com` without service reload::
+            api.nginx.remove_proxy('test.com', reload_service=True)
         """
         reload_service = _bool_from_scalr_str(reload_service)
 
@@ -1426,10 +1426,10 @@ class NginxAPI(BehaviorAPI):
 
         See add_proxy() for detailed kwds description.
 
-        Example::
+        Example:
 
-            Make proxy with name `test.com`.
-            >>> api.nginx.make_proxy('test.com', 
+            Make proxy with name `test.com`::
+            api.nginx.make_proxy('test.com', 
                                      backends=[{'host': '123.321.111.1'}],
                                      port='8080',
                                      backend_port='80')
@@ -1521,13 +1521,13 @@ class NginxAPI(BehaviorAPI):
         :param update_backend_table: if True updates self.backend_table after server addition.
         :type update_backend_table: bool
 
-        Example:
+        Examples:
 
-            Adding server without parameters to backend `backend`.
-            >>> api.nginx.add_server('backend', '123.321.111.19')
+            Adding server without parameters to backend `backend`::
+            api.nginx.add_server('backend', '123.321.111.19')
 
-            Adding server with non-standard port to backend `test`.
-            >>> api.nginx.add_server('test',
+            Adding server with non-standard port to backend `test`::
+            api.nginx.add_server('test',
                                      {'host': '11.22.33.44', 'port': '8089'})
         """
         update_conf = _bool_from_scalr_str(update_conf)
@@ -1594,8 +1594,8 @@ class NginxAPI(BehaviorAPI):
 
         Example:
 
-            Removing server from backend `backend`.
-            >>> api.nginx.remove_server('backend', '123.321.111.19')
+            Removing server from backend `backend`::
+            api.nginx.remove_server('backend', '123.321.111.19')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1655,15 +1655,15 @@ class NginxAPI(BehaviorAPI):
         :param reload_service: if True reloads nginx service after server addition.
         :type reload_service: bool
 
-        Example:
+        Examples:
 
             Adding server without parameters to backends that are contain role
-                `1234`.
-            >>> api.nginx.add_server_to_role('123.321.111.19', '1234')
+                `1234`::
+            api.nginx.add_server_to_role('123.321.111.19', '1234')
 
             Adding server with non-standard port to backends that are contain
-                role `4321`.
-            >>> api.nginx.add_server_to_role({'host': '11.22.33.44', 'port': '8089'},
+                role `4321`::
+            api.nginx.add_server_to_role({'host': '11.22.33.44', 'port': '8089'},
                                              '4321')
         """
         update_conf = _bool_from_scalr_str(update_conf)
@@ -1726,8 +1726,8 @@ class NginxAPI(BehaviorAPI):
 
         Example:
 
-            Removing server from backends that are contain role `1234`.
-            >>> api.nginx.remove_server_from_role('123.321.111.19', '1234')
+            Removing server from backends that are contain role `1234`::
+            api.nginx.remove_server_from_role('123.321.111.19', '1234')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1780,8 +1780,8 @@ class NginxAPI(BehaviorAPI):
 
         Example:
 
-            Removing server from all backends.
-            >>> api.nginx.remove_server_from_all_backends('123.321.111.19')
+            Removing server from all backends::
+            api.nginx.remove_server_from_all_backends('123.321.111.19')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1835,8 +1835,8 @@ class NginxAPI(BehaviorAPI):
 
         Example::
 
-            Enable ssl on server with name `test.com`.
-            >>> api.nginx.enable_ssl('test.com', '443', '12345')
+            Enable ssl on server with name `test.com`::
+            api.nginx.enable_ssl('test.com', '443', '12345')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1901,8 +1901,8 @@ class NginxAPI(BehaviorAPI):
 
         Example::
 
-            Disable ssl on server with name `test.com`.
-            >>> api.nginx.disable_ssl('test.com')
+            Disable ssl on server with name `test.com`::
+            api.nginx.disable_ssl('test.com')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
