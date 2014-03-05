@@ -62,8 +62,11 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
             if os_dist.redhat_family:
                 semanage = software.which('semanage')
-                if semanage:
-                    util.system2((semanage, 'permissive', '-a', 'rsync_t'))
+                if not semanage:
+                    pkgmgr.installed('policycoreutils-python')
+                    semanage = software.which('semanage')
+
+                util.system2((semanage, 'permissive', '-a', 'rsync_t'))
 
             gc_img_bundle_bin = software.which('gcimagebundle')
 
