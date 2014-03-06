@@ -401,6 +401,11 @@ class UpdClientAPI(object):
         release_repo.ensure()
 
 
+    def _ensure_daemon(self):
+        if not self.daemon.running:
+            self.daemon.start()
+
+
     def _sync(self):
         params = self.queryenv.list_farm_role_params(self.farm_role_id)
         update = params.get('params', {}).get('base', {}).get('update', {})
@@ -423,6 +428,7 @@ class UpdClientAPI(object):
             force = True
         notifies = not bootstrap
         reports = self.is_client_mode and not bootstrap
+
 
         def check_allowed():
             if not force:
@@ -486,8 +492,7 @@ class UpdClientAPI(object):
                     self.package, self.candidate, 
                     backup=True,
                     rpm_raise_scriptlet_errors=True)
-                if not self.daemon.running:
-                    self.daemon.start()
+                self._ensure_daemon()
             except:
                 if pkginfo['backup_id']:
                     # TODO: remove stacktrace
@@ -495,20 +500,19 @@ class UpdClientAPI(object):
                     self.state = 'in-progress/rollback'
                     self.error = str(sys.exc_info()[1])
                     self.pkgmgr.restore_backup(self.package, pkginfo['backup_id'])
+                    self._ensure_daemon()
                     self.state = 'rollbacked'
                     LOG.info('Rollbacked')
+                    if reports:
+                        self.report(False)
                 else:
                     raise
             else:
                 self.state = 'completed/wait-ack'
                 self.installed = self.candidate
                 self.candidate = None
-
-            if not self.daemon.running:
-                self.daemon.start()
-
-            if reports:
-                self.report(True)
+                if reports:
+                        self.report(True)
             return self.status(cached=True)
 
         def do_update(op):
