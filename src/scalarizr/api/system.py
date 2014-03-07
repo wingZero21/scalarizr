@@ -541,7 +541,7 @@ class SystemAPI(object):
     @rpc.command_method
     def execute_scripts(self, scripts=None, global_variables=None, event_name=None, 
             role_name=None, async=False):
-        def do_execute_scripts():
+        def do_execute_scripts(op):
             msg = lambda: None
             msg.name = event_name
             msg.role_name = role_name
