@@ -919,7 +919,7 @@ class MysqlHandler(DBMSRHandler):
             self.mysql.my_cnf.set('mysqld/' + key, value)
 
         if not storage_valid:
-            if __mysql__['behavior'] == 'percona' and linux.os.debian_family:
+            if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
                 self.mysql.service.start()
                 debian_cnf = metaconf.Configuration('mysql')
                 debian_cnf.read(__mysql__['debian.cnf'])
