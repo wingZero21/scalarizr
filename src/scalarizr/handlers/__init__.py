@@ -124,7 +124,7 @@ class Handler(object):
                 elif name == 'memcached':
                     handlers.append(config.BuiltinBehaviours.MEMCACHED)
 
-                elif name == 'postgresql' and Version('9.0') <= version < Version('9.3'):
+                elif name == 'postgresql' and Version('9.0') <= version < Version('9.4'):
                     handlers.append(config.BuiltinBehaviours.POSTGRESQL)
                 elif name == 'redis' and Version('2.2') <= version < Version('2.9'):
                     handlers.append(config.BuiltinBehaviours.REDIS)
