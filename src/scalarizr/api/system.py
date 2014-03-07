@@ -23,13 +23,14 @@ import subprocess
 from multiprocessing import pool
 
 from scalarizr import rpc, linux
+from scalarizr.api import operation as operation_api
 from scalarizr.bus import bus
 from scalarizr import util
 from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
 from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
-from scalarizr.handlers.script_executor import logs_dir
+from scalarizr.handlers import script_executor
 
 LOG = logging.getLogger(__name__)
 
@@ -110,6 +111,11 @@ class SystemAPI(object):
     _LOG_FILE = '/var/log/scalarizr.log'
     _DEBUG_LOG_FILE = '/var/log/scalarizr_debug.log'
     _UPDATE_LOG_FILE = '/var/log/scalarizr_update.log'
+
+
+    def __init__(self):
+        self._op_api = operation_api.OperationAPI()
+
 
     def _readlines(self, path):
         with open(path, "r") as fp:
@@ -532,14 +538,31 @@ class SystemAPI(object):
             wrk_pool.join()
 
 
+    @rpc.command_method
+    def execute_scripts(self, scripts=None, global_variables=None, event_name=None, 
+            role_name=None, async=False):
+        def do_execute_scripts():
+            msg = lambda: None
+            msg.name = event_name
+            msg.role_name = role_name
+            msg.body = {
+                'scripts': scripts or [],
+                'global_variables': global_variables or []
+            }
+            hdlr = script_executor.get_handlers()[0]
+            hdlr(msg)
+
+        return self._op_api.run('system.execute_scripts', do_execute_scripts, async=async)
+
+
     @rpc.query_method
     def get_script_logs(self, exec_script_id, maxsize=max_log_size):
         '''
         :return: out and err logs
         :rtype: dict(stdout: base64encoded, stderr: base64encoded)
         '''
-        stdout_match = glob.glob(os.path.join(logs_dir, '*%s-out.log' % exec_script_id))
-        stderr_match = glob.glob(os.path.join(logs_dir, '*%s-err.log' % exec_script_id))
+        stdout_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-out.log' % exec_script_id))
+        stderr_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-err.log' % exec_script_id))
 
         if not stdout_match:
             stdout = binascii.b2a_base64(u'log file not found')
