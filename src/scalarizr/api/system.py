@@ -29,6 +29,7 @@ from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
 from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
+from scalarizr.api.binding import jsonrpc_http
 from scalarizr.handlers.script_executor import logs_dir
 
 LOG = logging.getLogger(__name__)
@@ -591,9 +592,19 @@ if linux.os.windows_family:
         @coinitialized
         @rpc.command_method
         def reboot(self):
+            updclient = jsonrpc_http.HttpServiceProxy('http://localhost:8008', 
+                            bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
+            try:
+                dont_do_it = updclient.status()['state'].startswith('in-progress')
+            except:
+                pass
+            else:
+                if dont_do_it:
+                    raise Exception('Reboot not allowed, cause Scalarizr update is in-progress')
             wmi = client.GetObject('winmgmts:')
-            for opsys in wmi.InstancesOf('Win32_OperatingSystem'):
-                opsys.Reboot()
+            wos = next(iter(wmi.InstancesOf('Win32_OperatingSystem')))
+            wos.reboot()
+                
 
         @coinitialized
         @rpc.command_method
