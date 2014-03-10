@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import os
+import sys
 import posixpath
 import glob
 import operator
@@ -99,7 +100,11 @@ class Metadata(object):
         for pvd in self.providers:
             votes[pvd] = VoteCapabilityDict.fromkeys(self.capabilities, 0)
         def vote(pvd):
-            pvd.vote(votes)
+            try:
+                pvd.vote(votes)
+            except:
+                LOG.debug('{0}.vote raised: {1}'.format(
+                        pvd.__class__.__name__, sys.exc_info()[1]))
         pool = process_pool.ThreadPool(processes=len(self.providers))
         try:
             pool.map(vote, self.providers)
@@ -239,13 +244,18 @@ class CloudStackPvd(Provider):
     def __init__(self, 
             dhcp_server=None, 
             dhcp_leases_pattern='/var/lib/dhc*/dhclient*.leases'):
-        if not dhcp_server:
-            dhcp_server = self.dhcp_server(dhcp_leases_pattern)
-        LOG.debug('Use DHCP server: %s', dhcp_server)
-        self.base_url = 'http://{0}/latest'.format(dhcp_server)
+        self.dhcp_server = dhcp_server
+        self.dhcp_leases_pattern = dhcp_leases_pattern
+
+    @property
+    def base_url(self):
+        if not self.dhcp_server:
+            self.dhcp_server = self.get_dhcp_server(self.dhcp_leases_pattern)
+            LOG.debug('Use DHCP server: %s', self.dhcp_server)
+        return 'http://{0}/latest'.format(self.dhcp_server)
 
     @classmethod
-    def dhcp_server(cls, leases_pattern=None):
+    def get_dhcp_server(cls, leases_pattern=None):
         router = None
         try:
             leases_file = glob.glob(leases_pattern)[0]
