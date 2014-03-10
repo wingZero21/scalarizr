@@ -141,10 +141,11 @@ class Provider(object):
         except:
             return False
 
-    def get_url(self, url=None, rel=None):
+    def get_url(self, url=None, rel=None, headers=None):
         if rel:
             url = posixpath.join(url or self.base_url, rel)
-        return urllib2.urlopen(url, timeout=self.HTTP_TIMEOUT).read().strip()
+        return urllib2.urlopen(urllib2.Request(url, headers=headers), 
+                timeout=self.HTTP_TIMEOUT).read().strip()
 
     def try_ec2_url(self):
         return self.try_url(self.EC2_BASE_URL)
@@ -176,6 +177,10 @@ class Ec2Pvd(Provider):
 class GcePvd(Provider):
     def __init__(self):
         self.base_url = 'http://metadata/computeMetadata/v1'    
+
+    def get_url(self, url=None, rel=None):
+        return super(GcePvd, self).get_url(url, rel, 
+                headers={'X-Google-Metadata-Request': 'True'})
 
     def vote(self, votes):
         if self.try_url(self.base_url):
