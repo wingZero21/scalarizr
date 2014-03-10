@@ -40,6 +40,10 @@ try:
 except:
     print('Error: prettytable modul not found!')
 
+if sys.version_info[0:2] >= (2, 7):
+    from xml.etree import ElementTree as ET
+else:
+    from scalarizr.externals.etree import ElementTree as ET
 
 from yaml import dump
 from yaml.representer import Representer
@@ -683,8 +687,20 @@ def main():
                 sys.exit()
 
             qe = new_queryenv()
-            xml = qe.fetch(*args, params=kv)
-            print minidom.parseString(xml).toprettyxml(encoding='utf-8')
+            out = qe.fetch(*args, params=kv)
+            try:
+                xml = ET.XML(out)
+                glob_vars = xml[0]
+                i = 0
+                for _ in xrange(len(glob_vars)):
+                    var = glob_vars[i]
+                    if int(var.attrib.get('private', 0)) == 1:
+                        glob_vars.remove(var)
+                        continue
+                    i += 1
+                print ET.tostring(xml)
+            except:
+                print minidom.parseString(out).toprettyxml(encoding='utf-8')
 
         if options.msgsnd:
 
