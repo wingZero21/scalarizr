@@ -702,6 +702,10 @@ class Service(object):
 
         if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
             self._logger.info('Scalarizr was updated to %s', __version__)
+            node.__node__['messaging'].send(
+                'HostUpdate',
+                body={'scalarizr': {'version': __version__}}
+            )
 
         if cnf.state == ScalarizrState.UNKNOWN:
             cnf.state = ScalarizrState.BOOTSTRAPPING
