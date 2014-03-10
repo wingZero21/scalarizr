@@ -254,10 +254,12 @@ class QueryEnvService(object):
         data = xml2dict(ET.XML(xml)) or {}
         data = data['variables'] if 'variables' in data and data['variables'] else {}
         glob_vars = {}
+        values = data.get('values', {})
         glob_vars['public'] = dict((k, v.encode('utf-8') if v else '')
-                                   for k, v in data['values'].items())
+                                   for k, v in values.items())
+        private_values = data.get('private_values', {})
         glob_vars['private'] = dict((k, v.encode('utf-8') if v else '')
-                                           for k, v in data['private_values'].items())
+                                           for k, v in private_values.items())
         return glob_vars
 
     def _read_get_global_config_response(self, xml):
