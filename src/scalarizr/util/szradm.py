@@ -698,9 +698,10 @@ def main():
                         glob_vars.remove(var)
                         continue
                     i += 1
-                print ET.tostring(xml)
+                out = ET.tostring(xml)
             except:
-                print minidom.parseString(out).toprettyxml(encoding='utf-8')
+                pass
+            print minidom.parseString(out).toprettyxml(encoding='utf-8')
 
         if options.msgsnd:
 
