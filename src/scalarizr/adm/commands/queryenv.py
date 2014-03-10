@@ -3,6 +3,7 @@ import re
 import os
 import itertools
 import sys
+from xml.dom import minidom
 
 from scalarizr.util import system2
 from scalarizr.adm.command import Command
@@ -145,7 +146,8 @@ class Queryenv(Command):
                     glob_vars.remove(var)
                     continue
                 i += 1
-            print ET.tostring(xml)
+            out = ET.tostring(xml)
+            print minidom.parseString(out).toprettyxml(encoding='utf-8')
         except:
             self._display_out('', out)
 
@@ -159,10 +161,11 @@ class Queryenv(Command):
         """
         all_display_methods = [m for m in dir(self) if m.startswith('_display')]
         display_method = None
-        for m in all_display_methods:
-            if method.replace('-', '_') in m:
-                display_method = getattr(self, m)
-                break
+        if method:
+            for m in all_display_methods:
+                if method.replace('-', '_') in m:
+                    display_method = getattr(self, m)
+                    break
 
         if display_method:
             display_method(out)
