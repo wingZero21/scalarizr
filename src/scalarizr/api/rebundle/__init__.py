@@ -2,7 +2,7 @@
 from scalarizr import rpc
 from scalarizr.api.operation import OperationAPI
 from scalarizr.util import Singleton
-
+from scalarizr.node import __node__
 
 class RebundleAPI(object):
 
@@ -40,3 +40,11 @@ class RebundleAPI(object):
 
     def _finalize(self):
         raise NotImplementedError()
+
+
+# depending on __node__['platform_name'] return rebundle api object
+
+def get_api():
+    platform_name = __node__['platform_name']
+    if platform_name == 'openstack':
+        pass
