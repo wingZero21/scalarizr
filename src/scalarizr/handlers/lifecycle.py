@@ -59,7 +59,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         self._logger = logging.getLogger(__name__)
         self._op_api = operation.OperationAPI()
         self._system_api = system_api.SystemAPI()
-        self._logger.debug('platform is: %s' % __node__['platform_name'])
+
         bus.define_events(
             # Fires before HostInit message is sent
             # @param msg 
@@ -385,6 +385,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
     def on_HostInitResponse(self, message):
+        self._logger.debug('platform is: %s' % __node__['platform_name'])
         if bus.cnf.state == ScalarizrState.RUNNING:
             self._logger.info("Ignoring 'HostInitResponse' message, cause state is '%s'", 
                     bus.cnf.state)
