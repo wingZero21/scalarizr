@@ -274,6 +274,19 @@ Section -PostInstall
       nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
   ${EnableX64FSRedirection}
 
+  ${Unless} $installed_version == ""
+      Push $installed_version
+      Push "2.5.13"
+      Call CompareVersions
+      Pop $R0
+
+      ${If} $R0 == 1
+          nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file'
+      ${EndIf}
+
+  ${EndIf}
+
+
   ${If} $start_scalarizr == "1"
       services::SendServiceCommand 'start' 'Scalarizr'
   ${EndIf}
