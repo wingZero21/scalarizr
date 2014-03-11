@@ -1,16 +1,11 @@
-from __future__ import with_statement
 '''
 Created on Oct 13, 2011
 
 @author: marat
 '''
 
-from __future__ import with_statement
-
 import os
-import sys
 import logging
-import string
 
 from scalarizr.bus import bus
 from scalarizr import storage2, linux
@@ -19,7 +14,7 @@ from scalarizr import handlers
 from scalarizr.node import __node__
 from scalarizr.messaging import Messages
 from scalarizr.util import wait_until
-from scalarizr.linux import mount, coreutils
+from scalarizr.linux import mount
 
 
 LOG = logging.getLogger(__name__)
@@ -32,6 +27,7 @@ class BlockDeviceHandler(handlers.Handler):
     _config = None
 
     def __init__(self, vol_type):
+        super(BlockDeviceHandler, self).__init__()
         self._vol_type = vol_type
         self._volumes = []
         self.on_reload()
@@ -51,17 +47,14 @@ class BlockDeviceHandler(handlers.Handler):
             "block_device_mounted"
         )
         
-        self._phase_plug_volume = 'Configure storage'
-        
         
     def on_reload(self):
         self._platform = bus.platform
         self._queryenv = bus.queryenv_service
 
-    def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
+    def accept(self, message, queue, **kwds):
         return message.name in (Messages.INT_BLOCK_DEVICE_UPDATED, 
-                Messages.MOUNTPOINTS_RECONFIGURE, 
-                Messages.BEFORE_HOST_TERMINATE)
+                Messages.MOUNTPOINTS_RECONFIGURE)
 
     def on_init(self):
         bus.on(
@@ -100,33 +93,12 @@ class BlockDeviceHandler(handlers.Handler):
 
 
     def on_host_init_response(self, hir):
-        
-        LOG.info('Configuring block device mountpoints')
-        with bus.initialization_op as op:
-            with op.phase(self._phase_plug_volume):
-                wait_until(self._plug_all_volumes, sleep=10, timeout=600, 
-                        error_text='Cannot attach and mount disks in a reasonable time')
-        
-        volumes = hir.body.get('volumes') or []
-        if volumes:
-            LOG.debug('HIR volumes: %s', volumes)
-            for i in range(0, len(volumes)):
-                vol = volumes[i]
-                template = vol.pop('template', None)
-                from_template_if_missing = vol.pop('from_template_if_missing', None)
-                vol = storage2.volume(**vol)
-                LOG.info('Ensuring %s volume %s', vol.type, dict(vol))
-                try:
-                    vol.ensure(mount=bool(vol.mpoint), mkfs=True)
-                except storage2.VolumeNotExistsError, e:
-                    if template and from_template_if_missing == '1':
-                        vol = storage2.volume(**template)
-                        LOG.warn('Volume %s not exists, re-creating %s volume from config: %s', 
-                                str(e), vol.type, dict(vol))
-                        vol.ensure(mount=bool(vol.mpoint), mkfs=True)
-                    else:
-                        raise
-                self._volumes.append(dict(vol))
+        bus.init_op.logger.info('Configuring storage volumes')
+        # volumes from QueryEnv.list_ebs_mountpoints()
+        wait_until(self._plug_old_style_volumes, sleep=10)
+        # volumes assigned to this role on Farm Designer
+        volumes = hir.body.get('volumes', []) or []
+        self._plug_new_style_volumes(volumes)
 
 
     def on_before_host_up(self, hostup):
@@ -135,7 +107,97 @@ class BlockDeviceHandler(handlers.Handler):
             hostup.body['volumes'] = self._volumes
 
 
-    def _plug_all_volumes(self):
+    def _plug_new_style_volumes(self, volumes):
+        for vol in volumes:
+            template = vol.pop('template', None)
+            from_template_if_missing = vol.pop('from_template_if_missing', False)
+            vol = storage2.volume(**vol)
+            self._log_ensure_volume(vol)
+            try:
+                vol.ensure(mount=bool(vol.mpoint), mkfs=True)
+            except storage2.VolumeNotExistsError, e:
+                if template and bool(int(from_template_if_missing)):
+                    LOG.warn('Volume %s not exists, re-creating %s from template', 
+                            str(e), vol.type)
+                    vol = storage2.volume(**template)
+                    self._log_ensure_volume(vol)
+                    vol.ensure(mount=bool(vol.mpoint), mkfs=True)
+                else:
+                    raise
+            self._volumes.append(dict(vol))
+
+
+    def _log_ensure_volume(self, vol):
+        '''
+        Log messages I want to see:
+
+        'Ensure ebs: take vol-12345678, mount to /mnt/volume'
+        'Ensure ebs: create volume, create ext3 filesystem, mount to /mnt/volume'
+        'Ensure ebs: create volume from snap-12345678'
+
+        'Ensure raid1: take raid-vol-123432 (ebs disks: vol-12345678, vol-12345678, vol-12345678, vol-12345678), mount to /mnt/raid'
+        'Ensure raid5: create 4 ebs volumes, create xfs filesystem, mount to /mnt/raid5'
+        'Ensure raid10: create 4 ebs volumes from snapshots (snap-12345678, snap-87654321, snap-11111111, snap-22222222), mount to /mnt/raid10'
+
+        '''
+
+        common_actions = {
+            'mkfs': 'make {0} filesystem',
+            'mount': 'mount to {0}'        
+        }
+        persistent_actions = {
+            'take': 'take {0}',
+            'new': 'create volume',
+            'snap': 'create volume from {0}'
+        }
+        raid_actions = {
+            'take': 'take {0} ({1} {2} disks: {3})',
+            'new': 'create {0} {1} volumes',
+            'snap': 'create {0} {1} volumes from snapshots ({2})'
+        }
+
+        is_raid = vol.type == 'raid'
+
+        acts = []
+        if vol.id:
+            if is_raid:
+                act = raid_actions['take'].format(vol.id, 
+                        len(vol.disks), 
+                        vol.disks[0].type, 
+                        ', '.join(str(disk.id) for disk in vol.disks))
+            else:
+                act = persistent_actions['take'].format(vol.id)
+            acts.append(act)
+        elif vol.snap:
+            if is_raid:
+                act = raid_actions['snap'].format(len(vol.disks), vol.snap['disks'][0]['type'], 
+                        ', '.join(snap['id'] for snap in vol.snap['disks']))
+            else:
+                act = persistent_actions['snap'].format(vol.snap['id'])
+            acts.append(act)
+        else:
+            if is_raid:
+                act = raid_actions['new'].format(len(vol.disks), vol.disks[0].type)
+            else:
+                act = persistent_actions['new']
+            acts.append(act)
+            if vol.mpoint:
+                act = common_actions['mkfs'].format(vol.fstype)
+                acts.append(act)
+        if vol.mpoint:
+            act = common_actions['mount'].format(vol.mpoint)
+            acts.append(act)
+
+        if is_raid:
+            msg = 'Ensure {0}{1}: '.format(vol.type, vol.level)
+        else:
+            msg = 'Ensure {0}: '.format(vol.type)
+        msg += ', '.join(acts)
+        log = bus.init_op.logger if bus.init_op else LOG
+        log.info(msg)
+
+
+    def _plug_old_style_volumes(self):
         unplugged = 0
         plugged_names = []
         for qe_mpoint in self._queryenv.list_ebs_mountpoints():
@@ -164,23 +226,17 @@ class BlockDeviceHandler(handlers.Handler):
             )
 
             if mpoint:
-                def block():
-                    vol.ensure(mount=True, mkfs=True, fstab=True)
-                    bus.fire("block_device_mounted", 
-                            volume_id=vol.id, device=vol.device)
-                    self.send_message(Messages.BLOCK_DEVICE_MOUNTED, 
-                        {"device_name": vol.device, 
-                        "volume_id": vol.id, 
-                        "mountpoint": vol.mpoint}
-                    )
-                
-                if bus.initialization_op:
-                    msg = 'Mount device %s to %s' % (vol.device, vol.mpoint)
-                    with bus.initialization_op.step(msg):
-                        block()
-                else:
-                    block()
-                
+                logger = bus.init_op.logger if bus.init_op else LOG
+                logger.info('Ensure %s: take %s, mount to %s', self._vol_type, vol.id, vol.mpoint)
+
+                vol.ensure(mount=True, mkfs=True, fstab=True)
+                bus.fire("block_device_mounted", 
+                        volume_id=vol.id, device=vol.device)
+                self.send_message(Messages.BLOCK_DEVICE_MOUNTED, 
+                    {"device_name": vol.device, 
+                    "volume_id": vol.id, 
+                    "mountpoint": vol.mpoint}
+                )                
         except:
             LOG.exception("Can't attach volume")
 
@@ -224,16 +280,7 @@ class BlockDeviceHandler(handlers.Handler):
             
             bus.fire("block_device_detached", device=message.devname)
 
-    def on_BeforeHostTerminate(self, message):
-        if message.local_ip != __node__['private_ip']:
-            return
 
-        volumes = message.body.get('volumes', [])
-        volumes = volumes or []
-        
-        for volume in volumes:
-            volume = storage2.volume(volume)
-            volume.umount()
-            volume.detach()
+
 
 

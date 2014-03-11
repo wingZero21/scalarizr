@@ -14,10 +14,14 @@ import string
 import pkgutil
 import traceback
 import platform
+import functools
 
 
 from scalarizr.bus import bus
 from scalarizr import exceptions
+
+
+LOG = logging.getLogger(__name__)
 
 
 class UtilError(BaseException):
@@ -713,8 +717,35 @@ class Singleton(type):
         return cls._instances[cls]
 
 
+def add_authorized_key(ssh_public_key):
+    authorized_keys_path = "/root/.ssh/authorized_keys"
+    if not os.path.exists(authorized_keys_path):
+        open(authorized_keys_path, 'w+').close()
+
+    c = None
+    with open(authorized_keys_path, 'r') as fp:
+        c = fp.read()
+    idx = c.find(ssh_public_key)
+    if idx == -1:
+        if c and c[-1] != '\n':
+            c += '\n'
+        c += ssh_public_key + "\n"
+        LOG.debug("Add server ssh public key to authorized_keys")
+    elif idx > 0 and c[idx-1] != '\n':
+        c = c[0:idx] + '\n' + c[idx:]
+        LOG.warn('Adding new-line character before server SSH key in authorized_keys file')
+
+    os.chmod(authorized_keys_path, 0600)
+    try:
+        with open(authorized_keys_path, 'w') as fp:
+            fp.write(c)
+    finally:
+        os.chmod(authorized_keys_path, 0400)
+
+
 if platform.uname()[0] == 'Windows':
     import _winreg as winreg
+    import pythoncom
     
     REG_KEY = 'Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Scalarizr'
 
@@ -727,3 +758,14 @@ if platform.uname()[0] == 'Windows':
             return winreg.QueryValueEx(hkey, value_name)[0]
         finally:
             winreg.CloseKey(hkey)
+
+
+    def coinitialized(fn):
+        @functools.wraps(fn)
+        def decorator(*args, **kwargs):
+            pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                pythoncom.CoUninitialize()
+        return decorator

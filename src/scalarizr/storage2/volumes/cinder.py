@@ -7,7 +7,7 @@ import string
 import threading
 from time import sleep
 
-from novaclient.exceptions import ClientException
+import novaclient.exceptions as nova_exc
 
 from scalarizr import node
 from scalarizr import storage2
@@ -27,6 +27,11 @@ def name2device(name):
         name = name.replace('/vd', '/xvd')
     if storage2.RHEL_DEVICE_ORDERING_BUG:
         name = name[0:8] + chr(ord(name[8]) + 4) + name[9:]
+    if name.startswith('/dev/vd'):
+        devices = ['/dev/vd' + a for a in string.ascii_lowercase[1:16]]
+        devices = [dev for dev in devices if not os.path.exists(dev)]
+        if devices:
+            return devices[0]
     return name
 
 
@@ -38,52 +43,21 @@ def device2name(device):
     return device.replace('/xvd', '/vd')
 
 
-class FreeDeviceLetterMgr(object):
-
-    def __init__(self):
-        self._all = set(string.ascii_lowercase[1:16])
-        self._acquired = set()
-        self._lock = threading.Lock()
-        self._local = threading.local()
-
-    def __enter__(self):
-        letters = list(self._all - self._acquired)
-        letters.sort()
-        for l in letters:
-            pattern = name2device('/dev/vd' + l) + '*'
-            if not glob.glob(pattern):
-                with self._lock:
-                    if not l in self._acquired:
-                        self._acquired.add(l)
-                        self._local.letter = l
-                        return self
-        msg = 'No free letters for block device name remains'
-        raise storage2.StorageError(msg)
-
-    def get(self):
-        return self._local.letter
-
-    def __exit__(self, *args):
-        if hasattr(self._local, 'letter'):
-            self._acquired.remove(self._local.letter)
-            del self._local.letter
-
-
 class CinderVolume(base.Volume):
+    attach_lock = threading.Lock()
 
     _global_timeout = 3600
-    _free_device_letter_mgr = FreeDeviceLetterMgr()
 
     def _check_cinder_connection(self):
         if not self._cinder:
             self._cinder = __openstack__['new_cinder_connection']
-        assert self._cinder.has_connection, \
+        assert self._cinder.has_connection(), \
             self.error_messages['no_connection']
 
     def _check_nova_connection(self):
         if not self._nova:
             self._nova = __openstack__['new_nova_connection']
-        assert self._nova.has_connection, \
+        assert self._nova.has_connection(), \
             self.error_messages['no_connection']
 
     def __init__(self,
@@ -134,7 +108,7 @@ class CinderVolume(base.Volume):
         return srv_id
 
     def _ensure(self):
-        assert (self._cinder and self._cinder.has_connection) or self.id, \
+        assert (self._cinder and self._cinder.has_connection()) or self.id, \
             self.error_messages['no_id_or_conn']
 
         if self._cinder:
@@ -170,24 +144,22 @@ class CinderVolume(base.Volume):
 
             server_ids = map(lambda info: info['server_id'],
                              volume.attachments)
+            my_server_id = __openstack__['server_id']
             if not (volume.status == 'in-use' and
-                    self._server_id() in server_ids):
+                    my_server_id in server_ids):
                 self._wait_status_transition()
                 if len(volume.attachments) > 0:
                     self._detach_volume()
-
-                with self._free_device_letter_mgr:
-                    name = '/dev/vd%s' % self._free_device_letter_mgr.get()
-                    self._attach_volume(device_name=name)
-                    self.device = name2device(name)
+                device = self._attach_volume(server_id=my_server_id)
             elif not self.device:
-                self.device = volume.attachments[0]['device']
+                device = volume.attachments[0]['device']
 
             self._config.update({
                 'id': volume.id,
                 'avail_zone': volume.availability_zone,
                 'size': volume.size,
-                'volume_type': volume.volume_type})
+                'volume_type': volume.volume_type,
+                'device': device})
 
         # TODO: check device availability
 
@@ -230,8 +202,7 @@ class CinderVolume(base.Volume):
         coreutils.sync()
         snapshot = self._cinder.volume_snapshots.create(volume_id,
                                                         force=True,
-                                                        display_description=
-                                                        description)
+                                                        display_description=description)
         LOG.debug('Snapshot %s created for Cinder volume %s',
                   snapshot.id, volume_id)
         if not nowait:
@@ -247,63 +218,54 @@ class CinderVolume(base.Volume):
             description=snapshot.display_description,
             tags=tags)
 
-    def _attach_volume(self, server_id=None, device_name='auto'):
+
+    def _attach_volume(self, server_id=None):
+        '''
+        :rtype: tuple(cloud_device_name, os_device_name)
+        '''
         if server_id is None:
             server_id = self._server_id()
         volume_id = self.id
-        self._check_cinder_connection()
-
-        #volume attaching
-        LOG.debug('Attaching Cinder volume %s (device: %s) to server %s',
-                  volume_id,
-                  device_name,
-                  server_id)
         self._check_nova_connection()
+
         ops_delay = 10
-        for _ in xrange(5):
+        with self.attach_lock:
             for _ in xrange(5):
-                try:
-                    self._nova.volumes.create_server_volume(
-                            server_id, volume_id, device_name)
-                except ClientException, e:
-                    LOG.warn('Exception caught while trying'
-                             'to attach volume %s: \n%s ', volume_id, e)
-                    LOG.debug('Will try again after %d seconds.', ops_delay)
-                    sleep(ops_delay)
-                else:
+                LOG.debug('Attaching Cinder volume %s', volume_id)
+                taken_before = base.taken_devices()
+                attachment = self._nova.volumes.create_server_volume(server_id, volume_id, None)
+
+                #waiting for attaching transitional state
+                LOG.debug('Checking that Cinder volume %s is attached', volume_id)
+                new_status = self._wait_status_transition(volume_id)
+                if new_status == 'in-use':
+                    LOG.debug('Cinder volume %s attached', volume_id)
                     break
+                elif new_status == 'available':
+                    LOG.warn('Volume %s status changed to "available" instead of "in-use"', volume_id)
+                    LOG.debug('Will try attach volume again after %d seconds', ops_delay)
+                    continue
+                else:
+                    msg = 'Unexpected status transition "available" -> "{0}".' \
+                            ' Cinder volume {1}'.format(new_status, volume_id)
+                    raise storage2.StorageError(msg)
 
-            #waiting for attaching transitional state
-            LOG.debug('Checking that Cinder volume %s is attached', volume_id)
-            new_status = self._wait_status_transition(volume_id)
-            if new_status == 'in-use':
-                LOG.debug('Cinder volume %s attached', volume_id)
-                break
-            elif new_status == 'available':
-                LOG.warn('Volume %s status changed to "available" instead of "in-use"')
-                LOG.debug('Will try attach volume again after %d seconds', ops_delay)
-                continue
-            else:
-                msg = 'Unexpected status transition "available" -> "%s".' \
-                        ' Cinder volume %s'.format(new_status, volume_id)
-                raise storage2.StorageError(msg)
-
-
-        # Checking device availability in OS
-        device = name2device(device_name)
-        LOG.debug('Cinder device name %s is mapped to %s in operation system',
-                  device_name, device)
-        LOG.debug('Checking that device %s is available', device)
-
-        msg = 'Device %s is not available in operation system. ' \
-              'Timeout reached (%s seconds)' % (
-              device, self._global_timeout)
-        util.wait_until(lambda: os.access(device, os.F_OK | os.R_OK),
+            if not linux.os.windows_family:
+                util.wait_until(lambda: base.taken_devices() > taken_before,
+                        start_text='Checking that volume %s is available in OS' % volume_id,
+                        timeout=30,
                         sleep=1,
-                        logger=LOG,
-                        timeout=self._global_timeout,
-                        error_text=msg)
-        LOG.debug('Device %s is available', device)
+                        error_text='Volume %s attached but not available in OS' % volume_id)
+
+                devices = list(base.taken_devices() - taken_before)
+                if len(devices) > 1:
+                    msg = "While polling for attached device, got multiple new devices: %s. " \
+                        "Don't know which one to select".format(devices)
+                    raise Exception(msg)
+                return devices[0]
+            else:
+                return attachment.device
+
 
     def _detach(self, force, **kwds):
         self._detach_volume()
@@ -390,7 +352,7 @@ class CinderVolume(base.Volume):
                 msg = 'Cinder volume %s enters error state after %s.' % \
                     (volume_id, status)
                 raise storage2.StorageError(msg)
-            return vol[0].status
+        return vol[0].status
 
     def _wait_snapshot(self, snapshot_id):
         LOG.debug('Checking that Cinder snapshot %s is completed', snapshot_id)
@@ -428,7 +390,7 @@ class CinderSnapshot(base.Snapshot):
     }
 
     def _check_cinder_connection(self):
-        assert self._cinder.has_connection, \
+        assert self._cinder and self._cinder.has_connection(), \
             self.error_messages['no_connection']
 
     def __init__(self, **kwds):

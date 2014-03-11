@@ -252,7 +252,10 @@ class PostgreSql(BaseService):
         self.postgresql_conf.listen_addresses = '*'
         self.postgresql_conf.wal_level = 'hot_standby'
         self.postgresql_conf.max_wal_senders = 5
-        self.postgresql_conf.wal_keep_segments = 32
+
+        wks = self.postgresql_conf.wal_keep_segments
+        if not wks or int(wks) < 32:
+            self.postgresql_conf.wal_keep_segments = 32  # [TTM-8]
 
         if disttool.is_ubuntu() and disttool.version_info() == (12, 4) and '9.1' == self.version:
             #SEE: https://bugs.launchpad.net/ubuntu/+source/postgresql-9.1/+bug/1018307
@@ -870,7 +873,7 @@ class PostgresqlConf(BasePGConfig):
     ssl_renegotiation_limit = property(_get_ssl_renegotiation_limit, _set_ssl_renegotiation_limit)
 
     max_wal_senders_default = 5
-    wal_keep_segments_default = 32
+    wal_keep_segments_default = 0
 
 
     
@@ -1033,6 +1036,8 @@ class PgHbaConf(object):
             LOG.debug('Adding record "%s" to %s' % (str(record),self.path))
             with open(self.path, 'a') as fp:
                 fp.write('\n'+str(record)+'\n')
+        else:
+            LOG.debug('Record "%s" is already in %s. Nothing to add.' % (str(record),self.path))
             
     def delete_record(self, record, delete_similar=False):
         deleted = []

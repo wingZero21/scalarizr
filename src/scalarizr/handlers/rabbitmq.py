@@ -7,6 +7,7 @@ Created on Sep 7, 2011
 from __future__ import with_statement
 
 import os
+import re
 import sys
 import pwd
 import logging
@@ -17,23 +18,26 @@ from scalarizr.messaging import Messages
 from scalarizr import storage2
 from scalarizr.handlers import HandlerError, ServiceCtlHandler, build_tags
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.util import system2, initdv2, software, dns, cryptotool
+from scalarizr.util import initdv2, software, dns, cryptotool
 from scalarizr.node import __node__
+from scalarizr.linux import iptables
 import scalarizr.services.rabbitmq as rabbitmq_svc
+
 
 
 __rabbitmq__ = __node__['rabbitmq']
 
 
-BEHAVIOUR = SERVICE_NAME = CNF_SECTION = BuiltinBehaviours.RABBITMQ
+BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.RABBITMQ
 OPT_VOLUME_CNF = 'volume_config'
 OPT_SNAPSHOT_CNF = 'snapshot_config'
 DEFAULT_STORAGE_PATH = '/var/lib/rabbitmq/mnesia'
 STORAGE_VOLUME_CNF = 'rabbitmq.json'
-RABBITMQ_MGMT_PLUGIN_NAME= 'rabbitmq_management'
+RABBITMQ_MGMT_PLUGIN_NAME = 'rabbitmq_management'
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
+RABBITMQ_ENV_CFG_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
 
-RABBIT_HOSTNAME_TPL = 'rabbit-%s'
+
 
 
 class RabbitMQMessages:
@@ -75,26 +79,18 @@ class RabbitMQHandler(ServiceCtlHandler):
         bus.on("host_init_response", self.on_host_init_response)
         bus.on("before_host_up", self.on_before_host_up)
         bus.on("before_hello", self.on_before_hello)
+        bus.on("start", self.on_start)
+
         if bus.event_defined('rebundle_cleanup_image'):
             bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
         bus.on("before_host_down", self.on_before_host_down)
 
-        if 'bootstrapping' == __node__['state']:
 
-            self.cleanup_hosts_file('/')
-            self._logger.info('Performing initial cluster reset')
+    def on_start(self):
+        self._insert_iptables_rules()
 
-            if os.path.exists(DEFAULT_STORAGE_PATH):
-                rabbitmq_user = pwd.getpwnam("rabbitmq")
-                os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
-
-            self.service.start()
-            self.rabbitmq.stop_app()
-            self.rabbitmq.reset()
-            self.service.stop()
-
-
-        elif 'running' == __node__['state']:
+        if 'running' == __node__['state']:
+            self._set_nodename_in_env()
             rabbitmq_vol = __rabbitmq__['volume']
 
             if not __rabbitmq__['volume'].mounted_to():
@@ -118,21 +114,16 @@ class RabbitMQHandler(ServiceCtlHandler):
                                                            RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL,
                                                            RabbitMQMessages.INT_RABBITMQ_HOST_INIT)
 
-    def get_initialization_phases(self, hir_message):
-        self._phase_rabbitmq = 'Configure RabbitMQ'
-        self._step_accept_scalr_conf = 'Accept Scalr configuration'
-        self._step_create_storage = 'Create storage'
-        self._step_patch_conf = 'Patch configuration files'
-        self._step_join_cluster = 'Join cluster'
-        self._step_collect_hostup_data = 'Collect HostUp data'
 
-        return {'before_host_up': 
-            [{'name': self._phase_rabbitmq,
-              'steps': [self._step_accept_scalr_conf,
-                        self._step_create_storage,
-                        self._step_patch_conf,
-                        self._step_join_cluster,
-                        self._step_collect_hostup_data]}]}
+    def _insert_iptables_rules(self):
+        if iptables.enabled():
+            iptables.FIREWALL.ensure([
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '5672'},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '15672'},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '55672'},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'}
+            ])
+
 
     def cleanup_hosts_file(self, rootdir):
         """ Clean /etc/hosts file """
@@ -219,7 +210,7 @@ class RabbitMQHandler(ServiceCtlHandler):
             return
 
         if message.local_ip != self.platform.get_private_ip():
-            hostname = RABBIT_HOSTNAME_TPL % message.server_index
+            hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % message.server_index
             self._logger.info("Adding %s as %s to hosts file", message.local_ip, hostname)
             dns.ScalrHosts.set(message.local_ip, hostname)
 
@@ -243,34 +234,72 @@ class RabbitMQHandler(ServiceCtlHandler):
             self.service.stop()
 
 
+    def _set_nodename_in_env(self):
+        node_name = rabbitmq_svc.NODE_HOSTNAME_TPL % __rabbitmq__['hostname']
+        os.environ.update(dict(RABBITMQ_NODENAME=node_name))
+
+        env_cfg = ''
+        if os.path.exists(RABBITMQ_ENV_CFG_PATH):
+            with open(RABBITMQ_ENV_CFG_PATH) as f:
+                env_cfg = f.read()
+
+        if 'RABBITMQ_NODENAME' in env_cfg:
+            env_cfg = re.sub(re.compile('^(RABBITMQ_NODENAME=(?!%s).*)$' % node_name, re.M), '#\g<0>', env_cfg)
+        if not re.search(re.compile('^RABBITMQ_NODENAME=%s' % node_name, re.M), env_cfg):
+            env_cfg += '\nRABBITMQ_NODENAME=%s' % node_name
+
+        with open(RABBITMQ_ENV_CFG_PATH, 'w') as f:
+            f.write(env_cfg)
+
+
     def on_host_init_response(self, message):
-        with bus.initialization_op as op:
-            with op.phase(self._phase_rabbitmq):
-                with op.step(self._step_accept_scalr_conf):
+        log = bus.init_op.logger
+        log.info('Accept Scalr configuration')
 
-                    if not message.body.has_key("rabbitmq"):
-                        raise HandlerError("HostInitResponse message for RabbitMQ behaviour must have 'rabbitmq' property")
+        if not message.body.has_key("rabbitmq"):
+            raise HandlerError("HostInitResponse message for RabbitMQ behaviour must have 'rabbitmq' property")
 
-                    rabbitmq_data = message.rabbitmq.copy()
+        rabbitmq_data = message.rabbitmq.copy()
 
-                    if not rabbitmq_data['password']:
-                        rabbitmq_data['password'] = cryptotool.pwgen(10)
+        if not rabbitmq_data['password']:
+            rabbitmq_data['password'] = cryptotool.pwgen(10)
 
-                    hostname = RABBIT_HOSTNAME_TPL % int(message.server_index)
-                    rabbitmq_data['server_index'] = message.server_index
-                    rabbitmq_data['hostname'] = hostname
+        self.cleanup_hosts_file('/')
 
-                    dns.ScalrHosts.set('127.0.0.1', hostname)
-                    with open('/etc/hostname', 'w') as f:
-                        f.write(hostname)
-                    system2(('hostname', '-F', '/etc/hostname'))
+        if os.path.exists(RABBITMQ_ENV_CFG_PATH):
+            os.remove(RABBITMQ_ENV_CFG_PATH)
 
-                    volume_config = rabbitmq_data.pop('volume_config')
-                    volume_config['mpoint'] = DEFAULT_STORAGE_PATH
-                    rabbitmq_data['volume'] = storage2.volume(volume_config)
-                    rabbitmq_data['volume'].tags = self.rabbitmq_tags
+        if not os.path.isdir(DEFAULT_STORAGE_PATH):
+            os.makedirs(DEFAULT_STORAGE_PATH)
 
-                    __rabbitmq__.update(rabbitmq_data)
+        rabbitmq_user = pwd.getpwnam("rabbitmq")
+        os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
+
+        self._logger.info('Performing initial cluster reset')
+
+        self.service.stop()
+
+        hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
+        __rabbitmq__['hostname'] = hostname
+        dns.ScalrHosts.set('127.0.0.1', hostname)
+        self._set_nodename_in_env()
+
+        self.service.start()
+        self.rabbitmq.stop_app()
+        self.rabbitmq.reset()
+        self.service.stop()
+
+        # Use RABBITMQ_NODENAME instead of setting actual hostname
+        #with open('/etc/hostname', 'w') as f:
+        #    f.write(hostname)
+        #system2(('hostname', '-F', '/etc/hostname'))
+
+        volume_config = rabbitmq_data.pop('volume_config')
+        volume_config['mpoint'] = DEFAULT_STORAGE_PATH
+        rabbitmq_data['volume'] = storage2.volume(volume_config)
+        rabbitmq_data['volume'].tags = self.rabbitmq_tags
+
+        __rabbitmq__.update(rabbitmq_data)
 
 
     def _is_storage_empty(self, storage_path):
@@ -281,83 +310,84 @@ class RabbitMQHandler(ServiceCtlHandler):
 
 
     def on_before_host_up(self, message):
-        with bus.initialization_op as op:
-            with op.phase(self._phase_rabbitmq):
-                with op.step(self._step_create_storage):
-                    hostname_ip_pairs = self._get_cluster_nodes()
-                    nodes_to_cluster_with = []
-                    server_index = __rabbitmq__['server_index']
-                    msg_body = dict(server_index=server_index)
+        log = bus.init_op.logger
 
-                    for hostname, ip in hostname_ip_pairs:
-                        nodes_to_cluster_with.append(hostname)
-                        dns.ScalrHosts.set(ip, hostname)
-                        try:
-                            self.send_int_message(ip,
-                                                                    RabbitMQMessages.INT_RABBITMQ_HOST_INIT,
-                                                                    msg_body, broadcast=True)
-                        except:
-                            e = sys.exc_info()[1]
-                            self._logger.warning("Can't deliver internal message"
-                                            " to server %s: %s" % (ip, e))
+        log.info('Create storage')
+        hostname_ip_pairs = self._get_cluster_nodes()
+        nodes_to_cluster_with = []
+        server_index = __node__['server_index']
+        msg_body = dict(server_index=server_index)
 
-                    rabbitmq_volume = __rabbitmq__['volume']
-                    rabbitmq_volume.ensure(mkfs=True, mount=True)
-                    __rabbitmq__['volume'] = rabbitmq_volume
+        for hostname, ip in hostname_ip_pairs:
+            nodes_to_cluster_with.append(hostname)
+            dns.ScalrHosts.set(ip, hostname)
+            try:
+                self.send_int_message(ip, 
+                    RabbitMQMessages.INT_RABBITMQ_HOST_INIT,
+                    msg_body, 
+                    broadcast=True)
+            except:
+                e = sys.exc_info()[1]
+                self._logger.warning("Can't deliver internal message"
+                                " to server %s: %s" % (ip, e))
 
-                    rabbitmq_user = pwd.getpwnam("rabbitmq")
-                    os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
+        rabbitmq_volume = __rabbitmq__['volume']
+        rabbitmq_volume.ensure(mkfs=True, mount=True)
+        __rabbitmq__['volume'] = rabbitmq_volume
 
-                with op.step(self._step_patch_conf):
-                    # Check if it's first run here, before rabbit starts
-                    init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
-                    if init_run:
-                        self._logger.debug("Storage is empty. Assuming it's "
-                                                "initial run.")
+        rabbitmq_user = pwd.getpwnam("rabbitmq")
+        os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 
-                    do_cluster = True if nodes_to_cluster_with else False
-                    self._logger.debug('Nodes to cluster with: %s' %
-                                                    nodes_to_cluster_with)
 
-                    is_disk_node = self.rabbitmq.node_type == rabbitmq_svc.NodeTypes.DISK
+        log.info('Patch configuration files')
+        # Check if it's first run here, before rabbit starts
+        init_run = self._is_storage_empty(DEFAULT_STORAGE_PATH)
+        if init_run:
+            self._logger.debug("Storage is empty. Assuming it's "
+                                    "initial run.")
 
-                    self_hostname = __rabbitmq__['hostname']
+        do_cluster = True if nodes_to_cluster_with else False
+        self._logger.debug('Nodes to cluster with: %s' %
+                                        nodes_to_cluster_with)
 
-                    self._logger.debug('Enabling management agent plugin')
-                    self.rabbitmq.enable_plugin(RABBITMQ_MGMT_AGENT_PLUGIN_NAME)
+        is_disk_node = self.rabbitmq.node_type == rabbitmq_svc.NodeTypes.DISK
 
-                    cookie = __rabbitmq__['cookie']
-                    self._logger.debug('Setting erlang cookie: %s' % cookie)
-                    self.rabbitmq.set_cookie(cookie)
+        self_hostname = __rabbitmq__['hostname']
 
-                    self.service.start()
+        self._logger.debug('Enabling management agent plugin')
+        self.rabbitmq.enable_plugin(RABBITMQ_MGMT_AGENT_PLUGIN_NAME)
 
-                with op.step(self._step_join_cluster):
+        cookie = __rabbitmq__['cookie']
+        self._logger.debug('Setting erlang cookie: %s' % cookie)
+        self.rabbitmq.set_cookie(cookie)
 
-                    if do_cluster and (not is_disk_node or init_run):
-                        self._logger.info('Joining cluster with other nodes.')
-                        self.rabbitmq.cluster_with(self_hostname,
-                                                nodes_to_cluster_with, is_disk_node)
+        self.service.start()
 
-                    self.rabbitmq.delete_user('guest')
-                    scalr_user_password = __rabbitmq__['password']
-                    self.rabbitmq.check_scalr_user(scalr_user_password)
+        log.info('Join cluster')
+        if do_cluster and (not is_disk_node or init_run):
+            self._logger.info('Joining cluster with other nodes.')
+            self.rabbitmq.cluster_with(self_hostname,
+                                    nodes_to_cluster_with, is_disk_node)
 
-                    master_user_password = __rabbitmq__['password']
-                    self.rabbitmq.check_master_user(master_user_password)
+        self.rabbitmq.delete_user('guest')
+        scalr_user_password = __rabbitmq__['password']
+        self.rabbitmq.check_scalr_user(scalr_user_password)
 
-                    cluster_nodes = self.rabbitmq.cluster_nodes()
-                    if not all([node in cluster_nodes for node in nodes_to_cluster_with]):
-                        raise HandlerError('Cannot cluster with all role servers')
+        master_user_password = __rabbitmq__['password']
+        self.rabbitmq.check_master_user(master_user_password)
 
-                with op.step(self._step_collect_hostup_data):
-                    # Update message
-                    msg_data = dict()
-                    msg_data['volume_config'] = dict(__rabbitmq__['volume'])
-                    msg_data['node_type'] = self.rabbitmq.node_type
-                    msg_data['password'] = scalr_user_password
-                    self._logger.debug('Updating HostUp message with %s' % msg_data)
-                    message.rabbitmq = msg_data
+        cluster_nodes = self.rabbitmq.cluster_nodes()
+        if not all([node in cluster_nodes for node in nodes_to_cluster_with]):
+            raise HandlerError('Cannot cluster with all role servers')
+
+        log.info('Collect HostUp data')
+        # Update message
+        msg_data = dict()
+        msg_data['volume_config'] = dict(__rabbitmq__['volume'])
+        msg_data['node_type'] = self.rabbitmq.node_type
+        msg_data['password'] = scalr_user_password
+        self._logger.debug('Updating HostUp message with %s' % msg_data)
+        message.rabbitmq = msg_data
 
 
     @property
@@ -370,12 +400,6 @@ class RabbitMQHandler(ServiceCtlHandler):
         for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
             for host in role.hosts:
                 ip = host.internal_ip
-                hostname = RABBIT_HOSTNAME_TPL % host.index
+                hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % host.index
                 nodes.append((hostname, ip))
         return nodes
-
-
-    @property
-    def hostname(self):
-        server_index = __rabbitmq__['server_index']
-        return RABBIT_HOSTNAME_TPL % server_index

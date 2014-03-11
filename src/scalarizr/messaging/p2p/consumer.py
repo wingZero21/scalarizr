@@ -6,6 +6,7 @@ Created on Dec 5, 2009
 '''
 
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 
 # Core
 from scalarizr.messaging import MessageConsumer, MessagingError
@@ -52,23 +53,15 @@ class P2pMessageConsumer(MessageConsumer):
         if self.running:
             raise MessagingError('Message consumer is already running')
 
+        r = urlparse(self.endpoint)
         try:
             if self._server is None:
-                r = urlparse(self.endpoint)
-                msg_port = r.port
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                try:
-                    sock.connect(('0.0.0.0', msg_port))
-                    msg_port = 8011
-                    sock.close()
-                except socket.error:
-                    pass
-                STATE['global.msg_port'] = msg_port
-                self._logger.info('Building message consumer server on %s:%s', r.hostname, msg_port)
+                #port = __node__['base']['messaging_port']
+                self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-                self._server = HTTPServer((r.hostname, msg_port), self._get_request_handler_class())
+                self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
         except (BaseException, Exception), e:
-            self._logger.error("Cannot build server on port %s. %s", msg_port, e)
+            self._logger.error("Cannot build server on port %s. %s", r.port, e)
             return
 
         self._logger.debug('Starting message consumer %s', self.endpoint)
@@ -103,12 +96,12 @@ class P2pMessageConsumer(MessageConsumer):
                                 h = HTMLParser.HTMLParser()
                                 rawmsg = h.unescape(rawmsg).encode('utf-8')
                         except:
-                            logger.debug('%s', sys.exc_info()[1], sys.exc_info()[2])
+                            logger.debug('Caught message parsing error', exc_info=sys.exc_info())
 
                 except (BaseException, Exception), e:
                     err = 'Message consumer protocol filter raises exception: %s' % str(e)
-                    logger.info(err)  # Downshift level, cause HTTP scanners do a lot of flood
-                    self.send_response(400, str(e))
+                    logger.exception(err)
+                    self.send_response(201, 'Created')
                     return
 
                 try:
@@ -117,6 +110,7 @@ class P2pMessageConsumer(MessageConsumer):
 
                     mime_type = self.headers.get('Content-Type', 'application/xml')
                     format = ('application/json' in mime_type) and 'json' or 'xml'
+
                     if 'json' == format:
                         message.fromjson(rawmsg)
                     else:
@@ -127,17 +121,27 @@ class P2pMessageConsumer(MessageConsumer):
                     msg_copy.id = message.id
                     if 'platform_access_data' in msg_copy.body:
                         del msg_copy.body['platform_access_data']
+                    if 'global_variables' in msg_copy.body:
+                        glob_vars = msg_copy.body.get('global_variables', []) or []
+                        i = 0
+                        for v in list(glob_vars):
+                            if v.get('private'):
+                                del glob_vars[i]
+                                i -= 1
+                            elif 'private' in v:
+                                del glob_vars[i]['private']
+                            i += 1
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
 
                 except (BaseException, Exception), e:
                     err = "Cannot decode message. error: %s; raw message: %s" % (str(e), rawmsg)
                     logger.exception(err)
-                    self.send_response(400, err)
+                    self.send_response(201, 'Created')
                     return
 
 
-                logger.debug("Received message '%s' (message_id: %s)", message.name, message.id)
+                logger.debug("Received message '%s' (message_id: %s, format: %s)", message.name, message.id, format)
                 #logger.info("Received ingoing message '%s' in queue %s", message.name, queue)
 
                 try:
@@ -155,7 +159,7 @@ class P2pMessageConsumer(MessageConsumer):
 
             def log_message(self, format, *args):
                 logger = logging.getLogger(__name__)
-                logger.debug("%s %s\n", self.address_string(), format%args)
+                logger.debug(format % args)
 
         RequestHandler.consumer = self
         return RequestHandler

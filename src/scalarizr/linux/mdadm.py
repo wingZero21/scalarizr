@@ -1,5 +1,6 @@
 from __future__ import with_statement
 
+import logging
 import re
 import os
 from scalarizr import linux
@@ -16,6 +17,7 @@ mdadm_binary = linux.which('mdadm')
 if not os.path.exists('/proc/mdstat'):
     coreutils.modprobe('md_mod')
 
+LOG = logging.getLogger(__name__)
 
 def mdadm(mode, md_device=None, *devices, **long_kwds):
     """
@@ -37,6 +39,8 @@ def mdfind(*devices):
 
     with open('/proc/mdstat') as f:
         stat = f.readlines()
+        
+    LOG.debug('mdstat: %s', stat)
 
     for line in stat:
         if all(map(lambda x: x in line, devices_base)):
@@ -63,8 +67,12 @@ _raid_devices_re        = re.compile('Raid\s+Devices\s+:\s+(?P<count>\d+)')
 _total_devices_re       = re.compile('Total\s+Devices\s+:\s+(?P<count>\d+)')
 _state_re               = re.compile('State\s+:\s+(?P<state>.+)')
 _rebuild_re             = re.compile('Rebuild\s+Status\s+:\s+(?P<percent>\d+)%')
-_level_re                       = re.compile('Raid Level : (?P<level>.+)')
+_level_re               = re.compile('Raid Level : (?P<level>.+)')
 
+
+def version():
+    out = mdadm('misc', None, '--version')[1].strip()
+    return tuple(map(int, out.split('-')[1].strip()[1:].split('.')))
 
 def detail(md_device):
     """

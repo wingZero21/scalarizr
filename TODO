@@ -1,0 +1,2 @@
+- move api log into separate file scalarizr_api.log
+- json messages pretty formatter, where: 1 collapse global_variables, move top message name

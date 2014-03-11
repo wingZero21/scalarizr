@@ -13,21 +13,27 @@ services = {}
 class ServiceAPI(object):
 
 
-    @rpc.service_method
+    @rpc.query_method
     def get_preset(self, behavior):
         if behavior not in services:
             raise AssertionError('Behaviour %s is not registred in ServiceAPI')
 
         provider = services[behavior]
         manifest = provider.get_manifest(behavior)
-        return provider.get_preset(manifest)
+        if manifest:
+            return provider.get_preset(manifest)
+        else:
+            raise BaseException('Cannot retrieve preset: Manifest not found.')
 
 
-    @rpc.service_method
+    @rpc.command_method
     def set_preset(self, behavior, values):
         if behavior not in services:
             raise AssertionError('Behaviour %s is not registred in ServiceAPI')
 
         provider = services[behavior]
         manifest = provider.get_manifest(behavior)
-        provider.set_preset(values, manifest)
+        if manifest:
+            provider.set_preset(values, manifest)
+        else:
+            raise AssertionError('Cannot apply preset: Manifest not found.')

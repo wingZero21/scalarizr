@@ -31,6 +31,13 @@ def service_method(fn):
     fn._jsonrpc = True
     return fn
 
+def query_method(fn):
+    fn._jsonrpc = 'query'
+    return fn
+
+def command_method(fn):
+    fn._jsonrpc = 'command'
+    return fn
 
 class ServiceError(Exception):
     PARSE = -32700
@@ -98,11 +105,15 @@ class RequestHandler(object):
 
     def handle_request(self, data, namespace=None):
         id, result, error = '', None, None
+        log_it = False
         try:
             req = self._parse_request(data) if isinstance(data, basestring) else data
             id, method, params = self._translate_request(req)
             svs = self._find_service(namespace)
             fn = self._find_method(svs, method)
+            if fn._jsonrpc == 'command':
+                log_it = True
+                LOG.debug('request: %s', json.dumps(data))
             result = self._invoke_method(fn, params)
             # important to test json serializarion before serialize the whole result
             json.dumps(result)
@@ -113,6 +124,9 @@ class RequestHandler(object):
                             'data': e.data}
         except:
             E, e = sys.exc_info()[:2]
+            if E in (SystemExit, KeyboardInterrupt):
+                raise
+            code = E.__name__
             if E in (KeyError, IndexError):
                 # file/line/def where exception occurred formatted like exception stacktrace 
                 where = traceback.format_list([traceback.extract_tb(sys.exc_info()[2])[-1]])[0].strip()  
@@ -129,7 +143,10 @@ class RequestHandler(object):
             else:
                 resp = {'error': error}
             resp['id'] = id
-        return json.dumps(resp)
+        ret = json.dumps(resp)
+        if log_it:
+            LOG.debug('response: %s', ret)
+        return ret
 
 
     def _parse_request(self, data):

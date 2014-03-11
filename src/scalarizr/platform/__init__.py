@@ -179,7 +179,7 @@ class Platform():
 
         def images(self):
             if bus.scalr_version >= (3, 1, 0):
-                return os.path.join(self.root(), 'images')
+                return os.path.join(self.root(), 'images/')
             else:
                 return '%s://scalr2-images-%s-%s' % (
                         self.platform.cloud_storage_path.split('://')[0],
@@ -297,6 +297,9 @@ class Architectures:
 
 
 if linux.os.windows_family:
+    from scalarizr.util import coinitialized
+
+    @coinitialized
     def net_interfaces():
         wmi = win32com.client.GetObject('winmgmts:')
         wql = "SELECT IPAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = 'True'"
@@ -333,3 +336,12 @@ else:
                 'ipv6': None
                 } for i in range(0, outbytes, struct_size))
 
+
+def is_private_ip(ipaddr):
+    return any(map(lambda x: ipaddr.startswith(x), ('10.', '172.', '192.168.')))
+
+def is_local_ip(ipaddr):
+    return ipaddr.startswith('127.')
+
+def is_public_ip(ipaddr):
+    return not (is_private_ip(ipaddr) or is_local_ip(ipaddr))

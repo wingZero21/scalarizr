@@ -1,5 +1,4 @@
-*.pem
- 
+Berksfile.lock
  
 # https://github.com/github/gitignore
  

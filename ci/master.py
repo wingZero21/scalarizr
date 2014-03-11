@@ -21,6 +21,11 @@ c["schedulers"].append(Triggerable(
 	builderNames=["deb_packaging", "rpm_packaging", "win_packaging"]
 ))
 
+# c["schedulers"].append(Triggerable(
+# 	name="{0} omnibus packaging".format(project),
+# 	builderNames=["omnibus_centos510", "omnibus_centos510-i686", 
+# 				"omnibus_ubuntu1004", "omnibus_ubuntu1004-i686"]
+# ))
 
 def push_to_github(__opts__):
 	cwd = 'sandboxes/{0}/public'.format(project)
@@ -42,8 +47,10 @@ c['builders'].append(dict(
 		#buildsteps.svn(__opts__) +
 		#buildsteps.bump_version(__opts__, setter='cat > src/scalarizr/version') +
 		buildsteps.git(__opts__) +
-                buildsteps.bump_version_for_git(__opts__, setter='cat > src/scalarizr/version') +
+		buildsteps.bump_version_for_git(__opts__, setter='cat > src/scalarizr/version') +
 		buildsteps.source_dist(__opts__) +
+		buildsteps.trigger_tests(__opts__) +
+		buildsteps.trigger_docs(__opts__) + 
 		buildsteps.trigger_packaging(__opts__) + 
 		buildsteps.to_repo(__opts__, types=["deb", "rpm", "win"]) +
 		push_to_github(__opts__)

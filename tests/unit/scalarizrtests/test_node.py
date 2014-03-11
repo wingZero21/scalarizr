@@ -3,13 +3,14 @@ import os
 import mock
 
 from scalarizr import node
-from nose.tools import raises
+from nose.tools import raises, eq_
+from nose.plugins.attrib import attr
+
 
 
 class TestCompound(object):
-    def test_plain_key(self):
+    def test_get_plain_key(self):
         store = mock.MagicMock(spec=node.Store)
-        store.__len__.return_value = 1
         store.__getitem__.return_value = 'aaa'
 
         master = node.Compound({'plain_key': store})
@@ -18,38 +19,25 @@ class TestCompound(object):
         store.__getitem__.assert_called_with('plain_key')
 
 
-    def test_re_key(self):
-        store = {
-                'root_password': 'qqq',
-                'stat_password': 'ppp'
-        }
-
-        master = node.Compound({'*_password': store})
-
-        assert master['root_password'] == 'qqq'
-        assert master['stat_password'] == 'ppp'
-        try:
-            master['undefined_password']
-            assert 0, 'Expected KeyError'
-        except KeyError:
-            pass
-
-
-    def test_enum_key(self):
+    def test_get_enum_key(self):
         values = {
                 'server_id': '14593',
                 'platform': 'ec2'
         }
-        def getitem(key):
-            return values[key]
         store = mock.MagicMock(spec=node.Store)
-        store.__len__.return_value = len(values)
-        store.__getitem__.side_effect = getitem
+        store.__getitem__.side_effect = lambda key: values[key]
 
         master = node.Compound({'server_id,platform': store})
 
-        assert master['server_id'] == '14593'
-        assert master['platform'] == 'ec2'
+        eq_(master['server_id'], '14593')
+        eq_(master['platform'], 'ec2')
+
+    def test_set_enum_key(self):
+        store = mock.MagicMock(spec=node.Store)
+        master = node.Compound({'mike,andru,luka': store})
+
+        master['mike'] = 'story'
+        store.__setitem__.assert_called_with('mike', 'story')
 
 
     def test_set_undefined_key(self):
@@ -60,15 +48,22 @@ class TestCompound(object):
 
 
     def test_update(self):
+        sub = mock.MagicMock(spec=node.Store)
         mysql = node.Compound({
-                'behavior': 'percona'
+                'behavior': 'percona',
+                'sub_1,sub_2': sub
         })
         mysql.update({
-                'replication_master': '1'
+                'replication_master': '1',
+                'sub_1': 'a value',
+                'sub_2': 'not bad'
         })
+
 
         assert 'replication_master' in mysql
         assert mysql['replication_master'] == '1'
+        sub.__setitem__.call_args_list[0] = mock.call(mysql, 'sub_1', 'a value')
+        sub.__setitem__.call_args_list[1] = mock.call(mysql, 'sub_2', 'not bad')
 
 
 class TestJson(object):
@@ -102,6 +97,7 @@ class TestJson(object):
         self.store['any_key'] = data
 
 
+
     def test_set_object(self):
         class _Data(object):
             def __init__(self, data):
@@ -119,7 +115,7 @@ class TestIni(object):
         filename = os.path.dirname(__file__) + '/../fixtures/node.ini'
         self.store = node.Ini(filename, 'mysql')
 
-
+    @attr('one')
     def test_get(self):
         assert self.store['root_password'] == 'Q9OgJxYf19ygFHpRprLF'
 
@@ -143,10 +139,10 @@ class TestIni(object):
 
     def test_set_new_file(self):
         filename = os.path.dirname(__file__) + '/../fixtures/node_new.ini'
-        self.store.filename = filename
+        store = node.Ini(filename, 'mysql')
         try:
-            self.store['root_password'] = 'abs'
-            assert self.store['root_password'] == 'abs'
+            store['root_password'] = 'abs'
+            assert store['root_password'] == 'abs'
         finally:
             if os.path.exists(filename):
                 os.remove(filename)

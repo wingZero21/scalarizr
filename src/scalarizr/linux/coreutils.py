@@ -112,10 +112,11 @@ def chmod_r(path, mode):
 
 
 def remove(path):
-    if os.path.isfile(path):
-        os.remove(path) 
-    elif os.path.isdir(path):
-        shutil.rmtree(path)
+    if os.path.exists(path):
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else: 
+            os.remove(path) 
 
 
 def clean_dir(path, recursive=True):
@@ -235,10 +236,15 @@ def statvfs(path='/'):
     
 _dfrow = namedtuple('df', 'device size mpoint')
 
+def _parse_int(val):
+    try:
+        return int(val)
+    except ValueError:
+        return 0
 
 def df():
     out = linux.system(('df', '-Pk'))[0]
-    return [_dfrow(line[0], int(line[1]), line[-1]) 
+    return [_dfrow(line[0], _parse_int(line[1]), line[-1]) 
             for line in map(str.split, out.splitlines()[1:])]
 
 

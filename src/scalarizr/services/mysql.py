@@ -32,6 +32,7 @@ from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
+from scalarizr.linux import pkgmgr
 
 
 LOG = logging.getLogger(__name__)
@@ -126,7 +127,7 @@ class MySQL(BaseService):
 
                 raw_value = self.my_cnf.get(directive)
                 LOG.debug('directive %s:%s' % (directive, raw_value))
-                if raw_value:
+                if raw_value and node.__node__['platform'] != 'openstack':
                     src_dir = os.path.dirname(raw_value + "/") + "/"
                     LOG.debug('source path: %s' % src_dir)
                     if os.path.isdir(src_dir) and src_dir != dest:
@@ -136,6 +137,10 @@ class MySQL(BaseService):
                                 if not system2((software.which('getsebool'), 'mysqld_disable_trans'), raise_exc=False)[2]:
                                     LOG.debug('Make SELinux rule for rsync')
                                     system2((software.which('setsebool'), '-P', 'mysqld_disable_trans', '1'))
+                                else:
+                                    semanage = get_semanage()
+                                    system2((semanage, 'fcontext', '-a', '-t', 'bin_t', '/usr/bin/rsync'))
+                                    system2((software.which('restorecon'), '-v', '/usr/bin/rsync'))
 
                         LOG.info('Copying mysql directory \'%s\' to \'%s\'', src_dir, dest)
                         rsync(src_dir, dest, archive=True, exclude=['ib_logfile*', '*.sock'])
@@ -658,7 +663,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
 
     def __init__(self):
-        if 'gce' == node.__node__['platform']:
+        if 'gce' == node.__node__['platform'].name:
             self.ensure_pid_directory()
 
         self.mysql_cli = MySQLClient()
@@ -868,6 +873,16 @@ def _add_apparmor_rules(directory):
                 apparmor_initd.reload()
             except InitdError, e:
                 LOG.error('Cannot restart apparmor. %s', e)
+
+
+def get_semanage():
+    if linux.os['family'] == 'RedHat':
+        semanage = software.which('semanage')
+        if not semanage:
+            mgr = pkgmgr.package_mgr()
+            mgr.install('policycoreutils-python')
+            semanage = software.which('semanage')
+        return semanage
 
 
 class MySQLPresetProvider(PresetProvider):

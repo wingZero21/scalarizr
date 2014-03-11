@@ -13,7 +13,7 @@ from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import PresetProvider, BaseConfig
 from scalarizr.api import service as preset_service
-from scalarizr.handlers import Handler, HandlerError, FarmSecurityMixin
+from scalarizr.handlers import ServiceCtlHandler, HandlerError, FarmSecurityMixin
 from scalarizr.messaging import Messages
 
 # Libs
@@ -81,7 +81,7 @@ BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MEMCACHED
 def get_handlers():
     return [MemcachedHandler()]
 
-class MemcachedHandler(Handler, FarmSecurityMixin):
+class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 
     _logger = None
     _queryenv = None
@@ -92,6 +92,7 @@ class MemcachedHandler(Handler, FarmSecurityMixin):
         self.preset_provider = MemcachedPresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
         FarmSecurityMixin.__init__(self, [11211])
+        ServiceCtlHandler.__init__(self, BEHAVIOUR, MemcachedInitScript())
         self._logger = logging.getLogger(__name__)
         self._queryenv = bus.queryenv_service
         bus.on("init", self.on_init)
@@ -103,15 +104,9 @@ class MemcachedHandler(Handler, FarmSecurityMixin):
         return message.name in (Messages.HOST_INIT, Messages.HOST_DOWN, Messages.UPDATE_SERVICE_CONFIGURATION) \
                         and BEHAVIOUR in behaviour
 
-    def get_initialization_phases(self, hir_message):
-        self._phase_memcached = 'Configure Memcached'
-        return {'before_host_up': [{'name': self._phase_memcached, 'steps': []}]}
-
     def on_before_host_up(self, message):
         # Service configured
-        with bus.initialization_op as op:
-            with op.phase(self._phase_memcached):
-                bus.fire('service_configured', service_name=SERVICE_NAME)
+        bus.fire('service_configured', service_name=SERVICE_NAME)
 
     def on_host_init_response(self, message):
         if hasattr(message, BEHAVIOUR):

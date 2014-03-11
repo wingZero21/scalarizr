@@ -41,7 +41,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-         python-boto (>= 2.6.0)
+         python-boto (>= 2.13.0)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Amazon EC2
@@ -52,6 +52,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-ec2 (= ${binary:Version}),
+         euca2ools (>= 3.0.2)
 Description: Scalarizr agent for Eucalyptus
  Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
 
@@ -73,11 +74,11 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-         python-novaclient (>= 2.6.1),
+         python-novaclient (>= 2.15.0),
          python-rackspace-novaclient (>= 1.0),
-         python-cinderclient (>= 1.0.1),
+         python-cinderclient (>= 1.0.5),
          python-swiftclient (>= 1.2.0),
-         python-keystoneclient (>= 0.2.2)
+         python-keystoneclient (>= 0.3.2)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Openstack cloud
@@ -88,7 +89,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack (>= 0.1.r16)
+		python-cloudstack (>= 0.2.3)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for CloudStack (cloud.com) cloud
@@ -99,7 +100,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack 
+		python-cloudstack (>= 0.2.3) 
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for uCloud (Korea Telecom) cloud
@@ -110,7 +111,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack 
+		python-cloudstack (>= 0.2.3)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for IDCF cloud

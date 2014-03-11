@@ -3,6 +3,7 @@
 !addplugindir "plugins"
 !include "EnvVarUpdate.nsh"
 !include "x64.nsh"
+!include "explode.nsh"
 !include "VerCmp.nsh"
 !include "TextFunc.nsh"
 !insertmacro ConfigWrite
@@ -18,8 +19,11 @@
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
 
-SetCompressor /FINAL /SOLID lzma
+SetCompress off
+; SetCompressor /FINAL /SOLID zlib
+
 ; MUI 1.67 compatible ------
+
 !include "MUI.nsh"
 
 ; MUI Settings
@@ -34,6 +38,7 @@ SetCompressor /FINAL /SOLID lzma
 ; Finish page
 !insertmacro MUI_PAGE_FINISH
 
+
 ; Uninstaller pages
 !insertmacro MUI_UNPAGE_INSTFILES
 
@@ -46,9 +51,31 @@ InstallDir "$PROGRAMFILES64\Scalarizr"
 ShowInstDetails show
 ShowUnInstDetails show
 
+
+Var /GLOBAL new_version
+Var /GLOBAL len
+Var /GLOBAL part
+Var /GLOBAL i
+!macro GetVersion Version
+    ${Explode} $len "." ${Version}
+    Pop $new_version
+    IntOp $len $len - 1
+
+    ${For} $i 1 $len
+        Pop $part
+        ${If} $i < 3
+            StrCpy $new_version "$new_version.$part"
+        ${EndIf}
+    ${Next}
+
+    ${StrRep} $new_version $new_version "b" ""
+    Push $new_version
+!macroend
+
+
 Function .onInit
   ${IfNot} ${RunningX64}
-    MessageBox MB_OK "You are trying to install 64 bit package on 32 bit system. Please, download and install 32 bit package instead." /SD IDOK
+    MessageBox MB_OK "Scalarizr only supports 64 bit systems." /SD IDOK
     Quit
   ${EndIf}
 
@@ -56,22 +83,23 @@ Function .onInit
 
   Var /GLOBAL installed_version
   Var /GLOBAL installed_release
+
   ReadRegStr $installed_version ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion"
   ReadRegStr $installed_release ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayRelease"
 
   StrCmp $installed_version "" not_installed
+
   ${StrRep} $0 ${PRODUCT_VERSION} "r" ""
   ${StrRep} $1 $installed_version "r" ""
-  ${VersionCompare} $0 $1 $R0
+
+  !insertmacro GetVersion $0
+  !insertmacro GetVersion $1
+
+  Call CompareVersions
+  Pop $R0
     
-  ${If} $R0 == 2
-  ${OrIf} $R0 == 0
-  ${AndIf} $installed_release > ${PRODUCT_RELEASE}
-    MessageBox MB_OK|MB_ICONINFORMATION "You already have a newer version ($installed_version-$installed_release) of ${PRODUCT_NAME} installed." /SD IDOK
-    Quit
-  ${ElseIf} $R0 == 0
-  ${AndIf} $installed_release == ${PRODUCT_RELEASE}
-    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} $installed_version-$installed_release installed." /SD IDOK
+  ${If} $R0 == 1
+    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} version ($installed_version-$installed_release) installed." /SD IDOK
     Quit
   ${EndIf}
   
@@ -84,36 +112,79 @@ Function .onInit
 FunctionEnd
 
 Section "MainSection" SEC01
+  ${DisableX64FSRedirection}
+
+  Var /GLOBAL start_scalarizr
+  StrCpy $start_scalarizr "0"
+
   ${If} $installed_version != ""
-	services::IsServiceRunning 'Scalarizr'
-	Pop $0
-	StrCmp $0 'No' stopped
+  services::IsServiceRunning 'Scalarizr'
+  Pop $0
+  StrCmp $0 'No' stopped
+  StrCpy $start_scalarizr "1"
     services::SendServiceCommand 'stop' 'Scalarizr'
-	Pop $0
-	StrCmp $0 'Ok' stopped
-		MessageBox MB_OK|MB_ICONSTOP 'Failed to stop service. Reason: $0' /SD IDOK
-		SetErrorLevel 2
-		Abort
-	stopped:
+  Pop $0
+  StrCmp $0 'Ok' stopped
+    MessageBox MB_OK|MB_ICONSTOP 'Failed to stop service. Reason: $0' /SD IDOK
+    SetErrorLevel 2
+    Abort
+  stopped:
     RMDir /r $INSTDIR\src
     RMDir /r $INSTDIR\scripts
     RMDir /r $INSTDIR\share
+    Delete $INSTDIR\scalarizr.bat
   ${EndIf}
   
   SetOverwrite on
-  SetOutPath "$INSTDIR"
-  File /r /x *.svn* /x *.pyc /x *.pyo "${SZR_BASE_PATH}\src"
+  SetOutPath "$INSTDIR\src"
+  File /r /x *.svn* /x *.pyc /x *.pyo "${SZR_BASE_PATH}\src\scalarizr"
+  File /r /x *.svn* /x *.pyc /x *.pyo "${SZR_BASE_PATH}\src\upd"
   
   SetOutPath "$INSTDIR"
   File /r /x *.svn* "${SZR_BASE_PATH}\share"
-  
+
+  ; If md5sum doesn't exist - write md5 of first python dist
+  IfFileExists $INSTDIR\Python27\python.md5 +4 0
+      FileOpen $4 "$INSTDIR\Python27\python.md5" w
+      FileWrite $4 "5b14d7be2d17a1aff90a4c5b70bd3218"
+      FileClose $4
+
+  ; Update python, only if md5sum doesn't match
+  ;ClearErrors
+  ;FileOpen $0 $PLUGINSDIR\python.md5 r
+  ;IfErrors +3
+  ;FileRead $0 $1
+  ;FileClose $0
+
+  ;ClearErrors
+  ;FileOpen $0 $INSTDIR\Python27\python.md5 r
+  ;IfErrors +3
+  ;FileRead $0 $2
+  ;FileClose $0
+
+  ;Var /GLOBAL python_updated
+  ;StrCpy $python_updated "0"
+
+  ;${IfNot} $1 == $2
+  ;    RMDir /r $INSTDIR\Python27
+  ;    Goto InstallPython
+  ;${EndIf}
+
   ${IfNot} ${FileExists} "$INSTDIR\Python27"
-  	File /r /x *.svn* /x *.pyc /x *.pyo "x86_64\Python27"
+    InstallPython:
+
+    SetOutPath "$PLUGINSDIR"
+    File "x86_64\python.tar.gz"
+    untgz::extract "-z" "-u" "-d" "$INSTDIR"  "$PLUGINSDIR\python.tar.gz"
+
+    SetOutPath "$INSTDIR\Python27"
+    File "x86_64\python.md5"
   ${EndIf}
-  
-  SetOverwrite off  
+
+  SetOverwrite off
+  SetOutPath "$INSTDIR"
   File /r /x *.svn* "noarch\*"
-  
+
   SetOutPath "$INSTDIR\scripts\"
   #File "${SZR_BASE_PATH}\scripts\update.py"
   #File "${SZR_BASE_PATH}\scripts\win*"
@@ -129,14 +200,14 @@ Section "MainSection" SEC01
 
   SetOutPath "$SYSDIR"
   SetOverwrite try
-  ${DisableX64FSRedirection}
-    File "x86_64\python27.dll"
-  ${EnableX64FSRedirection}
+  File "x86_64\python27.dll"
+
 
   SetOutPath "$INSTDIR\var\log"
 
   SetOutPath "$INSTDIR\var\run"
 
+  ${EnableX64FSRedirection}
 SectionEnd
 
 Section -AdditionalIcons
@@ -154,6 +225,7 @@ Section -Post
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
+
 SectionEnd
 
 Section -PostInstall
@@ -170,35 +242,42 @@ Section -PostInstall
   
   ${If} $installed_version == ""
   ${AndIf} ${RunningX64}
-  	nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
+    nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
   ${EndIf}
   
   RMDir /r $INSTDIR\tmp
-  
-  ReadEnvStr $R0 "PYTHONPATH"
-  StrCpy $R0 "$R0;$INSTDIR\Python27\Lib;$INSTDIR\Python27\Lib\site-packages;$INSTDIR\src"
-  SetEnv::SetEnvVar "PYTHONPATH" $R0
-  
-	${If} $installed_version == ""
-	    ${DisableX64FSRedirection}
-		nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
-	    ${EnableX64FSRedirection}   
 
-		${ConfigWrite} "$INSTDIR\etc\public.d\config.ini" "scripts_path" " = $INSTDIR\scripts\" $R0
-		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "exec_dir_prefix" " = %TEMP%\scalr-scripting." $R0
-		${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "logs_dir_prefix" " = $INSTDIR\var\log\scalarizr\scripting\scalr-scripting." $R0
-	
-		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib"
-		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib\site-packages"
-		${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\src"
-		${EnvVarUpdate} $0 "PATH" "A" "HKLM" "$INSTDIR"
+  SetRegView 64
+  ; Remove pythonpath for old scalarizr installations
+  ${EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python26\Lib"
+  ${EnvVarUpdate} $0 "PYTHONPATH" "R" "HKLM" "$INSTDIR\Python26\Lib\site-packages"
 
-    nsExec::ExecToStack "netsh advfirewall firewall add rule name=Scalarizr dir=in protocol=tcp localport=8008-8014 action=allow"
-	${EndIf}
-	
+  ; Set PYTHONPATH only to what we need
+  SetEnv::SetEnvVar "PYTHONPATH" "$INSTDIR\Python27\Lib;$INSTDIR\Python27\Lib\site-packages;$INSTDIR\src"
 
-    nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
-    nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
+  ; Set new pythonpath and path variables
+  ${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib"
+  ${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\Python27\Lib\site-packages"
+  ${EnvVarUpdate} $0 "PYTHONPATH" "A" "HKLM" "$INSTDIR\src"
+  ${EnvVarUpdate} $0 "PATH" "A" "HKLM" "$INSTDIR"
+
+  ${DisableX64FSRedirection}
+      ${If} $installed_version == ""
+        ${ConfigWrite} "$INSTDIR\etc\public.d\config.ini" "scripts_path" " = $INSTDIR\scripts\" $R0
+        ${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "exec_dir_prefix" " = %TEMP%\scalr-scripting." $R0
+        ${ConfigWrite} "$INSTDIR\etc\public.d\script_executor.ini" "logs_dir_prefix" " = $INSTDIR\var\log\scalarizr\scripting\scalr-scripting." $R0
+
+        nsExec::ExecToStack "netsh advfirewall firewall add rule name=Scalarizr dir=in protocol=tcp localport=8008-8014 action=allow"
+      ${EndIf}
+
+      nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
+      nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
+      nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
+  ${EnableX64FSRedirection}
+
+  ${If} $start_scalarizr == "1"
+      services::SendServiceCommand 'start' 'Scalarizr'
+  ${EndIf}
 
 
 SectionEnd

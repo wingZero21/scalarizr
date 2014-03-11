@@ -12,7 +12,7 @@ from scalarizr import rpc
 
 class RabbitMQAPI:
 
-    @rpc.service_method
+    @rpc.command_method
     def reset_password(self, new_password=None):
         """
         Reset password for RabbitMQ user 'scalr_master'. Return new password

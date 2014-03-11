@@ -7,7 +7,7 @@ Created on Sep 10, 2010
 
 from scalarizr.util import system2
 from scalarizr import linux
-from scalarizr.linux import coreutils, pkgmgr
+from scalarizr.linux import coreutils, pkgmgr, which
 import os, re, zipfile, glob, platform
 
 __all__ = ('all_installed', 'software_info', 'explore', 'which')
@@ -32,20 +32,6 @@ def explore(name, lookup_fn):
 
         raise Exception("'%s' software has been already explored" % name)
     software_list[name] = lookup_fn
-
-
-def which(name, *extra_dirs):
-    '''
-    Search executable in /bin /sbin /usr/bin /usr/sbin /usr/libexec /usr/local/bin /usr/local/sbin
-    @rtype: tuple
-    '''
-    try:
-        places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
-        places.extend(extra_dirs)
-        return [os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))][0]
-    except IndexError:
-        return False
-        #raise LookupError("Command '%s' not found" % name)
 
 
 def system_info(verbose=False):
@@ -79,6 +65,8 @@ def system_info(verbose=False):
             'release': str(linux.os['release']),
             'codename': linux.os['codename']
     }
+
+    ret['os']['arch'] = linux.os['arch']
 
     ret['storage'] = {}
     ret['storage']['fstypes'] = []
@@ -148,7 +136,7 @@ def mysql_software_info():
 explore('mysql', mysql_software_info)
 
 def nginx_software_info():
-    binary = which('nginx', '/usr/local/nginx/sbin')
+    binary = which('nginx', path_append='/usr/local/nginx/sbin')
     if not binary:
         raise SoftwareError("Can't find executable for Nginx server")
 
@@ -271,24 +259,36 @@ explore('apache', apache_software_info)
 
 
 def tomcat_software_info():
+    catalina_home = linux.system('echo $CATALINA_HOME', shell=True)[0].strip()
+    if not catalina_home:
+        try:
+            catalina_home = glob.glob('/opt/apache-tomcat*')[0]
+        except IndexError:
+            pass
+    if not catalina_home:
+        try:
+            catalina_home = glob.glob('/usr/share/*tomcat*')[0]
+        except IndexError:
+            msg = (
+                "Can't find Tomcat installation\n"
+                " - CATALINA_HOME env variable is unset\n"
+                " - /opt/apache-tomcat*\n"
+                " - /usr/share/*tomcat* search is empty\n"
+            )
+            raise SoftwareError(msg)
 
-    tomcat_dir = [os.path.join('/usr/share', location) for location
-                              in os.listdir('/usr/share') if 'tomcat' in location]
-    if not tomcat_dir:
-        raise SoftwareError("Can't find tomcat server location")
+    catalina_jar = os.path.join(catalina_home, 'lib/catalina.jar')
+    if not os.path.exists(catalina_jar):
+        msg = "Can't get Tomcat version: file {0} not exists".format(catalina_jar)
+        raise SoftwareError(msg)
 
-    catalina_path = os.path.join(tomcat_dir[0], 'lib/catalina.jar')
-
-    if not os.path.exists(catalina_path):
-        raise SoftwareError("Version script doesn't exist")
-
-    catalina = zipfile.ZipFile(catalina_path, 'r')
+    catalina = zipfile.ZipFile(catalina_jar, 'r')
     try:
-        properties_path = 'org/apache/catalina/util/ServerInfo.properties'
-        if not properties_path in catalina.namelist():
+        properties_file = 'org/apache/catalina/util/ServerInfo.properties'
+        if not properties_file in catalina.namelist():
             raise SoftwareError("ServerInfo.properties file isn't in catalina.jar")
 
-        properties = catalina.read(properties_path)
+        properties = catalina.read(properties_file)
         properties = re.sub(re.compile('^#.*$', re.M), '', properties).strip()
 
         res = re.search('^server.info=Apache\s+Tomcat/([\d\.]+)', properties, re.M)
@@ -401,6 +401,27 @@ def redis_software_info():
 explore('redis', redis_software_info)
 
 
+def haproxy_software_info():
+
+    binary_name = "haproxy"
+    binary = which(binary_name)
+    if not binary:
+        raise SoftwareError("Can't find executable for HAProxy")
+
+    out = system2((binary, '-v'))[0]
+    if not out:
+        raise SoftwareError()
+
+    version_string = out.splitlines()[0]
+    res = re.search('[\d\.]+', version_string)
+    if res:
+        version = res.group(0)
+
+        return SoftwareInfo('haproxy', version, out)
+    raise SoftwareError
+explore('haproxy', haproxy_software_info)
+
+
 def mongodb_software_info():
     try:
         mongod = which('mongod')
@@ -421,7 +442,7 @@ def chef_software_info():
     if not binary:
         raise SoftwareError("Can't find executable for chef client")
 
-    version_string = system2((binary, '-v'))[0].strip()
+    version_string = linux.system((binary, '-v'))[0].strip()
     if not version_string:
         raise SoftwareError
 

@@ -119,12 +119,9 @@ class Configuration:
         if self.etree:
             indent(self.etree.getroot())
 
-
     def _read0(self, file):
         fp = open(file)
         self.readfp(fp)
-
-
 
     def readfp(self, fp):
         try:
@@ -168,6 +165,26 @@ class Configuration:
         except:
             raise
 
+    def dumps(self):
+        """
+        Dump configuration to string instead of file
+        @return: str
+        """
+        s = StringIO()
+        try:
+            self.write_fp(s, close=False)
+            return s.getvalue()
+        finally:
+            s.close()
+
+    def reads(self, s):
+        """
+        @type s: str
+        @param s: String, containing configuration
+        """
+        fp = StringIO(s)
+        self.readfp(fp)
+
     def extend(self, conf):
         """
         Extend self with options from another config
@@ -184,12 +201,17 @@ class Configuration:
         for node in conf.etree.getroot():
             self.etree.find(self._cursect).append(node)
 
+    def insert_conf(self, conf, path):
+        self._init()
+        for node in conf.etree.getroot():
+            self.etree.find(path).append(node)
+
     def comment(self, path):
         """
         Comment part of the configuration (one option or subtree)
         """
         path = quote(path)
-        parent_els      = self._find_all(os.path.join(path,'..'))
+        parent_els = self._find_all(os.path.join(path,'..'))
         if not parent_els:
             return
 

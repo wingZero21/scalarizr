@@ -117,9 +117,8 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
         if not root_disk:
             raise HandlerError("Can't find root device")
 
-        if instance.root_device_name:
+        if instance.root_device_type == 'ebs':
             # EBS-root device instance
-
             """ detecting root device like rdev=`sda` """
             rdev = None
             for el in os.listdir('/sys/block'):
@@ -232,10 +231,14 @@ class RebundleStratery:
                 with open(motd_filename, 'w') as fp:
                     fp.write(motd)
 
-    def _fix_fstab(self, image_mpoint):
-        LOG.debug('Fixing fstab')
+    def _fix_fstab(self, image_mpoint=None, filename=None, disable_root_fsck=True):
+        assert image_mpoint or filename
+        if image_mpoint:
+            filename = os.path.join(image_mpoint, 'etc/fstab')
+        LOG.debug('Fixing fstab at %s', filename)
         pl = bus.platform
-        fstab = mount.fstab(os.path.join(image_mpoint, 'etc/fstab'))
+
+        fstab = mount.fstab(filename)
 
         # Remove EBS volumes from fstab
         ec2_conn = pl.new_ec2_conn()
@@ -261,10 +264,11 @@ class RebundleStratery:
                 del fstab[entry.device]
 
         # Disable fsck on root filesystem
-        root_entry = fstab['/']
-        del fstab['/']
-        fstab.add(root_entry.device, root_entry.mpoint, root_entry.fstype,
-                          root_entry.options, root_entry.dump, 0)
+        if disable_root_fsck:
+            root_entry = fstab['/']
+            del fstab['/']
+            fstab.add(root_entry.device, root_entry.mpoint, root_entry.fstype,
+                              root_entry.options, root_entry.dump, 0)
 
         # Ubuntu 10.04 mountall workaround
         # @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
@@ -504,17 +508,40 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             for part in manifest.parts:
                 upload_files.append(os.path.join(manifest_dir, part[0]))
 
-            trn = FileTransfer(src=upload_files, dst=self._platform.scalrfs.images())
-            trn.run()
-            #trn = Transfer(pool=4, max_attempts=5, logger=LOG)
-            #trn.upload(upload_files, self._platform.scalrfs.images())
-
-            manifest_path = os.path.join(self._platform.scalrfs.images(), os.path.basename(manifest_path))
-            return manifest_path.split('s3://')[1]
+            return self._upload_image_files(upload_files, manifest_path)
 
         except (Exception, BaseException):
             LOG.error("Cannot upload image")
             raise
+
+    def _upload_image_files(self, files, manifest_path):
+        dst = self._platform.scalrfs.images()
+        trn = FileTransfer(src=files, dst=dst)
+        res = trn.run()
+        #trn = Transfer(pool=4, max_attempts=5, logger=LOG)
+        #trn.upload(upload_files, self._platform.scalrfs.images())
+
+        if res["failed"]:
+            sources = map(lambda job: job["src"], res["failed"])
+            exceptions = map(lambda job: job["exc_info"][1], res["failed"])
+            str_exceptions = map(lambda exc: ': '.join([repr(exc).split('(')[0],
+                                                        exc.message]),
+                                 exceptions)
+            str_fails = map(lambda pair: '  ' + ' => '.join(pair), zip(sources, str_exceptions))
+            msg = ("Failed uploading the image files to {dst}\n"
+                   "{failed} out of {total} failed:\n"
+                   "\n"
+                   "{fails}"
+            ).format(dst=dst,
+                     failed=len(res["failed"]),
+                     total=len(res["completed"]) + len(res["failed"]),
+                     fails='\n'.join(str_fails)
+            )
+            raise HandlerError(msg)
+
+        manifest_path = os.path.join(self._platform.scalrfs.images(), os.path.basename(manifest_path))
+        return manifest_path.split('s3://')[1]
+
 
     def _register_image(self, s3_manifest_path):
         try:
@@ -923,23 +950,23 @@ class AmiManifest:
     arch = None
     parts = None
     image_size = None
-    bundled_size=None
-    bundler_name=None,
-    bundler_version=None,
-    bundler_release=None,
-    user_encrypted_key=None
-    ec2_encrypted_key=None
-    user_encrypted_iv=None
-    ec2_encrypted_iv=None
-    image_digest=None
-    digest_algo=None
-    crypto_algo=None
-    user_private_key=None
-    kernel_id=None
-    ramdisk_id=None
-    product_codes=None
-    ancestor_ami_ids=None
-    block_device_mapping=None
+    bundled_size = None
+    bundler_name = None,
+    bundler_version = None,
+    bundler_release = None,
+    user_encrypted_key = None
+    ec2_encrypted_key = None
+    user_encrypted_iv = None
+    ec2_encrypted_iv = None
+    image_digest = None
+    digest_algo = None
+    crypto_algo = None
+    user_private_key = None
+    kernel_id = None
+    ramdisk_id = None
+    product_codes = None
+    ancestor_ami_ids = None
+    block_device_mapping = None
 
 
     def __init__(self, name=None, user=None, arch=None,

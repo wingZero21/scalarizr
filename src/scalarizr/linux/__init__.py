@@ -12,12 +12,14 @@ class LinuxError(util.PopenError):
     pass
 
 
-def which(exe):
+def which(exe, path_append=None):
     if exe and exe.startswith('/') and \
                     osmod.access(exe, osmod.X_OK):
         return exe
     exe = osmod.path.basename(exe)
     path = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/libexec:/usr/local/bin'
+    if path_append:
+        path = '{0}:{1}'.format(path, path_append)
     if osmod.environ.get('PATH'):
         path += ':' + osmod.environ['PATH']
     for p in set(path.split(osmod.pathsep)):
@@ -75,6 +77,7 @@ class __os(dict):
             self['name'] = 'Windows'
             self['release'] = win32_ver[1]
             self['codename'] = win32_ver[0]
+            self['arch'] = 'x86_64' if platform.uname()[4].upper() == 'AMD64' else 'i386'
 
         elif osmod.path.isfile('/etc/lsb-release'):
             for line in open('/etc/lsb-release').readlines():

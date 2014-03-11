@@ -10,6 +10,7 @@ Public Scalarizr API
 from __future__ import with_statement
 
 import os
+import posixpath
 import binascii
 import logging
 import sys
@@ -93,11 +94,9 @@ class WsgiApplication(Security):
                 start_response('400 Bad request', [], sys.exc_info())
                 return str(sys.exc_info()[1])
 
-            #LOG.debug('request: %s', data)
             req = json.loads(data)
             with self.handle_meta_params(req):
                 result = self.req_handler.handle_request(req, namespace=environ['PATH_INFO'][1:] or None)
-            #LOG.debug('response: %s', result)
 
             result = self.encrypt_data(result)
             sig, date = self.sign(result, self._read_crypto_key())
@@ -109,6 +108,8 @@ class WsgiApplication(Security):
             start_response('200 OK', headers)
             return result
         except:
+            if sys.exc_info()[0] in (SystemExit, KeyboardInterrupt):
+                raise
             start_response('500 Internal Server Error', [], sys.exc_info())
             LOG.exception('Unhandled exception')
             return ''
@@ -149,7 +150,7 @@ class HttpServiceProxy(rpc.ServiceProxy, Security):
         }
         namespace = self.local.method[0] if len(self.local.method) > 1 else ''
 
-        http_req = urllib2.Request(os.path.join(self.endpoint, namespace), jsonrpc_req, headers)
+        http_req = urllib2.Request(posixpath.join(self.endpoint, namespace), jsonrpc_req, headers)
         try:
             jsonrpc_resp = urllib2.urlopen(http_req).read()
             return self.decrypt_data(jsonrpc_resp)

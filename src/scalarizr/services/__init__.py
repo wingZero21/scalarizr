@@ -166,10 +166,6 @@ class BaseConfig(object):
 
     def get_numeric_option(self, option):
         value = self.get(option)
-        try:
-            assert value is None or int(value)
-        except AssertionError:
-            raise ValueError('%s must be a number (got %s instead)' % (option, type(value)))
         return value if value is None else int(value)
 
 
@@ -405,53 +401,21 @@ class PresetProvider(object):
 
 
     def get_manifest(self, behaviour):
+        result = {}
+        raw = None
         #download manifest
         manifest_url = self.get_manifest_url(behaviour)
-        response = urllib2.urlopen(manifest_url)
-        raw = response.read()
-
-        #parse manifest
-        json_obj = json.loads(raw)
-
-        #return black and white lists of variables for each config
-        result = {}
-        for conf_name, data in json_obj.items():
-            result[conf_name] = dict(include=data['include'], exclude=data['exclude'])
+        try:
+            response = urllib2.urlopen(manifest_url)
+            raw = response.read()
+        except (Exception, BaseException), e:
+            LOG.warning('Unable to fetch manifest: %s' % e)
+        else:
+            if raw:
+                #parse manifest
+                json_obj = json.loads(raw)
+                #return black and white lists of variables for each config
+                for conf_name, data in json_obj.items():
+                    result[conf_name] = dict(include=data['include'], exclude=data['exclude'])
         return result
 
-
-
-def backup_step_msg(str_or_tuple):
-    if isinstance(str_or_tuple, str):
-        return "Backup '%s'" % str_or_tuple
-
-    start = str_or_tuple[0]
-    end = str_or_tuple[1]
-    num = str_or_tuple[2]
-    if start+1 != end:
-        return 'Backup %d-%d of %d databases' % (start+1, end, num)
-    else:
-        return 'Backup last database'
-
-
-# number of databases backuped in single step
-backup_num_databases_in_step = 10
-
-def backup_databases_iterator(databases):
-    page_size = backup_num_databases_in_step
-    num_db = len(databases)
-    if num_db >= page_size:
-        for start in xrange(0, num_db, page_size):
-            end = start + page_size
-            if end > num_db:
-                end = num_db
-            yield (databases[start:end], backup_step_msg((start, end, num_db)))
-    else:
-        for db_name in databases:
-            yield ([db_name], backup_step_msg(db_name))
-
-def make_backup_steps(db_list, _operation, _single_backup_fun):
-    for db_portion, step_msg in backup_databases_iterator(db_list):
-        with _operation.step(step_msg):
-            for db_name in db_portion:
-                _single_backup_fun(db_name)

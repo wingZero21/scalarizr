@@ -184,16 +184,6 @@ class NginxHandler(ServiceCtlHandler):
                              Messages.VHOST_RECONFIGURE,
                              Messages.UPDATE_SERVICE_CONFIGURATION)
 
-    def get_initialization_phases(self, hir_message):
-        self._phase = 'Configure Nginx'
-        self._step_setup_proxying = 'Setup proxying'
-        self._step_copy_error_pages = 'Copy default html error pages'
-
-        return {'before_host_up': [{
-                    'name': self._phase,
-                    'steps': [self._step_copy_error_pages,
-                              self._step_copy_error_pages,
-                              self._step_setup_proxying]}]}
 
     def _set_nginx_v2_mode_flag(self, on):
         if on and not self._get_nginx_v2_mode_flag():
@@ -203,6 +193,25 @@ class NginxHandler(ServiceCtlHandler):
 
     def _get_nginx_v2_mode_flag(self):
         return os.path.exists(self._nginx_v2_flag_filepath)
+
+    def _recreate_compat_mode(self):
+        self._logger.debug('Compatibility mode proxying recreation')
+        roles_for_proxy = []
+        if __nginx__['upstream_app_role']:
+            roles_for_proxy = [__nginx__['upstream_app_role']]
+        else:
+            roles_for_proxy = self.get_all_app_roles()
+
+        self.api.fix_app_servers_inc()
+        self.make_default_proxy(roles_for_proxy)
+
+        https_inc_path = os.path.join(os.path.dirname(self.api.app_inc_path),
+                                      'https.include')
+        nginx_dir = os.path.dirname(https_inc_path)
+        for file_path in os.listdir(nginx_dir):
+            if file_path.startswith('https.include'):
+                self._logger.debug('Removing %s' % file_path)
+                os.remove(file_path)
 
     def on_start(self):
         self._logger.debug('Handling on_start message')
@@ -221,46 +230,34 @@ class NginxHandler(ServiceCtlHandler):
                 self._logger.debug('Recreating proxying with proxies:\n%s' % proxies)
                 self.api.recreate_proxying(proxies)
             else:
-                self._logger.debug('Compatibility mode proxying recreation')
-                roles_for_proxy = []
-                if __nginx__['upstream_app_role']:
-                    roles_for_proxy = [__nginx__['upstream_app_role']]
-                else:
-                    roles_for_proxy = self.get_all_app_roles()
-                self.make_default_proxy(roles_for_proxy)
-
-                https_inc_path = os.path.join(os.path.dirname(self.api.app_inc_path),
-                                              'https.include')
-                if os.path.exists(https_inc_path):
-                    self._logger.debug('Removing https.include')
-                    os.remove(https_inc_path)
+                self._recreate_compat_mode()
 
 
     def on_before_host_up(self, message):
         self._logger.debug('Handling on_before_host_up message')
-        with bus.initialization_op as op:
-            with op.phase(self._phase):
+        log = bus.init_op.logger
+        self._init_script.stop()
 
-                with op.step(self._step_copy_error_pages):
-                    self._copy_error_pages()
+        log.info('Copy default html error pages')
+        self._copy_error_pages()
 
-                with op.step(self._step_setup_proxying):
-                    self._logger.debug('Updating main config')
-                    v2_mode = bool(self._proxies) or self._get_nginx_v2_mode_flag()
-                    self._update_main_config(remove_server_section=v2_mode,
-                                             reload_service=False)
+        log.info('Setup proxying')
+        self._logger.debug('Updating main config')
+        v2_mode = bool(self._proxies) or self._get_nginx_v2_mode_flag()
+        self._update_main_config(remove_server_section=v2_mode,
+                                 reload_service=False)
 
-                    if v2_mode:
-                        self._logger.debug('Recreating proxying with proxies:\n%s' % self._proxies)
-                        self.api.recreate_proxying(self._proxies)
-                    else:
-                        # default behaviour
-                        roles_for_proxy = []
-                        if __nginx__['upstream_app_role']:
-                            roles_for_proxy = [__nginx__['upstream_app_role']]
-                        else:
-                            roles_for_proxy = self.get_all_app_roles()
-                        self.make_default_proxy(roles_for_proxy)
+        if v2_mode:
+            self._logger.debug('Recreating proxying with proxies:\n%s' % self._proxies)
+            self.api.recreate_proxying(self._proxies)
+        else:
+            # default behaviour
+            roles_for_proxy = []
+            if __nginx__['upstream_app_role']:
+                roles_for_proxy = [__nginx__['upstream_app_role']]
+            else:
+                roles_for_proxy = self.get_all_app_roles()
+            self.make_default_proxy(roles_for_proxy)
 
         bus.fire('service_configured',
                  service_name=SERVICE_NAME,
@@ -279,34 +276,41 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('on host up backend table is %s' % self.api.backend_table)
         # Assuming backend `backend` can be only in default behaviour mode
         if not self._get_nginx_v2_mode_flag():
-            upstream_role = __nginx__['upstream_app_role']
-            self._logger.debug('upstream app role is %s and server is up in role %s',
-                __nginx__['upstream_app_role'],
-                role_name)
-            if (upstream_role and upstream_role == role_name) or \
-                (not upstream_role and BuiltinBehaviours.APP in behaviours):
+            self._recreate_compat_mode()
+            # upstream_role = __nginx__['upstream_app_role']
+            # self._logger.debug('upstream app role is %s and server is up in role %s',
+            #     __nginx__['upstream_app_role'],
+            #     role_name)
+            # if (upstream_role and upstream_role == role_name) or \
+            #     (not upstream_role and BuiltinBehaviours.APP in behaviours):
 
-                for default_backend in ['backend', 'backend.ssl']:
-                    if default_backend not in self.api.backend_table:
-                        continue
+            #     for default_backend in ['backend', 'backend.ssl']:
+            #         if default_backend not in self.api.backend_table:
+            #             continue
 
-                    server_list = []
-                    for dest in self.api.backend_table[default_backend]:
-                        server_list.extend(dest['servers'])
-                    if server in server_list:
-                        continue
+            #         server_list = []
+            #         for dest in self.api.backend_table[default_backend]:
+            #             server_list.extend(dest['servers'])
+            #         if server in server_list:
+            #             continue
 
-                    self.api.remove_server(default_backend,
-                                           '127.0.0.1',
-                                           reload_service=False,
-                                           update_backend_table=True)
-                    self._logger.info('adding new app server %s to default backend', server)
-                    self.api.add_server(default_backend, server,
-                                         update_backend_table=True)
+            #         self.api.remove_server(default_backend,
+            #                                '127.0.0.1',
+            #                                reload_service=False,
+            #                                update_backend_table=True)
+            #         self._logger.info('adding new app server %s to default backend', server)
+            #         self.api.add_server(default_backend, server,
+            #                              update_backend_table=True)
 
         else:
             self._logger.info('adding new app server %s to role %s backend(s)', server, role_id)
-            self.api.add_server_to_role(server, role_id)
+            # self.api.add_server_to_role(server, role_id)
+            role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
+            nginx_params = role_params.get(BEHAVIOUR)
+            proxies = nginx_params.get('proxies', []) if nginx_params else []
+            self._logger.debug('Recreating proxying with proxies:\n%s' % proxies)
+            self.api.recreate_proxying(proxies)
+
         self._logger.info('After %s host up backend table is %s' % (server, self.api.backend_table))
 
 
@@ -324,34 +328,42 @@ class NginxHandler(ServiceCtlHandler):
         self._logger.debug('removing server %s from backends' % server)
         # Assuming backend `backend` can be only in default behaviour mode
         if not self._get_nginx_v2_mode_flag():
-            upstream_role = __nginx__['upstream_app_role']
-            if (upstream_role and upstream_role == role_name) or \
-                (not upstream_role and BuiltinBehaviours.APP in behaviours):
+            self._recreate_compat_mode()
+            # upstream_role = __nginx__['upstream_app_role']
+            # if (upstream_role and upstream_role == role_name) or \
+            #     (not upstream_role and BuiltinBehaviours.APP in behaviours):
 
-                self._logger.info('removing server %s from default backend' %
-                                   server)
+            #     self._logger.info('removing server %s from default backend' %
+            #                        server)
 
-                for default_backend in ['backend', 'backend.ssl']:
-                    if default_backend not in self.api.backend_table:
-                        continue
-                    server_list = []
-                    for dest in self.api.backend_table[default_backend]:
-                        server_list.extend(dest['servers'])
-                    if server not in server_list:
-                        continue
+            #     for default_backend in ['backend', 'backend.ssl']:
+            #         if default_backend not in self.api.backend_table:
+            #             continue
+            #         server_list = []
+            #         for dest in self.api.backend_table[default_backend]:
+            #             server_list.extend(dest['servers'])
+            #         if server not in server_list:
+            #             continue
 
-                    if len(server_list) == 1:
-                        self._logger.debug('adding localhost to default backend')
-                        self.api.add_server(default_backend, '127.0.0.1',
-                                            reload_service=False,
-                                            update_backend_table=True)
-                    self._logger.info('Removing %s server from backend' % server)
-                    self.api.remove_server(default_backend, server, 
-                                           update_backend_table=True)
+            #         if len(server_list) == 1:
+            #             self._logger.debug('adding localhost to default backend')
+            #             self.api.add_server(default_backend, '127.0.0.1',
+            #                                 reload_service=False,
+            #                                 update_backend_table=True)
+            #         self._logger.info('Removing %s server from backend' % server)
+            #         self.api.remove_server(default_backend, server, 
+            #                                update_backend_table=True)
 
         else:
-            self._logger.info('removing server %s from role %s backend(s)', server, role_id)
-            self.api.remove_server_from_role(server, role_id)
+            # self._logger.info('removing server %s from role %s backend(s)', server, role_id)
+            # self.api.remove_server_from_role(server, role_id)
+            self._logger.info('adding new app server %s to role %s backend(s)', server, role_id)
+            # self.api.add_server_to_role(server, role_id)
+            role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
+            nginx_params = role_params.get(BEHAVIOUR)
+            proxies = nginx_params.get('proxies', []) if nginx_params else []
+            self._logger.debug('Recreating proxying with proxies:\n%s' % proxies)
+            self.api.recreate_proxying(proxies)
         self._logger.debug('After %s host down backend table is %s' %
                            (server, self.api.backend_table))
 
@@ -569,6 +581,18 @@ class NginxHandler(ServiceCtlHandler):
 
         self._logger.debug('Update main configuration file')
         dump = self._dump_config(config)
+
+        gzip_vary = config.get_list('http/gzip_vary')
+        if not gzip_vary:
+            config.add('http/gzip_vary', 'on')
+        gzip_proxied = config.get_list('http/gzip_proxied')
+        if not gzip_proxied:
+            config.add('http/gzip_proxied', 'any')
+        gzip_types = config.get_list('http/gzip_types')
+        if not gzip_types:
+            types = 'text/plain text/css application/json application/x-javascript' \
+                'text/xml application/xml application/xml+rss text/javascript'
+            config.add('http/gzip_types', types)
 
         include_list = config.get_list('http/include')
         if not self.api.app_inc_path in include_list:

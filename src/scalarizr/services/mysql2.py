@@ -445,14 +445,27 @@ class MySQLDumpBackup(backup.Backup):
             out, err = popen.communicate()
             LOG.debug("mysqldump log_stderr communicate done")
             if err:
-                LOG.debug("mysqldump stderr: %s", err)
-        map(log_stderr, self._popens)
+                LOG.debug("mysqldump (code %s) stderr for %s: %s", popen.returncode, popen.db_name, err)
+            return popen.db_name, popen.returncode, err
+        mysqldump_results = map(log_stderr, self._popens)
 
         if self._killed:
             raise Error("Canceled")
 
-        result = transfer_result_to_backup_result(result)
-        return result
+        mysqldump_errors = []
+        for db_name, retcode, err in mysqldump_results:
+            if retcode:
+                mysqldump_errors.append('%s: "%s"' % db_name, err)
+        if mysqldump_errors:
+            raise Error("Mysqldump has returned a non-zero code.\n" + 
+                        '\n'.join(mysqldump_errors))
+
+        parts = transfer_result_to_backup_result(result)
+        return backup.restore(type='mysqldump', 
+                cloudfs_source=result.cloudfs_path, 
+                parts=parts,
+                description=self.description,
+                tags=self.tags)
 
     def _gen_src(self):
         if self.file_per_database:
@@ -467,6 +480,7 @@ class MySQLDumpBackup(backup.Backup):
                     if self._killed:
                         return
                     popen = _mysqldump.popen(stdin=None, bufsize=-1)
+                    popen.db_name = db_name
                     self._popens.append(popen)
                 stream = popen.stdout
                 yield cloudfs.NamedStream(stream, db_name)
@@ -477,6 +491,7 @@ class MySQLDumpBackup(backup.Backup):
                 if self._killed:
                     return
                 popen = _mysqldump.popen(stdin=None, bufsize=-1)
+                popen.db_name = "all-databases"
                 self._popens.append(popen)
             yield popen.stdout
 
@@ -496,7 +511,18 @@ class MySQLDumpBackup(backup.Backup):
         LOG.debug("...killed MySQLDumpBackup")
 
 
+class MySQLDumpRestore(backup.Backup):
+    def __init__(self, 
+            cloudfs_source=None,
+            parts=None,
+            **kwds):
+        super(MySQLDumpRestore, self).__init__(
+            cloudfs_source=cloudfs_source,
+            parts=parts,
+            **kwds)
+
 backup.backup_types['mysqldump'] = MySQLDumpBackup
+backup.restore_types['mysqldump'] = MySQLDumpRestore
 
 
 class User(bases.ConfigDriven):

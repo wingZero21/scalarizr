@@ -56,9 +56,9 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr EC2 edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-boto >= 2.6.0
+Requires:       python26-boto >= 2.13.0
 %else
-Requires:       python-boto >= 2.6.0
+Requires:       python-boto >= 2.13.0
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
@@ -80,6 +80,11 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr Eucalyptus edition
 Group:          Applications/Internet
 Requires:		scalarizr-ec2 = %{version}-%{release}
+%if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
+Requires:       python26-euca2ools
+%else
+Requires:       euca2ools >= 3.0.2
+%endif
 
 %description -n scalarizr-eucalyptus
 Scalarizr converts any server to Scalr-manageable node
@@ -114,17 +119,17 @@ Summary:        Scalarizr OpenStack edition
 Group:          Applications/Internet
 Requires:       scalarizr-base = %{version}-%{release}
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:		python26-novaclient >= 2.10.0
+Requires:		python26-novaclient >= 2.15.0
 Requires:       python26-rackspace-novaclient >= 1.0
-Requires:       python26-cinderclient >= 1.0.1
+Requires:       python26-cinderclient >= 1.0.5
 Requires:       python26-swiftclient >= 1.2.0
-Requires:       python26-keystoneclient >= 0.2.2
+Requires:       python26-keystoneclient >= 0.3.2
 %else
-Requires:		python-novaclient >= 2.10.0
+Requires:		python-novaclient >= 2.15.0
 Requires:       python-rackspace-novaclient >= 1.0
-Requires:       python-cinderclient >= 1.0.1
+Requires:       python-cinderclient >= 1.0.5
 Requires:       python-swiftclient >= 1.2.0
-Requires:       python-keystoneclient >= 0.2.2
+Requires:       python-keystoneclient >= 0.3.2
 %endif
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
@@ -143,9 +148,9 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr CloudStack (cloud.com) edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-cloudstack >= 0.1.r16
+Requires:       python26-cloudstack >= 0.2.3
 %else
-Requires:       python-cloudstack >= 0.1.r16
+Requires:       python-cloudstack >= 0.2.3
 Requires:       lsscsi
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
@@ -224,7 +229,8 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr Google Compute Engine edition
 Group:          Applications/Internet
 Requires:       scalarizr-base = %{version}-%{release}
-Requires:       pyOpenSSL >= 0.13
+Requires:       pyOpenSSL >= 0.13 python-httplib2
+Requires:       python-google-api-client
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
 Conflicts:      scalarizr-rackspace
