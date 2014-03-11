@@ -251,7 +251,10 @@ class UpdClient(util.Server):
             pid = fp.read().strip()
             if not pid:
                 return
-        with open('/proc/{0}/cmdline'.format(pid)) as fp:
+        cmdline_file = '/proc/{0}/cmdline'.format(pid)
+        if not os.path.exists(cmdline_file):
+            return
+        with open(cmdline_file) as fp:
             cmdline = fp.read().split('\x00')
             if 'python' in cmdline[0] and 'scalr-upd-client' in cmdline[1]:
                 msg = 'Another updclient instance is already running (pid: {0})'.format(pid)

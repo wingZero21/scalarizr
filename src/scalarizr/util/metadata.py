@@ -149,7 +149,7 @@ class Provider(object):
     def get_url(self, url=None, rel=None, headers=None):
         if rel:
             url = posixpath.join(url or self.base_url, rel)
-        return urllib2.urlopen(urllib2.Request(url, headers=headers), 
+        return urllib2.urlopen(urllib2.Request(url, headers=headers or {}), 
                 timeout=self.HTTP_TIMEOUT).read().strip()
 
     def try_ec2_url(self):
