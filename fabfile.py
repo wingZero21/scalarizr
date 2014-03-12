@@ -1,36 +1,38 @@
+import os
 from fabric.api import *
 
-#env.hosts = ['ubuntu-1', 'ubuntu-2']
+env.user = 'root'
 
-@parallel
-def runs_in_parallel():
-    return run('uname -a')
+slaves = ['slave']
 
-@runs_once
-def runs_serially():
-	result = execute(runs_in_parallel)
-	puts(result)
 
-"""
-def sdist():
-	''' create source distribution '''
-	pass
+@hosts(slaves)
+def git_export(project='scalarizr-omnibus'):
+    project_path = '/root/ci/master/projects/%s' % project
 
-def sdist_upload():
-	pass
+    local("rm -f /tmp/%s.tar.gz" % project)
+    local("cd %s && git archive --format=tar HEAD | gzip >/tmp/%s.tar.gz" % (project_path, project))
 
-def test():
-	''' run unit tests '''
-	pass
+    run("rm -f /tmp/%s.tar.gz" % project)
+    run("rm -rf /root/ci/slave/projects/%s" % project)
+    run("mkdir -p /root/ci/slave/projects/%s" % project)
 
-def bdist():
-	''' '''
-	pass
+    put('/tmp/%s.tar.gz' % project, '/tmp/%s.tar.gz' % project)
 
-@roles()
-def omnibus():
-	pass
+    with cd('/root/ci/slave/projects/%s' % project):
+        run("tar -xf /tmp/%s.tar.gz" % project)
 
-def omnibus_upload():
-	pass
-"""
+
+@hosts(slaves)
+def omnibus_build():
+    with cd('/root/ci/slave/projects/scalarizr-omnibus'):
+        run("bundle install --binstubs")
+        run("bin/omnibus build project scalarizr")
+
+
+@hosts(slaves)
+def build_source(project='scalarizr'):
+    git_export(project)
+    with cd('/root/ci/slave/projects/%s' % project):
+        run("python setup.py sdist")
+    get('/root/ci/slave/projects/scalarizr/dist/%s-*.tar.gz' % project, '/root/ci/master/artifacts')
