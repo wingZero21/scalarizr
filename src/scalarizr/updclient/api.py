@@ -327,7 +327,7 @@ class UpdClientAPI(object):
         self.system_matches = system_matches
         if not self.system_matches:
             if dry_run:
-                self._sync()      
+                self._sync()  
             else:
                 self.update(bootstrap=True)
         else:
@@ -419,6 +419,7 @@ class UpdClientAPI(object):
         globs = self.queryenv.get_global_config()['params']
         self.scalr_id = globs['scalr.id']
         self.scalr_version = globs['scalr.version']
+        self._ensure_repos()
 
 
     @rpc.command_method
@@ -520,7 +521,6 @@ class UpdClientAPI(object):
             self.state = 'in-progress/prepare'
             self.error = ''
             self._sync()
-            self._ensure_repos()
 
             pkgmgr.LOG.addHandler(op.logger.handlers[0])
             try:
