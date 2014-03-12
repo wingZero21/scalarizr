@@ -328,6 +328,7 @@ class UpdClientAPI(object):
         if not self.system_matches:
             if dry_run:
                 self._sync()  
+                self._ensure_repos(updatedb=False)
             else:
                 self.update(bootstrap=True)
         else:
@@ -361,7 +362,7 @@ class UpdClientAPI(object):
                     fp.write(pid)    
         
 
-    def _ensure_repos(self):
+    def _ensure_repos(self, updatedb=True):
         repo = pkgmgr.repository('scalr-{0}'.format(self.repository), self.repo_url)
         # Delete previous repository 
         for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr-*'):
@@ -371,8 +372,9 @@ class UpdClientAPI(object):
             self._configure_devel_repo(repo)
         # Ensure new repository
         repo.ensure()
-        LOG.info('Updating packages cache')
-        self.pkgmgr.updatedb() 
+        if updatedb:
+            LOG.info('Updating packages cache')
+            self.pkgmgr.updatedb() 
 
 
     def _configure_devel_repo(self, repo):
@@ -419,7 +421,6 @@ class UpdClientAPI(object):
         globs = self.queryenv.get_global_config()['params']
         self.scalr_id = globs['scalr.id']
         self.scalr_version = globs['scalr.version']
-        self._ensure_repos()
 
 
     @rpc.command_method
@@ -521,6 +522,7 @@ class UpdClientAPI(object):
             self.state = 'in-progress/prepare'
             self.error = ''
             self._sync()
+            self._ensure_repos()
 
             pkgmgr.LOG.addHandler(op.logger.handlers[0])
             try:
