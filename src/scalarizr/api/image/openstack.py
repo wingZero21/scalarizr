@@ -1,15 +1,20 @@
 import logging
+import os
+import shutil
 import sys
+import time
 
 from scalarizr.api.rebundle import RebundleAPI
-from scalarizr.util import software
 from scalarizr.node import __node__
+from scalarizr.util import software
+from scalarizr.util import system2 
+from scalarizr.util import wait_until
 
 
 _logger = logging.getLogger(__name__)
 
 
-class OpenStackWindowsRebundler(object):
+class OpenStackWindowsImageTaker(object):
 
     def prepare(self, message):
         # XXX: server is terminated during sysprep.
@@ -17,11 +22,10 @@ class OpenStackWindowsRebundler(object):
         #shutil.copy(r'C:\Windows\System32\sysprep\RunSysprep_2.cmd', r'C:\windows\system32\sysprep\RunSysprep.cmd')
         #shutil.copy(r'C:\Windows\System32\sysprep\SetupComplete_2.cmd', r'C:\windows\setup\scripts\SetupComplete.cmd')
         #linux.system((r'C:\windows\system32\sysprep\RunSysprep.cmd', ))
-
         return software.system_info()
 
 
-class OpenStackLinuxRebundler(object):
+class OpenStackLinuxImageTaker(object):
 
     def prepare(self):
         if os.path.exists('/etc/udev/rules.d/70-persistent-net.rules'):
@@ -62,19 +66,19 @@ class OpenStackLinuxRebundler(object):
             shutil.move('/tmp/70-persistent-net.rules', '/etc/udev/rules.d')
 
 
-class OpenStackRebundleAPI(RebundleAPI):
+class OpenStackImageAPI(RebundleAPI):
     
     def __init__(self):
         if linux.os.windows_family:
-            self._rebundler = OpenStackWindowsRebundler()
+            self._image_taker = OpenStackWindowsImageTaker()
         else:
-            self._rebundler = OpenStackLinuxRebundler()
+            self._image_taker = OpenStackLinuxImageTaker()
 
     def _prepare(self):
-        return self._rebundler.prepare()
+        return self._image_taker.prepare()
 
     def _snapshot(self):
-        return self._rebundler.snapshot()
+        return self._image_taker.snapshot()
 
     def _finalize(self):
-        return self._rebundler.finalize()
+        return self._image_taker.finalize()
