@@ -688,19 +688,6 @@ def main():
 
             qe = new_queryenv()
             out = qe.fetch(*args, params=kv)
-            try:
-                xml = ET.XML(out)
-                glob_vars = xml[0]
-                i = 0
-                for _ in xrange(len(glob_vars)):
-                    var = glob_vars[i]
-                    if int(var.attrib.get('private', 0)) == 1:
-                        glob_vars.remove(var)
-                        continue
-                    i += 1
-                out = ET.tostring(xml)
-            except:
-                pass
             print minidom.parseString(out).toprettyxml(encoding='utf-8')
 
         if options.msgsnd:
