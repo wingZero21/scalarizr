@@ -106,10 +106,10 @@ class QueryEnvService(object):
                         glob_vars.remove(var)
                         continue
                     i += 1
-                log_body = ET.tostring(xml)
+                resp_body = ET.tostring(xml)
             except (BaseException, Exception), e:
                 self._logger.debug("Exception occured while parsing list-global-variables response: %s" % e.message)
-            self._logger.debug("QueryEnv response: %s", log_body)
+            self._logger.debug("QueryEnv response: %s", resp_body)
         elif log_response:
             self._logger.debug("QueryEnv response: %s", resp_body)
         return resp_body
@@ -155,7 +155,6 @@ class QueryEnvService(object):
 
         response_log_copy = deepcopy(response)
         try:
-            # response_log_copy['chef'] = response['chef'].copy()
             del response_log_copy['chef']['validator_name']
             del response_log_copy['chef']['validator_key']
         except (KeyError, TypeError):
