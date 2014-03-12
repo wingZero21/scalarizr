@@ -106,10 +106,10 @@ class QueryEnvService(object):
                         glob_vars.remove(var)
                         continue
                     i += 1
-                resp_body = ET.tostring(xml)
+                log_body = ET.tostring(xml)
             except (BaseException, Exception), e:
                 self._logger.debug("Exception occured while parsing list-global-variables response: %s" % e.message)
-            self._logger.debug("QueryEnv response: %s", resp_body)
+            self._logger.debug("QueryEnv response: %s", log_body)
         elif log_response:
             self._logger.debug("QueryEnv response: %s", resp_body)
         return resp_body
