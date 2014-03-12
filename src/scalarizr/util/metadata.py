@@ -116,6 +116,7 @@ class Metadata(object):
             pvd, vote = cap_votes[-1]
             if not vote:
                 pvd = self._nodata_pvd
+            LOG.debug("provider for '{0}': {1}".format(cap, pvd))
             self._provider_for_capability[cap] = pvd
         self._providers_resolved = True
 
@@ -164,11 +165,14 @@ class Provider(object):
 
 
 class Ec2Pvd(Provider):
+    LOG = logging.getLogger(__name__ + '.ec2')
+
     def __init__(self):
         self.base_url = Provider.EC2_BASE_URL
 
     def vote(self, votes):
         if self.try_ec2_url():
+            self.LOG.debug('matched')
             votes[self].incr_each()
 
     def instance_id(self):
@@ -180,15 +184,18 @@ class Ec2Pvd(Provider):
            
 
 class GcePvd(Provider):
+    LOG = logging.getLogger(__name__ + '.gce')
+
     def __init__(self):
         self.base_url = 'http://metadata/computeMetadata/v1'    
 
-    def get_url(self, url=None, rel=None):
+    def get_url(self, url=None, rel=None, headers=None):
         return super(GcePvd, self).get_url(url, rel, 
                 headers={'X-Google-Metadata-Request': 'True'})
 
     def vote(self, votes):
         if self.try_url(self.base_url):
+            self.LOG.debug('matched')
             votes[self].incr_each()
 
     def instance_id(self):
@@ -200,6 +207,7 @@ class GcePvd(Provider):
         
 
 class OpenStackQueryPvd(Provider):
+    LOG = logging.getLogger(__name__ + '.openstack-query')
 
     def __init__(self, 
             metadata_json_url='http://169.254.169.254/openstack/latest/meta_data.json'):
@@ -209,11 +217,14 @@ class OpenStackQueryPvd(Provider):
     def vote(self, votes):
         meta = self.try_url(self.metadata_json_url)
         if meta:
+            self.LOG.debug('matched meta_data.json')
             self._cache = json.loads(meta)
             votes[self]['instance_id'] += 1
             votes['Ec2Pvd'].decr_each()
         if 'meta' in self._cache:
+            self.LOG.debug('matched user_data in meta_data.json')
             votes[self]['user_data'] += 1
+
 
     def instance_id(self):
         return self._cache['instance_id']
@@ -223,9 +234,12 @@ class OpenStackQueryPvd(Provider):
 
 
 class OpenStackXenStorePvd(Provider):
+    LOG = logging.getLogger(__name__ + '.openstack-xenbus')
+
     def vote(self, votes):
         if self.try_file('/proc/xen/xenbus') and linux.which('xenstore-ls') \
                 and linux.which('nova-agent'):
+            self.LOG.debug('matched user_data')
             votes[self]['user_data'] += 2
             votes['OpenStackQueryPvd']['user_data'] -= 1
 
@@ -241,6 +255,8 @@ class OpenStackXenStorePvd(Provider):
 
 
 class CloudStackPvd(Provider):
+    LOG = logging.getLogger(__name__ + '.cloudstack')
+
     def __init__(self, 
             dhcp_server=None, 
             dhcp_leases_pattern='/var/lib/dhc*/dhclient*.leases'):
@@ -251,7 +267,7 @@ class CloudStackPvd(Provider):
     def base_url(self):
         if not self.dhcp_server:
             self.dhcp_server = self.get_dhcp_server(self.dhcp_leases_pattern)
-            LOG.debug('Use DHCP server: %s', self.dhcp_server)
+            self.LOG.debug('Use DHCP server: %s', self.dhcp_server)
         return 'http://{0}/latest'.format(self.dhcp_server)
 
     @classmethod
@@ -259,7 +275,7 @@ class CloudStackPvd(Provider):
         router = None
         try:
             leases_file = glob.glob(leases_pattern)[0]
-            LOG.debug('Use DHCP leases file: %s', leases_file)
+            cls.LOG.debug('Use DHCP leases file: %s', leases_file)
         except IndexError:
             msg = "Pattern {0} doesn't matches any leases files".format(leases_pattern)
             raise Error(msg)
@@ -270,6 +286,7 @@ class CloudStackPvd(Provider):
 
     def vote(self, votes):
         if self.try_url(self.base_url):
+            self.LOG.debug('matched')
             votes[self].incr_each()
             if self.try_ec2_url():
                 votes['Ec2Pvd'].decr_each()
@@ -288,11 +305,14 @@ class CloudStackPvd(Provider):
 
 
 class FileDataPvd(Provider):
+    LOG = logging.getLogger(__name__ + '.file')
+
     def __init__(self, filename):
         self.filename = filename
 
     def vote(self, votes):
         if self.try_file(self.filename):
+            self.LOG.debug('matched user_data in file %s', self.filename)
             votes[self]['user_data'] += 1
 
     def __repr__(self):
