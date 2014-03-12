@@ -5,7 +5,7 @@ from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool, software
+from scalarizr.util import initdv2, disttool, software, system2
 from scalarizr.linux import iptables, pkgmgr
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 
@@ -138,11 +138,11 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.HAPROXY)
                 elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
                     handlers.append(config.BuiltinBehaviours.MYSQL)
-                    mgr = pkgmgr.package_mgr()
-                    if mgr.info('percona-server-server')['installed'] or \
-                            mgr.info('percona-server-server-5.5')['installed']:
+                    mysqld = software.which("mysqld")
+                    out = system2((mysqld, "--help"))[0]
+                    if "percona" in out.lower():
                         handlers.append(config.BuiltinBehaviours.PERCONA)
-                    elif mgr.info('mariadb-server')['installed']:
+                    elif 'Maria' in str_ver:
                         handlers.append(config.BuiltinBehaviours.MARIADB)
                     else:
                         handlers.append(config.BuiltinBehaviours.MYSQL2)
