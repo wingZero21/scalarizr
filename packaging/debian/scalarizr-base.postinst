@@ -530,7 +530,7 @@ if [ -n "$installed_version" ]; then
 		fi
 	fi
 
-	if dpkg --compare-versions "$installed_version" lt '0.23.0'; then
+	if dpkg --compare-versions "$installed_version" lt '2.5.13'; then
 		python -m scalarizr.updclient.app --make-status-file
 	fi
 fi

@@ -700,13 +700,6 @@ class Service(object):
         STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__))
         STATE['global.version'] = __version__
 
-        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
-            self._logger.info('Scalarizr was updated to %s', __version__)
-            node.__node__['messaging'].send(
-                'HostUpdate',
-                body={'scalarizr': {'version': __version__}}
-            )
-
         if cnf.state == ScalarizrState.UNKNOWN:
             cnf.state = ScalarizrState.BOOTSTRAPPING
 
@@ -739,6 +732,13 @@ class Service(object):
 
         # Initialize scalarizr services
         self._init_services()
+        
+        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
+            self._logger.info('Scalarizr was updated to %s', __version__)
+            node.__node__['messaging'].send(
+                'HostUpdate',
+                body={'scalarizr': {'version': __version__}}
+            )
 
         if cnf.state == ScalarizrState.RUNNING:
             # ReSync user-data
