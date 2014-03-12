@@ -136,20 +136,7 @@ class Queryenv(Command):
         print make_table(table_data, headers)
 
     def _display_fetch(self, out):
-        try:
-            xml = ET.XML(out)
-            glob_vars = xml[0]
-            i = 0
-            for _ in xrange(len(glob_vars)):
-                var = glob_vars[i]
-                if int(var.attrib.get('private', 0)) == 1:
-                    glob_vars.remove(var)
-                    continue
-                i += 1
-            out = ET.tostring(xml)
-            print minidom.parseString(out).toprettyxml(encoding='utf-8')
-        except:
-            self._display_out('', out)
+        print minidom.parseString(out).toprettyxml(encoding='utf-8')
 
     def _display_out(self, method, out):
         """
