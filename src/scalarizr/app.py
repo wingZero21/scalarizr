@@ -29,6 +29,11 @@ if linux.os.windows:
 else:
     from scalarizr.snmp.agent import SnmpServer
 
+if linux.os.windows:
+    import win32timezone as os_time
+else:
+    from datetime import datetime as os_time
+
 # Utils
 from scalarizr.util import initdv2, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
@@ -932,6 +937,17 @@ class Service(object):
         consumer = msg_service.get_consumer()
         consumer.listeners.append(MessageListener())
 
+        producer = msg_service.get_producer()
+        def msg_meta(queue, message):
+            """
+            Add scalarizr version to meta
+            """
+            message.meta.update({
+                'szr_version': __version__,
+                'timestamp': os_time.utcnow().strftime("%a %d %b %Y %H:%M:%S %z")
+            })
+        producer.on('before_send', msg_meta)
+
         if not linux.os.windows_family:
             logger.debug('Schedule SNMP process')
             self._snmp_scheduled_start_time = time.time()
@@ -1043,8 +1059,14 @@ class Service(object):
                 try:
                     upd_state[0] = upd.status()['state']
                     return upd_state[0] != 'noop'
-                except (urllib2.HTTPError, socket.error, IOError):
-                    self._logger.debug('Failed to get UpdateClient status: %s', sys.exc_info()[1])
+                except (urllib2.HTTPError, socket.error, IOError), exc:
+                    self._logger.debug('Failed to get UpdateClient status: %s', exc)
+                    if 'Server-ID header not presented' in str(exc):
+                        self._logger.debug(('UpdateClient serves previous API version. '
+                            'Looks like we are in a process of migration to new update sytem. '
+                            'UpdateClient restart will handle this situation. Restarting'))
+                        upd_svs.restart()
+
             wait_until(upd_ready, timeout=60, sleep=1)
             upd_state = upd_state[0]
             self._logger.info('UpdateClient state: %s', upd_state)

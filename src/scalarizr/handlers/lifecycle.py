@@ -24,10 +24,6 @@ from scalarizr.util.flag import Flag
 # Libs
 from scalarizr.util import cryptotool, software
 from scalarizr.linux import iptables, os as os_dist
-if os_dist.windows_family:
-    import win32timezone as os_time
-else:
-    from datetime import datetime as os_time
 
 # Stdlibs
 import logging, os, sys, threading
@@ -142,7 +138,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
     def on_init(self):
         bus.on("host_init_response", self.on_host_init_response)
-        self._producer.on("before_send", self.on_before_message_send)
 
         # Add internal messages to scripting skip list
         try:
@@ -477,15 +472,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         system2([sys.executable, up_script], close_fds=True)
         Flag.set('update')
 
-
-    def on_before_message_send(self, queue, message):
-        """
-        Add scalarizr version to meta
-        """
-        message.meta.update({
-            'szr_version': scalarizr.__version__,
-            'timestamp': os_time.utcnow().strftime("%a %d %b %Y %H:%M:%S %z")
-        })
 
 
 class IntMessagingService(object):

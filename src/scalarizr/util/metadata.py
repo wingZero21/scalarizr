@@ -242,6 +242,7 @@ class OpenStackXenStorePvd(Provider):
             self.LOG.debug('matched user_data')
             votes[self]['user_data'] += 2
             votes['OpenStackQueryPvd']['user_data'] -= 1
+            votes['Ec2Pvd'].decr_each()
 
     def user_data(self):
         keyvalue_re = re.compile(r'([^\s]+)\s+=\s+\"{2}([^\"]+)\"{2}')
