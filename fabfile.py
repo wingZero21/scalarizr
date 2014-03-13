@@ -3,36 +3,37 @@ from fabric.api import *
 
 env.user = 'root'
 
-slaves = ['slave']
+build = os.environ["PWD"].split('-')[-1]
+build_dir = os.path.join('/root/ci/build', build)
 
 
-@hosts(slaves)
-def git_export(project='scalarizr-omnibus'):
-    project_path = '/root/ci/master/projects/%s' % project
+def git_export():
+    archive = '/tmp/%s.tar.gz' % build
 
-    local("rm -f /tmp/%s.tar.gz" % project)
-    local("cd %s && git archive --format=tar HEAD | gzip >/tmp/%s.tar.gz" % (project_path, project))
+    local("git archive --format=tar HEAD | gzip >%s" % archive)
+    put(archive, archive)
+    local("rm -f %s" % archive)
 
-    run("rm -f /tmp/%s.tar.gz" % project)
-    run("rm -rf /root/ci/slave/projects/%s" % project)
-    run("mkdir -p /root/ci/slave/projects/%s" % project)
-
-    put('/tmp/%s.tar.gz' % project, '/tmp/%s.tar.gz' % project)
-
-    with cd('/root/ci/slave/projects/%s' % project):
-        run("tar -xf /tmp/%s.tar.gz" % project)
+    run("mkdir -p %s" % build_dir)
+    with cd(build_dir):
+        run("tar -xf %s" % archive)
+    run("rm -f %s" % archive)
 
 
-@hosts(slaves)
 def omnibus_build():
-    with cd('/root/ci/slave/projects/scalarizr-omnibus'):
-        run("bundle install --binstubs")
-        run("bin/omnibus build project scalarizr")
+    omnibus_dir = os.path.join(build_dir, 'omnibus')
+    with cd(omnibus_dir):
+        run("omnibus build project scalarizr")
 
 
-@hosts(slaves)
-def build_source(project='scalarizr'):
-    git_export(project)
-    with cd('/root/ci/slave/projects/%s' % project):
+def build_source():
+    git_export()
+    branch = local("git rev-parse --abbrev-ref HEAD", capture=True)
+    version = local("git describe --tag", capture=True)
+    with cd(build_dir):
+        # bump version
+        run("echo '%s' >src/scalarizr/version" % version)
+        # build
         run("python setup.py sdist")
-    get('/root/ci/slave/projects/scalarizr/dist/%s-*.tar.gz' % project, '/root/ci/master/artifacts')
+    local("mkdir /root/ci/artifacts/%s" % build)
+    get('%s/dist/*.tar.gz' % build_dir, '/root/ci/artifacts/%s' % build)

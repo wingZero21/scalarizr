@@ -1,0 +1,9 @@
+#!/bin/bash
+#
+# Perform necessary scalarizr removal steps
+# after package is uninstalled.
+#
+
+echo "scalarizr has been uninstalled!"
+
+exit 0
