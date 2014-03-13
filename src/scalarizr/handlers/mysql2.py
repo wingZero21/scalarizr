@@ -555,7 +555,7 @@ class MysqlHandler(DBMSRHandler):
                         # Set read_only option
                         #self.mysql.my_cnf.read_only = False
                         self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
-                        self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
+                        #self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
                         self.mysql.my_cnf.delete_options(['mysqld/read_only'])
                         self.mysql.service.start()
                         # Update __mysql__['behavior'] configuration
@@ -912,7 +912,7 @@ class MysqlHandler(DBMSRHandler):
             'log_bin': os.path.join(__mysql__['binlog_dir'], 'binlog'),
             'log-bin-index': os.path.join(__mysql__['binlog_dir'], 'binlog.index'),  # MariaDB
             'sync_binlog': '1',
-            'innodb_flush_log_at_trx_commit': '1',
+            #'innodb_flush_log_at_trx_commit': '1',
             'expire_logs_days': '10'
         }
         for key, value in options.items():
