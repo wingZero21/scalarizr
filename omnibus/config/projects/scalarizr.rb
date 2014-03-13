@@ -5,12 +5,12 @@ homepage "http://scalr.com"
 
 replaces        "scalarizr"
 install_path    "/opt/scalarizr"
-#if ENV['SCALARIZR_OMNIBUS_VERSION']
-#    build_version   ENV['SCALARIZR_OMNIBUS_VERSION']
-#else
-#    build_version   Omnibus::BuildVersion.new.semver
-#end
-build_version   Omnibus::BuildVersion.new.semver
+if ENV['SCALARIZR_OMNIBUS_VERSION']
+    build_version   ENV['SCALARIZR_OMNIBUS_VERSION']
+else
+    build_version   Omnibus::BuildVersion.new.semver
+end
+#build_version   Omnibus::BuildVersion.new.semver
 build_iteration 1
 
 # creates required build directories

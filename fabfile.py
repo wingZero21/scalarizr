@@ -23,7 +23,8 @@ def git_export():
 def omnibus_build():
     omnibus_dir = os.path.join(build_dir, 'omnibus')
     with cd(omnibus_dir):
-        run("omnibus build project scalarizr")
+        run("bundle install --binstubs")
+        run("bin/omnibus build project scalarizr")
 
 
 def build_source():
