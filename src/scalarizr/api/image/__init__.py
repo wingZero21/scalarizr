@@ -1,11 +1,14 @@
 import logging
+import os
+import shutil
 
+from scalarizr import linux
 from scalarizr import rpc
 from scalarizr.api.operation import OperationAPI
+from scalarizr.linux import coreutils
+from scalarizr.node import __node__
 from scalarizr.util import Singleton
 from scalarizr.util import software
-from scalarizr.node import __node__
-from scalarizr import linux
 
 from scalarizr.api import image
 from image.openstack import OpenStackImageAPI
@@ -28,7 +31,7 @@ class ImageAPI(object):
     @rpc.command_method
     def prepare(self, async=False):
         if not system2(('which', 'wall'), raise_exc=False)[2]:
-                system2(('wall'), stdin=WALL_MESSAGE, raise_exc=False)
+            system2(('wall'), stdin=WALL_MESSAGE, raise_exc=False)
         prepare_result = self._op_api.run('api.image.prepare',
             func=self._prepare,
             async=async,
@@ -99,12 +102,49 @@ class ImageAPI(object):
     def _finalize(self):
         raise NotImplementedError()
 
+    def _clean_image(self, rootdir):
+        # TODO: revise method, rewrite if needed
+        _logger.info('Performing image cleanup')
+        # Truncate logs
+
+        _logger.debug('Truncating log files')
+        logs_path = os.path.join(rootdir, 'var/log')
+        if os.path.exists(logs_path):
+            for basename in os.listdir(logs_path):
+                filename = os.path.join(logs_path, basename)
+                if os.path.isfile(filename):
+                    try:
+                        coreutils.truncate(filename)
+                    except OSError, e:
+                        self._logger.error("Cannot truncate file '%s'. %s", filename, e)
+            shutil.rmtree(os.path.join(logs_path, 'scalarizr/scripting'))
+
+        # Cleanup users homes
+        _logger.debug('Removing users activity')
+        for homedir in ('root', 'home/ubuntu', 'home/scalr'):
+            homedir = os.path.join(rootdir, homedir)
+            self._cleanup_user_activity(homedir)
+            self._cleanup_ssh_keys(homedir)
+
+        # Cleanup scalarizr private data
+        _logger.debug('Removing scalarizr private data')
+        etc_path = os.path.join(rootdir, bus.etc_path[1:])
+        privated = os.path.join(etc_path, "private.d")
+        if os.path.exists(privated):
+            shutil.rmtree(privated)
+            os.mkdir(privated)
+
+        # Sync filesystem buffers
+        system2('sync')
+
+        _logger.debug('Cleanup completed')
+
 
 def get_api():
     platform_name = __node__['platform'].name
     if platform_name == 'openstack':
         return OpenStackImageAPI()
-    elif platform_name = 'ec2':
+    elif platform_name == 'ec2':
         return EC2ImageAPI()
     # ...
     else:
