@@ -657,7 +657,7 @@ if linux.os.windows_family:
                     urls = map(string.strip, urls)
                     urls = filter(lambda u: u and not u.startswith('#'), urls)
                     for url in urls:
-                        if not url.endswith(linux.os['arch']):
+                        if not re.search(r'{0}/?'.format(linux.os['arch']), url):
                             url = posixpath.join(url, linux.os['arch'])
                         dst = os.path.join(tmp_dir, url.replace('/', '_'))
                         src = posixpath.join(url, 'index')
