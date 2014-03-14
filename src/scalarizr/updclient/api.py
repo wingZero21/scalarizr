@@ -378,6 +378,8 @@ class UpdClientAPI(object):
 
 
     def _configure_devel_repo(self, repo):
+        if 'release/latest' in self.repo_url or 'release/stable' in self.repo_url:
+            LOG.warn("Special branches release/latest and release/stable currently doesn't works") 
         # Pin repository
         if linux.os.redhat_family or linux.os.oracle_family:
             pkg = 'yum-priorities' \
