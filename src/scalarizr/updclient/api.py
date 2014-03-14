@@ -300,7 +300,16 @@ class UpdClientAPI(object):
                     return
         else:
             LOG.debug('Getting cloud user-data')
-            user_data = self.meta['user_data']
+            try:
+                user_data = self.meta['user_data']
+            except metadata.NoUserDataError:
+                if self.platform == 'openstack':
+                    LOG.info('Found no user-data on OpenStack platform, '
+                            'this mean that all providers failed and we should '
+                            'wait for an injected user-data file')
+                    time.sleep(20)
+                    self.meta = metadata.Metadata()
+                    user_data = self.meta['user_data']
             norm_user_data(user_data)
             LOG.debug('Apply user-data settings')
             self._update_self_dict(user_data)
