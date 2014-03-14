@@ -31,8 +31,8 @@ Depends: ${shlibs:Depends},
          rsync (>= 2.6.8)
 Provides: ${python:Provides}
 Replaces: scalarizr (<< 0.7), scalr-upd-client, scalarizr-devtools
-Breaks: scalarizr (<< 0.7), scalr-upd-client, scalarizr-devtools
-Conflicts: scalr-upd-client, scalarizr-devtools
+Breaks: scalarizr (<< 0.7), scalarizr-devtools
+Conflicts: scalarizr-devtools
 Description: Scalarizr agent common files
  Scalarizr base components common for all cloud platforms.
 
