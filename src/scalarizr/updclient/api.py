@@ -383,10 +383,10 @@ class UpdClientAPI(object):
     def _configure_devel_repo(self, repo):
         # Pin repository
         if linux.os.redhat_family or linux.os.oracle_family:
-            pkg = 'yum-priorities' \
-                    if linux.os['release'] < (6, 0) else \
-                    'yum-plugin-priorities'
-            self.pkgmgr.installed(pkg)
+            #pkg = 'yum-priorities' \
+            #        if linux.os['release'] < (6, 0) else \
+            #        'yum-plugin-priorities'
+            #self.pkgmgr.installed(pkg)
             repo.config += 'priority=10\n'
         else:
             if os.path.isdir('/etc/apt/preferences.d'):

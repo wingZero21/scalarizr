@@ -23,6 +23,7 @@ Requires:       python26-prettytable python26-PyYAML
 Requires:		python26-pymysql
 Requires:		python26-pychef
 Requires:       yum-downloadonly
+Requires:		yum-priorities
 %else
 # setuptools from pip used instead of rpm
 # BuildRequires:  python-setuptools
@@ -38,6 +39,7 @@ Requires:       python-prettytable PyYAML
 Requires:		python-pymysql
 Requires:		python-pychef
 Requires:       yum-plugin-downloadonly
+Requires:       yum-plugin-priorities
 %endif
 Requires:		which
 Requires:		e2fsprogs
