@@ -2,6 +2,7 @@
 
 set -x
 
+echo 'scalarizr-base.prerm'
 echo $@
 
 NAME="scalarizr"
