@@ -657,7 +657,8 @@ if linux.os.windows_family:
                     urls = map(string.strip, urls)
                     urls = filter(lambda u: u and not u.startswith('#'), urls)
                     for url in urls:
-                        url = posixpath.join(url, linux.os['arch'])
+                        if not url.endswith(linux.os['arch']):
+                            url = posixpath.join(url, linux.os['arch'])
                         dst = os.path.join(tmp_dir, url.replace('/', '_'))
                         src = posixpath.join(url, 'index')
                         LOG.debug('Fetching index file %s', src)
