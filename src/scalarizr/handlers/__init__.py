@@ -5,7 +5,7 @@ from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool, software, system2
+from scalarizr.util import initdv2, disttool, software, system2, PopenError
 from scalarizr.linux import iptables, pkgmgr
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 
@@ -136,19 +136,28 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.APP)
                 elif name == 'haproxy' and Version('1.3') < version < Version('1.5'):
                     handlers.append(config.BuiltinBehaviours.HAPROXY)
-                elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
-                    handlers.append(config.BuiltinBehaviours.MYSQL)
-                    mysqld = software.which("mysqld")
-                    out = system2((mysqld, "--help"))[0]
-                    if "percona" in out.lower():
-                        handlers.append(config.BuiltinBehaviours.PERCONA)
-                    elif 'Maria' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.MARIADB)
-                    else:
-                        handlers.append(config.BuiltinBehaviours.MYSQL2)
                 elif name == 'tomcat':
                     handlers.append(config.BuiltinBehaviours.TOMCAT)
+                elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
+                    """
 
+                    """
+                    handlers.append(config.BuiltinBehaviours.MYSQL)
+                    if 'Maria' in str_ver:
+                        handlers.append(config.BuiltinBehaviours.MARIADB)
+                    elif 'Percona' in str_ver:  # Percona < 5.5.36
+                        handlers.append(config.BuiltinBehaviours.PERCONA)
+                    else:
+                        mysqld = software.which("mysqld")
+                        try:
+                            out = system2((mysqld, "--help"))[0]
+                            if "percona" in out.lower():  # Percona 5.5.36
+                                handlers.append(config.BuiltinBehaviours.PERCONA)
+                            else:  # Mysql 5.5.x
+                                handlers.append(config.BuiltinBehaviours.MYSQL2)
+                        except PopenError:
+                            # ubuntu1004, 5.1.x only, percona is not available
+                            pass
         return handlers
 
 
