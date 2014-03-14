@@ -139,9 +139,6 @@ class Handler(object):
                 elif name == 'tomcat':
                     handlers.append(config.BuiltinBehaviours.TOMCAT)
                 elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
-                    """
-
-                    """
                     handlers.append(config.BuiltinBehaviours.MYSQL)
                     if 'Maria' in str_ver:
                         handlers.append(config.BuiltinBehaviours.MARIADB)
