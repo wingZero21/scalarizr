@@ -335,10 +335,7 @@ class ListVirtualhostsCommand(Command):
     def iter_result(self, result):
         '''return: [hostname=string,type=string,raw=string, https=0|1]'''
         for d in result:
-            raw = d.raw
-            if sys.version_info[0:2] < (2, 7):
-                raw = raw.replace('\n', '')
-            yield [d.hostname, d.https, d.type, raw]
+            yield [d.hostname, d.https, d.type, d.raw]
 
 # DEPRECATED
 class ListScriptsCommand(Command):
