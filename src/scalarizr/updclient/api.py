@@ -363,7 +363,7 @@ class UpdClientAPI(object):
         
 
     def _ensure_repos(self, updatedb=True):
-        if 'release/latest' in self.repo_url or 'release/stable' in self.repo_url:
+        if 'release-latest' in self.repo_url or 'release-stable' in self.repo_url:
             LOG.warn("Special branches release/latest and release/stable currently doesn't work") 
             self.repo_url = devel_repo_url_for_branch('master')
         repo = pkgmgr.repository('scalr-{0}'.format(self.repository), self.repo_url)
