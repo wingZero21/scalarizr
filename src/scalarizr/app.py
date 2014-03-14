@@ -712,7 +712,8 @@ class Service(object):
         if cnf.state == ScalarizrState.BOOTSTRAPPING:
             cnf.fire('apply_user_data', cnf)
             
-        self._talk_to_updclient()
+        if node.__node__['state'] != 'importing':
+            self._talk_to_updclient()
 
         # Check Scalr version
         if not bus.scalr_version:
