@@ -2,6 +2,8 @@
 
 set -x
 
+echo $@
+
 # Required by: feature/update-system
 # This script stops scalr-upd-client daemon, which breaks upgrade to scalarizr with embed scalr-upd-client
 rm -f /var/lib/dpkg/info/scalr-upd-client.prerm
