@@ -95,23 +95,25 @@ class QueryEnvService(object):
         resp_body = self.htmlparser.unescape(resp_body)
         resp_body = resp_body.encode('utf-8')
 
-        if command == 'list-global-variables':
-            try:
-                xml = ET.XML(resp_body)
-                glob_vars = xml[0]
-                i = 0
-                for _ in xrange(len(glob_vars)):
-                    var = glob_vars[i]
-                    if int(var.attrib.get('private', 0)) == 1:
-                        glob_vars.remove(var)
-                        continue
-                    i += 1
-                log_body = ET.tostring(xml)
-            except (BaseException, Exception), e:
-                self._logger.debug("Exception occured while parsing list-global-variables response: %s" % e.message)
+        if log_response:
+            log_body = resp_body
+            if command == 'list-global-variables':
+                try:
+                    xml = ET.XML(resp_body)
+                    glob_vars = xml[0]
+                    i = 0
+                    for _ in xrange(len(glob_vars)):
+                        var = glob_vars[i]
+                        if int(var.attrib.get('private', 0)) == 1:
+                            glob_vars.remove(var)
+                            continue
+                        i += 1
+                    log_body = ET.tostring(xml)
+                except (BaseException, Exception), e:
+                    self._logger.debug("Exception occured while parsing list-global-variables response: %s" % e.message)
+                    if isinstance(e, ET.ParseError):
+                        raise
             self._logger.debug("QueryEnv response: %s", log_body)
-        elif log_response:
-            self._logger.debug("QueryEnv response: %s", resp_body)
         return resp_body
 
 
