@@ -10,7 +10,6 @@ if ENV['SCALARIZR_OMNIBUS_VERSION']
 else
     build_version   Omnibus::BuildVersion.new.semver
 end
-#build_version   Omnibus::BuildVersion.new.semver
 build_iteration 1
 
 # creates required build directories
@@ -18,8 +17,7 @@ dependency "preparation"
 
 # scalarizr dependencies/components
 dependency "scalarizr-deps"
-#dependency "scalarizr-update"
-#dependency "scalarizr"
+dependency "scalarizr"
 
 # version manifest file
 dependency "version-manifest"
