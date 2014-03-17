@@ -7,8 +7,7 @@ Created on Nov 11, 2010
 '''
 
 from scalarizr.util import system2, wait_until, firstmatched, PopenError
-from scalarizr.util import dynimp
-from scalarizr.linux import coreutils
+from scalarizr.linux import coreutils, pkgmgr
 
 import logging
 import os
@@ -35,8 +34,7 @@ class Mdadm:
             if disttool.is_redhat_based():
                 system2(('/usr/bin/yum', '-d0', '-y', 'install', 'mdadm', '-x', 'exim'), raise_exc=False)
             else:
-                mgr = dynimp.package_mgr()
-                mgr.install('mdadm', mgr.candidates('mdadm')[-1])
+                pkgmgr.installed('mdadm')
 
         if not os.path.exists('/proc/mdstat'):
             coreutils.modprobe('md_mod')

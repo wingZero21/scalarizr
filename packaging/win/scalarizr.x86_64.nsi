@@ -138,7 +138,6 @@ Section "MainSection" SEC01
   SetOverwrite on
   SetOutPath "$INSTDIR\src"
   File /r /x *.svn* /x *.pyc /x *.pyo "${SZR_BASE_PATH}\src\scalarizr"
-  File /r /x *.svn* /x *.pyc /x *.pyo "${SZR_BASE_PATH}\src\upd"
   
   SetOutPath "$INSTDIR"
   File /r /x *.svn* "${SZR_BASE_PATH}\share"
@@ -271,9 +270,22 @@ Section -PostInstall
       ${EndIf}
 
       nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
-      nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
+      nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\scalarizr\updclient\app.py" "--startup" "auto" "install"'
       nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
   ${EnableX64FSRedirection}
+
+  ${Unless} $installed_version == ""
+      Push $installed_version
+      Push "2.5.13"
+      Call CompareVersions
+      Pop $R0
+
+      ${If} $R0 == 1
+          nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file'
+      ${EndIf}
+
+  ${EndIf}
+
 
   ${If} $start_scalarizr == "1"
       services::SendServiceCommand 'start' 'Scalarizr'
@@ -297,7 +309,7 @@ Section Uninstall
   SetRegView 64
   services::SendServiceCommand 'stop' 'Scalarizr'
   services::SendServiceCommand 'stop' 'ScalrUpdClient'
-  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
+  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\scalarizr\updclient\app.py" "remove"'
   nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
 
   Rename $INSTDIR\etc $PLUGINSDIR\etc

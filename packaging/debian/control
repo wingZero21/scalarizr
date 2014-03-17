@@ -19,7 +19,6 @@ Priority: extra
 Depends: ${shlibs:Depends}, 
          ${misc:Depends}, 
          ${python:Depends},
-         scalr-upd-client,
          python-m2crypto (= 0.20.1-1ubuntu5) | python-m2crypto (>= 0.20),
          python-pysnmp4 (>= 4.1.12a), 
          python-pysnmp4-mibs (>= 0.0.5a), 
@@ -31,8 +30,9 @@ Depends: ${shlibs:Depends},
          python (<< 2.6) | python-pymysql,
          rsync (>= 2.6.8)
 Provides: ${python:Provides}
-Replaces: scalarizr (<< 0.7)
-Breaks: scalarizr (<< 0.7)
+Replaces: scalarizr (<< 0.7), scalr-upd-client, scalarizr-devtools
+Breaks: scalarizr (<< 0.7), scalarizr-devtools
+Conflicts: scalarizr-devtools
 Description: Scalarizr agent common files
  Scalarizr base components common for all cloud platforms.
 

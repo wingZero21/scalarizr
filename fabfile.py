@@ -2,7 +2,6 @@ import os
 from fabric.api import env, cd, local, run, put, get
 from fabric.context_managers import shell_env
 
-env.user = 'root'
 
 build = os.environ["PWD"].split('-')[-1]
 build_dir = os.path.join('/root/ci/build', build)

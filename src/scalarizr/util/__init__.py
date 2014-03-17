@@ -743,6 +743,56 @@ def add_authorized_key(ssh_public_key):
         os.chmod(authorized_keys_path, 0400)
 
 
+class Server(object):
+    def __init__(self):
+        self.running = False
+        self.stop_event = threading.Event()
+    
+    def serve_forever(self):
+        self.start()
+        self.stop_event.clear()
+        try:
+            # do polling here to enable signal handling
+            while not self.stop_event.isSet():
+                self.stop_event.wait(0.2)
+        except:
+            self.stop()
+            raise
+    
+    def stop(self):
+        try:
+            if self.running:
+                self.do_stop()
+        finally:
+            self.running = False
+            self.stop_event.set()
+    
+    def start(self):
+        if not self.running:
+            self.do_start()
+        self.running = True
+        
+    def do_start(self):
+        pass
+    
+    def do_stop(self):
+        pass
+
+
+def init_logging(filename, verbose):
+    kwds = {}
+    if hasattr(filename, 'write'):
+        kwds['stream'] = filename
+    else:
+        kwds['filename'] = filename
+    if verbose:
+        kwds['level'] = logging.DEBUG
+    else:
+        kwds['level'] = logging.INFO
+    kwds['format'] = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+    logging.basicConfig(**kwds) 
+
+
 if platform.uname()[0] == 'Windows':
     import _winreg as winreg
     import pythoncom
