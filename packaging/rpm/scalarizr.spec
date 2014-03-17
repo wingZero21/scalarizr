@@ -45,8 +45,8 @@ Requires:		which
 Requires:		e2fsprogs
 Requires:       rsync >= 2.6.8
 Requires:       tar
-
-
+Obsoletes:      scalr-upd-client
+Obsoletes:      scalarizr-devtools
 
 BuildArch:      noarch
 BuildRoot:      %{_tmppath}/%{name}-buildroot
@@ -67,8 +67,6 @@ Requires:       python-boto >= 2.13.0
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Obsoletes:      scalarizr < 0.7
-Obsoletes:      scalr-upd-client
-Obsoletes:      scalarizr-devtools
 Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
