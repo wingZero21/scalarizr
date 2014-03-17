@@ -1,6 +1,6 @@
 import os
-from fabric.api import *
-from fabric.context_managers import *
+from fabric.api import env, cd, local, run, put, get
+from fabric.context_managers import shell_env
 
 env.user = 'root'
 
@@ -33,7 +33,7 @@ def build_omnibus():
 def build_source():
     git_export()
     #branch = local("git rev-parse --abbrev-ref HEAD", capture=True)
-    #version = local("git describe --tag", capture=True)
+    version = local("git describe --tag", capture=True)
     with cd(build_dir):
         # bump version
         run("echo '%s' >src/scalarizr/version" % version)
