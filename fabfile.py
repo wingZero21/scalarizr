@@ -21,7 +21,7 @@ def git_export():
     run("rm -f %s" % archive)
 
 
-def omnibus_build():
+def build_omnibus():
     omnibus_dir = os.path.join(build_dir, 'omnibus')
     version = local("git describe --tag", capture=True)
     with cd(omnibus_dir):
@@ -32,8 +32,8 @@ def omnibus_build():
 
 def build_source():
     git_export()
-    branch = local("git rev-parse --abbrev-ref HEAD", capture=True)
-    version = local("git describe --tag", capture=True)
+    #branch = local("git rev-parse --abbrev-ref HEAD", capture=True)
+    #version = local("git describe --tag", capture=True)
     with cd(build_dir):
         # bump version
         run("echo '%s' >src/scalarizr/version" % version)
@@ -41,3 +41,12 @@ def build_source():
         run("python setup.py sdist")
     local("mkdir /root/ci/artifacts/%s" % build)
     get('%s/dist/*.tar.gz' % build_dir, '/root/ci/artifacts/%s' % build)
+
+
+def build_binary():
+    git_export()
+    build_omnibus()
+
+
+def clean():
+    run("rm -rf %s" % build_dir)
