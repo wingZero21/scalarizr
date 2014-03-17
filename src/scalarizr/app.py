@@ -193,8 +193,9 @@ class ScalrUpdClientScript(initdv2.Daemon):
             pid_file = '/var/run/scalr-upd-client.pid'
             if os.access(pid_file, os.R_OK):
                 pid = open(pid_file).read().strip()
-                os.kill(pid, signal.SIGKILL)
-                os.unlink(pid_file)
+                if pid:
+                    os.kill(int(pid), signal.SIGKILL)
+                    os.unlink(pid_file)
             self.start()
 
 def _init():
