@@ -187,7 +187,15 @@ class ScalrUpdClientScript(initdv2.Daemon):
         name = 'ScalrUpdClient' if linux.os.windows_family else 'scalr-upd-client'
         super(ScalrUpdClientScript, self).__init__(name)
 
-
+    if not linux.os.windows:
+        def restart(self):
+            self.stop()
+            pid_file = '/var/run/scalr-upd-client.pid'
+            if os.access(pid_file, os.R_OK):
+                pid = open(pid_file).read().strip()
+                os.kill(pid, signal.SIGKILL)
+                os.unlink(pid_file)
+            self.start()
 
 def _init():
     optparser = bus.optparser
