@@ -531,6 +531,7 @@ class MysqlHandler(DBMSRHandler):
             new_vol = storage2.volume(mysql2.get('volume_config'))
 
 
+
         try:
             if new_vol and new_vol.type not in ('eph', 'lvm'):
                 if self.mysql.service.running:
@@ -555,7 +556,8 @@ class MysqlHandler(DBMSRHandler):
                         # Set read_only option
                         #self.mysql.my_cnf.read_only = False
                         self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
-                        self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
+                        if mysql2_svc.innodb_enabled():
+                            self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
                         self.mysql.my_cnf.delete_options(['mysqld/read_only'])
                         self.mysql.service.start()
                         # Update __mysql__['behavior'] configuration
@@ -912,14 +914,16 @@ class MysqlHandler(DBMSRHandler):
             'log_bin': os.path.join(__mysql__['binlog_dir'], 'binlog'),
             'log-bin-index': os.path.join(__mysql__['binlog_dir'], 'binlog.index'),  # MariaDB
             'sync_binlog': '1',
-            'innodb_flush_log_at_trx_commit': '1',
             'expire_logs_days': '10'
         }
+        if mysql2_svc.innodb_enabled():
+            options['innodb_flush_log_at_trx_commit'] = '1'
+
         for key, value in options.items():
             self.mysql.my_cnf.set('mysqld/' + key, value)
 
         if not storage_valid:
-            if __mysql__['behavior'] == 'percona' and linux.os.debian_family:
+            if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
                 self.mysql.service.start()
                 debian_cnf = metaconf.Configuration('mysql')
                 debian_cnf.read(__mysql__['debian.cnf'])

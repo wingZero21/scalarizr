@@ -921,6 +921,11 @@ class Service(object):
         factory = MessageServiceFactory()
         try:
             params = dict(ini.items("messaging_" + messaging_adp))
+            if ports_non_default:
+                consumer_url = list(urlparse(params[P2pConfigOptions.CONSUMER_URL]))
+                consumer_url[1] = ':'.join((consumer_url[1].split(':')[0], str(node.__node__['base']['messaging_port'])))
+                params[P2pConfigOptions.CONSUMER_URL] = urlunparse(consumer_url)
+
             params[P2pConfigOptions.SERVER_ID] = server_id
             params[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.key_path(cnf.DEFAULT_KEY)
 

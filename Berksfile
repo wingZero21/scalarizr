@@ -9,7 +9,6 @@ cookbook "buildscripts", git: repo_int, rel: "cookbooks/buildscripts", ref: "HEA
 cookbook "mysql", git: repo_pub, rel: "cookbooks/mysql", ref: "HEAD"
 cookbook "percona", git: repo_pub, rel: "cookbooks/percona", ref: "HEAD"
 cookbook "mariadb", git: repo_pub, rel: "cookbooks/mariadb", ref: "HEAD"
-cookbook "pxc", git: repo_pub, rel: "cookbooks/pxc", ref: "HEAD"
 cookbook "mongodb", git: repo_pub, rel: "cookbooks/mongodb", ref: "HEAD"
 cookbook "redis", git: repo_pub, rel: "cookbooks/redis", ref: "HEAD"
 cookbook "postgresql", git: repo_pub, rel: "cookbooks/postgresql", ref: "HEAD"
