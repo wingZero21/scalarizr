@@ -476,9 +476,17 @@ class MysqlHandler(DBMSRHandler):
 
     def on_DbMsr_CreateBackup(self, message):
         LOG.debug("on_DbMsr_CreateBackup")
-        self._backup_id = self._mysql_api.create_backup(
-                backup={'type': 'mysqldump'}, 
-                async=True)
+        try:
+            self._backup_id = self._mysql_api.create_backup(
+                    backup={'type': 'mysqldump'}, 
+                    async=True)
+        except:
+            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+                status='error',
+                last_error=str(sys.exc_info()[1]),
+                db_type=__mysql__.behavior
+            ))
+            raise 
 
 
     def on_DbMsr_CancelBackup(self, message):
@@ -488,12 +496,19 @@ class MysqlHandler(DBMSRHandler):
 
     def on_DbMsr_CreateDataBundle(self, message):
         LOG.debug("on_DbMsr_CreateDataBundle")
-        backup = message.body.get(__mysql__.behavior, {}).get('backup', {})
-        if not backup:
-            backup = {"type": "snap_mysql"}
-        self._data_bundle_id = self._mysql_api.create_backup(
-                backup=backup, 
-                async=True)
+        try:
+            backup = message.body.get(__mysql__.behavior, {}).get('backup', {})
+            if not backup:
+                backup = {"type": "snap_mysql"}
+            self._data_bundle_id = self._mysql_api.create_backup(
+                    backup=backup, 
+                    async=True)
+        except:
+            self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
+                status='error',
+                last_error=str(sys.exc_info()[1]),
+                db_type=__mysql__.behavior
+            ))
 
 
     def on_DbMsr_CancelDataBundle(self, message):
