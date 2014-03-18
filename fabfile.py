@@ -50,7 +50,7 @@ def build_binary():
     omnibus_build_version = '%s.b%s' % (version, build[0:8])
     files = run("ls %s/omnibus/pkg/*%s*" % (build_dir, omnibus_build_version)).split()
     for f in files:
-        get(f, '/root/ci/repo/')
+        get(f, '/root/ci/repos/%s' % os.path.basename(f))
 
 
 def clean():
