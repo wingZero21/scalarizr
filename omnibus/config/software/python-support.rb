@@ -1,12 +1,12 @@
 name "python-support"
-version "1.0.15"
+default_version "1.0.15"
 
 dependency "python"
 
-source :url => "https://launchpad.net/ubuntu/+archive/primary/+files/python-support_#{version}.tar.gz",
+source :url => "https://launchpad.net/ubuntu/+archive/primary/+files/python-support_#{default_version}.tar.gz",
        :md5 => "fa98675199468943db49deab6f147ebd"
 
-relative_path "python-support-#{version}"
+relative_path "python-support-#{default_version}"
 
 configure_env = {
   "LDFLAGS" => "-L#{install_dir}/embedded/lib -I#{install_dir}/embedded/include -L/lib -L/usr/lib",
