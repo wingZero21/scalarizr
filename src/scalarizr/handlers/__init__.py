@@ -227,8 +227,12 @@ class MessageListener:
 
             if message.body.get('global_variables'):    
                 global_variables = message.body.get('global_variables') or []
-                global_variables = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables)
-                sync_globals(global_variables)
+                glob_vars = {}
+                glob_vars['public'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables 
+                                            if not kv.get('private'))
+                glob_vars['private'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables
+                                            if kv.get('private'))
+                sync_globals(glob_vars)
 
             if 'scalr_version' in message.meta:
                 try:
@@ -833,12 +837,13 @@ def sync_globals(glob_vars=None):
     if not glob_vars:
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
-    os.environ.update(glob_vars)
+    os.environ.update(glob_vars['public'])
+    os.environ.update(glob_vars['private'])
 
     if not linux.os.windows:
         globals_path = '/etc/profile.d/scalr_globals.sh'
         with open(globals_path, 'w') as fp:
-            for k, v in glob_vars.items():
+            for k, v in glob_vars['public'].items():
                 v = v.replace('"', '\\"')
                 fp.write('export %s="%s"\n' % (k, v))
         os.chmod(globals_path, 0644)
