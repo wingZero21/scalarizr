@@ -1,12 +1,12 @@
 
-name "scalarizr"
+name       "scalarizr"
 maintainer "Scalr Inc"
-homepage "http://scalr.com"
+homepage   "http://scalr.com"
 
 replaces        "scalarizr"
 install_path    "/opt/scalarizr"
-if ENV['SCALARIZR_OMNIBUS_VERSION']
-    build_version   ENV['SCALARIZR_OMNIBUS_VERSION']
+if ENV['OMNIBUS_BUILD_VERSION']
+    build_version   ENV['OMNIBUS_BUILD_VERSION']
 else
     build_version   Omnibus::BuildVersion.new.semver
 end

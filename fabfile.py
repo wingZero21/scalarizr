@@ -1,4 +1,5 @@
 import os
+
 from fabric.api import env, cd, local, run, put, get
 from fabric.context_managers import shell_env
 
@@ -23,15 +24,15 @@ def git_export():
 def build_omnibus():
     omnibus_dir = os.path.join(build_dir, 'omnibus')
     version = local("git describe --tag", capture=True)
+    omnibus_build_version = '%s.%s' % (version, build[0:8])
     with cd(omnibus_dir):
         run("bundle install --binstubs")
-        with shell_env(BUILD_DIR=build_dir, SCALARIZR_OMNIBUS_VERSION=version):
+        with shell_env(BUILD_DIR=build_dir, OMNIBUS_BUILD_VERSION=omnibus_build_version):
             run("bin/omnibus build project scalarizr")
 
 
 def build_source():
     git_export()
-    #branch = local("git rev-parse --abbrev-ref HEAD", capture=True)
     version = local("git describe --tag", capture=True)
     with cd(build_dir):
         # bump version
