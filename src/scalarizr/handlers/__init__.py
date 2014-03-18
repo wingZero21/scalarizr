@@ -829,7 +829,7 @@ def get_role_servers(role_id=None, role_name=None):
     return servers
 
 
-def sync_globals(glob_vars):
+def sync_globals(glob_vars=None):
     if not glob_vars:
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
