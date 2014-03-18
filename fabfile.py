@@ -46,6 +46,12 @@ def build_source():
 def build_binary():
     git_export()
     build_omnibus()
+    version = local("git describe --tag", capture=True)
+    omnibus_build_version = '%s.b%s' % (version, build[0:8])
+    files = run("ls %s/omnibus/pkg/*%s*" % (build_dir, omnibus_build_version),
+            capture=True).split()
+    for f in files:
+        get('%s/omnibus/pkg/%s' % f, '/root/ci/repo/')
 
 
 def clean():
