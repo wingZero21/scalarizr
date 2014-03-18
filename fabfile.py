@@ -33,7 +33,7 @@ def git_export():
 def build_omnibus():
     # bump version
     with cd(build_dir):
-        run("echo '%s' >src/%s/version" % (project, version))
+        run("echo '%s' >src/%s/version" % (version, project))
 
     # build
     with cd(omnibus_dir):
@@ -65,5 +65,5 @@ def build_binary():
     local("mkdir -p %s" % os.path.join(artifacts_dir, project, branch, build))
     files = run("ls %s/omnibus/pkg/*%s*" % (build_dir, omnibus_build_version)).split()
     for f in files:
-        get(f, os.path.join(artifacts_dir, project, branch, build)
+        get(f, os.path.join(artifacts_dir, project, branch, build))
         run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
