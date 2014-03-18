@@ -51,6 +51,7 @@ def build_binary():
     files = run("ls %s/omnibus/pkg/*%s*" % (build_dir, omnibus_build_version)).split()
     for f in files:
         get(f, '/root/ci/repos/%s' % os.path.basename(f))
+        run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
 
 
 def clean():
