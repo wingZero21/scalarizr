@@ -1,6 +1,6 @@
 from __future__ import with_statement
 
-from scalarizr import config
+from scalarizr import config, linux
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
@@ -164,8 +164,7 @@ class MessageListener:
         cnf = bus.cnf
         platform = bus.platform
 
-
-        LOG.debug("Initializing message listener");
+        LOG.debug("Initializing message listener")
         self._accept_kwargs = dict(
                 behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
                 platform = platform.name,
@@ -180,7 +179,7 @@ class MessageListener:
     def get_handlers_chain (self):
         if self._handlers_chain is None:
             hds = []
-            LOG.debug("Collecting message handlers...");
+            LOG.debug("Collecting message handlers...")
 
             cnf = bus.cnf
             for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
@@ -225,6 +224,12 @@ class MessageListener:
             if message.body.has_key("platform_access_data"):
                 platform_access_data_on_me = True
                 pl.set_access_data(message.platform_access_data)
+
+            if message.body.get('global_variables'):    
+                global_variables = message.body.get('global_variables') or []
+                global_variables = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables)
+                sync_globals(global_variables)
+
             if 'scalr_version' in message.meta:
                 try:
                     ver = tuple(map(int, message.meta['scalr_version'].strip().split('.')))
@@ -822,3 +827,18 @@ def get_role_servers(role_id=None, role_name=None):
         servers.extend(ips)
 
     return servers
+
+
+def sync_globals(glob_vars):
+    if not glob_vars:
+        queryenv = bus.queryenv_service
+        glob_vars = queryenv.list_global_variables()
+    os.environ.update(glob_vars)
+
+    if not linux.os.windows:
+        globals_path = '/etc/profile.d/scalr_globals.sh'
+        with open(globals_path, 'w') as fp:
+            for k, v in glob_vars.items():
+                v = v.replace('"', '\\"')
+                fp.write('export %s="%s"\n' % (k, v))
+        os.chmod(globals_path, 0644)

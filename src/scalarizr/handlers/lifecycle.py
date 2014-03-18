@@ -160,22 +160,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
         self._insert_iptables_rules()
         if __node__['state'] !=  ScalarizrState.IMPORTING:
-            self._fetch_globals()
+            scalarizr.handlers.sync_globals()
 
-    def _fetch_globals(self):
-        queryenv = bus.queryenv_service
-        glob_vars = queryenv.list_global_variables()
-        os.environ.update(glob_vars)
-
-        if 'Windows' == os_dist['family']:
-            pass
-        else:
-            globals_path = '/etc/profile.d/scalr_globals.sh'
-            with open(globals_path, 'w') as fp:
-                for k, v in glob_vars.items():
-                    v = v.replace('"', '\\"')
-                    fp.write('export %s="%s"\n' % (k, v))
-            os.chmod(globals_path, 0644)
 
     def _assign_hostname(self):
         if not __node__.get('hostname'):
@@ -317,7 +303,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
                     + "Cross-scalarizr messaging not initialized")
 
-        self._fetch_globals()
+        scalarizr.handlers.sync_globals()
         self._assign_hostname()
 
 
