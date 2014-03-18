@@ -1060,7 +1060,7 @@ class Service(object):
 
     def _talk_to_updclient(self):
         try:
-            upd = jsonrpc_http.HttpServiceProxy('http://localhost:8008', bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
+            upd = jsonrpc_http.HttpServiceProxy('http://127.0.0.1:8008', bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
             upd_svs = ScalrUpdClientScript()
             if not upd_svs.running:
                 upd_svs.start()
