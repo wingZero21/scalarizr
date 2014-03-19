@@ -3,60 +3,59 @@ import os
 from fabric.api import env, cd, local, run, put, get
 from fabric.context_managers import shell_env
 
-project = os.environ['FAB_PROJECT']
 
-build = os.environ['PWD'].split('-')[-1]
-build_dir = os.environ['PWD']
+BUILD_DIR = os.environ['PWD']
+PROJECT = os.environ['FAB_PROJECT']
+ARTIFACTS_DIR = os.environ['ARTIFACTS_DIR']
 
-#git describe --exact-match --abbrev=0
-tag = local("git describe --abbrev=0 --tags", capture=True)
-version = '%s.b%s.b%s' % (tag, build[0:8],)
-branch = local("git rev-parse --abbrev-ref HEAD", capture=True)
+GIT_TAG = local("git describe --abbrev=0 --tags", capture=True)
+GIT_BRANCH=local("git rev-parse --abbrev-ref HEAD", capture=True)
+GIT_REF=local("git rev-parse HEAD", capture=True)
 
-omnibus_dir = os.path.join(build_dir, 'omnibus')
-omnibus_build_version = '%s.b%s' % (version, build[0:8])
-
-artifacts_dir = os.environ['ARTIFACTS_DIR']
+BUILD = os.environ['PWD'].split('-')[-1]
+VERSION = '%s.b%s.b%s' % (GIT_TAG, BUILD[0:8], GIT_REF[0:8])
+OMNIBUS_DIR = os.path.join(BUILD_DIR, 'omnibus')
+OMNIBUS_BUILD_VERSION = VERSION
 
 
 def git_export():
-    archive = '/tmp/%s.tar.gz' % build
+    archive = '/tmp/%s.tar.gz' % BUILD
 
     local("git archive --format=tar HEAD | gzip >%s" % archive)
     put(archive, archive)
     local("rm -f %s" % archive)
 
-    run("mkdir -p %s" % build_dir)
-    with cd(build_dir):
+    run("mkdir -p %s" % BUILD_DIR)
+    with cd(BUILD_DIR):
         run("tar -xf %s" % archive)
     run("rm -f %s" % archive)
 
 
 def build_omnibus():
-    # bump version
-    with cd(build_dir):
-        run("echo '%s' >src/%s/version" % (version, project))
+    # bump project version
+    with cd(BUILD_DIR):
+        run("echo '%s' >src/%s/version" % (VERSION, PROJECT))
 
-    # build
-    with cd(omnibus_dir):
+    # build project
+    with cd(OMNIBUS_DIR):
         run("bundle install --binstubs")
-        with shell_env(BUILD_DIR=build_dir, OMNIBUS_BUILD_VERSION=omnibus_build_version):
-            run("bin/omnibus build project %s" % project)
+        with shell_env(BUILD_DIR=BUILD_DIR, OMNIBUS_BUILD_VERSION=OMNIBUS_BUILD_VERSION):
+            run("bin/omnibus build project %s" % PROJECT)
 
 
 def build_source():
     git_export()
 
-    with cd(build_dir):
-        # bump version
-        run("echo '%s' >src/%s/version" % (version, project))
-        # build
+    with cd(BUILD_DIR):
+        # bump project version
+        run("echo '%s' >src/%s/version" % (VERSION, PROJECT))
+        # build project
         run("python setup.py sdist")
 
-    local("mkdir -p %s" % os.path.join(artifacts_dir, project, branch, build))
+    local("mkdir -p %s" % os.path.join(ARTIFACTS_DIR, PROJECT, BRANCH, BUILD))
     get(
-        '%s/dist/*.tar.gz' % build_dir,
-        os.path.join(artifacts_dir, project, branch, build)
+        '%s/dist/*.tar.gz' % BUILD_DIR,
+        os.path.join(ARTIFACTS_DIR, PROJECT, BRANCH, BUILD)
     )
 
 
@@ -64,8 +63,8 @@ def build_binary():
     git_export()
     build_omnibus()
 
-    local("mkdir -p %s" % os.path.join(artifacts_dir, project, branch, build))
-    files = run("ls %s/omnibus/pkg/*%s*" % (build_dir, omnibus_build_version)).split()
+    local("mkdir -p %s" % os.path.join(ARTIFACTS_DIR, PROJECT, BRANCH, BUILD))
+    files = run("ls %s/omnibus/pkg/*%s*" % (BUILD_DIR, OMNIBUS_BUILD_VERSION)).split()
     for f in files:
-        get(f, os.path.join(artifacts_dir, project, branch, build))
+        get(f, os.path.join(ARTIFACTS_DIR, PROJECT, BRANCH, BUILD))
         run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
