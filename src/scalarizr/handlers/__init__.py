@@ -238,9 +238,6 @@ class MessageListener:
                                             if not kv.get('private'))
                 glob_vars['private'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables
                                             if kv.get('private'))
-                if linux.os.windows:
-                    glob_vars['public'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['public'].items())
-                    glob_vars['private'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['private'].items())
                 sync_globals(glob_vars)
 
             if 'scalr_version' in message.meta:
@@ -846,6 +843,9 @@ def sync_globals(glob_vars=None):
     if not glob_vars:
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
+    if linux.os.windows:
+        glob_vars['public'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['public'].items())
+        glob_vars['private'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['private'].items())
     os.environ.update(glob_vars['public'])
     os.environ.update(glob_vars['private'])
 
