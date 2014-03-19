@@ -239,8 +239,8 @@ class MessageListener:
                 glob_vars['private'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables
                                             if kv.get('private'))
                 if linux.os.windows:
-                    glob_vars['public'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['public'])
-                    glob_vars['private'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['private'])
+                    glob_vars['public'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['public'].items())
+                    glob_vars['private'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['private'].items())
                 sync_globals(glob_vars)
 
             if 'scalr_version' in message.meta:
