@@ -71,3 +71,7 @@ def build_binary():
     for f in files:
         get(f, ARTIFACTS_DIR)
         run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
+
+ 
+def clean():
+    run("rm -rf %s" % BUILD_DIR)
