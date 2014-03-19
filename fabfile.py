@@ -6,15 +6,21 @@ from fabric.context_managers import shell_env
 
 BUILD_DIR = os.environ['PWD']
 PROJECT = os.environ['FAB_PROJECT']
-ARTIFACTS_DIR = os.environ['ARTIFACTS_DIR']
 
 GIT_TAG = local("git describe --abbrev=0 --tags", capture=True)
 GIT_BRANCH=local("git rev-parse --abbrev-ref HEAD", capture=True)
 GIT_REF=local("git rev-parse HEAD", capture=True)
 
 BUILD = os.environ['PWD'].split('-')[-1]
-VERSION = '%s.b%s.b%s' % (GIT_TAG, BUILD[0:8], GIT_REF[0:8])
 OMNIBUS_DIR = os.path.join(BUILD_DIR, 'omnibus')
+
+if GIT_REF == open('.git/HEAD', 'r').read():
+    VERSION = GIT_TAG
+    ARTIFACTS_DIR = os.join(os.environ['ARTIFACTS_DIR'], PROJECT, GIT_TAG, BUILD)
+else:
+    VERSION = '%s.b%s.b%s' % (GIT_TAG, BUILD[0:8], GIT_REF[0:8])
+    ARTIFACTS_DIR = os.join(os.environ['ARTIFACTS_DIR'], PROJECT, GIT_BRANCH, BUILD)
+
 OMNIBUS_BUILD_VERSION = VERSION
 
 
@@ -52,19 +58,16 @@ def build_source():
         # build project
         run("python setup.py sdist")
 
-    local("mkdir -p %s" % os.path.join(ARTIFACTS_DIR, PROJECT, BRANCH, BUILD))
-    get(
-        '%s/dist/*.tar.gz' % BUILD_DIR,
-        os.path.join(ARTIFACTS_DIR, PROJECT, BRANCH, BUILD)
-    )
+    local("mkdir -p %s" % ARTIFACTS_DIR)
+    get('%s/dist/*.tar.gz' % BUILD_DIR, ARTIFACTS_DIR)
 
 
 def build_binary():
     git_export()
     build_omnibus()
 
-    local("mkdir -p %s" % os.path.join(ARTIFACTS_DIR, PROJECT, BRANCH, BUILD))
+    local("mkdir -p %s" % os.path.join(ARTIFACTS_DIR, PROJECT, GIT_BRANCH, BUILD))
     files = run("ls %s/omnibus/pkg/*%s*" % (BUILD_DIR, OMNIBUS_BUILD_VERSION)).split()
     for f in files:
-        get(f, os.path.join(ARTIFACTS_DIR, PROJECT, BRANCH, BUILD))
+        get(f, os.path.join(ARTIFACTS_DIR, PROJECT, GIT_BRANCH, BUILD))
         run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
