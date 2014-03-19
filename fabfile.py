@@ -8,7 +8,9 @@ project = os.environ['FAB_PROJECT']
 build = os.environ['PWD'].split('-')[-1]
 build_dir = os.environ['PWD']
 
-version = local("git describe --tag", capture=True)
+#git describe --exact-match --abbrev=0
+tag = local("git describe --abbrev=0 --tags", capture=True)
+version = '%s.b%s.b%s' % (tag, build[0:8],)
 branch = local("git rev-parse --abbrev-ref HEAD", capture=True)
 
 omnibus_dir = os.path.join(build_dir, 'omnibus')
