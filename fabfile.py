@@ -73,5 +73,5 @@ def build_binary():
         run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
 
  
-def clean():
+def cleanup():
     run("rm -rf %s" % BUILD_DIR)
