@@ -16,10 +16,10 @@ OMNIBUS_DIR = os.path.join(BUILD_DIR, 'omnibus')
 
 if GIT_REF == open('.git/HEAD', 'r').read():
     VERSION = GIT_TAG
-    ARTIFACTS_DIR = os.join(os.environ['ARTIFACTS_DIR'], PROJECT, GIT_TAG, BUILD)
+    ARTIFACTS_DIR = os.path.join(os.environ['ARTIFACTS_DIR'], PROJECT, GIT_TAG, BUILD)
 else:
     VERSION = '%s.b%s.b%s' % (GIT_TAG, BUILD[0:8], GIT_REF[0:8])
-    ARTIFACTS_DIR = os.join(os.environ['ARTIFACTS_DIR'], PROJECT, GIT_BRANCH, BUILD)
+    ARTIFACTS_DIR = os.path.join(os.environ['ARTIFACTS_DIR'], PROJECT, GIT_BRANCH, BUILD)
 
 OMNIBUS_BUILD_VERSION = VERSION
 
@@ -66,8 +66,8 @@ def build_binary():
     git_export()
     build_omnibus()
 
-    local("mkdir -p %s" % os.path.join(ARTIFACTS_DIR, PROJECT, GIT_BRANCH, BUILD))
+    local("mkdir -p %s" % ARTIFACTS_DIR)
     files = run("ls %s/omnibus/pkg/*%s*" % (BUILD_DIR, OMNIBUS_BUILD_VERSION)).split()
     for f in files:
-        get(f, os.path.join(ARTIFACTS_DIR, PROJECT, GIT_BRANCH, BUILD))
+        get(f, ARTIFACTS_DIR)
         run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
