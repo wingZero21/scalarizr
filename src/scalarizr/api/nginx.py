@@ -806,7 +806,7 @@ class NginxAPI(object):
                 fp.write(server_wide_template['content'])
             template_conf = metaconf.Configuration('nginx')
             template_conf.read(temp_file)
-            .insert_conf(template_conf, 'server')
+            config.insert_conf(template_conf, 'server')
             _logger.debug('etree after temlate: %s' % ET.tostring(config.etree))
             os.remove(temp_file)
         else:
