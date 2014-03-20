@@ -982,6 +982,10 @@ class DebianBasedModSSL(ModSSL):
         self._enable_mod_ssl()
         self._enable_default_ssl_virtual_host()
         self._set_name_virtual_host(ssl_port)
+        # Cleaning ssl.conf after rebundle
+        # Replacing unexisting certificate with snakeoil.
+        self.set_default_certificate(SSLCertificate())
+
 
     def _enable_mod_ssl(self):
         if not os.path.exists(__apache__["ssl_load_deb"]):
