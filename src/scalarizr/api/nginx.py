@@ -18,7 +18,7 @@ from scalarizr.util import PopenError
 from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
-
+from xml.etree import ElementTree as ET
 
 __nginx__ = __node__['nginx']
 
@@ -1023,6 +1023,7 @@ class NginxAPI(object):
 
         self._save_app_servers_inc()
         if write_proxies:
+            _logger.debug('etree: %s' % ET.tostring(self.proxies_inc.etree))
             self._save_proxies_inc()
 
         if reload_service:
