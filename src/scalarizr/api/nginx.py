@@ -788,7 +788,7 @@ class NginxAPI(object):
         nginx config
         """
 
-        hostname = unicode(hostname)
+        # hostname = unicode(hostname)
         # port = unicode(port)
 
 
@@ -804,7 +804,7 @@ class NginxAPI(object):
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
             with open(temp_file, 'w') as fp:
-                fp.write(server_wide_template['content'])
+                fp.write(unicode(server_wide_template['content']))
             template_conf = metaconf.Configuration('nginx')
             template_conf.read(temp_file)
             config.insert_conf(template_conf, 'server')
