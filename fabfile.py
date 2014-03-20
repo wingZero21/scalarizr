@@ -8,18 +8,19 @@ BUILD_DIR = os.environ['PWD']
 PROJECT = os.environ['FAB_PROJECT']
 
 GIT_TAG = local("git describe --abbrev=0 --tags", capture=True)
-GIT_BRANCH=local("git rev-parse --abbrev-ref HEAD", capture=True)
-GIT_REF=local("git rev-parse HEAD", capture=True)
+GIT_BRANCH = local("git rev-parse --abbrev-ref HEAD", capture=True)
+NRM_BRANCH = GIT_BRANCH.replace('/', '-').replace('_', '-').replace('.', '')
+GIT_REF = local("git rev-parse HEAD", capture=True)
 
 BUILD = os.environ['PWD'].split('-')[-1]
 OMNIBUS_DIR = os.path.join(BUILD_DIR, 'omnibus')
 
-if GIT_REF == open('.git/HEAD', 'r').read():
+if GIT_REF == open('.git/HEAD', 'r').read().strip():
     VERSION = GIT_TAG
     ARTIFACTS_DIR = os.path.join(os.environ['ARTIFACTS_DIR'], PROJECT, GIT_TAG, BUILD)
 else:
-    VERSION = '%s.b%s.b%s' % (GIT_TAG, BUILD[0:8], GIT_REF[0:8])
-    ARTIFACTS_DIR = os.path.join(os.environ['ARTIFACTS_DIR'], PROJECT, GIT_BRANCH, BUILD)
+    VERSION = '%s.b%s.%s' % (GIT_TAG, BUILD[0:8], GIT_REF[0:8])
+    ARTIFACTS_DIR = os.path.join(os.environ['ARTIFACTS_DIR'], PROJECT, NRM_BRANCH, BUILD)
 
 OMNIBUS_BUILD_VERSION = VERSION
 
