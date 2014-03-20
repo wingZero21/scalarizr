@@ -788,7 +788,7 @@ class NginxAPI(object):
         nginx config
         """
 
-        # hostname = unicode(hostname)
+        hostname = unicode(hostname)
         # port = unicode(port)
 
 
