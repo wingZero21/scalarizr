@@ -305,6 +305,7 @@ class NginxAPI(object):
             for proxy_parms in proxy_list:
                 if 'hostname' in proxy_parms:
                     proxy_parms['name'] = proxy_parms.pop('hostname')
+                _logger.debug('Adding proxy with params %s' % proxy_parms)
                 self.add_proxy(reload_service=False, **proxy_parms)
 
             if reload_service:
