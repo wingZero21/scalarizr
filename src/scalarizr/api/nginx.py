@@ -806,18 +806,22 @@ class NginxAPI(object):
                 fp.write(server_wide_template['content'])
             template_conf = metaconf.Configuration('nginx')
             template_conf.read(temp_file)
-            config.insert_conf(template_conf, 'server')
+            .insert_conf(template_conf, 'server')
+            _logger.debug('etree after temlate: %s' % ET.tostring(config.etree))
             os.remove(temp_file)
         else:
             self._add_default_template(config)
             
         if port:
             config.add(u'server/listen', str(port))
+            _logger.debug('etree after port: %s' % ET.tostring(config.etree))
         try:
             config.get(u'server/server_name')
             config.set(u'server/server_name', hostname)
         except:
             config.add(u'server/server_name', hostname)
+
+        _logger.debug('etree after server name: %s' % ET.tostring(config.etree))
 
         # Configuring ssl
         if ssl:
@@ -844,6 +848,7 @@ class NginxAPI(object):
                 template_conf = metaconf.Configuration('nginx')
                 template_conf.read(temp_file)
                 config.insert_conf(template_conf, location_xpath)
+                _logger.debug('etree after loc template: %s' % ET.tostring(config.etree))
                 os.remove(temp_file)
 
             config.add('%s/proxy_pass' % location_xpath, 'http://%s' % backend_name)
@@ -1023,7 +1028,6 @@ class NginxAPI(object):
 
         self._save_app_servers_inc()
         if write_proxies:
-            _logger.debug('etree: %s' % ET.tostring(self.proxies_inc.etree))
             self._save_proxies_inc()
 
         if reload_service:
