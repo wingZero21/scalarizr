@@ -3,6 +3,8 @@ name       "scalarizr"
 maintainer "Scalr Inc"
 homepage   "http://scalr.com"
 
+extra_package_files => ['--deb-changelog /tmp/changelog']
+
 replaces        "scalarizr"
 install_path    "/opt/scalarizr"
 if ENV['OMNIBUS_BUILD_VERSION']
