@@ -804,7 +804,7 @@ class NginxAPI(object):
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
             with open(temp_file, 'w') as fp:
-                fp.write(server_wide_template['content'])
+                fp.write(unicode(server_wide_template['content']))
             template_conf = metaconf.Configuration('nginx')
             template_conf.read(temp_file)
             config.insert_conf(template_conf, 'server')
@@ -814,7 +814,7 @@ class NginxAPI(object):
             self._add_default_template(config)
             
         if port:
-            config.add(u'server/listen', str(port))
+            config.add('server/listen', str(port))
             _logger.debug('etree after port: %s' % ET.dump(config.etree))
         try:
             config.get('server/server_name')
@@ -845,7 +845,7 @@ class NginxAPI(object):
                 temp_file = self.proxies_inc_dir + '/temalate.tmp'
                 # TODO: this is ugly. Find the way to read conf from string
                 with open(temp_file, 'w') as fp:
-                    fp.write(unicode(grouped_templates[location]['content']))
+                    fp.write(grouped_templates[location]['content'])
                 template_conf = metaconf.Configuration('nginx')
                 template_conf.read(temp_file)
                 config.insert_conf(template_conf, location_xpath)
