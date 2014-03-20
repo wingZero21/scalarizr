@@ -799,30 +799,26 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
-        _logger.debug('etree after server: %s' % ET.dump(config.etree))
         if server_wide_template and server_wide_template['content']:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
             with open(temp_file, 'w') as fp:
-                fp.write(unicode(server_wide_template['content']))
+                fp.write(server_wide_template['content'])
             template_conf = metaconf.Configuration('nginx')
             template_conf.read(temp_file)
             config.insert_conf(template_conf, 'server')
-            _logger.debug('etree after temlate: %s' % ET.dump(config.etree))
             os.remove(temp_file)
         else:
             self._add_default_template(config)
             
         if port:
             config.add('server/listen', str(port))
-            _logger.debug('etree after port: %s' % ET.dump(config.etree))
         try:
             config.get('server/server_name')
             config.set('server/server_name', hostname)
         except:
             config.add('server/server_name', hostname)
 
-        _logger.debug('etree after server name: %s' % ET.dump(config.etree))
 
         # Configuring ssl
         if ssl:
@@ -849,7 +845,6 @@ class NginxAPI(object):
                 template_conf = metaconf.Configuration('nginx')
                 template_conf.read(temp_file)
                 config.insert_conf(template_conf, location_xpath)
-                _logger.debug('etree after loc template: %s' % ET.dump(config.etree))
                 os.remove(temp_file)
 
             config.add('%s/proxy_pass' % location_xpath, 'http://%s' % backend_name)
