@@ -799,6 +799,7 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
+        _logger.debug('etree after server: %s' % ET.dump(config.etree))
         if server_wide_template and server_wide_template['content']:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
