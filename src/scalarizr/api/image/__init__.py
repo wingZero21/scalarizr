@@ -7,8 +7,11 @@ from scalarizr import rpc
 from scalarizr.api.operation import OperationAPI
 from scalarizr.linux import coreutils
 from scalarizr.node import __node__
+from scalarizr.bus import bus
+from scalarizr.config import ScalarizrState
 from scalarizr.util import Singleton
 from scalarizr.util import software
+from scalarizr.util import system2
 
 from scalarizr.api import image
 from image.openstack import OpenStackImageAPI
@@ -19,6 +22,10 @@ _logger = logging.getLogger(__name__)
 
 
 WALL_MESSAGE = 'Server is going to make image'
+
+
+class ImageAPIError(BaseException):
+    pass
 
 
 class ImageAPI(object):
@@ -69,6 +76,7 @@ class ImageAPI(object):
 
     @rpc.command_method
     def create(self, role_name, async=True):
+        """ Creates image """
         create_operation = self._op_api.create('api.image.create',
             func=self._create,
             func_kwds={'role_name': role_name},
@@ -81,34 +89,37 @@ class ImageAPI(object):
 
 
     def _create(self, role_name):
-        prepare_result = self.prepare()
-        image_id = self.snapshot()
-        finalize_result = self.finalize()
+        prepare_result = self.prepare(role_name)
+        image_id = self.snapshot(role_name)
+        finalize_result = self.finalize(role_name)
 
         result = {'image_id': image_id}
         if prepare_result:
             result.update(prepare_result)
         if finalize_result:
-            relult.update(finalize_result)
+            result.update(finalize_result)
         
         return result
 
-    def _prepare(self):
-        raise NotImplementedError()
+    def _prepare(self, role_name):
+        # Override this method in this class inheritors
+        pass
 
-    def _snapshot(self):
-        raise NotImplementedError()
+    def _snapshot(self, role_name):
+        # Override this method in this class inheritors
+        pass
 
-    def _finalize(self):
-        raise NotImplementedError()
+    def _finalize(self, role_name):
+        # Override this method in this class inheritors
+        pass
 
-    def _clean_image(self, rootdir):
+    def _clean(self, image_rootdir):
         # TODO: revise method, rewrite if needed
         _logger.info('Performing image cleanup')
         # Truncate logs
 
         _logger.debug('Truncating log files')
-        logs_path = os.path.join(rootdir, 'var/log')
+        logs_path = os.path.join(image_rootdir, 'var/log')
         if os.path.exists(logs_path):
             for basename in os.listdir(logs_path):
                 filename = os.path.join(logs_path, basename)
@@ -116,19 +127,19 @@ class ImageAPI(object):
                     try:
                         coreutils.truncate(filename)
                     except OSError, e:
-                        self._logger.error("Cannot truncate file '%s'. %s", filename, e)
+                        _logger.error("Cannot truncate file '%s'. %s", filename, e)
             shutil.rmtree(os.path.join(logs_path, 'scalarizr/scripting'))
 
         # Cleanup users homes
         _logger.debug('Removing users activity')
         for homedir in ('root', 'home/ubuntu', 'home/scalr'):
-            homedir = os.path.join(rootdir, homedir)
-            self._cleanup_user_activity(homedir)
-            self._cleanup_ssh_keys(homedir)
+            homedir = os.path.join(image_rootdir, homedir)
+            self._clean_user_activity(homedir)
+            self._clean_ssh_keys(homedir)
 
         # Cleanup scalarizr private data
         _logger.debug('Removing scalarizr private data')
-        etc_path = os.path.join(rootdir, bus.etc_path[1:])
+        etc_path = os.path.join(image_rootdir, bus.etc_path[1:])
         privated = os.path.join(etc_path, "private.d")
         if os.path.exists(privated):
             shutil.rmtree(privated)
@@ -138,6 +149,29 @@ class ImageAPI(object):
         system2('sync')
 
         _logger.debug('Cleanup completed')
+
+    def _clean_user_activity(self, homedir):
+        for name in (
+            ".bash_history",
+            ".lesshst",
+            ".viminfo",
+            ".mysql_history",
+            ".history",
+            ".sqlite_history"):
+            filename = os.path.join(homedir, name)
+            if os.path.exists(filename):
+                os.remove(filename)
+
+
+    def _clean_ssh_keys(self, homedir):
+        filename = os.path.join(homedir, '.ssh/authorized_keys')
+        if os.path.exists(filename):
+            _logger.debug('Removing Scalr SSH keys from %s', filename)
+            with open(filename + '.tmp', 'w+') as dest:
+                with open(filename) as source:
+                    lines = [l for l in source if 'SCALR-ROLESBUILDER' not in l]
+                    dest.writelines(lines)
+            os.rename(filename + '.tmp', filename)
 
 
 def get_api():

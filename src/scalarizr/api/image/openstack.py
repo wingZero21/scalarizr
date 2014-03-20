@@ -4,11 +4,13 @@ import shutil
 import sys
 import time
 
-from scalarizr.api.rebundle import RebundleAPI
+from scalarizr.api.image import ImageAPI
+from scalarizr.api.image import ImageAPIError
 from scalarizr.node import __node__
 from scalarizr.util import software
-from scalarizr.util import system2 
+from scalarizr.util import system2
 from scalarizr.util import wait_until
+from scalarizr import linux
 
 
 _logger = logging.getLogger(__name__)
@@ -16,13 +18,19 @@ _logger = logging.getLogger(__name__)
 
 class OpenStackWindowsImageTaker(object):
 
-    def prepare(self, message):
+    def prepare(self):
         # XXX: server is terminated during sysprep.
         # we should better understand how it works
         #shutil.copy(r'C:\Windows\System32\sysprep\RunSysprep_2.cmd', r'C:\windows\system32\sysprep\RunSysprep.cmd')
         #shutil.copy(r'C:\Windows\System32\sysprep\SetupComplete_2.cmd', r'C:\windows\setup\scripts\SetupComplete.cmd')
         #linux.system((r'C:\windows\system32\sysprep\RunSysprep.cmd', ))
         return software.system_info()
+
+    def snapshot(self, rolename):
+        pass
+
+    def finalize(self):
+        pass
 
 
 class OpenStackLinuxImageTaker(object):
@@ -31,8 +39,8 @@ class OpenStackLinuxImageTaker(object):
         if os.path.exists('/etc/udev/rules.d/70-persistent-net.rules'):
             shutil.move('/etc/udev/rules.d/70-persistent-net.rules', '/tmp')
 
-    def snapshot(self):
-        image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+    def snapshot(self, role_name):
+        image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
         nova = __node__['openstack']['new_nova_connection']
         nova.connect()
 
@@ -57,7 +65,7 @@ class OpenStackLinuxImageTaker(object):
 
         image_id = result[0].id
         if result[0].status == 'FAILED':
-            raise handlers.HandlerError('Image %s becomes FAILED', image_id)
+            raise ImageAPIError('Image %s becomes FAILED', image_id)
         _logger.info('Image %s completed and available for use!', image_id)
         return image_id
 
@@ -66,7 +74,7 @@ class OpenStackLinuxImageTaker(object):
             shutil.move('/tmp/70-persistent-net.rules', '/etc/udev/rules.d')
 
 
-class OpenStackImageAPI(RebundleAPI):
+class OpenStackImageAPI(ImageAPI):
     
     def __init__(self):
         if linux.os.windows_family:
@@ -74,11 +82,11 @@ class OpenStackImageAPI(RebundleAPI):
         else:
             self._image_taker = OpenStackLinuxImageTaker()
 
-    def _prepare(self):
+    def _prepare(self, role_name):
         return self._image_taker.prepare()
 
-    def _snapshot(self):
-        return self._image_taker.snapshot()
+    def _snapshot(self, role_name):
+        return self._image_taker.snapshot(role_name)
 
-    def _finalize(self):
+    def _finalize(self, role_name):
         return self._image_taker.finalize()
