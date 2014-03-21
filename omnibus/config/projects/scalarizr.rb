@@ -18,7 +18,7 @@ extra_package_files(["--deb-changelog '#{Omnibus::Config.project_root}/changelog
 dependency "preparation"
 
 # scalarizr dependencies/components
-dependency "scalarizr-deps"
+#dependency "scalarizr-deps"
 dependency "scalarizr"
 
 # version manifest file
