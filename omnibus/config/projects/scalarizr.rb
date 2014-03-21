@@ -12,7 +12,7 @@ else
 end
 build_iteration 1
 
-extra_package_files(["--deb-changelog '#{Omnibus::Config.poject_root}/changelog'"])
+extra_package_files(["--deb-changelog '#{Omnibus::Config.project_root}/changelog'"])
 
 # creates required build directories
 dependency "preparation"
