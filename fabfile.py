@@ -90,7 +90,7 @@ def generate_changelog():
     author_email = local("git show -s --format=%ae", capture=True)
     now = time.strftime("%a, %d %b %Y %H:%M:%S %z", time.gmtime())
     with cd(os.path.join(OMNIBUS_DIR, 'pkg')):
-        run("echo %s >changelog" % template.format(**locals()))
+        run("echo '%s' >changelog" % template.format(**locals()))
 
  
 def cleanup():
