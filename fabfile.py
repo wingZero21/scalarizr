@@ -59,7 +59,7 @@ def build_omnibus():
 
     # build project
     with cd(OMNIBUS_DIR):
-        run("bundle install --binstubs")
+        run("[ -f bin/omnibus ] || bundle install --binstubs")
         with shell_env(BUILD_DIR=BUILD_DIR, OMNIBUS_BUILD_VERSION=OMNIBUS_BUILD_VERSION):
             run("bin/omnibus build project --without-healthcheck %s" % PROJECT)
 
