@@ -788,8 +788,8 @@ class NginxAPI(object):
         nginx config
         """
 
-        # hostname = unicode(hostname)
-        # port = unicode(port)
+        hostname = unicode(hostname)
+        port = unicode(port)
 
 
         if not grouped_templates:
@@ -799,6 +799,7 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
+        _logger.debug('etree after temlate: %s' % ET.dump(config.etree))
         if server_wide_template and server_wide_template['content']:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
@@ -807,18 +808,21 @@ class NginxAPI(object):
             template_conf = metaconf.Configuration('nginx')
             template_conf.read(temp_file)
             config.insert_conf(template_conf, 'server')
+            _logger.debug('etree after temlate: %s' % ET.dump(config.etree))
             os.remove(temp_file)
         else:
             self._add_default_template(config)
             
         if port:
-            config.add('server/listen', str(port))
+            config.add(u'server/listen', str(port))
+            _logger.debug('etree after port: %s' % ET.dump(config.etree))
         try:
-            config.get('server/server_name')
-            config.set('server/server_name', hostname)
+            config.get(u'server/server_name')
+            config.set(u'server/server_name', hostname)
         except:
-            config.add('server/server_name', hostname)
+            config.add(u'server/server_name', hostname)
 
+        _logger.debug('etree after server name: %s' % ET.dump(config.etree))
 
         # Configuring ssl
         if ssl:
@@ -830,9 +834,9 @@ class NginxAPI(object):
         # Adding locations leading to defined backends
 
         for i, (location, backend_name) in enumerate(locations_and_backends):
-            location_xpath = 'server/location'
-            location = location
-            backend_name = backend_name
+            location_xpath = u'server/location'
+            location = unicode(location)
+            backend_name = unicode(backend_name)
             config.add(location_xpath, location)
 
             location_xpath = '%s[%i]' % (location_xpath, i + 1)
@@ -841,10 +845,11 @@ class NginxAPI(object):
                 temp_file = self.proxies_inc_dir + '/temalate.tmp'
                 # TODO: this is ugly. Find the way to read conf from string
                 with open(temp_file, 'w') as fp:
-                    fp.write(grouped_templates[location]['content'])
+                    fp.write(unicode(grouped_templates[location]['content']))
                 template_conf = metaconf.Configuration('nginx')
                 template_conf.read(temp_file)
                 config.insert_conf(template_conf, location_xpath)
+                _logger.debug('etree after loc template: %s' % ET.dump(config.etree))
                 os.remove(temp_file)
 
             config.add('%s/proxy_pass' % location_xpath, 'http://%s' % backend_name)
