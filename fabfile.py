@@ -1,4 +1,5 @@
 import os
+import time
 
 from fabric.api import env, cd, local, run, put, get
 from fabric.context_managers import shell_env
@@ -72,6 +73,24 @@ def build_binary():
     for f in files:
         get(f, ARTIFACTS_DIR)
         run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
+
+
+def generate_changelog():
+    template = \
+    """{package} ({version}) {branch}; urgency=low
+
+  * Build {package}
+
+ -- {author} <{author_email}>  {now}"""
+    
+    package = PROJECT
+    version = VERSION
+    branch = NRM_BRANCH
+    author = local("git show -s --format=%an", capture=True)
+    author_email = local("git show -s --format=%ae", capture=True)
+    now = strftime("%a, %d %b %Y %H:%M:%S %z", time.gmtime())
+    with cd(os.path.join(OMNIBUS_DIR, 'pkg')):
+        run("echo %s >changelog", % template.format(**locals()))
 
  
 def cleanup():
