@@ -39,6 +39,19 @@ def git_export():
     run("rm -f %s" % archive)
 
 
+def import_source():
+    local("mkdir -p %s" % ARTIFACTS_DIR)
+    get('%s/dist/*.tar.gz' % BUILD_DIR, ARTIFACTS_DIR)
+
+
+def import_binary()
+    local("mkdir -p %s" % ARTIFACTS_DIR)
+    files = run("ls %s/omnibus/pkg/*%s*" % (BUILD_DIR, OMNIBUS_BUILD_VERSION)).split()
+    for f in files:
+        get(f, ARTIFACTS_DIR)
+        run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
+
+
 def build_omnibus():
     # bump project version
     with cd(BUILD_DIR):
@@ -60,19 +73,13 @@ def build_source():
         # build project
         run("python setup.py sdist")
 
-    local("mkdir -p %s" % ARTIFACTS_DIR)
-    get('%s/dist/*.tar.gz' % BUILD_DIR, ARTIFACTS_DIR)
+    import_source()
 
 
 def build_binary():
     git_export()
     build_omnibus()
-
-    local("mkdir -p %s" % ARTIFACTS_DIR)
-    files = run("ls %s/omnibus/pkg/*%s*" % (BUILD_DIR, OMNIBUS_BUILD_VERSION)).split()
-    for f in files:
-        get(f, ARTIFACTS_DIR)
-        run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
+    import_binary()
 
 
 def generate_changelog():
@@ -98,6 +105,7 @@ def changelog_workaround():
         run("mv *.deb tmp.deb")
         run("fpm -s deb -t deb --deb-changelog ../changelog -n %s tmp.deb" % PROJECT)
         run("rm -f tmp.deb")
+    import_binary()
 
  
 def cleanup():
