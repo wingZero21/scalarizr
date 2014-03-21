@@ -88,7 +88,7 @@ def generate_changelog():
     branch = NRM_BRANCH
     author = local("git show -s --format=%an", capture=True)
     author_email = local("git show -s --format=%ae", capture=True)
-    now = strftime("%a, %d %b %Y %H:%M:%S %z", time.gmtime())
+    now = time.strftime("%a, %d %b %Y %H:%M:%S %z", time.gmtime())
     with cd(os.path.join(OMNIBUS_DIR, 'pkg')):
         run("echo %s >changelog" % template.format(**locals()))
 
