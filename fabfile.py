@@ -92,6 +92,13 @@ def generate_changelog():
     with cd(os.path.join(OMNIBUS_DIR, 'pkg')):
         run("echo '%s' >changelog" % template.format(**locals()))
 
+
+def changelog_workaroung():
+    with cd(os.path.join(OMNIBUS_DIR, 'pkg')):
+        run("mv *.deb tmp.deb")
+        run("fpm -s deb -t deb --deb-changelog changelog -n %s tmp.deb" % PROJECT)
+        run("rm -f tmp.deb")
+
  
 def cleanup():
     run("rm -rf %s" % BUILD_DIR)
