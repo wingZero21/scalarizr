@@ -234,10 +234,12 @@ class MessageListener:
             if message.body.get('global_variables'):    
                 global_variables = message.body.get('global_variables') or []
                 glob_vars = {}
-                glob_vars['public'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables 
-                                            if not kv.get('private'))
-                glob_vars['private'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables
-                                            if kv.get('private'))
+                glob_vars['public'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') 
+                                        for kv in global_variables 
+                                        if not kv.get('private'))
+                glob_vars['private'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') 
+                                        for kv in global_variables
+                                        if kv.get('private'))
                 sync_globals(glob_vars)
 
             if 'scalr_version' in message.meta:
