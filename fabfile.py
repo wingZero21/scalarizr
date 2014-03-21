@@ -44,7 +44,7 @@ def import_source():
     get('%s/dist/*.tar.gz' % BUILD_DIR, ARTIFACTS_DIR)
 
 
-def import_binary()
+def import_binary():
     local("mkdir -p %s" % ARTIFACTS_DIR)
     files = run("ls %s/omnibus/pkg/*%s*" % (BUILD_DIR, OMNIBUS_BUILD_VERSION)).split()
     for f in files:
