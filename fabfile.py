@@ -78,7 +78,9 @@ def build_source():
 
 def build_binary():
     git_export()
+    generate_changelog()
     build_omnibus()
+    changelog_workaround()
     import_binary()
 
 
