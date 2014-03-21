@@ -22,14 +22,8 @@ from xml.etree import ElementTree as ET
 
 __nginx__ = __node__['nginx']
 
-import sys
-_logger = logging.getLogger(__name__)
 
-ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-_logger.addHandler(ch)
+_logger = logging.getLogger(__name__)
 
 
 class NginxInitScript(initdv2.ParametrizedInitScript):
@@ -805,7 +799,7 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
-        _logger.debug('etree after temlate: %s' % ET.dump(config.etree))
+        _logger.debug('etree after temlate: %s' % ET.tostring(config.etree.getroot()))
         if server_wide_template and server_wide_template['content']:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
@@ -814,21 +808,21 @@ class NginxAPI(object):
             template_conf = metaconf.Configuration('nginx')
             template_conf.read(temp_file)
             config.insert_conf(template_conf, 'server')
-            _logger.debug('etree after temlate: %s' % ET.dump(config.etree))
+            _logger.debug('etree after temlate: %s' % ET.tostring(config.etree.getroot()))
             os.remove(temp_file)
         else:
             self._add_default_template(config)
             
         if port:
             config.add(u'server/listen', str(port))
-            _logger.debug('etree after port: %s' % ET.dump(config.etree))
+            _logger.debug('etree after port: %s' % ET.tostring(config.etree.getroot()))
         try:
             config.get(u'server/server_name')
             config.set(u'server/server_name', hostname)
         except:
             config.add(u'server/server_name', hostname)
 
-        _logger.debug('etree after server name: %s' % ET.dump(config.etree))
+        _logger.debug('etree after server name: %s' % ET.tostring(config.etree.getroot()))
 
         # Configuring ssl
         if ssl:
@@ -855,7 +849,7 @@ class NginxAPI(object):
                 template_conf = metaconf.Configuration('nginx')
                 template_conf.read(temp_file)
                 config.insert_conf(template_conf, location_xpath)
-                _logger.debug('etree after loc template: %s' % ET.dump(config.etree))
+                _logger.debug('etree after loc template: %s' % ET.tostring(config.etree.getroot()))
                 os.remove(temp_file)
 
             config.add('%s/proxy_pass' % location_xpath, 'http://%s' % backend_name)
