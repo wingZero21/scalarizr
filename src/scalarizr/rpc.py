@@ -135,7 +135,7 @@ class RequestHandler(object):
             if fn._jsonrpc == 'command':
                 log_it = True
                 data_to_log = self._clear_request_data(data)
-                LOG.debug('request: %s', json.dumps(data))
+                LOG.debug('request: %s', json.dumps(data_to_log))
             result = self._invoke_method(fn, params)
             # important to test json serializarion before serialize the whole result
             json.dumps(result)
