@@ -107,7 +107,6 @@ def changelog_workaround():
         run("mv *.deb tmp.deb")
         run("fpm -s deb -t deb --deb-changelog ../changelog -n %s tmp.deb" % PROJECT)
         run("rm -f tmp.deb")
-    import_binary()
 
  
 def cleanup():
