@@ -89,14 +89,14 @@ def generate_changelog():
     author = local("git show -s --format=%an", capture=True)
     author_email = local("git show -s --format=%ae", capture=True)
     now = time.strftime("%a, %d %b %Y %H:%M:%S %z", time.gmtime())
-    with cd(os.path.join(OMNIBUS_DIR, 'pkg')):
+    with cd(OMNIBUS_DIR):
         run("echo '%s' >changelog" % template.format(**locals()))
 
 
-def changelog_workaroung():
+def changelog_workaround():
     with cd(os.path.join(OMNIBUS_DIR, 'pkg')):
         run("mv *.deb tmp.deb")
-        run("fpm -s deb -t deb --deb-changelog changelog -n %s tmp.deb" % PROJECT)
+        run("fpm -s deb -t deb --deb-changelog ../changelog -n %s tmp.deb" % PROJECT)
         run("rm -f tmp.deb")
 
  
