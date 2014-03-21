@@ -815,18 +815,17 @@ class NginxAPI(object):
             
         if port:
             config.add(u'server/listen', str(port))
-            _logger.debug('etree after port: %s' % ET.tostring(config.etree.getroot()))
         try:
             config.get(u'server/server_name')
             config.set(u'server/server_name', hostname)
         except:
             config.add(u'server/server_name', hostname)
 
-        _logger.debug('etree after server name: %s' % ET.tostring(config.etree.getroot()))
 
         # Configuring ssl
         if ssl:
             self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id, port!=None)
+        _logger.debug('etree after ssl: %s' % ET.tostring(config.etree.getroot()))
 
         config.add('server/include', self.error_pages_inc)
         
