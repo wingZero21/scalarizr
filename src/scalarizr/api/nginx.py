@@ -22,8 +22,14 @@ from xml.etree import ElementTree as ET
 
 __nginx__ = __node__['nginx']
 
-
+import sys
 _logger = logging.getLogger(__name__)
+
+ch = logging.StreamHandler(sys.stdout)
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+_logger.addHandler(ch)
 
 
 class NginxInitScript(initdv2.ParametrizedInitScript):
