@@ -745,13 +745,14 @@ class NginxAPI(object):
                         http):
         old_style_ssl = self._old_style_ssl_on()
 
+        _logger.debug('etree before ssl: %s' % ET.tostring(config.etree.getroot()))
         listen_val = '%s%s' % ((ssl_port or '443'), ' ssl' if not old_style_ssl else '')
+        _logger.debug('listen val: "%s"' % listen_val)
         config.add('%s/listen' % server_xpath, listen_val)
+        _logger.debug('etree after ssl: %s' % ET.tostring(config.etree.getroot()))
 
         if old_style_ssl:
-            _logger.debug('etree before ssl: %s' % ET.tostring(config.etree.getroot()))
             config.add('%s/ssl' % server_xpath, 'on')
-            _logger.debug('etree after ssl: %s' % ET.tostring(config.etree.getroot()))
         ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
