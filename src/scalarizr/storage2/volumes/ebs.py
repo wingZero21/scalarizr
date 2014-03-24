@@ -390,7 +390,7 @@ class EbsVolume(base.Volume, EbsMixin):
         coreutils.sync()
 
         # conn.create_snapshot leaks snapshots when RequestLimitExceeded occured 
-        params = {'VolumeId': volume.id}
+        params = {'VolumeId': volume}
         if description:
             params['Description'] = description[0:255]
         snapshot = self._conn.get_object('CreateSnapshot', params, 
