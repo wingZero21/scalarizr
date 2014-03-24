@@ -49,6 +49,18 @@ class CinderVolume(base.Volume):
 
     _global_timeout = 3600
 
+    def _new_cinder_connection(self):
+        try:
+            return __openstack__.connect_cinder()
+        except NoCredentialsError:
+            return False
+
+    def _new_nova_connection(self):
+        try:
+            return __openstack__.connect_nova()
+        except NoCredentialsError:
+            return False
+
     def _check_cinder_connection(self):
         try:
             self._cinder = __openstack__.connect_cinder()
