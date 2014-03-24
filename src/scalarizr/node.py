@@ -332,6 +332,16 @@ node = {
         'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
 }
 
+node['defaults'] = {
+    'base': {
+        'api_port': 8010,
+        'messaging_port': 8013
+    }
+}
+
+node['base'] = {
+}
+
 for behavior in ('mysql', 'mysql2', 'percona', 'mariadb'):
     section = 'mysql2' if behavior in ('percona', 'mariadb') else behavior
     node[behavior] = Compound({

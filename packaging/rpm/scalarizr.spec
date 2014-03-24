@@ -80,6 +80,11 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr Eucalyptus edition
 Group:          Applications/Internet
 Requires:		scalarizr-ec2 = %{version}-%{release}
+%if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
+Requires:       python26-euca2ools
+%else
+Requires:       euca2ools >= 3.0.2
+%endif
 
 %description -n scalarizr-eucalyptus
 Scalarizr converts any server to Scalr-manageable node

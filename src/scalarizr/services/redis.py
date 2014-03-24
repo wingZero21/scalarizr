@@ -164,9 +164,13 @@ class Redisd(object):
 
     def stop(self, reason=None):
         if self.running:
-            LOG.info('Stopping redis server on port %s (pid %s). Reason: %s' % (self.port, self.pid, reason))
-            os.kill(int(self.pid), signal.SIGTERM)
-            wait_until(lambda: not self.running)
+            if self.pid:
+                LOG.info('Stopping redis server on port %s (pid %s). Reason: %s' % (self.port, self.pid, reason))
+                os.kill(int(self.pid), signal.SIGTERM)
+                wait_until(lambda: not self.running)
+            else:
+                #XXX: rare case when process is alive but scalarizr is unable to get PID
+                raise ServiceError("Cannot stop redis process: PID file not found.")
 
     def restart(self, reason=None, force=True):
         #force parameter is needed

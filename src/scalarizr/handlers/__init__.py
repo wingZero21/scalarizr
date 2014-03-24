@@ -1,12 +1,12 @@
 from __future__ import with_statement
 
-from scalarizr import config
+from scalarizr import config, linux
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool, software
-from scalarizr.linux import iptables
+from scalarizr.util import initdv2, disttool, software, system2, PopenError
+from scalarizr.linux import iptables, pkgmgr
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 
 import os
@@ -136,17 +136,25 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.APP)
                 elif name == 'haproxy' and Version('1.3') < version < Version('1.5'):
                     handlers.append(config.BuiltinBehaviours.HAPROXY)
-                elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
-                    handlers.append(config.BuiltinBehaviours.MYSQL)
-                    if 'Percona' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.PERCONA)
-                    elif 'Maria' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.MARIADB)
-                    else:
-                        handlers.append(config.BuiltinBehaviours.MYSQL2)
                 elif name == 'tomcat':
                     handlers.append(config.BuiltinBehaviours.TOMCAT)
-
+                elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
+                    handlers.append(config.BuiltinBehaviours.MYSQL)
+                    if 'Maria' in str_ver:
+                        handlers.append(config.BuiltinBehaviours.MARIADB)
+                    elif 'Percona' in str_ver:  # Percona < 5.5.36
+                        handlers.append(config.BuiltinBehaviours.PERCONA)
+                    else:
+                        mysqld = software.which("mysqld")
+                        try:
+                            out = system2((mysqld, "--help"))[0]
+                            if "percona" in out.lower():  # Percona 5.5.36
+                                handlers.append(config.BuiltinBehaviours.PERCONA)
+                            else:  # Mysql 5.5.x
+                                handlers.append(config.BuiltinBehaviours.MYSQL2)
+                        except PopenError:
+                            # ubuntu1004, 5.1.x only, percona is not available
+                            pass
         return handlers
 
 
@@ -162,8 +170,7 @@ class MessageListener:
         cnf = bus.cnf
         platform = bus.platform
 
-
-        LOG.debug("Initializing message listener");
+        LOG.debug("Initializing message listener")
         self._accept_kwargs = dict(
                 behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
                 platform = platform.name,
@@ -178,7 +185,7 @@ class MessageListener:
     def get_handlers_chain (self):
         if self._handlers_chain is None:
             hds = []
-            LOG.debug("Collecting message handlers...");
+            LOG.debug("Collecting message handlers...")
 
             cnf = bus.cnf
             for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
@@ -223,6 +230,18 @@ class MessageListener:
             if message.body.has_key("platform_access_data"):
                 platform_access_data_on_me = True
                 pl.set_access_data(message.platform_access_data)
+
+            if message.body.get('global_variables'):    
+                global_variables = message.body.get('global_variables') or []
+                glob_vars = {}
+                glob_vars['public'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') 
+                                        for kv in global_variables 
+                                        if not kv.get('private'))
+                glob_vars['private'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') 
+                                        for kv in global_variables
+                                        if kv.get('private'))
+                sync_globals(glob_vars)
+
             if 'scalr_version' in message.meta:
                 try:
                     ver = tuple(map(int, message.meta['scalr_version'].strip().split('.')))
@@ -820,3 +839,22 @@ def get_role_servers(role_id=None, role_name=None):
         servers.extend(ips)
 
     return servers
+
+
+def sync_globals(glob_vars=None):
+    if not glob_vars:
+        queryenv = bus.queryenv_service
+        glob_vars = queryenv.list_global_variables()
+    if linux.os.windows:
+        glob_vars['public'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['public'].items())
+        glob_vars['private'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['private'].items())
+    os.environ.update(glob_vars['public'])
+    os.environ.update(glob_vars['private'])
+
+    if not linux.os.windows:
+        globals_path = '/etc/profile.d/scalr_globals.sh'
+        with open(globals_path, 'w') as fp:
+            for k, v in glob_vars['public'].items():
+                v = v.replace('"', '\\"')
+                fp.write('export %s="%s"\n' % (k, v))
+        os.chmod(globals_path, 0644)

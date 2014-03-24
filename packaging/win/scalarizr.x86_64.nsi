@@ -3,6 +3,7 @@
 !addplugindir "plugins"
 !include "EnvVarUpdate.nsh"
 !include "x64.nsh"
+!include "explode.nsh"
 !include "VerCmp.nsh"
 !include "TextFunc.nsh"
 !insertmacro ConfigWrite
@@ -37,6 +38,7 @@ SetCompress off
 ; Finish page
 !insertmacro MUI_PAGE_FINISH
 
+
 ; Uninstaller pages
 !insertmacro MUI_UNPAGE_INSTFILES
 
@@ -49,6 +51,28 @@ InstallDir "$PROGRAMFILES64\Scalarizr"
 ShowInstDetails show
 ShowUnInstDetails show
 
+
+Var /GLOBAL new_version
+Var /GLOBAL len
+Var /GLOBAL part
+Var /GLOBAL i
+!macro GetVersion Version
+    ${Explode} $len "." ${Version}
+    Pop $new_version
+    IntOp $len $len - 1
+
+    ${For} $i 1 $len
+        Pop $part
+        ${If} $i < 3
+            StrCpy $new_version "$new_version.$part"
+        ${EndIf}
+    ${Next}
+
+    ${StrRep} $new_version $new_version "b" ""
+    Push $new_version
+!macroend
+
+
 Function .onInit
   ${IfNot} ${RunningX64}
     MessageBox MB_OK "Scalarizr only supports 64 bit systems." /SD IDOK
@@ -59,22 +83,23 @@ Function .onInit
 
   Var /GLOBAL installed_version
   Var /GLOBAL installed_release
+
   ReadRegStr $installed_version ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion"
   ReadRegStr $installed_release ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayRelease"
 
   StrCmp $installed_version "" not_installed
+
   ${StrRep} $0 ${PRODUCT_VERSION} "r" ""
   ${StrRep} $1 $installed_version "r" ""
-  ${VersionCompare} $0 $1 $R0
+
+  !insertmacro GetVersion $0
+  !insertmacro GetVersion $1
+
+  Call CompareVersions
+  Pop $R0
     
-  ${If} $R0 == 2
-  ${OrIf} $R0 == 0
-  ${AndIf} $installed_release > ${PRODUCT_RELEASE}
-    MessageBox MB_OK|MB_ICONINFORMATION "You already have a newer version ($installed_version-$installed_release) of ${PRODUCT_NAME} installed." /SD IDOK
-    Quit
-  ${ElseIf} $R0 == 0
-  ${AndIf} $installed_release == ${PRODUCT_RELEASE}
-    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} $installed_version-$installed_release installed." /SD IDOK
+  ${If} $R0 == 1
+    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} version ($installed_version-$installed_release) installed." /SD IDOK
     Quit
   ${EndIf}
   
@@ -93,17 +118,17 @@ Section "MainSection" SEC01
   StrCpy $start_scalarizr "0"
 
   ${If} $installed_version != ""
-	services::IsServiceRunning 'Scalarizr'
-	Pop $0
-	StrCmp $0 'No' stopped
-	StrCpy $start_scalarizr "1"
+  services::IsServiceRunning 'Scalarizr'
+  Pop $0
+  StrCmp $0 'No' stopped
+  StrCpy $start_scalarizr "1"
     services::SendServiceCommand 'stop' 'Scalarizr'
-	Pop $0
-	StrCmp $0 'Ok' stopped
-		MessageBox MB_OK|MB_ICONSTOP 'Failed to stop service. Reason: $0' /SD IDOK
-		SetErrorLevel 2
-		Abort
-	stopped:
+  Pop $0
+  StrCmp $0 'Ok' stopped
+    MessageBox MB_OK|MB_ICONSTOP 'Failed to stop service. Reason: $0' /SD IDOK
+    SetErrorLevel 2
+    Abort
+  stopped:
     RMDir /r $INSTDIR\src
     RMDir /r $INSTDIR\scripts
     RMDir /r $INSTDIR\share
@@ -217,7 +242,7 @@ Section -PostInstall
   
   ${If} $installed_version == ""
   ${AndIf} ${RunningX64}
-  	nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
+    nsExec::Exec 'cmd /c start "vcredist" /wait "$INSTDIR\tmp\vcredist_x64.exe" /q /norestart'
   ${EndIf}
   
   RMDir /r $INSTDIR\tmp

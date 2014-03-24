@@ -26,7 +26,7 @@ from telnetlib import Telnet
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
-from scalarizr.util import system2, initdv2
+from scalarizr.util import system2, initdv2, software
 from scalarizr.util import wait_until, dynimp, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
@@ -35,6 +35,11 @@ from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 LOG = logging.getLogger(__name__)
 
 etc_path = bus.etc_path or "/etc/scalr"
+
+
+def apache_version():
+    return software.apache_software_info().version
+
 
 apache = {
     "vhosts_dir":           os.path.join(etc_path, "private.d/vhosts"),
@@ -45,7 +50,8 @@ apache = {
 if linux.os.debian_family:
     apache.update({
         "httpd.conf":       "/etc/apache2/apache2.conf",
-        "ssl_conf_path":    "/etc/apache2/sites-available/default-ssl",
+        "ssl_conf_path":    "/etc/apache2/sites-available/default-ssl" if apache_version() < (2, 4) else
+                            "/etc/apache2/sites-available/default-ssl.conf",
         "default_vhost":    "/etc/apache2/sites-enabled/000-default",
         "ports_conf_deb":   "/etc/apache2/ports.conf",
         "ssl_load_deb":     "/etc/apache2/mods-enabled/ssl.load",
@@ -116,11 +122,19 @@ class ApacheAPI(object):
     mod_ssl = None
     current_open_ports = None
 
+    _version = None
+
     def __init__(self):
         self.service = initdv2.lookup("apache")
         self.mod_ssl = DebianBasedModSSL() if linux.os.debian_family else RedHatBasedModSSL()
         self.current_open_ports = []
         self._query_env = bus.queryenv_service
+
+    @property
+    def version(self):
+        if not self._version:
+            self._version = apache_version()
+        return self._version
 
     @rpc.command_method
     def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True, allow_port=False):
@@ -166,7 +180,7 @@ class ApacheAPI(object):
                 os.makedirs(docroot_parent_path, 0755)
                 LOG.info("Created parent directory of document root %s for %s" % (directory, name))
 
-            if not os.path.exists(directory) or not os.listdir(directory):
+            if not os.path.exists(directory):
                 shutil.copytree(os.path.join(bus.share_path, "apache/html"), directory)
                 files = ", ".join(os.listdir(directory))
                 LOG.debug("Copied document root files: %s" % files)
@@ -519,8 +533,9 @@ class ApacheAPI(object):
         with ApacheConfigManager(__apache__["httpd.conf"]) as apache_config:
             inc_mask = __apache__["vhosts_dir"] + "/*" + __apache__["vhost_extension"]
 
-            if not inc_mask in apache_config.get_list("Include"):
-                apache_config.add("Include", inc_mask)
+            opt_include = "Include" if self.version < (2,4) else "IncludeOptional"
+            if not inc_mask in apache_config.get_list(opt_include):
+                apache_config.add(opt_include, inc_mask)
                 LOG.info("VirtualHosts directory included in %s" % __apache__["httpd.conf"])
 
     def fix_default_virtual_host(self):
@@ -967,6 +982,10 @@ class DebianBasedModSSL(ModSSL):
         self._enable_mod_ssl()
         self._enable_default_ssl_virtual_host()
         self._set_name_virtual_host(ssl_port)
+        # Cleaning ssl.conf after rebundle
+        # Replacing unexisting certificate with snakeoil.
+        self.set_default_certificate(SSLCertificate())
+
 
     def _enable_mod_ssl(self):
         if not os.path.exists(__apache__["ssl_load_deb"]):
