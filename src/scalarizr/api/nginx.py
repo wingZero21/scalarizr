@@ -530,7 +530,7 @@ class NginxAPI(object):
                 key = 'server'
             else:
                 key = template['location']
-            result[key] = {'content': template['content']}
+            result[key] = {'content': template['content'] or ''}
         return result
 
     def _add_backend(self,
@@ -806,7 +806,7 @@ class NginxAPI(object):
             os.remove(temp_file)
         else:
             self._add_default_template(config)
-            
+        
         if port:
             config.add('server/listen', str(port))
         try:
@@ -821,7 +821,6 @@ class NginxAPI(object):
 
         config.add('server/include', self.error_pages_inc)
         
-
         # Adding locations leading to defined backends
 
         for i, (location, backend_name) in enumerate(locations_and_backends):
