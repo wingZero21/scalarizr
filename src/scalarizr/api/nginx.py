@@ -813,9 +813,13 @@ class NginxAPI(object):
             os.remove(temp_file)
         else:
             self._add_default_template(config)
-            
+        
+        _logger.debug('nginx port is: %s' % port)
         if port:
+            _logger.debug('etree before port: %s' % ET.tostring(config.etree.getroot()))
             config.add(u'server/listen', str(port))
+            _logger.debug('etree after port: %s' % ET.tostring(config.etree.getroot()))
+
         try:
             config.get(u'server/server_name')
             config.set(u'server/server_name', hostname)
