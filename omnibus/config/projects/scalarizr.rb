@@ -17,7 +17,7 @@ extra_package_files(["--deb-changelog '#{Omnibus::Config.project_root}/changelog
 # creates required build directories
 dependency "preparation"
 
-if ENV['SCALARIZR_DEPENDENCY'] == 'yes'
+if ENV['BUILD_DEPENDENCY'] == 'yes'
     # scalarizr dependencies/components
     dependency "scalarizr-deps"
 end
