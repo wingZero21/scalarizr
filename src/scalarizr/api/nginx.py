@@ -749,7 +749,9 @@ class NginxAPI(object):
         config.add('%s/listen' % server_xpath, listen_val)
 
         if old_style_ssl:
+            _logger.debug('etree before ssl: %s' % ET.tostring(config.etree.getroot()))
             config.add('%s/ssl' % server_xpath, 'on')
+            _logger.debug('etree after ssl: %s' % ET.tostring(config.etree.getroot()))
         ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
@@ -799,7 +801,6 @@ class NginxAPI(object):
 
         server_wide_template = grouped_templates.get('server')
         config.add('server', '')
-        _logger.debug('etree after temlate: %s' % ET.tostring(config.etree.getroot()))
         if server_wide_template and server_wide_template['content']:
             # TODO: this is ugly. Find the way to read conf from string
             temp_file = self.proxies_inc_dir + '/temalate.tmp'
@@ -808,7 +809,6 @@ class NginxAPI(object):
             template_conf = metaconf.Configuration('nginx')
             template_conf.read(temp_file)
             config.insert_conf(template_conf, 'server')
-            _logger.debug('etree after temlate: %s' % ET.tostring(config.etree.getroot()))
             os.remove(temp_file)
         else:
             self._add_default_template(config)
@@ -825,7 +825,6 @@ class NginxAPI(object):
         # Configuring ssl
         if ssl:
             self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id, port!=None)
-        _logger.debug('etree after ssl: %s' % ET.tostring(config.etree.getroot()))
 
         config.add('server/include', self.error_pages_inc)
         
@@ -848,7 +847,6 @@ class NginxAPI(object):
                 template_conf = metaconf.Configuration('nginx')
                 template_conf.read(temp_file)
                 config.insert_conf(template_conf, location_xpath)
-                _logger.debug('etree after loc template: %s' % ET.tostring(config.etree.getroot()))
                 os.remove(temp_file)
 
             config.add('%s/proxy_pass' % location_xpath, 'http://%s' % backend_name)
