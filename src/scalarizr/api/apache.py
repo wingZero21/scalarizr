@@ -115,6 +115,7 @@ class ApacheAPI(object):
     service = None
     mod_ssl = None
     current_open_ports = None
+    _is_ssl_enabled = False
 
     def __init__(self):
         self.service = initdv2.lookup("apache")
@@ -143,6 +144,11 @@ class ApacheAPI(object):
         v_host = VirtualHost(template)
 
         if ssl:
+
+            if not self._is_ssl_enabled:
+                self.enable_mod_ssl()
+                self._is_ssl_enabled = True
+
             ssl_certificate = SSLCertificate(ssl_certificate_id)
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
@@ -481,6 +487,14 @@ class ApacheAPI(object):
     def configtest(self):
         self.service.configtest()
 
+    @rpc.command_method
+    def enable_mod_ssl(self):
+        self.mod_ssl.ensure()
+
+    @rpc.command_method
+    def disable_mod_ssl(self):
+        self.mod_ssl.disable()
+
     def init_service(self):
         """
         Configures apache service
@@ -494,7 +508,7 @@ class ApacheAPI(object):
 
         self.update_log_rotate_config()
 
-        self.mod_ssl.ensure()
+        #self.mod_ssl.ensure()  # [SCALARIZR-1381]
 
         if linux.os.debian_family:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
@@ -671,6 +685,13 @@ class VirtualHost(BasicApacheConfiguration):
     @property
     def ssl_chain_path(self):
         return self._cnf.get(".//SSLCertificateChainFile")
+
+    @property
+    def is_ssl_based(self):
+        try:
+            return self.ssl_cert_path and self.ssl_key_path
+        except NoPathError:
+            return False
 
     @property
     def document_root_paths(self):
@@ -954,6 +975,9 @@ class ModSSL(object):
     def ensure(self):
         raise NotImplementedError
 
+    def disable(self):
+        raise NotImplementedError
+
 
 class DebianBasedModSSL(ModSSL):
 
@@ -971,6 +995,10 @@ class DebianBasedModSSL(ModSSL):
         # Replacing unexisting certificate with snakeoil.
         self.set_default_certificate(SSLCertificate())
 
+    def disable(self):
+        if os.path.exists(__apache__["ssl_load_deb"]):
+            system2((__apache__["a2dismod_path"], "ssl"))
+            LOG.info("mod_ssl enabled.")
 
     def _enable_mod_ssl(self):
         if not os.path.exists(__apache__["ssl_load_deb"]):
