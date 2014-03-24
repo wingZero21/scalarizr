@@ -60,9 +60,10 @@ def build_omnibus():
     # build project
     with cd(OMNIBUS_DIR):
         run("[ -f bin/omnibus ] || bundle install --binstubs")
-        env = {'BUILD_DIR': BUILD_DIR}
-        if 'OMNIBUS_BUILD_VERSION' in os.environ:
-            env.update({'OMNIBUS_BUILD_VERSION': os.environ['OMNIBUS_BUILD_VERSION']})
+        env = {
+            'BUILD_DIR': BUILD_DIR,
+            'OMNIBUS_BUILD_VERSION': OMNIBUS_BUILD_VERSION,
+        }
         if 'BUILD_DEPENDENCY' in os.environ:
             env.update({'BUILD_DEPENDENCY': os.environ['BUILD_DEPENDENCY']}) 
         with shell_env(**env):
