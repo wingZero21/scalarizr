@@ -18,7 +18,7 @@ from scalarizr.util import PopenError
 from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
-from xml.etree import ElementTree as ET
+
 
 __nginx__ = __node__['nginx']
 
