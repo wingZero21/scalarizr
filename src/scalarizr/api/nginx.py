@@ -745,11 +745,8 @@ class NginxAPI(object):
                         http):
         old_style_ssl = self._old_style_ssl_on()
 
-        _logger.debug('etree before ssl: %s' % ET.tostring(config.etree.getroot()))
         listen_val = '%s%s' % ((ssl_port or '443'), ' ssl' if not old_style_ssl else '')
-        _logger.debug('listen val: "%s"' % listen_val)
         config.add('%s/listen' % server_xpath, listen_val)
-        _logger.debug('etree after ssl: %s' % ET.tostring(config.etree.getroot()))
 
         if old_style_ssl:
             config.add('%s/ssl' % server_xpath, 'on')
@@ -791,10 +788,6 @@ class NginxAPI(object):
         nginx config
         """
 
-        hostname = unicode(hostname)
-        port = unicode(port)
-
-
         if not grouped_templates:
             grouped_templates = {}
 
@@ -814,18 +807,13 @@ class NginxAPI(object):
         else:
             self._add_default_template(config)
         
-        _logger.debug('nginx port is: %s' % port)
         if port:
-            _logger.debug('etree before port: %s' % ET.tostring(config.etree.getroot()))
             config.add(u'server/listen', str(port))
-            _logger.debug('etree after port: %s' % ET.tostring(config.etree.getroot()))
-
         try:
             config.get(u'server/server_name')
             config.set(u'server/server_name', hostname)
         except:
             config.add(u'server/server_name', hostname)
-
 
         # Configuring ssl
         if ssl:
@@ -833,7 +821,6 @@ class NginxAPI(object):
 
         config.add('server/include', self.error_pages_inc)
         
-
         # Adding locations leading to defined backends
 
         for i, (location, backend_name) in enumerate(locations_and_backends):
