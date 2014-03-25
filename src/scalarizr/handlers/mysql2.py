@@ -898,6 +898,7 @@ class MysqlHandler(DBMSRHandler):
         #    self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
 
 
+        self.mysql.my_cnf.delete_options(['mysqld/log_bin', 'mysqld/log-bin'])
 
         if not storage_valid:
             '''
@@ -918,8 +919,6 @@ class MysqlHandler(DBMSRHandler):
                 except:
                     LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
                 '''
-
-            self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
             linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
 
         # Patch configuration
