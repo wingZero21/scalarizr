@@ -9,7 +9,7 @@ from scalarizr.linux import coreutils
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
-,from scalarizr.util import Singleton
+from scalarizr.util import Singleton
 from scalarizr.util import software
 from scalarizr.util import system2
 
