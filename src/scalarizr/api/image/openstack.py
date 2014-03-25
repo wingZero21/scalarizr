@@ -4,7 +4,7 @@ import shutil
 import sys
 import time
 
-from scalarizr.api.image import ImageAPI
+from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
 from scalarizr.node import __node__
 from scalarizr.util import software
@@ -74,7 +74,7 @@ class OpenStackLinuxImageTaker(object):
             shutil.move('/tmp/70-persistent-net.rules', '/etc/udev/rules.d')
 
 
-class OpenStackImageAPI(ImageAPI):
+class OpenStackImageAPIDelegate(ImageAPIDelegate):
     
     def __init__(self):
         if linux.os.windows_family:
@@ -82,11 +82,11 @@ class OpenStackImageAPI(ImageAPI):
         else:
             self._image_taker = OpenStackLinuxImageTaker()
 
-    def _prepare(self, role_name):
+    def prepare(self, role_name):
         return self._image_taker.prepare()
 
-    def _snapshot(self, role_name):
+    def snapshot(self, role_name):
         return self._image_taker.snapshot(role_name)
 
-    def _finalize(self, role_name):
+    def finalize(self, role_name):
         return self._image_taker.finalize()

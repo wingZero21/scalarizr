@@ -4,7 +4,7 @@ import shutil
 import sys
 import time
 
-from scalarizr.api.image import ImageAPI
+from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
 from scalarizr.util import system2
 from scalarizr.linux import mount
@@ -225,5 +225,5 @@ class LinuxLoopbackImage(LinuxImage):
             loop.rmloop(self.devname)
 
 
-class EC2ImageAPI(ImageAPI):
+class EC2ImageAPIDelegate(ImageAPIDelegate):
     pass

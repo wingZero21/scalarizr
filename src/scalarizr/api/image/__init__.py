@@ -9,13 +9,14 @@ from scalarizr.linux import coreutils
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
-from scalarizr.util import Singleton
+,from scalarizr.util import Singleton
 from scalarizr.util import software
 from scalarizr.util import system2
 
 from scalarizr.api import image
-from image.openstack import OpenStackImageAPI
-from image.ec2 import EC2ImageAPI
+from image.openstack import OpenStackImageAPIDelegate
+from image.rackspace import RackspaceImageAPIDelegate
+from image.ec2 import EC2ImageAPIDelegate
 
 
 _logger = logging.getLogger(__name__)
@@ -28,19 +29,48 @@ class ImageAPIError(BaseException):
     pass
 
 
+class ImageAPIDelegate(object):
+
+    def prepare(self, role_name):
+        raise NotImplementedError()
+
+    def snapshot(self, role_name):
+        raise NotImplementedError()
+
+    def finalize(self, role_name):
+        raise NotImplementedError()
+
+
 class ImageAPI(object):
 
     __metaclass__ = Singleton
 
     def __init__(self):
         self._op_api = OperationAPI()
+        self.delegate = None
+
+    def init_delegate(self):
+        if self.delegate:
+            return
+
+        platform_name = __node__['platform'].name
+        if platform_name == 'openstack':
+            self.delegate = OpenStackImageAPIDelegate()
+        elif platform_name == 'ec2':
+            self.delegate = EC2ImageAPIDelegate()
+        elif platform_name == 'rackspace':
+            self.delegate = RackspaceImageAPIDelegate()
+        # ...
+        else:
+            self.delegate = None
 
     @rpc.command_method
     def prepare(self, async=False):
+        self.init_delegate()
         if not system2(('which', 'wall'), raise_exc=False)[2]:
             system2(('wall'), stdin=WALL_MESSAGE, raise_exc=False)
         prepare_result = self._op_api.run('api.image.prepare',
-            func=self._prepare,
+            func=self.delegate.prepare,
             async=async,
             exclusive=True)
         result = {}
@@ -52,13 +82,14 @@ class ImageAPI(object):
 
     @rpc.command_method
     def snapshot(self, role_name, async=False):
+        self.init_delegate()
         cnf = bus.cnf
         saved_state = cnf.state
         image_id = None
         try:
             cnf.state = ScalarizrState.REBUNDLING
             image_id = self._op_api.run('api.image.snapshot',
-                func=self._snapshot,
+                func=self.delegate.snapshot,
                 async=async,
                 exclusive=True)
         finally:
@@ -67,8 +98,9 @@ class ImageAPI(object):
 
     @rpc.command_method
     def finalize(self, async=False):
+        self.init_delegate()
         self._op_api.run('api.image.finalize',
-            func=self._finalize,
+            func=self.delegate.finalize,
             async=async,
             exclusive=True)
         _logger.info('Image created. If you imported this server to Scalr, '
@@ -77,6 +109,7 @@ class ImageAPI(object):
     @rpc.command_method
     def create(self, role_name, async=True):
         """ Creates image """
+        self.init_delegate()
         create_operation = self._op_api.create('api.image.create',
             func=self._create,
             func_kwds={'role_name': role_name},
@@ -86,7 +119,6 @@ class ImageAPI(object):
         else:
             create_operation.run()
         return create_operation.operation_id
-
 
     def _create(self, role_name):
         prepare_result = self.prepare(role_name)
@@ -100,18 +132,6 @@ class ImageAPI(object):
             result.update(finalize_result)
         
         return result
-
-    def _prepare(self, role_name):
-        # Override this method in this class inheritors
-        pass
-
-    def _snapshot(self, role_name):
-        # Override this method in this class inheritors
-        pass
-
-    def _finalize(self, role_name):
-        # Override this method in this class inheritors
-        pass
 
     def _clean(self, image_rootdir):
         # TODO: revise method, rewrite if needed
@@ -172,14 +192,4 @@ class ImageAPI(object):
                     lines = [l for l in source if 'SCALR-ROLESBUILDER' not in l]
                     dest.writelines(lines)
             os.rename(filename + '.tmp', filename)
-
-
-def get_api():
-    platform_name = __node__['platform'].name
-    if platform_name == 'openstack':
-        return OpenStackImageAPI()
-    elif platform_name == 'ec2':
-        return EC2ImageAPI()
-    # ...
-    else:
-        return None
+    

@@ -9,14 +9,14 @@ from scalarizr.config import ScalarizrState
 from scalarizr.util import wait_until
 from scalarizr.util import system2
 from scalarizr.node import __node__
-from scalarizr.api.image import ImageAPI
+from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
 
 
 _logger = logging.getLogger(__name__)
 
 
-class RackspaceImageAPI(ImageAPI):
+class RackspaceImageAPIDelegate(ImageAPIDelegate):
 
     def _find_server_id(self, conn):
         pl = __node__['platform']
@@ -55,7 +55,7 @@ class RackspaceImageAPI(ImageAPI):
             else:
                 raise
 
-    def _snapshot(self, role_name):
+    def snapshot(self, role_name):
         duplicate_errmsg = 'Another image is currently creating from this server. ' \
             'Image: id=%s name=%s status=%s\n' \
             'Rackspace allows to create only ONE image per server at a time. ' \

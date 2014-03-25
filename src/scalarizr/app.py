@@ -164,7 +164,8 @@ _api_routes = {
     'mysql': 'scalarizr.api.mysql.MySQLAPI',
     'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
     'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI',
-    'operation': 'scalarizr.api.operation.OperationAPI'
+    'operation': 'scalarizr.api.operation.OperationAPI',
+    'image': 'scalarizr.api.image.ImageAPI'
 }
 
 
