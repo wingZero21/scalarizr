@@ -9,7 +9,7 @@ from scalarizr.config import ScalarizrState
 from scalarizr.util import wait_until
 from scalarizr.util import system2
 from scalarizr.node import __node__
-from scalarizr.api.image import ImageAPIDelegate
+from scalarizr.api.image.delegate import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
 
 
@@ -30,7 +30,8 @@ class RackspaceImageAPIDelegate(ImageAPIDelegate):
 
         return server.id
 
-    def _create_image(self, conn):
+    def _create_image(self, conn, image_name, server_id):
+        # TODO: rewrite this
         retry_delay = 30
         try:
             return conn.images.create(image_name, server_id)
@@ -74,7 +75,7 @@ class RackspaceImageAPIDelegate(ImageAPIDelegate):
             system2("sync", shell=True)
             _logger.info("Creating server image: serverId=%s name=%s", server_id, image_name)
             for _ in xrange(0, 2):
-                self._create_image(conn)
+                self._create_image(conn, image_name, server_id)
                 _logger.debug('Image created: id=%s', image.id)
                 break
 
@@ -100,7 +101,7 @@ class RackspaceImageAPIDelegate(ImageAPIDelegate):
 
             image = conn.images.get(image.id)
             if image.status == 'FAILED':
-                raise zImageAPIError('Image %s becomes failed' % image.id)
+                raise ImageAPIError('Image %s becomes failed' % image.id)
             _logger.info('Image %s completed and available for use!', image.id)
         except:
             exc_type, exc_value, exc_trace = sys.exc_info()

@@ -13,6 +13,7 @@ from scalarizr.util import Singleton
 from scalarizr.util import software
 from scalarizr.util import system2
 
+from scalarizr.api.image.delegate import ImageAPIDelegate
 from scalarizr.api.image.openstack import OpenStackImageAPIDelegate
 from scalarizr.api.image.rackspace import RackspaceImageAPIDelegate
 from scalarizr.api.image.ec2 import EC2ImageAPIDelegate
@@ -26,18 +27,6 @@ WALL_MESSAGE = 'Server is going to make image'
 
 class ImageAPIError(BaseException):
     pass
-
-
-class ImageAPIDelegate(object):
-
-    def prepare(self, role_name):
-        raise NotImplementedError()
-
-    def snapshot(self, role_name):
-        raise NotImplementedError()
-
-    def finalize(self, role_name):
-        raise NotImplementedError()
 
 
 class ImageAPI(object):
