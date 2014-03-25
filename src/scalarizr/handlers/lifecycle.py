@@ -190,7 +190,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                 with open(self.saved_boot_id_file, 'r') as fp:
                     saved_boot_id = fp.read()
 
-                if saved_boot_id and saved_boot_id != current_boot_id:
+                if saved_boot_id and saved_boot_id != current_boot_id \
+                    and not Flag.exists(Flag.HALT):
                     Flag.set(Flag.REBOOT)
 
             with open(self.boot_id_file, 'r') as fp:
