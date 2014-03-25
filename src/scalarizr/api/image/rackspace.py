@@ -9,7 +9,7 @@ from scalarizr.config import ScalarizrState
 from scalarizr.util import wait_until
 from scalarizr.util import system2
 from scalarizr.node import __node__
-from scalarizr.api.image.delegate import ImageAPIDelegate
+from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
 
 

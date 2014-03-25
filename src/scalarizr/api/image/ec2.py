@@ -4,7 +4,7 @@ import shutil
 import sys
 import time
 
-from scalarizr.api.image.delegate import ImageAPIDelegate
+from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
 from scalarizr.util import system2
 from scalarizr.linux import mount
