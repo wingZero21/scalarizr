@@ -13,10 +13,9 @@ from scalarizr.util import Singleton
 from scalarizr.util import software
 from scalarizr.util import system2
 
-from scalarizr.api import image
-from image.openstack import OpenStackImageAPIDelegate
-from image.rackspace import RackspaceImageAPIDelegate
-from image.ec2 import EC2ImageAPIDelegate
+from scalarizr.api.image.openstack import OpenStackImageAPIDelegate
+from scalarizr.api.image.rackspace import RackspaceImageAPIDelegate
+from scalarizr.api.image.ec2 import EC2ImageAPIDelegate
 
 
 _logger = logging.getLogger(__name__)
