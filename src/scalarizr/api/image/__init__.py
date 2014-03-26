@@ -2,13 +2,13 @@
 
 class ImageAPIDelegate(object):
 
-    def prepare(self, role_name):
+    def prepare(self, operation, role_name):
         raise NotImplementedError()
 
-    def snapshot(self, role_name):
+    def snapshot(self, operation, role_name):
         raise NotImplementedError()
 
-    def finalize(self, role_name):
+    def finalize(self, operation, role_name):
         raise NotImplementedError()
 
 

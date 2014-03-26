@@ -64,7 +64,7 @@ class RackspaceImageAPIDelegate(ImageAPIDelegate):
             else:
                 raise
 
-    def snapshot(self, role_name):
+    def snapshot(self, op, role_name):
         conn = __node__['platform'].new_cloudservers_conn()
         server_id = self._find_server_id(conn)
         for image in conn.images.findall(serverId=server_id):
