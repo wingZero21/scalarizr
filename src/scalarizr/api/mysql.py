@@ -1,3 +1,4 @@
+
 '''
 Created on Dec 04, 2011
 
@@ -26,7 +27,12 @@ from scalarizr.api import BehaviorAPI
 
 class MySQLAPI(BehaviorAPI):
     """
-    @xxx: reporting is a pain
+    Basic API for replacing data volume, changing mysql passwords,
+    creating backups, monitoring replication and controlling service status.
+
+    Namespace::
+
+        mysql
     """
     __metaclass__ = Singleton
 
@@ -43,26 +49,110 @@ class MySQLAPI(BehaviorAPI):
 
     @rpc.command_method
     def start_service(self):
+        """
+        Starts MySQL service.
+
+        Example::
+
+            api.mysql.start_service()
+        """
         self._mysql_init.start()
 
     @rpc.command_method
-    def stop_service(self):
-        self._mysql_init.stop()
+    def stop_service(self, reason=None):
+        """
+        Stops MySQL service.
+
+        :param reason: Message to appear in log before service is stopped.
+        :type reason: str
+
+        Example::
+
+            api.mysql.stop_service("Configuring MySQL service.")
+        """
+        self._mysql_init.stop(reason)
 
     @rpc.command_method
     def reload_service(self):
+        """
+        Reloads MySQL service.
+
+        :param reason: Message to appear in log before service is reloaded.
+        :type reason: str
+
+        Example::
+
+            api.mysql.reload_service("Applying new settings in my.cnf")
+        """
         self._mysql_init.reload()
 
     @rpc.command_method
     def restart_service(self):
+        """
+        Restarts MySQL service.
+
+        :param reason: Message to appear in log before service is restarted.
+        :type reason: str
+
+        Example::
+
+            api.mysql.restart_service("Applying new service configuration preset.")
+        """
         self._mysql_init.restart()
 
     @rpc.command_method
     def get_service_status(self):
+        """
+        Checks Apache service status.
+
+        RUNNING = 0
+        DEAD_PID_FILE_EXISTS = 1
+        DEAD_VAR_LOCK_EXISTS = 2
+        NOT_RUNNING = 3
+        UNKNOWN = 4
+
+        :return: Status num.
+        :rtype: int
+        """
         return self._mysql_init.status()
 
     @rpc.command_method
     def grow_volume(self, volume, growth, async=False):
+        """
+        Stops MySQL service, Extends volume capacity and starts MySQL service again.
+        Depending on volume type growth parameter can be size in GB or number of disks (e.g. for RAID volumes)
+
+        :type volume: dict
+        :param volume: Volume configuration object
+
+        :type growth: dict
+        :param growth: size in GB for regular disks or number of volumes for RAID configuration.
+
+        Growth keys:
+
+            - size (Type: int, Availability: ebs, csvol, cinder, gce_persistent) -- A new size for persistent volume.
+            - iops (Type: int, Availability: ebs) -- A new IOPS value for EBS volume.
+            - volume_type (Type: string, Availability: ebs) -- A new volume type for EBS volume. Values: "standard" | "io1".
+            - disks (Type: Growth, Availability: raid) -- A growth dict for underlying RAID volumes.
+            - disks_count (Type: int, Availability: raid) - number of disks.
+
+        :type async: bool
+        :param async: Execute method in a separate thread and report status
+                        with Operation/Steps mechanism.
+
+        Example:
+
+        Grow EBS volume to 50Gb::
+
+            new_vol = api.mysql.grow_volume(
+                volume={
+                    'id': 'vol-e13aa63ef',
+                },
+                growth={
+                    'size': 50
+                }
+            )
+        """
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
 
@@ -113,6 +203,12 @@ class MySQLAPI(BehaviorAPI):
 
     @rpc.query_method
     def replication_status(self):
+        """
+        Checks current replication status.
+
+        :return: MySQL replication status.
+        :rtype: dict
+        """
         mysql_cli = mysql_svc.MySQLClient(__mysql__['root_user'],
                                           __mysql__['root_password'])
         if int(__mysql__['replication_master']):
@@ -136,7 +232,9 @@ class MySQLAPI(BehaviorAPI):
 
     @rpc.command_method
     def create_backup(self, backup=None, async=True):
-
+        """
+        Creates a new backup of every available database and uploads gzipped data to the cloud storage.
+        """
         def do_backup(op, backup_conf=None):
             try:
                 purpose = '{0}-{1}'.format(

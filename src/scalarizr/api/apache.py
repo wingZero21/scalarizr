@@ -640,7 +640,7 @@ class ApacheAPI(BehaviorAPI):
     @rpc.command_method
     def reload_service(self, reason=None):
         """
-        Reloads Apache service.
+        Reloads Apache configuration.
 
         :param reason: Message to appear in log before service is reloaded.
         :type reason: str
@@ -661,6 +661,18 @@ class ApacheAPI(BehaviorAPI):
 
     @rpc.command_method
     def get_service_status(self):
+        """
+        Checks Apache service status.
+
+        RUNNING = 0
+        DEAD_PID_FILE_EXISTS = 1
+        DEAD_VAR_LOCK_EXISTS = 2
+        NOT_RUNNING = 3
+        UNKNOWN = 4
+
+        :return: Status num.
+        :rtype: int
+        """
         return self.service.status()
 
     @rpc.command_method

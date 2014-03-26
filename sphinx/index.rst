@@ -82,13 +82,6 @@ HTTP layer::
 		reload_service,
 		configtest
 
-.. autoclass:: scalarizr.api.storage.StorageAPI	
-	:members: create,
-		snapshot,
-		detach,
-		destroy,
-		grow
-
 .. autoclass:: scalarizr.api.system.SystemAPI	
 	:members: call_auth_shutdown_hook, 
 		set_hostname, 
@@ -121,6 +114,67 @@ HTTP layer::
 		enable_mms,
 		disable_mms
 
+.. autoclass:: scalarizr.api.service.ServiceAPI
+	:members: get_preset, 
+		set_preset,
+		reconfigure
+
+.. autoclass:: scalarizr.api.operation.OperationAPI
+	:members: result, 
+		cancel
+
+.. autoclass:: scalarizr.api.rabbitmq.RabbitMQAPI
+	:members: start_service,
+		stop_service,
+		restart_service,
+		reload_service,
+		get_service_status
+
+.. autoclass:: scalarizr.api.chef.ChefAPI
+	:members: start_service,
+		stop_service,
+		restart_service,
+		reload_service,
+		get_service_status
+
+.. autoclass:: scalarizr.api.haproxy.HAProxyAPI
+	:members: start_service,
+		stop_service,
+		restart_service,
+		reload_service,
+		get_service_status,
+		add_server,
+		remove_server,
+		create_listener,
+		configure_healthcheck,
+		get_servers_health,
+		delete_listener,
+		reset_healthcheck,
+		list_listeners,
+		list_servers
+
+.. autoclass:: scalarizr.api.redis.RedisAPI
+	:members: start_service,
+		stop_service,
+		reload_service,
+		restart_service,
+		get_service_status,
+		launch_processes,
+		shutdown_processes,
+		list_processes,
+		reset_password,
+		replication_status,
+		create_databundle,
+		create_backup
+
+.. autoclass:: scalarizr.api.storage.StorageAPI	
+	:members: create,
+		snapshot,
+		detach,
+		destroy,
+		grow,
+		replace_raid_disk
+
 .. autoclass:: scalarizr.api.nginx.NginxAPI
 	:members: start_service,
 		stop_service,
@@ -133,9 +187,19 @@ HTTP layer::
 		remove_proxy,
 		add_server,
 		remove_server,
-		add_server_to_role,
 		remove_server_from_role,
 		remove_server_from_all_backends,
 		enable_ssl,
 		disable_ssl
-		
+
+
+.. autoclass:: scalarizr.api.mysql.MySQLAPI
+	:members: start_service,
+		stop_service,
+		restart_service,
+		reload_service,
+		get_service_status,
+		grow_volume,
+		reset_password,
+		replication_status,
+		create_backup

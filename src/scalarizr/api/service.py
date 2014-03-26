@@ -27,7 +27,13 @@ behavior_apis = {
 
 
 class ServiceAPI(object):
+    """
+    Basic API for managing service configuration presets.
 
+    Namespace::
+
+        service
+    """
     __metaclass__ = Singleton
 
     def __init__(self):
@@ -36,6 +42,12 @@ class ServiceAPI(object):
 
     @rpc.query_method
     def get_preset(self, behavior):
+        """
+        Returns current service configuration preset
+
+        :param behavior: service name.
+        :type behavior: str.
+        """
         if behavior not in services:
             raise AssertionError('Behaviour %s is not registred in ServiceAPI')
 
@@ -48,6 +60,9 @@ class ServiceAPI(object):
 
     @rpc.command_method
     def set_preset(self, behavior, values):
+        """
+        Sets configuration preset.
+        """
         if behavior not in services:
             raise AssertionError('Behaviour %s is not registred in ServiceAPI')
 

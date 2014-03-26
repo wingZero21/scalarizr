@@ -70,7 +70,13 @@ initdv2.explore('chef', ChefInitScript)
 
 
 class ChefAPI(BehaviorAPI):
+    """
+    Basic API for managing Chef service status.
 
+    Namespace::
+
+        chef
+    """
     __metaclass__ = Singleton
 
     behavior = 'chef'
@@ -80,22 +86,68 @@ class ChefAPI(BehaviorAPI):
 
     @rpc.command_method
     def start_service(self):
+        """
+        Starts Chef service.
+
+        Example::
+
+            api.chef.start_service()
+        """
         self.service.start()
 
     @rpc.command_method
     def stop_service(self):
+        """
+        Stops Chef service.
+
+        Example::
+
+            api.chef.stop_service()
+        """
         self.service.stop()
 
     @rpc.command_method
     def reload_service(self):
+        """
+        Reloads Chef configuration.
+
+        Example::
+
+            api.chef.reload_service()
+        """
         self.service.reload()
 
     @rpc.command_method
     def restart_service(self):
+        """
+        Restarts Chef service.
+
+        Example::
+
+            api.chef.restart_service()
+        """
         self.service.restart()
 
     @rpc.command_method
     def get_service_status(self):
+        """
+        Checks Chef service status.
+
+        RUNNING = 0
+        DEAD_PID_FILE_EXISTS = 1
+        DEAD_VAR_LOCK_EXISTS = 2
+        NOT_RUNNING = 3
+        UNKNOWN = 4
+
+        :return: Status num.
+        :rtype: int
+
+
+        Example::
+
+            >>> api.chef.get_service_status()
+            0
+        """
         return self.service.status()
 
     @classmethod

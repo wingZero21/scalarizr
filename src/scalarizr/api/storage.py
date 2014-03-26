@@ -192,7 +192,7 @@ class StorageAPI(object):
 
         Grow EBS volume to 50Gb::
 
-            new_vol = api.grow(
+            new_vol = api.storage.grow(
                 volume={
                     'id': 'vol-e13aa63ef',
                 },
@@ -228,8 +228,7 @@ class StorageAPI(object):
         :param disk: A replacement disk configuration
 
         :type async: bool
-        :param async: Execute method in a separate thread and report status
-        with Operation/Steps mechanism.
+        :param async: Execute method in a separate thread and report status with Operation/Steps mechanism.
         """
         self._check_invalid(volume, 'volume', dict)
         self._check_invalid(volume, 'index', int)

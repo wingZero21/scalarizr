@@ -38,7 +38,13 @@ LOG = logging.getLogger(__name__)
 
 
 class RedisAPI(BehaviorAPI):
+    """
+    Basic API for managing Redis 2.x service.
 
+    Namespace::
+
+        redis
+    """
     __metaclass__ = Singleton
 
     behavior = 'redis'
@@ -136,6 +142,9 @@ class RedisAPI(BehaviorAPI):
 
     @rpc.command_method
     def launch_processes(self, num=None, ports=None, passwords=None, async=False):
+        """
+        Launches multiple redis processes
+        """
         if ports and passwords and len(ports) != len(passwords):
             raise AssertionError('Number of ports must be equal to number of passwords')
         if num and ports and num != len(ports):
@@ -161,12 +170,18 @@ class RedisAPI(BehaviorAPI):
 
     @rpc.command_method
     def shutdown_processes(self, ports, remove_data=False, async=False):
+        """
+        Stops multiple redis processes.
+        """
         def do_shutdown_processes(op):
             return self._shutdown(ports, remove_data)
         return self._op_api.run('Shutdown Redis processes', do_shutdown_processes, async=async)
 
     @rpc.query_method
     def list_processes(self):
+        """
+        Returns information about all running redis processes.
+        """
         return self.get_running_processes()
 
     def _launch(self, ports=None, passwords=None, op=None):
@@ -325,6 +340,12 @@ class RedisAPI(BehaviorAPI):
 
     @rpc.query_method
     def replication_status(self):
+        """
+        Checks current replication status.
+
+        :return: Redis replication status.
+        :rtype: dict
+        """
         ri = redis_service.RedisInstances()
 
         if __redis__["replication_master"]:
@@ -347,6 +368,9 @@ class RedisAPI(BehaviorAPI):
 
     @rpc.command_method
     def create_databundle(self, async=True):
+        """
+        Creates a new data bundle of /mnt/redis-storage.
+        """
 
         def do_databundle(op):
             try:
@@ -392,7 +416,10 @@ class RedisAPI(BehaviorAPI):
 
     @rpc.command_method
     def create_backup(self, async=True):
-
+        """
+        Creates a new backup of db files of all currently running redis processes
+        and uploads gzipped data to the cloud storage.
+        """
         def do_backup(op):
             try:
                 self.redis_instances.save_all()

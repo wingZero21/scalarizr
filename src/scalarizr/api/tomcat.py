@@ -70,7 +70,13 @@ class CatalinaInitScript(initdv2.ParametrizedInitScript):
 
 
 class TomcatAPI(BehaviorAPI):
+    """
+    Basic API for managing Tomcat service.
 
+    Namespace::
+
+        tomcat
+    """
     __metaclass__ = Singleton
 
     behavior = 'tomcat'
@@ -112,22 +118,68 @@ class TomcatAPI(BehaviorAPI):
 
     @rpc.command_method
     def start_service(self):
+        """
+        Starts Tomcat service.
+
+        Example::
+
+            api.tomcat.start_service()
+        """
         self.service.start()
 
     @rpc.command_method
     def stop_service(self):
+        """
+        Stops Tomcat service.
+
+        Example::
+
+            api.tomcat.stop_service()
+        """
         self.service.stop()
 
     @rpc.command_method
     def reload_service(self):
+        """
+        Reloads Tomcat configuration.
+
+        Example::
+
+            api.tomcat.reload_service()
+        """
         self.service.reload()
 
     @rpc.command_method
     def restart_service(self):
+        """
+        Restarts Tomcat service.
+
+        Example::
+
+            api.tomcat.restart_service()
+        """
         self.service.restart()
 
     @rpc.command_method
     def get_service_status(self):
+        """
+        Checks Tomcat service status.
+
+        RUNNING = 0
+        DEAD_PID_FILE_EXISTS = 1
+        DEAD_VAR_LOCK_EXISTS = 2
+        NOT_RUNNING = 3
+        UNKNOWN = 4
+
+        :return: Status num.
+        :rtype: int
+
+
+        Example::
+
+            >>> api.tomcat.get_service_status()
+            0
+        """
         return self.service.status()
 
     @classmethod

@@ -10,7 +10,13 @@ from scalarizr.api import BehaviorAPI
 
 
 class RabbitMQAPI(BehaviorAPI):
+    """
+    Basic API for managing RabbitMQ service.
 
+    Namespace::
+
+        rabbitmq
+    """
     __metaclass__ = Singleton
 
     behavior = 'rabbitmq'
@@ -21,28 +27,81 @@ class RabbitMQAPI(BehaviorAPI):
 
     @rpc.command_method
     def start_service(self):
+        """
+        Starts RabbitMQ service.
+
+        Example::
+
+            api.rabbitmq.start_service()
+        """
         self.service.start()
 
     @rpc.command_method
     def stop_service(self):
+        """
+        Stops RabbitMQ service.
+
+        Example::
+
+            api.rabbitmq.stop_service()
+        """
         self.service.stop()
 
     @rpc.command_method
     def reload_service(self):
+        """
+        Reloads RabbitMQ configuration.
+
+        Example::
+
+            api.rabbitmq.reload_service()
+        """
         self.service.reload()
 
     @rpc.command_method
     def restart_service(self):
+        """
+        Restarts RabbitMQ service.
+
+        Example::
+
+            api.rabbitmq.restart_service()
+        """
         self.service.restart()
 
     @rpc.command_method
     def get_service_status(self):
+        """
+        Checks RabbitMQ service status.
+
+        RUNNING = 0
+        DEAD_PID_FILE_EXISTS = 1
+        DEAD_VAR_LOCK_EXISTS = 2
+        NOT_RUNNING = 3
+        UNKNOWN = 4
+
+        :return: Status num.
+        :rtype: int
+
+
+        Example::
+
+            >>> api.rabbitmq.get_service_status()
+            0
+        """
         return self.service.status()
 
     @rpc.command_method
     def reset_password(self, new_password=None):
         """
-        Reset password for RabbitMQ user 'scalr_master'. Return new password
+        Resets password for RabbitMQ user 'scalr_master'.
+
+        :param new_password: New password. If not provided, 10-character string will be generated.
+        :type new_password: str
+
+        :returns: New password.
+        :rtype: str
+
         """
         if not new_password:
             new_password = pwgen(10)

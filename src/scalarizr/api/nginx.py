@@ -1638,11 +1638,7 @@ class NginxAPI(BehaviorAPI):
             self._reload_service()
 
     @rpc.command_method
-    def add_server_to_role(self, 
-                           server,
-                           role_id,
-                           update_conf=True, 
-                           reload_service=True):
+    def add_server_to_role(self, server, role_id, update_conf=True, reload_service=True):
         """
         Adds server to each backend that uses given role. If role isn't used in
         any backend, does nothing
@@ -1654,7 +1650,7 @@ class NginxAPI(BehaviorAPI):
         :param role_id: Id of the role in which new server is up.
         :type role_id: str
 
-        :param update_conf: if True updates app_servers_inc object from file 
+        :param update_conf: if True updates app_servers_inc object from file
             before performing server addition.
         :type update_conf: bool
 

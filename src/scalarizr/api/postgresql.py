@@ -48,7 +48,7 @@ class PostgreSQLAPI(BehaviorAPI):
 
     Namespace::
 
-        apache
+        postgresql
     """
     __metaclass__ = Singleton
 
@@ -68,22 +68,68 @@ class PostgreSQLAPI(BehaviorAPI):
 
     @rpc.command_method
     def start_service(self):
+        """
+        Starts PostgreSQL service.
+
+        Example::
+
+            api.postgresql.start_service()
+        """
         self.service.start()
 
     @rpc.command_method
     def stop_service(self):
+        """
+        Stops PostgreSQL service.
+
+        Example::
+
+            api.postgresql.stop_service()
+        """
         self.service.stop()
 
     @rpc.command_method
     def reload_service(self):
+        """
+        Reloads PostgreSQL configuration.
+
+        Example::
+
+            api.postgresql.reload_service()
+        """
         self.service.reload()
 
     @rpc.command_method
     def restart_service(self):
+        """
+        Restarts PostgreSQL service.
+
+        Example::
+
+            api.postgresql.restart_service()
+        """
         self.service.restart()
 
     @rpc.command_method
     def get_service_status(self):
+        """
+        Checks PostgreSQL service status.
+
+        RUNNING = 0
+        DEAD_PID_FILE_EXISTS = 1
+        DEAD_VAR_LOCK_EXISTS = 2
+        NOT_RUNNING = 3
+        UNKNOWN = 4
+
+        :return: Status num.
+        :rtype: int
+
+
+        Example::
+
+            >>> api.postgresql.get_service_status()
+            0
+        """
         return self.service.status()
 
     @rpc.command_method
@@ -140,6 +186,8 @@ class PostgreSQLAPI(BehaviorAPI):
     @rpc.query_method
     def replication_status(self):
         """
+        Checks current replication status.
+
         :return: Postgresql replication status.
         :rtype: dict
 
