@@ -12,8 +12,10 @@ from scalarizr.config import ScalarizrState
 from scalarizr.util import Singleton
 from scalarizr.util import software
 from scalarizr.util import system2
+from scalarizr.config import BuiltinPlatforms
 
 from scalarizr.api.image import ImageAPIDelegate
+from scalarizr.api.image import ImageAPIError
 from scalarizr.api.image.openstack import OpenStackImageAPIDelegate
 from scalarizr.api.image.rackspace import RackspaceImageAPIDelegate
 from scalarizr.api.image.ec2 import EC2ImageAPIDelegate
@@ -38,15 +40,15 @@ class ImageAPI(object):
             return
 
         platform_name = __node__['platform'].name
-        if platform_name == 'openstack':
+        if platform_name == BuiltinPlatforms.OPENSTACK:
             self.delegate = OpenStackImageAPIDelegate()
-        elif platform_name == 'ec2':
+        elif platform_name == BuiltinPlatforms.EC2:
             self.delegate = EC2ImageAPIDelegate()
-        elif platform_name == 'rackspace':
+        elif platform_name == BuiltinPlatforms.RACKSPACE:
             self.delegate = RackspaceImageAPIDelegate()
         # ...
         else:
-            self.delegate = None
+            raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
 
     @rpc.command_method
     def prepare(self, async=False):
