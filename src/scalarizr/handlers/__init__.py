@@ -147,7 +147,7 @@ class Handler(object):
                     else:
                         mysqld = software.which("mysqld")
                         try:
-                            out = system2((mysqld, "--help"))[0]
+                            out = system2((mysqld, "--help"), raise_exc=False)[0]
                             if "percona" in out.lower():  # Percona 5.5.36
                                 handlers.append(config.BuiltinBehaviours.PERCONA)
                             else:  # Mysql 5.5.x
