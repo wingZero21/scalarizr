@@ -89,7 +89,7 @@ class QueryEnvService(object):
                         resp_body = e.msg
                     self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, resp_body, msg_wait)
                     if 'not supported' in resp_body:
-                        raise
+                        raise QueryEnvError('Unsupported method "%s"' % command)
                 else:
                     self._logger.warn('QueryEnv failed. %s. %s', e, msg_wait)
                 self._logger.warn('Sleep %s seconds before next attempt...', wait_seconds)
