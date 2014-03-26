@@ -18,6 +18,11 @@ _logger = logging.getLogger(__name__)
 
 class RackspaceImageAPIDelegate(ImageAPIDelegate):
 
+    duplicate_errmsg = 'Another image is currently creating from this server. ' \
+        'Image: id=%s name=%s status=%s\n' \
+        'Rackspace allows to create only ONE image per server at a time. ' \
+        'Try again later.'
+
     def _find_server_id(self, conn):
         pl = __node__['platform']
 
@@ -30,43 +35,42 @@ class RackspaceImageAPIDelegate(ImageAPIDelegate):
 
         return server.id
 
+    def _find_image(self, conn, server_id, n_retries=10, retry_delay=30):
+        for _ in xrange(n_retries):
+            try:
+                return conn.images.find(serverId=server_id)
+            except NotFound:
+                _logger.info('Image not found. Sleeping %s seconds and retry', retry_delay)
+                time.sleep(retry_delay)
+        else:
+            raise ImageAPIError('Image not found. Retry limits exceed')
+
+
     def _create_image(self, conn, image_name, server_id):
         # TODO: rewrite this
-        retry_delay = 30
         try:
             return conn.images.create(image_name, server_id)
 
         except CloudServersException, e:
             if 'Unhandled exception occurred during processing' in str(e):
-                continue
+                return None
             if 'Cannot create a new backup request while saving a prior backup or migrating' in str(e):
                 _logger.warning('Rackspace answered with "%s"', str(e))
-                for _ in xrange(0, 10):
-                    _logger.info('Lookup image %s', image_name)
-                    try:
-                        image = conn.images.find(serverId=server_id)
-                        break
-                    except NotFound:
-                        _logger.info('Image not found. Sleeping %s seconds and retry', retry_delay)
-                        time.sleep(retry_delay)
-                else:
-                    raise zImageAPIError('Image not found. Retry limits exceed')
+                _logger.info('Searching image %s', image_name)
+                image = self._find_image(conn, server_id)
                 if image.name != image_name:
-                    raise zImageAPIError(duplicate_errmsg % (image.id, image.name, image.status))
+                    raise ImageAPIError(self.duplicate_errmsg % (image.id, image.name, image.status))
+                return image
             else:
                 raise
 
     def snapshot(self, role_name):
-        duplicate_errmsg = 'Another image is currently creating from this server. ' \
-            'Image: id=%s name=%s status=%s\n' \
-            'Rackspace allows to create only ONE image per server at a time. ' \
-            'Try again later.'
         conn = __node__['platform'].new_cloudservers_conn()
         server_id = self._find_server_id(conn)
         for image in conn.images.findall(serverId=server_id):
             if image.status not in ('ACTIVE', 'FAILED'):
-                raise zImageAPIError(
-                    duplicate_errmsg % (image.id, image.name, image.status))
+                raise ImageAPIError(
+                    self.duplicate_errmsg % (image.id, image.name, image.status))
 
         image = None
         image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
@@ -75,9 +79,14 @@ class RackspaceImageAPIDelegate(ImageAPIDelegate):
             system2("sync", shell=True)
             _logger.info("Creating server image: serverId=%s name=%s", server_id, image_name)
             for _ in xrange(0, 2):
-                self._create_image(conn, image_name, server_id)
+                image = self._create_image(conn, image_name, server_id)
+                if not image:
+                    continue
                 _logger.debug('Image created: id=%s', image.id)
                 break
+            else:
+                _logger.debug('Image is not created')
+                raise ImageAPIError('Image is not created')
 
             _logger.info('Checking that image %s is completed', image.id)
 
