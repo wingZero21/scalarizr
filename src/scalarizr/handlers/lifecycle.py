@@ -190,7 +190,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                 with open(self.saved_boot_id_file, 'r') as fp:
                     saved_boot_id = fp.read()
 
-                if saved_boot_id and saved_boot_id != current_boot_id:
+                if saved_boot_id and saved_boot_id != current_boot_id \
+                    and not Flag.exists(Flag.HALT):
                     Flag.set(Flag.REBOOT)
 
             with open(self.boot_id_file, 'r') as fp:
@@ -198,12 +199,31 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                 with open(self.saved_boot_id_file, 'w') as saved_fp:
                     saved_fp.write(current_boot_id)
 
-        if Flag.exists(Flag.REBOOT) or Flag.exists(Flag.HALT):
+        if Flag.exists(Flag.REBOOT):
             self._logger.info("Scalarizr resumed after reboot")
             Flag.clear(Flag.REBOOT)
-            Flag.clear(Flag.HALT)
-            self._check_control_ports() 
+            self._check_control_ports()
             self._start_after_reboot()
+
+        elif Flag.exists(Flag.HALT):
+            self._logger.info("Scalarizr resumed after server stop")
+            Flag.clear(Flag.HALT)
+            self._check_control_ports()
+
+            queryenv = bus.queryenv_service
+            farm_role_params = queryenv.list_farm_role_params(farm_role_id=__node__['farm_role_id'])
+            try:
+                resume_strategy = farm_role_params['params']['base']['resume_strategy']
+            except KeyError:
+                resume_strategy = 'reboot'
+
+            if resume_strategy == 'reboot':
+                self._start_after_reboot()
+
+            elif resume_strategy == 'init':
+                __node__['state'] = ScalarizrState.BOOTSTRAPPING
+                self._logger.info('Scalarizr will re-initialize server due to resume strategy')
+                self._start_init()
 
         elif optparser and optparser.values.import_server:
             self._logger.info('Server will be imported into Scalr')
@@ -414,18 +434,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if message.local_ip != __node__['private_ip']:
             return
 
-        volumes = message.body.get('volumes', [])
-        volumes = volumes or []
-        
-        for volume in volumes:
-            try:
-                volume = storage2.volume(volume)
-                volume.umount()
-                volume.detach()
-            except:
-                self._logger.warn('Failed to detach volume %s: %s', 
-                        volume.id, sys.exc_info()[1])
-
         if __node__['platform'] == 'cloudstack':
             # Important! 
             # After following code run, server will loose network for some time
@@ -440,7 +448,25 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                     self._logger.warn('Failed to disable static NAT: %s', 
                             str(sys.exc_info()[1]))
 
-        elif __node__['platform'] == 'openstack':
+        suspend = message.body.get('suspend')
+        suspend = suspend and int(suspend) or False
+
+        if suspend:
+            return
+
+        volumes = message.body.get('volumes', [])
+        volumes = volumes or []
+
+        for volume in volumes:
+            try:
+                volume = storage2.volume(volume)
+                volume.umount()
+                volume.detach()
+            except:
+                self._logger.warn('Failed to detach volume %s: %s',
+                        volume.id, sys.exc_info()[1])
+
+        if __node__['platform'] == 'openstack':
             conn = __node__['openstack']['new_nova_connection']
             conn.reconnect()
 
