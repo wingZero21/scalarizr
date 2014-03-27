@@ -1094,6 +1094,8 @@ class Service(object):
                 self._logger.info('UpdateClient completed update and should be restarted, restarting')
                 upd_svs.restart()
         except:
+            if sys.exc_info()[0] == SystemExit:
+                raise
             self._logger.warn('Failed to talk to UpdateClient: %s', sys.exc_info()[1])
 
 
