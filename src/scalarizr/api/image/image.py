@@ -17,7 +17,6 @@ from scalarizr.config import BuiltinPlatforms
 from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
 from scalarizr.api.image.openstack import OpenStackImageAPIDelegate
-from scalarizr.api.image.rackspace import RackspaceImageAPIDelegate
 from scalarizr.api.image.ec2 import EC2ImageAPIDelegate
 
 
@@ -44,8 +43,6 @@ class ImageAPI(object):
             self.delegate = OpenStackImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.EC2:
             self.delegate = EC2ImageAPIDelegate()
-        elif platform_name == BuiltinPlatforms.RACKSPACE:
-            self.delegate = RackspaceImageAPIDelegate()
         # ...
         else:
             _logger.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))

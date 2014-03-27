@@ -6,22 +6,19 @@ import re
 import sys
 from time import sleep
 
-
 from cinderclient.v1 import client as cinder_client
 from novaclient.v1_1 import client as nova_client
 import swiftclient
-
 
 from scalarizr import platform
 from scalarizr.bus import bus
 from scalarizr import linux
 from scalarizr.storage.transfer import Transfer, TransferProvider
 from scalarizr.storage2.cloudfs import swift as swiftcloudfs
+from scalarizr.config import BuiltinPlatforms
 
 
 LOG = logging.getLogger(__name__)
-
-
 
 
 class OpenstackServiceWrapper(object):
@@ -97,6 +94,7 @@ class OpenstackPlatform(platform.Platform):
     _ip_addr = None
 
     features = ['volumes', 'snapshots']
+    name = BuiltinPlatforms.OPENSTACK
 
     def __init__(self):
         platform.Platform.__init__(self)
