@@ -105,9 +105,9 @@ class ImageAPI(object):
         return create_operation.operation_id
 
     def _create(self, op, role_name):
-        prepare_result = self.prepare(role_name)
-        image_id = self.snapshot(role_name)
-        finalize_result = self.finalize(role_name)
+        prepare_result = self.prepare(op, role_name)
+        image_id = self.snapshot(op, role_name)
+        finalize_result = self.finalize(op, role_name)
 
         result = {'image_id': image_id}
         if prepare_result:
