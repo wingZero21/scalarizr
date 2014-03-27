@@ -101,7 +101,24 @@ class QueryEnvService(object):
         resp_body = resp_body.encode('utf-8')
 
         if log_response:
-            self._logger.debug("QueryEnv response: %s", resp_body)
+            log_body = resp_body
+            if command == 'list-global-variables':
+                try:
+                    xml = ET.XML(resp_body)
+                    glob_vars = xml[0]
+                    i = 0
+                    for _ in xrange(len(glob_vars)):
+                        var = glob_vars[i]
+                        if int(var.attrib.get('private', 0)) == 1:
+                            glob_vars.remove(var)
+                            continue
+                        i += 1
+                    log_body = ET.tostring(xml)
+                except (BaseException, Exception), e:
+                    self._logger.debug("Exception occured while parsing list-global-variables response: %s" % e.message)
+                    if isinstance(e, ET.ParseError):
+                        raise
+            self._logger.debug("QueryEnv response: %s", log_body)
         return resp_body
 
 
@@ -263,11 +280,14 @@ class QueryEnvService(object):
         data = xml2dict(ET.XML(xml)) or {}
         data = data['variables'] if 'variables' in data and data['variables'] else {}
         glob_vars = {}
+        values = data.get('values', {})
         glob_vars['public'] = dict((k, v.encode('utf-8') if v else '')
-                                   for k, v in data['values'].items())
+                                   for k, v in values.items())
+        private_values = data.get('private_values', {})
         glob_vars['private'] = dict((k, v.encode('utf-8') if v else '')
-                                           for k, v in data['private_values'].items())
+                                           for k, v in private_values.items())
         return glob_vars
+
 
     def _read_get_global_config_response(self, xml):
         """

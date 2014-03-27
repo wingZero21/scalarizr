@@ -237,7 +237,7 @@ explore('mysql-proxy', mysqlproxy_software_info)
 
 def apache_software_info():
 
-    binary_name = "httpd" if linux.os.redhat_family else "apache2"
+    binary_name = "httpd" if linux.os.redhat_family else "apache2ctl"
     binary = which(binary_name)
     if not binary:
         raise SoftwareError("Can't find executable for apache http server")

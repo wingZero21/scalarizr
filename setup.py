@@ -1,7 +1,6 @@
 import os
 from setuptools import setup, find_packages
 
-
 def make_data_files(dst, src):
     ret = []
     for directory, _, files in os.walk(src):
