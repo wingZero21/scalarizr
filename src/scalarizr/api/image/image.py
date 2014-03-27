@@ -49,14 +49,15 @@ class ImageAPI(object):
             raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
 
     @rpc.command_method
-    def prepare(self, async=False):
+    def prepare(self, role_name=None, async=False):
         self.init_delegate()
         if not system2(('which', 'wall'), raise_exc=False)[2]:
             system2(('wall'), stdin=WALL_MESSAGE, raise_exc=False)
         prepare_result = self._op_api.run('api.image.prepare',
             func=self.delegate.prepare,
             async=async,
-            exclusive=True)
+            exclusive=True,
+            func_kwds={'role_name': role_name})
         result = {}
         if prepare_result:
             result['prepare_result'] = prepare_result
@@ -75,18 +76,20 @@ class ImageAPI(object):
             image_id = self._op_api.run('api.image.snapshot',
                 func=self.delegate.snapshot,
                 async=async,
-                exclusive=True)
+                exclusive=True,
+                func_kwds={'role_name': role_name})
         finally:
             cnf.state = saved_state
         return image_id
 
     @rpc.command_method
-    def finalize(self, async=False):
+    def finalize(self, role_name=None, async=False):
         self.init_delegate()
         self._op_api.run('api.image.finalize',
             func=self.delegate.finalize,
             async=async,
-            exclusive=True)
+            exclusive=True,
+            func_kwds={'role_name': role_name})
         _logger.info('Image created. If you imported this server to Scalr, '
                      'you can terminate Scalarizr now.')
 
@@ -105,9 +108,9 @@ class ImageAPI(object):
         return create_operation.operation_id
 
     def _create(self, op, role_name):
-        prepare_result = self.prepare(op, role_name)
-        image_id = self.snapshot(op, role_name)
-        finalize_result = self.finalize(op, role_name)
+        prepare_result = self.prepare(role_name)
+        image_id = self.snapshot(role_name)
+        finalize_result = self.finalize(role_name)
 
         result = {'image_id': image_id}
         if prepare_result:
