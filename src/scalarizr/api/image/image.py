@@ -48,6 +48,7 @@ class ImageAPI(object):
             self.delegate = RackspaceImageAPIDelegate()
         # ...
         else:
+            _logger.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))
             raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
 
     @rpc.command_method
