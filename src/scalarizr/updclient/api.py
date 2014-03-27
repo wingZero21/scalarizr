@@ -554,6 +554,8 @@ class UpdClientAPI(object):
                 try:
                     self.state = 'in-progress/install'
                     self.store()
+                    LOG.info('Installing {0}={1}'.format(
+                            self.package, pkginfo['candidate']))
                     if linux.os.windows:
                         # raises KeyboardInterrupt
                         update_windows(pkginfo)
