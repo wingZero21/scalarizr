@@ -12,16 +12,17 @@ else
 end
 build_iteration 1
 
-extra_package_files(["--deb-changelog '#{Omnibus::Config.project_root}/changelog'"])
-
 # creates required build directories
 dependency "preparation"
 
-if ENV['BUILD_DEPENDENCY'] == 'yes'
-    # scalarizr dependencies/components
+if ENV['BUILD_DEPENDENCY'] == 'n'
+    dependency "scalarizr"
+else
     dependency "scalarizr-deps"
+    dependency "scalarizr"
 end
-dependency "scalarizr"
+
+extra_package_file("--deb-changelog '#{Omnibus::Config.project_root}/changelog'")
 
 # version manifest file
 dependency "version-manifest"

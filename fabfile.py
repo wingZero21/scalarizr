@@ -18,37 +18,35 @@ OMNIBUS_DIR = os.path.join(BUILD_DIR, 'omnibus')
 
 if GIT_REF == open('.git/HEAD', 'r').read().strip():
     VERSION = GIT_TAG
-    ARTIFACTS_DIR = os.path.join(os.environ['ARTIFACTS_DIR'], PROJECT, GIT_TAG, BUILD)
+    MASTER_ARTIFACTS_DIR = os.path.join(os.environ['CI_DIR'], 'artifacts', PROJECT, GIT_TAG, BUILD)
+    SLAVE_ARTIFACTS_DIR = os.path.join('/vagrant', 'artifacts', PROJECT, GIT_TAG, BUILD)
 else:
     VERSION = '%s.b%s.%s' % (GIT_TAG, BUILD[0:8], GIT_REF[0:8])
-    ARTIFACTS_DIR = os.path.join(os.environ['ARTIFACTS_DIR'], PROJECT, NRM_BRANCH, BUILD)
+    MASTER_ARTIFACTS_DIR = os.path.join(os.environ['CI_DIR'], 'artifacts', PROJECT, NRM_BRANCH, BUILD)
+    SLAVE_ARTIFACTS_DIR = os.path.join('/vagrant', 'artifacts', PROJECT, NRM_BRANCH, BUILD)
 
 OMNIBUS_BUILD_VERSION = VERSION
 
 
 def git_export():
-    archive = '/tmp/%s.tar.gz' % BUILD
-
+    archive = '%s.tar.gz' % PROJECT
     local("git archive --format=tar HEAD | gzip >%s" % archive)
-    put(archive, archive)
-    local("rm -f %s" % archive)
-
     run("mkdir -p %s" % BUILD_DIR)
+    put(archive, BUILD_DIR)
     with cd(BUILD_DIR):
         run("tar -xf %s" % archive)
-    run("rm -f %s" % archive)
 
 
 def import_source():
-    local("mkdir -p %s" % ARTIFACTS_DIR)
-    get('%s/dist/*.tar.gz' % BUILD_DIR, ARTIFACTS_DIR)
+    local("mkdir -p %s" % MASTER_ARTIFACTS_DIR)
+    run("mv %s/dist/*.tar.gz %s" % (BUILD_DIR, SLAVE_ARTIFACTS_DIR))
 
 
 def import_binary():
-    local("mkdir -p %s" % ARTIFACTS_DIR)
+    local("mkdir -p %s" % MASTER_ARTIFACTS_DIR)
     files = run("ls %s/omnibus/pkg/*%s*" % (BUILD_DIR, OMNIBUS_BUILD_VERSION)).split()
     for f in files:
-        get(f, ARTIFACTS_DIR)
+        run("mv %s %s" % (f, SLAVE_ARTIFACTS_DIR))
         run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
 
 
