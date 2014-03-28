@@ -293,6 +293,7 @@ function main {
             $packageFile = downloadFile $url
             setSzrState "in-progress/stop"
             stopAllSzrServices
+            createSzrBackup
             try {
                 setSzrState "in-progress/install"
                 runInstaller $packageFile
