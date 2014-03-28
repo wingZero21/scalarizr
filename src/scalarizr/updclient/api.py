@@ -231,21 +231,26 @@ class UpdClientAPI(object):
 
 
     def get_system_id(self):
-        if linux.os.windows:
-            wmi = win32com.client.GetObject('winmgmts:')
-            for row in wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS'):
-                ret = row.SerialNumber
-                break
-            else:
-                LOG.debug('WMI returns empty UUID')
-        else:
-            ret = None
+        def win32_serial_number():
+            try:
+                wmi = win32com.client.GetObject('winmgmts:')
+                for row in wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS'):
+                    return row.SerialNumber
+                else:
+                    LOG.debug('WMI returns empty UUID')
+            except:
+                LOG.debug('WMI query failed: %s', sys.exc_info()[1])
+
+        def dmidecode_uuid():
             try:
                 ret = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
                 if not ret:
                     LOG.debug('dmidecide returns empty UUID')
+                return ret
             except:
-                LOG.debug(sys.exc_info()[1])
+                LOG.debug('dmidecode failed: %s', sys.exc_info()[1])
+
+        ret = win32_serial_number() if linux.os.windows else dmidecode_uuid()
         if not ret:
             ret = self.meta['instance_id']
         if not ret:
@@ -344,7 +349,8 @@ class UpdClientAPI(object):
             if self.state in ('completed/wait-ack', 'noop'):
                 self.state = 'completed'
             self.store()
-        if not dry_run and self.state != 'error' and not self.daemon.running:
+        if not (self.shutdown_ev.is_set() or dry_run or \
+                self.state == 'error' or self.daemon.running):
             self.daemon.start()
 
 
@@ -494,7 +500,8 @@ class UpdClientAPI(object):
             LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)
             self.shutdown_ev.wait(self.win_update_timeout)
             if self.shutdown_ev.is_set():
-                raise KeyboardInterrupt()
+                LOG.debug('Interrupting...')
+                return
             else:
                 msg = ('UpdateClient expected to be terminated by update.ps1, '
                         'but never happened')
@@ -557,12 +564,11 @@ class UpdClientAPI(object):
                     LOG.info('Installing {0}={1}'.format(
                             self.package, pkginfo['candidate']))
                     if linux.os.windows:
-                        # raises KeyboardInterrupt
                         update_windows(pkginfo)
                     else:
                         return update_linux(pkginfo)
+
                 except KeyboardInterrupt:
-                    LOG.debug('Caught KeyboardInterrupt')
                     if not linux.os.windows:
                         op.cancel()
                     return
@@ -580,7 +586,8 @@ class UpdClientAPI(object):
                 else:
                     raise
             finally:
-                self.store()
+                if not self.shutdown_ev.is_set():
+                    self.store()
                 pkgmgr.LOG.removeHandler(op.logger.handlers[0])
 
         return self.op_api.run('scalarizr.update', do_update, async=async, 
