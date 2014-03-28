@@ -288,12 +288,11 @@ function main {
         if (test-path $installDir) {
             $script:installedVersion = getSzrVersion
         }
-        setSzrState "in-progress/download-package"
-        $packageFile = downloadFile $url
-        setSzrState "in-progress/stop"
-        stopAllSzrServices
         try {
-            createSzrBackup
+            setSzrState "in-progress/download-package"
+            $packageFile = downloadFile $url
+            setSzrState "in-progress/stop"
+            stopAllSzrServices
             try {
                 setSzrState "in-progress/install"
                 runInstaller $packageFile
