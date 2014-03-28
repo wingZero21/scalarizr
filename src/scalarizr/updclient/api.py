@@ -290,12 +290,12 @@ class UpdClientAPI(object):
                             self._update_self_dict(json.load(fp))
                         if self.state.startswith('in-progress'):
                             if log_polling:
-                                LOG.debug("Script update.ps1 is in '%s', start polling", self.state)
+                                LOG.info("Script update.ps1 is in '%s', start polling", self.state)
                                 log_polling = False
                             self.shutdown_ev.wait(1)
                             continue
                         else:
-                            LOG.debug('Script update.ps1 finished, state: %s', self.state)
+                            LOG.info('Script update.ps1 finished, state: %s', self.state)
                             os.unlink(self.win_status_file)
                             return
                 wait_thread = threading.Thread(target=wait_update_script)
