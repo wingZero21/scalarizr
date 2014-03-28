@@ -273,7 +273,7 @@ class UpdClientAPI(object):
                 status_data = json.load(fp)
             system_matches = status_data['system_id'] == self.system_id
             if not system_matches:
-                LOG.debug('System ID in lock file and machine one not matched: %s != %s', 
+                LOG.info('System ID in lock file and machine one are not matched: %s != %s', 
                         status_data['system_id'], self.system_id)
             else:
                 LOG.debug('Serial number in lock file matches machine one')
@@ -310,7 +310,7 @@ class UpdClientAPI(object):
             except metadata.NoUserDataError:
                 if self.platform == 'openstack':
                     LOG.info('Found no user-data on OpenStack platform, '
-                            'this mean that all providers failed and we should '
+                            'this mean that all providers failed and now I should '
                             'wait for an injected user-data file')
                     time.sleep(20)
                     self.meta = metadata.Metadata()
