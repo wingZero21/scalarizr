@@ -50,7 +50,37 @@ def import_binary():
         run('rm -f /var/cache/omnibus/pkg/%s' % os.path.basename(f))
 
 
+def build_omnibus_base():
+    # rm old installation
+    run("rm -rf /opt/%s" % PROJECT)
+
+    # rm cache
+    run("rm -rf /var/cache/ci/%s" % PROJECT)
+
+    # build base installation
+    with cd(OMNIBUS_DIR):
+        run("[ -f bin/omnibus ] || bundle install --binstubs")
+        env = {
+            'BUILD_DIR': BUILD_DIR,
+            'OMNIBUS_BUILD_BASE': 'y',
+        }
+        with shell_env(**env):
+            run("bin/omnibus clean %s" % PROJECT)
+            run("bin/omnibus build project %s" % PROJECT)
+            run("rm -rf /var/cache/omnibus/pkg/*")
+
+    # save to cache
+    run("mkdir -p /var/cache/ci")
+    run("mv /opt/%s /var/cache/ci/%s" % (PROJECT, PROJECT))
+
+
 def build_omnibus():
+    # rm old installation
+    run("rm -rf /opt/%s" % PROJECT)
+
+    # copy base installation
+    run("cp -r /var/cache/ci/%s /opt/" % PROJECT)
+
     # bump project version
     with cd(BUILD_DIR):
         run("echo '%s' >src/%s/version" % (VERSION, PROJECT))
@@ -62,8 +92,6 @@ def build_omnibus():
             'BUILD_DIR': BUILD_DIR,
             'OMNIBUS_BUILD_VERSION': OMNIBUS_BUILD_VERSION,
         }
-        if 'BUILD_DEPENDENCY' in os.environ:
-            env.update({'BUILD_DEPENDENCY': os.environ['BUILD_DEPENDENCY']}) 
         with shell_env(**env):
             run("bin/omnibus build project --without-healthcheck %s" % PROJECT)
 
@@ -80,11 +108,15 @@ def build_source():
     import_source()
 
 
+def build_binary_base():
+    git_export()
+    build_omnibus_base()
+
+
 def build_binary():
     git_export()
     generate_changelog()
     build_omnibus()
-    #changelog_workaround()
     import_binary()
 
 
@@ -106,12 +138,5 @@ def generate_changelog():
         run("echo '%s' >changelog" % template.format(**locals()))
 
 
-def changelog_workaround():
-    with cd(os.path.join(OMNIBUS_DIR, 'pkg')):
-        run("mv *.deb tmp.deb")
-        run("fpm -s deb -t deb --deb-changelog ../changelog -n %s tmp.deb" % PROJECT)
-        run("rm -f tmp.deb")
-
- 
 def cleanup():
     run("rm -rf %s" % BUILD_DIR)

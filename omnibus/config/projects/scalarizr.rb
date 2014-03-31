@@ -15,14 +15,12 @@ build_iteration 1
 # creates required build directories
 dependency "preparation"
 
-if ENV['BUILD_DEPENDENCY'] == 'n'
-    dependency "scalarizr"
-else
+if ENV['OMNIBUS_BUILD_BASE'] == 'y'
     dependency "scalarizr-deps"
+else
     dependency "scalarizr"
+    extra_package_file("--deb-changelog '#{Omnibus::Config.project_root}/changelog'")
 end
-
-extra_package_file("--deb-changelog '#{Omnibus::Config.project_root}/changelog'")
 
 # version manifest file
 dependency "version-manifest"
