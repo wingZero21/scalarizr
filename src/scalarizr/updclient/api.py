@@ -295,7 +295,10 @@ class UpdClientAPI(object):
                             self.shutdown_ev.wait(1)
                             continue
                         else:
-                            LOG.info('Script update.ps1 finished, state: %s', self.state)
+                            msg = 'Script update.ps1 finished, state: {0}'.format(self.state)
+                            if self.error:
+                                msg += '. {0}'.format(self.error)
+                            LOG.info(msg)
                             os.unlink(self.win_status_file)
                             return
                 wait_thread = threading.Thread(target=wait_update_script)
