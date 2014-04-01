@@ -1,4 +1,3 @@
-
 import os
 import time
 import shutil
@@ -12,7 +11,7 @@ from scalarizr.platform.cloudstack import voltool
 _logger = logging.getLogger(__name__)
 
 
-class CloudStackAPIDelegate(ImageAPIDelegate):
+class CloudStackImageAPIDelegate(ImageAPIDelegate):
     IMAGE_MPOINT = '/mnt/img-mnt'
     IMAGE_NAME_MAXLEN = 32
 
@@ -63,7 +62,6 @@ class CloudStackAPIDelegate(ImageAPIDelegate):
     def prepare(self, op, role_name=None):
         if os.path.exists('/etc/udev/rules.d/70-persistent-net.rules'):
             shutil.move('/etc/udev/rules.d/70-persistent-net.rules', '/tmp')
-
 
     def after_rebundle(self, op, role_name=None):
         if os.path.exists('/tmp/70-persistent-net.rules'):
