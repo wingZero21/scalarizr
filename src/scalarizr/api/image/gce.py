@@ -48,7 +48,7 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
 
     def _register_image(self, image_name, bucket_name, archive_name, cloudstorage):
         pl = __node__['platform']
-        proj_id = pl.get_nuemric_project_id()
+        proj_id = pl.get_numeric_project_id()
         try:
             _logger.info('Registering new image %s' % image_name)
             compute = pl.new_compute_client()
@@ -102,7 +102,7 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
         archive_path = ''
         try:
             pl = __node__['platform']
-            proj_id = pl.get_nuemric_project_id()
+            proj_id = pl.get_numeric_project_id()
             proj_name = pl.get_project_id()
             cloudstorage = pl.new_storage_client()
 
