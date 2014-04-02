@@ -16,11 +16,6 @@ from scalarizr.config import BuiltinPlatforms
 
 from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
-from scalarizr.api.image.openstack import OpenStackImageAPIDelegate
-from scalarizr.api.image.ec2 import EC2ImageAPIDelegate
-from scalarizr.api.image.cloudstack import CloudStackImageAPIDelegate
-from scalarizr.api.image.gce import GCEImageAPIDelegate
-
 
 
 _logger = logging.getLogger(__name__)
@@ -43,13 +38,17 @@ class ImageAPI(object):
 
         platform_name = __node__['platform'].name
         if platform_name == BuiltinPlatforms.OPENSTACK:
-            self.delegate = OpenStackImageAPIDelegate()
+            module = __import__('scalarizr.api.image.openstack')
+            self.delegate = module.OpenStackImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.EC2:
-            self.delegate = EC2ImageAPIDelegate()
+            module = __import__('scalarizr.api.image.ec2')
+            self.delegate = module.EC2ImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.CLOUDSTACK:
-            self.delegate = CloudStackImageAPIDelegate()
+            module = __import__('scalarizr.api.image.cloudstack')
+            self.delegate = module.CloudStackImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.GCE:
-            self.delegate = GCEImageAPIDelegate()
+            module = __import__('scalarizr.api.image.gce')
+            self.delegate = module.GCEImageAPIDelegate()
         # ...
         else:
             _logger.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))
