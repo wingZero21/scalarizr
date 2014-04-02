@@ -1,6 +1,7 @@
 import os
 import time
 import shutil
+import logging
 
 from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
@@ -23,7 +24,7 @@ class CloudStackImageAPIDelegate(ImageAPIDelegate):
     def snapshot(self, op, role_name):
         now = time.strftime('%Y%m%d%H%M%S')
         if len(role_name) > self.IMAGE_NAME_MAXLEN - len(now) - 1:
-            image_name = role_name[0:16] + '--' + now
+            image_name = role_name[0:len(now)+2] + '--' + now
         else:
             image_name = role_name + "-" + now
 
