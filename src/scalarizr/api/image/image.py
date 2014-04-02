@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+import importlib
 
 from scalarizr import linux
 from scalarizr import rpc
@@ -38,16 +39,16 @@ class ImageAPI(object):
 
         platform_name = __node__['platform'].name
         if platform_name == BuiltinPlatforms.OPENSTACK:
-            module = __import__('scalarizr.api.image.openstack')
+            module = importlib.import_module('scalarizr.api.image.openstack')
             self.delegate = module.OpenStackImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.EC2:
-            module = __import__('scalarizr.api.image.ec2')
+            module = importlib.import_module('scalarizr.api.image.ec2')
             self.delegate = module.EC2ImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.CLOUDSTACK:
-            module = __import__('scalarizr.api.image.cloudstack')
+            module = importlib.import_module('scalarizr.api.image.cloudstack')
             self.delegate = module.CloudStackImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.GCE:
-            module = __import__('scalarizr.api.image.gce')
+            module = importlib.import_module('scalarizr.api.image.gce')
             self.delegate = module.GCEImageAPIDelegate()
         # ...
         else:
