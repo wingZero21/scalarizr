@@ -150,3 +150,9 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
         self._register_image(image_name, tmp_bucket_name, archive_name, cloudstorage)
 
         return '%s/images/%s' % (proj_name, image_name)
+
+    def prepare(self, operation, role_name):
+        pass
+
+    def finalize(self, operation, role_name):
+        pass
