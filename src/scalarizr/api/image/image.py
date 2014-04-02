@@ -19,6 +19,8 @@ from scalarizr.api.image import ImageAPIError
 from scalarizr.api.image.openstack import OpenStackImageAPIDelegate
 from scalarizr.api.image.ec2 import EC2ImageAPIDelegate
 from scalarizr.api.image.cloudstack import CloudStackImageAPIDelegate
+from scalarizr.api.image.gce import GCEImageAPIDelegate
+
 
 
 _logger = logging.getLogger(__name__)
@@ -46,6 +48,8 @@ class ImageAPI(object):
             self.delegate = EC2ImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.CLOUDSTACK:
             self.delegate = CloudStackImageAPIDelegate()
+        elif platform_name == BuiltinPlatforms.GCE:
+            self.delegate = GCEImageAPIDelegate()
         # ...
         else:
             _logger.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))

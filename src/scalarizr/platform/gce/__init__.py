@@ -1,5 +1,3 @@
-from __future__ import with_statement
-
 __author__ = 'Nick Demyanchuk'
 
 import os
@@ -19,6 +17,7 @@ from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
 
 from scalarizr.platform import Platform
+from scalarizr.config import BuiltinPlatforms
 
 
 COMPUTE_RW_SCOPE = ('https://www.googleapis.com/auth/compute', "https://www.googleapis.com/auth/compute.readonly")
@@ -136,6 +135,7 @@ class GcePlatform(Platform):
     compute_api_version = 'v1'
     metadata_url = 'http://metadata/computeMetadata/v1/'
     _metadata = None
+    name = BuiltinPlatforms.GCE
 
     def __init__(self):
         Platform.__init__(self)
