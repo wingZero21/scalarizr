@@ -10,10 +10,10 @@ from scalarizr.linux import coreutils
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
+from scalarizr.config import BuiltinPlatforms
 from scalarizr.util import Singleton
 from scalarizr.util import software
 from scalarizr.util import system2
-from scalarizr.config import BuiltinPlatforms
 
 from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
@@ -44,7 +44,7 @@ class ImageAPI(object):
         elif platform_name == BuiltinPlatforms.EC2:
             module = importlib.import_module('scalarizr.api.image.ec2')
             self.delegate = module.EC2ImageAPIDelegate()
-        elif platform_name == BuiltinPlatforms.CLOUDSTACK:
+        elif platform_name in (BuiltinPlatforms.CLOUDSTACK, BuiltinPlatforms.IDCF):
             module = importlib.import_module('scalarizr.api.image.cloudstack')
             self.delegate = module.CloudStackImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.GCE:
