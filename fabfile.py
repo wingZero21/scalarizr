@@ -11,11 +11,10 @@ from fabric.colors import green, red
 
 project = os.environ.get('CI_PROJECT', 'scalarizr')
 build_dir = os.environ['PWD']
-home_dir = os.environ.get('CI_HOME_DIR', '/root/ci')
+home_dir = os.environ.get('CI_HOME_DIR', '/var/lib/ci')
 omnibus_dir = os.path.join(build_dir, 'omnibus')
 project_dir = os.path.join(home_dir, project)
 repos_dir = os.path.join(home_dir, 'repos')
-aptly_dir = '/root/.aptly'
 master_synced_dir = os.path.join(os.environ.get('CI_APP_DIR', '/vagrant'), 'synced')
 slave_synced_dir = '/vagrant/synced'
 build_number_file = os.path.join(project_dir, '.build_number')
