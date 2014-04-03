@@ -724,6 +724,13 @@ class Service(object):
         if node.__node__['state'] != 'importing':
             self._talk_to_updclient()
 
+        if node.__node__['state'] != 'running':
+            try:
+                pkgmgr.updatedb()
+            except:
+                self._logger.warn('Failed to update package manager database: %s', 
+                    sys.exc_info()[1], exc_info=sys.exc_info())
+
         # Check Scalr version
         if not bus.scalr_version:
             version_file = cnf.private_path('.scalr-version')
