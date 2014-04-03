@@ -256,7 +256,7 @@ class OpenstackPlatform(platform.Platform):
 
     def get_server_id(self):
         global_variables = bus.queryenv_service.list_global_variables()
-        return global_variables['SCALR_CLOUD_SERVER_ID']
+        return global_variables['public']['SCALR_CLOUD_SERVER_ID']
 
     def get_avail_zone(self):
         return self._get_property('availability_zone')
