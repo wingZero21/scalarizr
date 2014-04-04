@@ -125,6 +125,7 @@ def git_export():
     local("git archive --format=tar HEAD | gzip >%s" % archive)
     run("rm -rf %s" % build_dir)
     run("mkdir -p %s" % build_dir)
+    local('rm -f %s' % archive)
     put(archive, build_dir)
     with cd(build_dir):
         run("tar -xf %s" % archive)
