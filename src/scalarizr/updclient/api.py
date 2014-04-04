@@ -332,6 +332,7 @@ class UpdClientAPI(object):
                     LOG.debug('Crypto key works')
                 except queryenv.InvalidSignatureError:
                     LOG.debug("Crypto key doesn't work")
+                    self.queryenv = None
             if not self.queryenv:
                 LOG.debug("Use crypto key from user-data")
                 with open(self.crypto_file, 'w+') as fp:
