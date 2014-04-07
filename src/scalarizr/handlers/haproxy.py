@@ -47,6 +47,7 @@ class HAProxyHandler(Handler):
     def __init__(self):
         LOG.debug("HAProxyHandler __init__")
         self.api = haproxy_api.HAProxyAPI()
+        self._proxies = None
         self.on_reload()
         bus.on(init=self.on_init, reload=self.on_reload)
 
@@ -110,7 +111,6 @@ class HAProxyHandler(Handler):
 
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         accept_res = haproxy_svs.BEHAVIOUR in behaviour and message.name in (
-            Messages.HOST_INIT_RESPONSE,
             # Messages.BEFORE_HOST_UP,
             Messages.HOST_UP, 
             Messages.HOST_DOWN, 
@@ -178,8 +178,8 @@ class HAProxyHandler(Handler):
 
 
     def on_host_init_response(self, msg):
-        LOG.debug('HAProxyHandler.on_host_init_response')
         if linux.os.debian_family:
+            LOG.info('Updating file /etc/default/haproxy')
             with open('/etc/default/haproxy', 'w+') as fp:
                 fp.write('ENABLED=1\n')
 
@@ -189,8 +189,12 @@ class HAProxyHandler(Handler):
         proxies = haproxy.get('haproxy')
         if proxies is None:
             proxies = []
-        self._configure(proxies)
+        self._proxies = proxies
 
+
+    def on_before_host_up(self, msg):
+
+        self._configure(self._proxies)
 
     """
     def on_before_host_up(self, msg):
