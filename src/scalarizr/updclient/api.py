@@ -26,7 +26,7 @@ from scalarizr.api.binding import jsonrpc_http
 from scalarizr.bus import bus
 from scalarizr.linux import pkgmgr
 from scalarizr.messaging import p2p as messaging
-from scalarizr.util import metadata, initdv2, sqlite_server
+from scalarizr.util import metadata, initdv2, sqlite_server, wait_until
 
 if linux.os.windows:
     import win32com
@@ -203,15 +203,24 @@ class UpdClientAPI(object):
 
 
     def _init_services(self):
-        if not self.queryenv:
-            self._init_queryenv()
-
         if not bus.db:
             self._init_db()
 
         if not bus.cnf:
             bus.cnf = config.ScalarizrCnf(self.etc_path)
             bus.cnf.bootstrap()
+
+        if not self.queryenv:
+            def init_queryenv():
+                try:
+                    self._init_queryenv()
+                    return True
+                except queryenv.InvalidSignatureError:
+                    if bus.cnf.state == 'bootstrapping':
+                        return False
+                    else:
+                        raise
+            wait_until(init_queryenv, timeout=120, sleep=10)
 
         if not self.messaging_service:
             LOG.debug('Initializing messaging')
