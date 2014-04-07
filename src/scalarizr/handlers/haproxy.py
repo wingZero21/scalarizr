@@ -133,7 +133,7 @@ class HAProxyHandler(Handler):
         bus.on(
             start=self.on_start,
             host_init_response=self.on_host_init_response,
-            # before_host_up=self.on_before_host_up,
+            before_host_up=self.on_before_host_up
         )
 
     def on_reload(self, *args):
@@ -144,7 +144,7 @@ class HAProxyHandler(Handler):
     def on_start(self):
         if not __node__['state'] == 'running':
             return
-            
+
         healthcheck_names = {
             "healthcheck.fallthreshold": "fall_threshold",
             "healthcheck.interval": "check_interval",
