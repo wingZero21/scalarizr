@@ -142,6 +142,9 @@ class HAProxyHandler(Handler):
         self.svs = haproxy_svs.HAProxyInitScript()
 
     def on_start(self):
+        if not __node__['state'] == 'running':
+            return
+            
         healthcheck_names = {
             "healthcheck.fallthreshold": "fall_threshold",
             "healthcheck.interval": "check_interval",
