@@ -49,7 +49,11 @@ class HAProxyHandler(Handler):
         self.api = haproxy_api.HAProxyAPI()
         self._proxies = None
         self.on_reload()
-        bus.on(init=self.on_init, reload=self.on_reload)
+        bus.on(
+            init=self.on_init, 
+            reload=self.on_reload,
+            host_init_response=self.on_host_init_response,
+            before_host_up=self.on_before_host_up)
 
     def _remove_add_servers_from_queryenv(self):
         cnf = ScalarizrCnf(bus.etc_path)
@@ -193,8 +197,8 @@ class HAProxyHandler(Handler):
 
 
     def on_before_host_up(self, msg):
-
         self._configure(self._proxies)
+
 
     """
     def on_before_host_up(self, msg):
