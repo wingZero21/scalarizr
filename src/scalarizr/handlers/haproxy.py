@@ -142,7 +142,7 @@ class HAProxyHandler(Handler):
         self.svs = haproxy_svs.HAProxyInitScript()
 
     def on_start(self):
-        if not __node__['state'] == 'running':
+        if not __node__['state'] != 'running':
             return
 
         healthcheck_names = {
@@ -185,6 +185,7 @@ class HAProxyHandler(Handler):
 
 
     def on_host_init_response(self, msg):
+        LOG.debug('on_host_init_response')
         if linux.os.debian_family:
             LOG.info('Updating file /etc/default/haproxy')
             with open('/etc/default/haproxy', 'w+') as fp:
@@ -200,6 +201,7 @@ class HAProxyHandler(Handler):
 
 
     def on_before_host_up(self, msg):
+        LOG.debug('on_before_host_up')
         self._configure(self._proxies)
 
 
