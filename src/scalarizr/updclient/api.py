@@ -217,6 +217,7 @@ class UpdClientAPI(object):
                     return True
                 except queryenv.InvalidSignatureError:
                     if bus.cnf.state == 'bootstrapping':
+                        LOG.debug('Ignore InvalidSignatureError while Scalarizr is bootstrapping, retrying...')
                         return False
                     else:
                         raise
