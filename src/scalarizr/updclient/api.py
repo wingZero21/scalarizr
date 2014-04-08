@@ -157,6 +157,7 @@ class UpdClientAPI(object):
         self.state = 'noop'
         self.meta = metadata.Metadata()
         self.shutdown_ev = threading.Event()
+        self.early_bootstrapped = False
 
 
     def _update_self_dict(self, data):
@@ -347,6 +348,7 @@ class UpdClientAPI(object):
                 LOG.debug("Use crypto key from user-data")
                 with open(self.crypto_file, 'w+') as fp:
                     fp.write(user_data['szr_key'])
+        self.early_bootstrapped = True
 
         if not linux.os.windows:
             self.package = 'scalarizr-' + self.platform
@@ -609,7 +611,8 @@ class UpdClientAPI(object):
 
 
     def shutdown(self):
-        self.store()
+        if self.early_bootstrapped:
+            self.store()
         self.shutdown_ev.set()
 
 
