@@ -322,13 +322,22 @@ class UpdClientAPI(object):
             try:
                 user_data = self.meta['user_data']
             except metadata.NoUserDataError:
-                if self.platform == 'openstack':
+                if 'OpenStack' in str(self.meta.provider_for_capability['instance_id']):  
+                    # TODO(marat): better to have property 'cloud': if meta.cloud == "openstack"
                     LOG.info('Found no user-data on OpenStack platform, '
-                            'this mean that all providers failed and now I should '
-                            'wait for an injected user-data file')
+                            'this mean that query data providers failed and now I should '
+                            'wait for a personality user-data file')
                     time.sleep(20)
                     self.meta = metadata.Metadata()
-                    user_data = self.meta['user_data']
+                    try:
+                        user_data = self.meta['user_data']
+                    except metadata.NoUserDataError:
+                        LOG.error(('Still no user-data, '
+                                'check why $ETC_DIR/private.d/user-data not exists. '
+                                "This time it's better fail"))
+                        raise
+                else:
+                    raise
             norm_user_data(user_data)
             LOG.debug('Apply user-data settings')
             self._update_self_dict(user_data)

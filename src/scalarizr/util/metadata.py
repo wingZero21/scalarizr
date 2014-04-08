@@ -69,7 +69,7 @@ class Metadata(object):
 
     def __init__(self, providers=None, capabilities=None):
         self._cache = {}
-        self._provider_for_capability = {}
+        self.provider_for_capability = {}
         self._nodata_pvd = self.NoDataPvd(self)
         self._providers_resolved = False
         if not providers:
@@ -117,14 +117,14 @@ class Metadata(object):
             if not vote:
                 pvd = self._nodata_pvd
             LOG.debug("provider for '{0}': {1}".format(cap, pvd))
-            self._provider_for_capability[cap] = pvd
+            self.provider_for_capability[cap] = pvd
         self._providers_resolved = True
 
     def __getitem__(self, capability):
         self._resolve_once_providers()
         if not capability in self._cache:
             try:
-                pvd = self._provider_for_capability[capability]
+                pvd = self.provider_for_capability[capability]
             except KeyError:
                 msg = "Can't find a provider for '{0}'".format(capability)
                 raise NoProviderError(msg)
