@@ -51,9 +51,8 @@ class HAProxyHandler(Handler):
         self.on_reload()
         bus.on(
             init=self.on_init, 
-            reload=self.on_reload,
-            host_init_response=self.on_host_init_response,
-            before_host_up=self.on_before_host_up)
+            reload=self.on_reload
+        )
 
     def _remove_add_servers_from_queryenv(self):
         cnf = ScalarizrCnf(bus.etc_path)
@@ -96,7 +95,7 @@ class HAProxyHandler(Handler):
 
         # add the proxies
         for proxy in proxies:       
-            LOG.debug("make_proxy args: port=%s, backends=%s, %s", proxy["port"],
+            LOG.debug("Calling make_proxy port=%s, backends=%s, %s", proxy["port"],
                     pformat(proxy["backends"]), pformat(proxy["healthcheck_params"]))
             self.api.make_proxy(port=proxy["port"],
                                 backends=proxy["backends"],
@@ -132,8 +131,7 @@ class HAProxyHandler(Handler):
     def on_init(self, *args, **kwds):
         bus.on(
             start=self.on_start,
-            host_init_response=self.on_host_init_response,
-            before_host_up=self.on_before_host_up
+            host_init_response=self.on_host_init_response
         )
 
     def on_reload(self, *args):
@@ -197,12 +195,7 @@ class HAProxyHandler(Handler):
         proxies = haproxy.get('haproxy')
         if proxies is None:
             proxies = []
-        self._proxies = proxies
-
-
-    def on_before_host_up(self, msg):
-        LOG.debug('on_before_host_up')
-        self._configure(self._proxies)
+        self._configure(proxies)
 
 
     """
