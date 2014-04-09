@@ -16,214 +16,148 @@ from scalarizr.storage2 import filesystem
 _logger = logging.getLogger(__name__)
 
 
-class LinuxImage(object):
-    SPECIAL_DIRS = ('/dev', '/media', '/mnt', '/proc', '/sys', '/cdrom', '/tmp')
-    _volume = None
-    # Image file
-    path = None
-    # Image device name
-    # Returned by _create_image def
-    devname = None
-    # Image mount point
-    mpoint = None
-    # Directories excludes list
-    excludes = None
-    _excluded_mpoints = None
-    _mtab = None
+class InstanceStoreImageMaker(object):
+    
+    def __init__(self,
+        image_name,
+        role_name,
+        excludes=[],
+        size=None,
+        bucket_name=None):
 
-    def __init__(self, volume, path=None, excludes=None):
-        self._mtab = mount.mounts()
-        self._volume = volume
-        self.mpoint = '/mnt/img-mnt'
-        self.path = path
+        self.image_name = image_name
+        self.role_name = role_name
+        self.excludes = excludes
+        self.size = size
+        self.bucket_name = bucket_name
 
-        # Create rsync excludes list
-        self.excludes = set(self.SPECIAL_DIRS)  # Add special dirs
-        self.excludes.update(excludes or ())    # Add user input
-        self.excludes.add(self.mpoint)                  # Add image mount point
-        if self.path:
-            self.excludes.add(self.path)            # Add image path
-        # Add all mounted filesystems, except bundle volume
-        self._excluded_mpoints = [entry.mpoint for entry in self._mtab.list_entries()
-            if entry.mpoint.startswith(self._volume) and entry.mpoint != self._volume]
-        self.excludes.update(self._excluded_mpoints)
-
-    def make(self):
-        self.devname = self._create_image()
-        self._format_image()
-        system2("sync", shell=True)  # Flush so newly formatted filesystem is ready to mount.
-        self._mount_image()
-        self._make_special_dirs()
-        self._copy_rec(self._volume, self.mpoint)
-        system2("sync", shell=True)  # Flush buffers
-        return self.mpoint
-
-    def clean(self):
-        self.umount()
-        if os.path.exists(self.mpoint):
-            os.rmdir(self.mpoint)
-
-    def umount(self):
-        if self.mpoint in self._mtab:
-            _logger.debug("Unmounting '%s'", self.mpoint)
-            system2("umount -d " + self.mpoint, shell=True, raise_exc=False)
-
-    def _format_image(self):
-        _logger.info("Formatting image")
-
-        vol_entry = None
-        for v in self._mtab:
-            if v.device.startswith('/dev'):
-                vol_entry = v
-                break
-
-        if vol_entry.device == '/dev/root' and not os.path.exists(vol_entry.device):
-            vol_entry = [v for v in mount.mounts('/etc/mtab') 
-                if v.device.startswith('/dev')][0]
-        fs = filesystem(vol_entry.fstype)
-
-        # create filesystem
-        fs.mkfs(self.devname)
-
-        # set EXT3/4 options
-        if fs.type.startswith('ext'):
-            # max mounts before check (-1 = disable)
-            system2(('/sbin/tune2fs', '-c', '1', self.devname))
-            # time based (3m = 3 month)
-            system2(('/sbin/tune2fs', '-i', '3m', self.devname))
-
-        # set label
-        label = fs.get_label(vol_entry.device)
-        if label:
-            fs.set_label(self.devname, label)
-
-        _logger.debug('Image %s formatted', self.devname)
-
-    def _create_image(self):
+    def prepare_image(self):
+        # prepares imiage with ec2-bundle-vol command
         pass
 
-    def _mount_image(self, options=None):
-        _logger.info("Mounting image")
-        if self.mpoint in  self._mtab:
-            raise ImageAPIError("Image already mounted")
-        options = options or []
-        mount.mount(self.devname, self.mpoint, *options)
+    def upload_image(self):
+        # upload image on S3 with ec2-upload-bundle or filetransfer
+        pass
 
-    def _make_special_dirs(self):
-        _logger.info('Making special directories')
+    def register_image(self):
+        # register image as AMI with ec2-register
+        pass
 
-        # Create empty special dirs
-        for dirname in self.SPECIAL_DIRS:
-            spec_dir = self.mpoint + dirname
-            if os.path.exists(dirname) and not os.path.exists(spec_dir):
-                _logger.debug("Create spec dir %s", dirname)
-                os.makedirs(spec_dir)
-                if dirname == '/tmp':
-                    os.chmod(spec_dir, 01777)
+    def cleanup(self):
+        # remove image from the server
+        pass
 
-        # Create excluded mpoints dirs (not under special dirs)
-        for dirname in self._excluded_mpoints:
-            if not [dirname for spec_dir in self.SPECIAL_DIRS if dirname.startswith(spec_dir)]:
-                if not os.path.exists(self.mpoint + dirname):
-                    _logger.debug('Create mpoint dir %s', dirname)
-                    os.makedirs(self.mpoint + dirname)
+    def create_image(self, name):
+        self.prepare_image()
+        self.upload_image()
+        self.register_image()
+        self.cleanup()  # ?
 
-        # MAKEDEV is incredibly variable across distros, so use mknod directly.
-        devdir = os.path.join(self.mpoint, 'dev')
-        mknod = '/bin/mknod'
-        nods = (
-            'console c 5 1',
-            'full c 1 7',
-            'null c 1 3',
-            'zero c 1 5',
-            'tty c 5 0',
-            'tty0 c 4 0',
-            'tty1 c 4 1',
-            'tty2 c 4 2',
-            'tty3 c 4 3',
-            'tty4 c 4 4',
-            'tty5 c 4 5',
-            'xvc0 c 204 191')
-        for nod in nods:
-            nod = nod.split(' ')
-            nod[0] = devdir + '/' + nod[0]
-            system2([mknod] + nod)
+class EBSImageMaker(object):
 
-        _logger.debug("Special directories were created")
+    def __init__(self):
+        pass
 
-    def _copy_rec(self, source, dest, xattr=True):
-        _logger.info("Copying %s into the image %s", source, dest)
-        rsync_longs = dict(archive=True, sparse=True, times=True)
-        if self.excludes:
-            rsync_longs['exclude'] = list(self.excludes)
-        #rsync = filetool.Rsync()
-        #rsync.archive().times().sparse().links().quietly()
-        #rsync.archive().sparse().xattributes()
-        #rsync.archive().sparse().times()
+    def create_image(self):
+        #create imaeg with ec2-create-image or through snapshotting server first
+        pass
+        # OR
+        self.make_snapshot()
+        self.register_image()
 
-        if xattr:
-            rsync_longs['xattrs'] = True
-        try:
-            rsync.rsync(source, dest, **rsync_longs)
-        except linux.LinuxError, e:
-            if e.returncode == 24:
-                _logger.warn(
-                    "rsync exited with error code 24. This means a partial transfer due to vanished " +
-                    "source files. In most cases files are copied normally")
-            elif e.returncode == 23:
-                _logger.warn(
-                    "rsync seemed successful but exited with error code 23. This probably means " +
-                    "that your version of rsync was built against a kernel with HAVE_LUTIMES defined, " +
-                    "although the current kernel was not built with this option enabled. The bundling " +
-                    "process will thus ignore the error and continue bundling.  If bundling completes " +
-                    "successfully, your image should be perfectly usable. We, however, recommend that " +
-                    "you install a version of rsync that handles this situation more elegantly.")
-            elif e.returncode == 1 and xattr:
-                _logger.warn(
-                    "rsync with preservation of extended file attributes failed. Retrying rsync " +
-                    "without attempting to preserve extended file attributes...")
-                self._copy_rec(source, dest, xattr=False)
-            else:
-                raise
-
-
-class LinuxLoopbackImage(LinuxImage):
-    """
-    This class encapsulate functionality to create an file loopback image
-    from a volume. The image is created using dd. Sub-directories of the
-    volume, including mounts of local filesystems, are copied to the image.
-    Symbolic links are preserved.
-    """
-
-    MAX_IMAGE_SIZE = 10*1024
-    _size = None
-
-    def __init__(self, volume, image_file, image_size, excludes=None):
-        '''
-        @param volume: Path to mounted volume to create the bundle from. Ex: '/'
-        @param image_file:  Destination file to store the bundled image. Ex: /mnt/img
-        @param image_size: Image file size in Mb. Ex: 1408 (1Gb)
-        @param excludes: list of directories and files to exclude. Ex: /mnt, /root/.*
-        '''
-        LinuxImage.__init__(self, volume, image_file, excludes)
-        self._size = image_size or self.MAX_IMAGE_SIZE
-
-    def make(self):
-        _logger.info("Make image %s from volume %s (excludes: %s)",
-            self.path, self._volume, ":".join(self.excludes))
-        LinuxImage.make(self)
-
-    def _create_image(self):
-        _logger.debug('Creating loop device (file: %s, size: %s)', self.path, self._size)
-        devname = loop.mkloop(self.path, size=self._size, quick=True)
-        _logger.debug('Created loop device %s associated with file %s', devname, self.path)
-        return devname
-
-    def clean(self):
-        LinuxImage.clean(self)
-        if self.devname:
-            loop.rmloop(self.devname)
+    def cleanup(self):
+        pass
 
 
 class EC2ImageAPIDelegate(ImageAPIDelegate):
-    pass
+
+    def __init__(self):
+        self.image_maker = None
+
+    def _get_root_device_type(self):
+        pl = __node__['platform']
+        ec2_conn = pl.new_ec2_conn()
+        instance_id = pl.get_instance_id()
+        try:
+            instance = ec2_conn.get_all_instances([instance_id])[0].instances[0]
+        except IndexError:
+            msg = 'Failed to find instance %s. ' \
+                'If you are importing this server, check that you are doing it from the ' \
+                'right Scalr environment' % instance_id
+            raise ImageAPIError(msg)
+
+        return instance.root_device_type
+
+    def _get_root_disk(self):
+        # list of all mounted devices 
+        devices = coreutils.df()
+
+        # root device partition like `df(device='/dev/sda2', ..., mpoint='/')
+        root_disk = None
+        for device in devices:
+            if device.mpoint == '/':
+                return device
+        
+        raise ImageAPIError("Can't find root device")
+
+    def prepare(self, operation, role_name):
+        '''
+        @param message.volume_size:
+                New size for EBS-root device.
+                By default current EBS-root size will be used (15G in most popular AMIs)
+        @param message.volume_id
+                EBS volume for root device copy.
+        '''
+
+        image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+
+        root_device_type = self._get_root_device_type()          
+        root_disk = self._get_root_disk()
+
+        if root_device_type == 'ebs':
+            # EBS-root device instance
+            # detecting root device like rdev=`sda`
+            rdev = None
+            for el in os.listdir('/sys/block'):
+                if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
+                    rdev = el
+                    break
+            if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
+                rdev = root_disk.device
+
+            # list partition of root device 
+            list_rdevparts = [dev.device for dev in devices
+                if dev.device.startswith('/dev/%s' % rdev)]
+
+            if len(list(set(list_rdevparts))) > 1:
+                # size of volume in KByte
+                volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
+                # size of volume in GByte
+                volume_size = int(volume_size[0].strip()) / 1024 / 1024
+                #TODO: need set flag, which be for few partitions
+                #copy_partition_table = True
+            else:
+                # if one partition we use old method
+                volume_size = self._rebundle_message.body.get('volume_size')
+                if not volume_size:
+                    volume_size = int(root_disk.size / 1000 / 1000)
+
+            self._strategy = self._ebs_strategy_cls(
+                    self, self._role_name, image_name, self._excludes,
+                    volume_size=volume_size,  # in Gb
+                    volume_id=self._rebundle_message.body.get('volume_id')
+            )
+        else:
+            self.image_maker = InstanceStoreImageMaker(
+                image_name,
+                role_name,
+                self.excludes,
+                image_size=root_disk.size / 1000,
+                s3_bucket_name=self._s3_bucket_name)
+
+
+    def snapshot(self, operation, role_name):
+        pass
+
+    def finalize(self, operation, role_name):
+        pass
