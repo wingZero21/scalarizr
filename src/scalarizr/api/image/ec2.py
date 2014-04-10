@@ -3,15 +3,22 @@ import os
 import shutil
 import sys
 import time
+import subprocess
 
 from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
 from scalarizr.util import system2
+from scalarizr import linux
 from scalarizr.linux import mount
 from scalarizr.linux import rsync
 from scalarizr.storage2.util import loop
 from scalarizr import linux
 from scalarizr.storage2 import filesystem
+from scalarizr.config import ScalarizrCnf
+from scalarizr.node import __node__
+from scalarizr.node import base_dir as etc_dir
+from scalarizr.node import private_dir
+
 
 _logger = logging.getLogger(__name__)
 
@@ -20,43 +27,86 @@ class InstanceStoreImageMaker(object):
     
     def __init__(self,
         image_name,
-        role_name,
+        environ,
         excludes=[],
-        size=None,
-        bucket_name=None):
+        image_size=None,
+        bucket_name=None,
+        destination='/mnt'):
 
         self.image_name = image_name
-        self.role_name = role_name
+        self.environ = environ
         self.excludes = excludes
-        self.size = size
+        self.image_size = image_size
         self.bucket_name = bucket_name
+        self.destination = destination
+        self.platform = __node__['platform']
 
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
-        pass
+        cmd = (
+            linux.which('ec2-bundle-vol'), 
+            '--arch', linux.os['arch'],
+            '--size', str(self.image_size),
+            '--destination', self.destination,
+            '--exclude', ','.join(self.excludes),
+            '--prefix', self.image_name,
+            '--volume', '/',
+            '--debug')
+        _logger.info('Image prepare command: ' + ' '.join(cmd))
+        out = linux.system(cmd, 
+            env=self.environ,
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT)[0]
+        _logger.info('Image prepare command out: %s' % out)
+
 
     def upload_image(self):
         # upload image on S3 with ec2-upload-bundle or filetransfer
-        pass
+        _logger.info('Uploading image (with ec2-upload-bundle)')
+        manifest = os.path.join(self.destination, self.image_name) + '.manifest.xml'
+        bucket = os.path.basename(self.platform.scalrfs.root())
+        cmd = (
+            linux.which('euca-upload-bundle'),
+            '--bucket', bucket,
+            '--manifest', manifest)
+        _logger.info('Image upload command: ', ' '.join(cmd))
+        out = linux.system(cmd, env=self.environ)[0]
+        _logger.info('Image upload command out: %s' % out)
+        return bucket, manifest
 
-    def register_image(self):
+    def register_image(self, bucket, manifest):
         # register image as AMI with ec2-register
-        pass
+        _logger.info('Registering image')
+        s3_manifest_path = '%s/%s' % (bucket, os.path.basename(manifest))
+        _logger.info("Registering image '%s'", s3_manifest_path)
+
+        ec2_conn = self.platform.new_ec2_conn()
+        ami_id = ec2_conn.register_image(image_location=s3_manifest_path)
+
+        _logger.info("Image is registered.")
+        _logger.debug('Image %s is available', ami_id)
+        return ami_id
 
     def cleanup(self):
         # remove image from the server
-        pass
+        linux.system('chmod 755 %s/keys/euca-*' % private_dir, shell=True)
+        linux.system('rm -f %s/keys/euca-*' % private_dir, shell=True)
+        linux.system('rm -f %s/%s.*' % (self.destination, self.image_name), shell=True)
 
-    def create_image(self, name):
-        self.prepare_image()
-        self.upload_image()
-        self.register_image()
-        self.cleanup()  # ?
+    def create_image(self):
+        try:
+            self.prepare_image()
+            bucket, manifest = self.upload_image()
+            image_id = self.register_image(bucket, manifest)
+            return image_id
+        finally:
+            self.cleanup()
+
 
 class EBSImageMaker(object):
 
-    def __init__(self):
-        pass
+    def __init__(self, environ):
+        self.environ = environ
 
     def create_image(self):
         #create imaeg with ec2-create-image or through snapshotting server first
@@ -73,11 +123,12 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
     def __init__(self):
         self.image_maker = None
+        self.environ = None
 
     def _get_root_device_type(self):
-        pl = __node__['platform']
-        ec2_conn = pl.new_ec2_conn()
-        instance_id = pl.get_instance_id()
+        platform = __node__['platform']
+        ec2_conn = platform.new_ec2_conn()
+        instance_id = platform.get_instance_id()
         try:
             instance = ec2_conn.get_all_instances([instance_id])[0].instances[0]
         except IndexError:
@@ -100,6 +151,25 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         
         raise ImageAPIError("Can't find root device")
 
+    def _setup_environment(self):
+        platform = __node__['platform']
+        cnf = ScalarizrCnf(etc_dir)
+        cert, pk = platform.get_cert_pk()
+        access_key, secret_key = platform.get_access_keys()
+
+        cert_path = cnf.write_key('ec2-cert.pem', cert)
+        pk_path = cnf.write_key('ec2-pk.pem', pk)
+        cloud_cert_path = cnf.write_key('ec2-cloud-cert.pem', platform.get_ec2_cert())
+
+        self.environ = os.environ.copy()
+        self.environ.update({
+            'EC2_CERT': cert_path,
+            'EC2_PRIVATE_KEY': pk_path,
+            'EC2_USER_ID': platform.get_account_id(),
+            'AWS_ACCESS_KEY': access_key,
+            'AWS_SECRET_KEY': secret_key,
+            'EC2_URL': platform.get_access_data('ec2_url')})
+
     def prepare(self, operation, role_name):
         '''
         @param message.volume_size:
@@ -109,7 +179,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 EBS volume for root device copy.
         '''
 
-        image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+        image_name = self.role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 
         root_device_type = self._get_root_device_type()          
         root_disk = self._get_root_disk()
@@ -143,7 +213,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                     volume_size = int(root_disk.size / 1000 / 1000)
 
             self._strategy = self._ebs_strategy_cls(
-                    self, self._role_name, image_name, self._excludes,
+                    self, self.role_name, image_name, self.excludes,
                     volume_size=volume_size,  # in Gb
                     volume_id=self._rebundle_message.body.get('volume_id')
             )
@@ -157,7 +227,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
 
     def snapshot(self, operation, role_name):
-        pass
+        image_id = self.image_maker.create_image()
+        return image_id
 
     def finalize(self, operation, role_name):
         pass
