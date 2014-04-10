@@ -489,7 +489,14 @@ def _cleanup_after_rebundle():
             continue
         path = os.path.join(priv_path, file)
         coreutils.chmod_r(path, 0700)
-        os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path, ignore_errors=True)
+        try:
+            os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+        except:
+            if linux.os.windows and sys.exc_info()[0] == WindowsError:         
+                # ScalrUpdClient locks db.sqlite 
+                logger.debug(sys.exc_info()[1])
+            else:
+                raise
     if not linux.os.windows_family:
         system2('sync', shell=True)
 
