@@ -322,7 +322,7 @@ class FileDataPvd(Provider):
                         '(mtime: {1!r}, boot_time: {2!r})').format(
                         self.filename,
                         time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(os.stat(self.filename).st_mtime)),
-                        time.strftime('%Y-%m-%dT%H:%M:%S', boot_time())))
+                        time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(boot_time()))))
                 votes[self]['user_data'] += 1
             else:
                 self.LOG.debug(('skipping user_data file {0!r}, '

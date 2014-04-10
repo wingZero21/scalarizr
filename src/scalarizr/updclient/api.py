@@ -328,15 +328,20 @@ class UpdClientAPI(object):
                     LOG.info('Found no user-data on OpenStack platform, '
                             'this mean that query data providers failed and now I should '
                             'wait for a personality user-data file')
-                    time.sleep(20)
-                    self.meta = metadata.Metadata()
-                    try:
-                        user_data = self.meta['user_data']
-                    except metadata.NoUserDataError:
-                        LOG.error(('Still no user-data, '
-                                'check why $ETC_DIR/private.d/user-data not exists. '
-                                "This time it's better fail"))
-                        raise
+                    max_attempt = 10
+                    for attempt in range(0, max_attempt):
+                        time.sleep(5)
+                        self.meta = metadata.Metadata()
+                        try:
+                            user_data = self.meta['user_data']
+                            break
+                        except metadata.NoUserDataError:
+                            if attempt == max_attempt:
+                                LOG.error(('Still no user-data, '
+                                        'check why $ETC_DIR/private.d/user-data not exists. '))
+                                raise
+                            else:
+                                LOG.debug('Still no user-data, retrying...')
                 else:
                     raise
             norm_user_data(user_data)
