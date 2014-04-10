@@ -489,7 +489,7 @@ def _cleanup_after_rebundle():
             continue
         path = os.path.join(priv_path, file)
         coreutils.chmod_r(path, 0700)
-        os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+        os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path, ignore_errors=True)
     if not linux.os.windows_family:
         system2('sync', shell=True)
 
