@@ -144,6 +144,7 @@ class UpdClientAPI(object):
         def fset(self, state):
             self.prev_state = self._state
             self._state = state
+            LOG.info('State transition: {0} -> {1}'.format(self.prev_state, state))
         return locals()
     state = property(**state())
 
@@ -318,7 +319,7 @@ class UpdClientAPI(object):
                 if self.shutdown_ev.is_set():
                     return
         else:
-            LOG.debug('Getting cloud user-data')
+            LOG.info('Getting cloud user-data')
             try:
                 user_data = self.meta['user_data']
             except metadata.NoUserDataError:
@@ -339,24 +340,27 @@ class UpdClientAPI(object):
                 else:
                     raise
             norm_user_data(user_data)
-            LOG.debug('Apply user-data settings')
+            LOG.info('Applying user-data settings')
             self._update_self_dict(user_data)
 
             crypto_dir = os.path.dirname(self.crypto_file)
             if not os.path.exists(crypto_dir):
                 os.makedirs(crypto_dir)
             if os.path.exists(self.crypto_file): 
-                LOG.debug('Testing that crypto key works (file: %s)', self.crypto_file) 
+                LOG.info('Testing that crypto key works (file: %s)', self.crypto_file) 
                 try:
                     self._init_queryenv()
-                    LOG.debug('Crypto key works')
+                    LOG.info('Crypto key works')
                 except queryenv.InvalidSignatureError:
-                    LOG.debug("Crypto key doesn't work: got invalid signature error")
+                    LOG.info("Crypto key doesn't work: got invalid signature error")
                     self.queryenv = None
             if not self.queryenv:
-                LOG.debug("Use crypto key from user-data")
+                LOG.info("Use crypto key from user-data")
+                if os.path.exists(self.crypto_file):
+                    os.chmod(self.crypto_file, 0600)
                 with open(self.crypto_file, 'w+') as fp:
                     fp.write(user_data['szr_key'])
+                os.chmod(self.crypto_file, 0400)
         self.early_bootstrapped = True
 
         if not linux.os.windows:
