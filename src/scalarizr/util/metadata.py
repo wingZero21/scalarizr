@@ -318,7 +318,11 @@ class FileDataPvd(Provider):
     def vote(self, votes):
         if self.try_file(self.filename):
             if os.stat(self.filename).st_mtime > boot_time():
-                self.LOG.debug('matched user_data in file {0!r}'.format(self.filename))
+                self.LOG.debug(('matched user_data in file {0!r} ' 
+                        '(mtime: {1!r}, boot_time: {2!r})').format(
+                        self.filename,
+                        time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(os.stat(self.filename).st_mtime)),
+                        time.strftime('%Y-%m-%dT%H:%M:%S', boot_time())))
                 votes[self]['user_data'] += 1
             else:
                 self.LOG.debug(('skipping user_data file {0!r}, '
