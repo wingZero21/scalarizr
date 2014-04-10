@@ -8,10 +8,14 @@ import os
 import sys
 import posixpath
 import glob
+import time
 import operator
 from multiprocessing import pool as process_pool
 
 from scalarizr import linux
+if linux.os.windows:
+    from win32com import client as comclient
+    from scalarizr.util import coinitialized
 
 
 LOG = logging.getLogger(__name__)
@@ -313,8 +317,12 @@ class FileDataPvd(Provider):
 
     def vote(self, votes):
         if self.try_file(self.filename):
-            self.LOG.debug('matched user_data in file %s', self.filename)
-            votes[self]['user_data'] += 1
+            if os.stat(self.filename).st_mtime > boot_time():
+                self.LOG.debug('matched user_data in file {0!r}'.format(self.filename))
+                votes[self]['user_data'] += 1
+            else:
+                self.LOG.debug(('skipping user_data file {0!r}, '
+                        'cause it was modified before os boot time').format(self.filename))
 
     def __repr__(self):
         return '<FileDataPvd at {0} filename={1}>'.format(
@@ -322,3 +330,30 @@ class FileDataPvd(Provider):
 
     def user_data(self):
         return Userdata.from_string(self.get_file(self.filename))
+
+
+_boot_time = None
+def boot_time():
+    # pylint: disable=W0603
+    global _boot_time
+    if not _boot_time:
+        if linux.os.windows:
+            @coinitialized
+            def get_boot_time():
+                wmi = comclient.GetObject('winmgmts:')
+                win_os = next(iter(wmi.InstancesOf('Win32_OperatingSystem')))
+                local_time, tz_op, tz_hh60mm = re.split(r'(\+|\-)', win_os.LastBootUpTime)
+                local_time = local_time.split('.')[0]
+                local_time = time.mktime(time.strptime(local_time, '%Y%m%d%H%M%S'))
+                tz_seconds = int(tz_hh60mm) * 60
+                if tz_op == '+':
+                    return local_time + tz_seconds
+                else:
+                    return local_time - tz_seconds
+        else:
+            def get_boot_time():
+                with open('/proc/uptime') as fp:
+                    uptime = float(fp.read().strip().split()[0])
+                return time.time() - uptime
+        _boot_time = get_boot_time()
+    return _boot_time
