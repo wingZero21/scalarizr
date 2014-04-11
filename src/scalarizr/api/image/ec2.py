@@ -205,7 +205,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
         root_device_type = self._get_root_device_type()          
         root_disk = self._get_root_disk()
-
+        _logger.debug('device type: %s' % root_device_type)
         if root_device_type == 'ebs':
             # EBS-root device instance
             # detecting root device like rdev=`sda`
