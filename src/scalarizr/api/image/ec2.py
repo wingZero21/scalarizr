@@ -193,14 +193,9 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             (platform.get_region(), platform.get_account_id())
 
     def prepare(self, operation, role_name):
-        '''
-        @param message.volume_size:
-                New size for EBS-root device.
-                By default current EBS-root size will be used (15G in most popular AMIs)
-        @param message.volume_id
-                EBS volume for root device copy.
-        '''
-
+        pass
+        
+    def snapshot(self, operation, role_name):
         image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 
         root_device_type = self._get_root_device_type()          
@@ -247,7 +242,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 s3_bucket_name=self._get_s3_bucket_name())
 
 
-    def snapshot(self, operation, role_name):
         image_id = self.image_maker.create_image()
         return image_id
 
