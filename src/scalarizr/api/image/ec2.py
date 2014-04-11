@@ -18,7 +18,7 @@ from scalarizr.config import ScalarizrCnf
 from scalarizr.node import __node__
 from scalarizr.node import base_dir as etc_dir
 from scalarizr.node import private_dir
-
+from scalarizr.linux import coreutils
 
 _logger = logging.getLogger(__name__)
 
@@ -105,18 +105,27 @@ class InstanceStoreImageMaker(object):
 
 class EBSImageMaker(object):
 
-    def __init__(self, environ):
+    def __init__(self, image_name, environ):
+        self.image_name = image_name
         self.environ = environ
 
     def create_image(self):
         #create imaeg with ec2-create-image or through snapshotting server first
-        pass
-        # OR
-        self.make_snapshot()
-        self.register_image()
-
-    def cleanup(self):
-        pass
+        platform = __node__['platform']
+        instance_id = platform.get_instance_id()
+        cmd = (
+            linux.which('ec2-create-image'), 
+            instance_id,
+            '--name', self.image_name,
+            '--no-reboot',
+            '--debug')
+        _logger.info('Image create command: ' + ' '.join(cmd))
+        out = linux.system(cmd, 
+            env=self.environ,
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT)[0]
+        _logger.info('Image create command out: %s' % out)
+        return out
 
 
 class EC2ImageAPIDelegate(ImageAPIDelegate):
@@ -124,6 +133,12 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def __init__(self):
         self.image_maker = None
         self.environ = None
+        self.excludes = [
+                self._destination,
+                '/selinux/*',
+                '/var/lib/dhclient',
+                '/var/lib/dhcp',
+                '/var/lib/dhcp3']
 
     def _get_root_device_type(self):
         platform = __node__['platform']
@@ -170,6 +185,11 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             'AWS_SECRET_KEY': secret_key,
             'EC2_URL': platform.get_access_data('ec2_url')})
 
+    def _get_s3_bucket_name(self):
+        platform = __node__['platform']
+        return 'scalr2-images-%s-%s' % \
+            (platform.get_region(), platform.get_account_id())
+
     def prepare(self, operation, role_name):
         '''
         @param message.volume_size:
@@ -179,7 +199,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 EBS volume for root device copy.
         '''
 
-        image_name = self.role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+        image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 
         root_device_type = self._get_root_device_type()          
         root_disk = self._get_root_disk()
@@ -187,43 +207,41 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         if root_device_type == 'ebs':
             # EBS-root device instance
             # detecting root device like rdev=`sda`
-            rdev = None
-            for el in os.listdir('/sys/block'):
-                if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
-                    rdev = el
-                    break
-            if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
-                rdev = root_disk.device
+            # rdev = None
+            # for el in os.listdir('/sys/block'):
+            #     if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
+            #         rdev = el
+            #         break
+            # if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
+            #     rdev = root_disk.device
 
-            # list partition of root device 
-            list_rdevparts = [dev.device for dev in devices
-                if dev.device.startswith('/dev/%s' % rdev)]
+            # # list partition of root device 
+            # list_rdevparts = [dev.device for dev in devices
+            #     if dev.device.startswith('/dev/%s' % rdev)]
 
-            if len(list(set(list_rdevparts))) > 1:
-                # size of volume in KByte
-                volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
-                # size of volume in GByte
-                volume_size = int(volume_size[0].strip()) / 1024 / 1024
-                #TODO: need set flag, which be for few partitions
-                #copy_partition_table = True
-            else:
-                # if one partition we use old method
-                volume_size = self._rebundle_message.body.get('volume_size')
-                if not volume_size:
-                    volume_size = int(root_disk.size / 1000 / 1000)
+            # if len(list(set(list_rdevparts))) > 1:
+            #     # size of volume in KByte
+            #     volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
+            #     # size of volume in GByte
+            #     volume_size = int(volume_size[0].strip()) / 1024 / 1024
+            #     #TODO: need set flag, which be for few partitions
+            #     #copy_partition_table = True
+            # else:
+            #     # if one partition we use old method
+            #     volume_size = self._rebundle_message.body.get('volume_size')
+            #     if not volume_size:
+            #         volume_size = int(root_disk.size / 1000 / 1000)
 
-            self._strategy = self._ebs_strategy_cls(
-                    self, self.role_name, image_name, self.excludes,
-                    volume_size=volume_size,  # in Gb
-                    volume_id=self._rebundle_message.body.get('volume_id')
-            )
+            self._strategy = EBSImageMaker(
+                    image_name,
+                    self.environ)
         else:
             self.image_maker = InstanceStoreImageMaker(
                 image_name,
                 role_name,
                 self.excludes,
                 image_size=root_disk.size / 1000,
-                s3_bucket_name=self._s3_bucket_name)
+                s3_bucket_name=self._get_s3_bucket_name())
 
 
     def snapshot(self, operation, role_name):
