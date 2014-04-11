@@ -234,7 +234,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             #     if not volume_size:
             #         volume_size = int(root_disk.size / 1000 / 1000)
 
-            self._strategy = EBSImageMaker(
+            self.image_maker = EBSImageMaker(
                     image_name,
                     self.environ)
         else:
