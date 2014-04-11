@@ -5,6 +5,7 @@ import uuid
 import string
 import glob
 
+from scalarizr.bus import bus
 from scalarizr import storage2
 from scalarizr.libs import bases
 from scalarizr.linux import coreutils, mount as mod_mount
@@ -127,6 +128,7 @@ class Volume(Base):
         if not os.path.exists(self.mpoint):
             os.makedirs(self.mpoint)
         mod_mount.mount(self.device, self.mpoint)
+        bus.fire("block_device_mounted", volume=self)
 
 
     def umount(self):

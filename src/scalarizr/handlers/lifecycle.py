@@ -141,7 +141,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
     def on_init(self):
-        bus.on("host_init_response", self.on_host_init_response)
+        bus.on(
+            host_init_response=self.on_host_init_response, 
+            block_device_mounted=self.on_block_device_mounted
+        )
         self._producer.on("before_send", self.on_before_message_send)
 
         # Add internal messages to scripting skip list
@@ -497,6 +500,14 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             'szr_version': scalarizr.__version__,
             'timestamp': os_time.utcnow().strftime("%a %d %b %Y %H:%M:%S %z")
         })
+
+
+    def on_block_device_mounted(self, volume):
+        self.send_message(Messages.BLOCK_DEVICE_MOUNTED, {
+            'device_name': volume.device,
+            'volume_id': volume.id,
+            'mountpoint': volume.mpoint            
+            })
 
 
 class IntMessagingService(object):
