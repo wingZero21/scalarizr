@@ -41,6 +41,14 @@ class InstanceStoreImageMaker(object):
         self.destination = destination
         self.platform = __node__['platform']
 
+        if not excludes:
+            self.excludes = [
+                self.destination,
+                '/selinux/*',
+                '/var/lib/dhclient',
+                '/var/lib/dhcp',
+                '/var/lib/dhcp3']
+
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
         cmd = (
@@ -133,12 +141,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def __init__(self):
         self.image_maker = None
         self.environ = None
-        self.excludes = [
-                self._destination,
-                '/selinux/*',
-                '/var/lib/dhclient',
-                '/var/lib/dhcp',
-                '/var/lib/dhcp3']
 
     def _get_root_device_type(self):
         platform = __node__['platform']
