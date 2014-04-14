@@ -932,6 +932,9 @@ class MysqlHandler(DBMSRHandler):
         }
         if mysql2_svc.innodb_enabled():
             options['innodb_flush_log_at_trx_commit'] = '1'
+        if __node__['platform'].name == 'ec2' \
+                and __node__['platform'].get_instance_type():
+            options['innodb_buffer_pool_size'] = '16M'  # Default 128M is too much
 
         for key, value in options.items():
             self.mysql.my_cnf.set('mysqld/' + key, value)
