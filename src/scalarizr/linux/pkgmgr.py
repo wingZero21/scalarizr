@@ -261,7 +261,13 @@ class YumPackageMgr(PackageMgr):
 
 
     def info(self, name):
-        installed, candidates = self.yum_list(name)
+        try:
+            installed, candidates = self.yum_list(name)
+        except linux.LinuxError, e:
+            if 'No matching Package' in str(e):
+                installed = candidates = None
+            else:
+                raise
         return {'installed': installed,
                 'candidate': candidates[-1] if candidates else None}
 

@@ -688,3 +688,8 @@ def mysqlbinlog_head():
     msg = 'Failed to read FORMAT_DESCRIPTION_EVENT ' \
             'at the top of the %s' % binlog_1
     raise Error(msg)
+
+
+def innodb_enabled():
+    opts = my_print_defaults('mysqld')
+    return not (opts.get('ignore-builtin-innodb') or opts.get('skip-innodb'))

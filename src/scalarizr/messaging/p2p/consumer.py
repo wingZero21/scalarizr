@@ -53,15 +53,15 @@ class P2pMessageConsumer(MessageConsumer):
         if self.running:
             raise MessagingError('Message consumer is already running')
 
+        r = urlparse(self.endpoint)
         try:
             if self._server is None:
-                r = urlparse(self.endpoint)
-                port = __node__['base']['messaging_port']
-                self._logger.info('Building message consumer server on %s:%s', r.hostname, port)
+                #port = __node__['base']['messaging_port']
+                self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-                self._server = HTTPServer((r.hostname, port), self._get_request_handler_class())
+                self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
         except (BaseException, Exception), e:
-            self._logger.error("Cannot build server on port %s. %s", port, e)
+            self._logger.error("Cannot build server on port %s. %s", r.port, e)
             return
 
         self._logger.debug('Starting message consumer %s', self.endpoint)
@@ -84,6 +84,17 @@ class P2pMessageConsumer(MessageConsumer):
             def do_POST(self):
                 logger = logging.getLogger(__name__)
 
+                if self.headers.get('X-Server-Id') and self.consumer._handler_thread:
+                    # Skip check for internal messaging
+                    if self.headers['X-Server-Id'] != __node__['server_id']:
+                        self.send_response(409)
+                        self.end_headers()
+                        msg = ("Message X-Server-Id header "
+                                "doesn't match node server_id: {0} != {1}").format(
+                                self.headers['X-Server-Id'], __node__['server_id'])
+                        self.wfile.write(msg)
+                        return
+
                 queue = os.path.basename(self.path)
                 rawmsg = self.rfile.read(int(self.headers["Content-length"]))
                 logger.debug("Received ingoing message in queue: '%s'", queue)
@@ -101,7 +112,8 @@ class P2pMessageConsumer(MessageConsumer):
                 except (BaseException, Exception), e:
                     err = 'Message consumer protocol filter raises exception: %s' % str(e)
                     logger.exception(err)
-                    self.send_response(201, 'Created')
+                    self.send_response(201)
+                    self.end_headers()
                     return
 
                 try:
@@ -121,13 +133,24 @@ class P2pMessageConsumer(MessageConsumer):
                     msg_copy.id = message.id
                     if 'platform_access_data' in msg_copy.body:
                         del msg_copy.body['platform_access_data']
+                    if 'global_variables' in msg_copy.body:
+                        glob_vars = msg_copy.body.get('global_variables', []) or []
+                        i = 0
+                        for v in list(glob_vars):
+                            if v.get('private'):
+                                del glob_vars[i]
+                                i -= 1
+                            elif 'private' in v:
+                                del glob_vars[i]['private']
+                            i += 1
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
 
                 except (BaseException, Exception), e:
                     err = "Cannot decode message. error: %s; raw message: %s" % (str(e), rawmsg)
                     logger.exception(err)
-                    self.send_response(201, 'Created')
+                    self.send_response(201)
+                    self.end_headers()
                     return
 
 
@@ -140,10 +163,12 @@ class P2pMessageConsumer(MessageConsumer):
                     #self.consumer._not_empty.set()
                 except (BaseException, Exception), e:
                     logger.exception(e)
-                    self.send_response(500, str(e))
+                    self.send_response(500)
+                    self.end_headers()
+                    self.wfile.write(str(e))
                     return
 
-                self.send_response(201, 'Created')
+                self.send_response(201)
                 self.end_headers()
 
 

@@ -171,8 +171,8 @@ class NginxFormatProvider(IniFormatProvider):
 
     def write_option(self, fp, node):
         if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'option':
-            values = node.text.split('\n')
-            fp.write (self._pad*self._nesting + unquote(node.tag)+ self._pad + unquote(values.pop(0)))
+            values = node.text.split('\n') if getattr(node, 'text') else ['']
+            fp.write (self._pad*self._nesting + unquote(node.tag) + self._pad + unquote(values.pop(0)))
             if len(values):
                 tag_len = len(node.tag)
                 for value in values:

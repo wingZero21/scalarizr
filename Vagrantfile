@@ -16,6 +16,8 @@ Vagrant.configure("2") do |config|
    config.vm.define name do |machine|
       machine.vm.box = box
       machine.vm.provision :chef_solo do |chef|
+        chef.encrypted_data_bag_secret_key_path = "~/.chef/databags_secret_key"
+        chef.data_bags_path = "~/.chef/data_bag"
         chef.add_recipe "vagrant_boxes::scalarizr"
       end
 

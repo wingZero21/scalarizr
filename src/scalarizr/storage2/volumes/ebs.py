@@ -388,12 +388,23 @@ class EbsVolume(base.Volume, EbsMixin):
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
         LOG.debug('Creating snapshot of EBS volume %s', volume)
         coreutils.sync()
-        snapshot = self._conn.create_snapshot(volume, description)
-        LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
-        if tags:
-            self._create_tags_async(snapshot.id, tags)
-        if not nowait:
-            self._wait_snapshot(snapshot)
+
+        # conn.create_snapshot leaks snapshots when RequestLimitExceeded occured 
+        params = {'VolumeId': volume}
+        if description:
+            params['Description'] = description[0:255]
+        snapshot = self._conn.get_object('CreateSnapshot', params, 
+                    boto.ec2.snapshot.Snapshot, verb='POST')
+
+        try:
+            LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
+            if tags:
+                self._create_tags_async(snapshot.id, tags)
+            if not nowait:
+                self._wait_snapshot(snapshot)
+        except boto.exception.BotoServerError, e:
+            if e.code != 'RequestLimitExceeded':
+                raise
         return snapshot
 
 
