@@ -323,10 +323,9 @@ class UpdClientAPI(object):
             try:
                 user_data = self.meta['user_data']
             except metadata.NoUserDataError:
-                if 'OpenStack' in str(self.meta.provider_for_capability['instance_id']):  
-                    # TODO(marat): better to have property 'cloud': if meta.cloud == "openstack"
-                    LOG.info('Found no user-data on OpenStack platform, '
-                            'this mean that query data providers failed and now I should '
+                if 'NoData' in str(self.meta.provider_for_capability['instance_id']):  
+                    LOG.info('Found no user-data and no instance-id, '
+                            'this mean that all data providers failed and now I should '
                             'wait for a personality user-data file')
                     max_attempt = 10
                     for attempt in range(0, max_attempt):
