@@ -246,7 +246,10 @@ class MySQLClient(object):
             XXX: temporary solution for mysql55
             '''
             cmd = "INSERT INTO mysql.user VALUES('%s','%s',PASSWORD('%s')" % (host, login, password) + ",'Y'"*priv_count
-            if len(self.fetchdict("select * from mysql.user LIMIT 1;")) == 42:
+            column_count = len(self.fetchdict("select * from mysql.user LIMIT 1;"))
+            if column_count == 43:
+                cmd += ",'','','','',0,0,0,0,'','','N'"
+            elif column_count == 42:
                 cmd += ",'','','','',0,0,0,0,'',''"
             else:
                 cmd += ",''"*4 +',0'*4
