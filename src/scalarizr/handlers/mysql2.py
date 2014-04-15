@@ -1070,6 +1070,10 @@ class MysqlHandler(DBMSRHandler):
                         __mysql__['restore'].type == 'xtrabackup':
             __mysql__['restore'].run()
 
+        # MySQL 5.6 stores UUID into data_dir/auto.cnf, which leads to 
+        # 'Fatal error: The slave I/O thread stops because master and slave have equal MySQL server UUIDs'
+        coreutils.remove(os.path.join(__mysql__['data_dir'], 'auto.cnf'))
+
         log.info('InnoDB recovery')
         if 'restore' in __mysql__ \
                         and __mysql__['restore'].type != 'xtrabackup':
