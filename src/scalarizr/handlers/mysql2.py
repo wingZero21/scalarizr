@@ -932,6 +932,9 @@ class MysqlHandler(DBMSRHandler):
         }
         if mysql2_svc.innodb_enabled():
             options['innodb_flush_log_at_trx_commit'] = '1'
+        if __node__['platform'].name == 'ec2' \
+                and __node__['platform'].get_instance_type():
+            options['innodb_buffer_pool_size'] = '16M'  # Default 128M is too much
 
         for key, value in options.items():
             self.mysql.my_cnf.set('mysqld/' + key, value)
@@ -1053,6 +1056,9 @@ class MysqlHandler(DBMSRHandler):
         self.mysql.my_cnf.read_only = True
         self.mysql.my_cnf.set('mysqld/log-bin-index', __mysql__['binlog_dir'] + '/binlog.index')  # MariaDB
         self._fix_percona_debian_cnf()
+        if __node__['platform'].name == 'ec2' \
+                and __node__['platform'].get_instance_type():
+            self.mysql.my_cnf.set('mysqld/innodb_buffer_pool_size', '16M')  # Default 128M is too much
 
         log.info('Move data directory to storage')
         self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
@@ -1063,6 +1069,10 @@ class MysqlHandler(DBMSRHandler):
         if 'restore' in __mysql__ and \
                         __mysql__['restore'].type == 'xtrabackup':
             __mysql__['restore'].run()
+
+        # MySQL 5.6 stores UUID into data_dir/auto.cnf, which leads to 
+        # 'Fatal error: The slave I/O thread stops because master and slave have equal MySQL server UUIDs'
+        coreutils.remove(os.path.join(__mysql__['data_dir'], 'auto.cnf'))
 
         log.info('InnoDB recovery')
         if 'restore' in __mysql__ \

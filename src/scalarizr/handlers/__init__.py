@@ -138,7 +138,7 @@ class Handler(object):
                     handlers.append(config.BuiltinBehaviours.HAPROXY)
                 elif name == 'tomcat':
                     handlers.append(config.BuiltinBehaviours.TOMCAT)
-                elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
+                elif name == 'mysql' and Version('5.0') <= version < Version('5.7'):
                     handlers.append(config.BuiltinBehaviours.MYSQL)
                     if 'Maria' in str_ver:
                         handlers.append(config.BuiltinBehaviours.MARIADB)
