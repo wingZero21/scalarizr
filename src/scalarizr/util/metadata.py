@@ -150,7 +150,7 @@ class Provider(object):
         try:
             return self.get_url(url)
         except:
-            self.LOG.debug('Try URL {0!r}: {1}'.format(url, sys.exc_info()[1]))
+            self.LOG.debug('Try {0!r}: {1}'.format(url, sys.exc_info()[1]))
             return False
 
     def get_url(self, url=None, rel=None, headers=None):
@@ -164,9 +164,9 @@ class Provider(object):
 
     def try_file(self, path):
         if not os.path.exists(path):
-            self.LOG.debug('Try file {0!r}: not exists'.format(path))
+            self.LOG.debug('Try {0!r}: not exists'.format(path))
         elif not os.access(path, os.R_OK):
-            self.LOG.debug('Try file {0!r}: not readable'.format(path))
+            self.LOG.debug('Try {0!r}: not readable'.format(path))
         else:
             return True
 
