@@ -138,6 +138,7 @@ class Metadata(object):
 
 
 class Provider(object):
+    LOG = logging.getLogger(__name__)
     HTTP_TIMEOUT = 5
     EC2_BASE_URL = 'http://169.254.169.254/latest'
     base_url = None
@@ -149,6 +150,7 @@ class Provider(object):
         try:
             return self.get_url(url)
         except:
+            self.LOG.debug('Try URL {0!r}: {1}'.format(url, sys.exc_info()[1]))
             return False
 
     def get_url(self, url=None, rel=None, headers=None):
@@ -161,7 +163,12 @@ class Provider(object):
         return self.try_url(self.EC2_BASE_URL)
 
     def try_file(self, path):
-        return os.access(path, os.R_OK)
+        if not os.path.exists(path):
+            self.LOG.debug('Try file {0!r}: not exists'.format(path))
+        elif not os.access(path, os.R_OK):
+            self.LOG.debug('Try file {0!r}: not readable'.format(path))
+        else:
+            return True
 
     def get_file(self, path):
         with open(path) as fp:
