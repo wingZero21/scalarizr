@@ -80,6 +80,8 @@ class Ec2Platform(Ec2LikePlatform):
         self._logger.debug("Return ec2 connection (region: %s)", region)  
         key_id, key = self.get_access_keys()
         proxy = self._access_data.get('proxy', {})
+        self._logger.debug('Proxy settings: %s', proxy)
+        self._logger.debug('Access data: %s', self._access_data)
         return boto.ec2.connect_to_region(region, 
                 aws_access_key_id=key_id, 
                 aws_secret_access_key=key,
@@ -95,6 +97,8 @@ class Ec2Platform(Ec2LikePlatform):
         key_id, key = self.get_access_keys()
         self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
         proxy = self._access_data.get('proxy', {})
+        self._logger.debug('Proxy settings: %s', proxy)
+        self._logger.debug('Access data: %s', self._access_data)
         return boto.connect_s3(
                 host=endpoint, 
                 aws_access_key_id=key_id, 
