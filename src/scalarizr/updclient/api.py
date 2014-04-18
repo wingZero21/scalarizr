@@ -338,7 +338,7 @@ class UpdClientAPI(object):
                         except metadata.NoUserDataError:
                             if attempt == num_attempts - 1:
                                 LOG.error(('Still no user-data, '
-                                        'check why $ETC_DIR/private.d/user-data not exists. '))
+                                        'check why $ETC_DIR/.scalr-user-data not exists. '))
                                 raise
                             else:
                                 LOG.debug(('Still no user-data, '
