@@ -335,17 +335,21 @@ class FileDataPvd(Provider):
 
     def vote(self, votes):
         if self.try_file(self.filename):
-            if os.stat(self.filename).st_mtime > boot_time():
+            # user-data file is not stale if it was injected
+            #  1) not more then a minute before OS boot (with nova)
+            #  2) after boot (with novaagent)
+            if os.stat(self.filename).st_mtime > boot_time() - 60:
                 fmt = '%Y-%m-%dT%H:%M:%S'
-                self.LOG.debug(('matched user_data in file {0!r} ' 
-                        '(mtime: {1!r}, boot_time: {2!r})').format(
-                        self.filename,
+                times_str = '(mtime: {0!r}, boot_time: {1!r})'.format(
                         time.strftime(fmt, time.localtime(os.stat(self.filename).st_mtime)),
-                        time.strftime(fmt, time.localtime(boot_time()))))
+                        time.strftime(fmt, time.localtime(boot_time())))
+                self.LOG.debug('matched user_data in file {0!r} {1}'.format(
+                        self.filename, times_str))
                 votes[self]['user_data'] += 1
             else:
                 self.LOG.debug(('skipping user_data file {0!r}, '
-                        'cause it was modified before os boot time').format(self.filename))
+                        'cause it was modified before os boot time {1}').format(
+                        self.filename, times_str))
 
     def __repr__(self):
         return '<FileDataPvd at {0} filename={1}>'.format(
