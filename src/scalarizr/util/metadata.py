@@ -149,6 +149,8 @@ class Provider(object):
         try:
             return self.get_url(url, rel, headers)
         except:
+            if rel:
+                url = posixpath.join(url or self.base_url, rel)
             self.LOG.debug('Try {0!r}: {1}'.format(url, sys.exc_info()[1]))
             return False
 
