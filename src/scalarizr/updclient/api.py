@@ -324,12 +324,13 @@ class UpdClientAPI(object):
                 user_data = self.meta['user_data']
             except metadata.NoUserDataError:
                 if 'NoData' in str(self.meta.provider_for_capability['instance_id']):  
-                    LOG.info('Found no user-data and no instance-id, '
-                            'this mean that all data providers failed and now I should '
-                            'wait for a personality user-data file')
+                    retry_int = 5
                     max_attempt = 10
+                    LOG.info('Found no user-data and no instance-id, '
+                            'this mean that all data providers failed. I should '
+                            'wait {0} seconds and retry'.format(retry_int))
                     for attempt in range(0, max_attempt):
-                        time.sleep(5)
+                        time.sleep(retry_int)
                         self.meta = metadata.Metadata()
                         try:
                             user_data = self.meta['user_data']
@@ -340,7 +341,8 @@ class UpdClientAPI(object):
                                         'check why $ETC_DIR/private.d/user-data not exists. '))
                                 raise
                             else:
-                                LOG.debug('Still no user-data, retrying...')
+                                LOG.debug(('Still no user-data, '
+                                        'retrying after {0} seconds...').format(retry_int))
                 else:
                     raise
             norm_user_data(user_data)

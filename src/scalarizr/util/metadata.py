@@ -140,15 +140,14 @@ class Metadata(object):
 class Provider(object):
     LOG = logging.getLogger(__name__)
     HTTP_TIMEOUT = 5
-    EC2_BASE_URL = 'http://169.254.169.254/latest'
     base_url = None
 
     def vote(self, votes):
         raise NotImplementedError()
 
-    def try_url(self, url):
+    def try_url(self, url=None, rel=None, headers=None):
         try:
-            return self.get_url(url)
+            return self.get_url(url, rel, headers)
         except:
             self.LOG.debug('Try {0!r}: {1}'.format(url, sys.exc_info()[1]))
             return False
@@ -158,9 +157,6 @@ class Provider(object):
             url = posixpath.join(url or self.base_url, rel)
         return urllib2.urlopen(urllib2.Request(url, headers=headers or {}), 
                 timeout=self.HTTP_TIMEOUT).read().strip()
-
-    def try_ec2_url(self):
-        return self.try_url(self.EC2_BASE_URL)
 
     def try_file(self, path):
         if not os.path.exists(path):
@@ -179,19 +175,25 @@ class Ec2Pvd(Provider):
     LOG = logging.getLogger(__name__ + '.ec2')
 
     def __init__(self):
-        self.base_url = Provider.EC2_BASE_URL
+        self.base_url = 'http://169.254.169.254/latest'
+        self._instance_id = None
+        self._user_data = None
 
     def vote(self, votes):
-        if self.try_ec2_url():
-            self.LOG.debug('matched')
-            votes[self].incr_each()
+        self._instance_id = self.try_url(rel='meta-data/instance-id')
+        if self._instance_id != False:
+            self.LOG.debug('matched instance_id')
+            votes[self]['instance_id'] += 1
+            self._user_data = self.try_url(rel='user-data')
+            if self._user_data != False:
+                self.LOG.debug('matched user_data')
+                votes[self]['user_data'] += 1
 
     def instance_id(self):
-        return self.get_url(rel='meta-data/instance-id')
+        return self._instance_id
 
     def user_data(self):
-        return Userdata.from_string(
-                self.get_url(rel='user-data'))
+        return Userdata.from_string(self._user_data)
            
 
 class GcePvd(Provider):
@@ -231,11 +233,13 @@ class OpenStackQueryPvd(Provider):
             self.LOG.debug('matched meta_data.json')
             self._cache = json.loads(meta)
             votes[self]['instance_id'] += 1
-            votes['Ec2Pvd'].decr_each()
+            votes['Ec2Pvd']['instance_id'] -= 1
+            votes['CloudStackPvd']['instance_id'] -= 1
         if 'meta' in self._cache:
             self.LOG.debug('matched user_data in meta_data.json')
             votes[self]['user_data'] += 1
-
+            votes['Ec2Pvd']['user_data'] -= 1
+            votes['CloudStackPvd']['user_data'] -= 1
 
     def instance_id(self):
         return self._cache['instance_id']
@@ -251,9 +255,8 @@ class OpenStackXenStorePvd(Provider):
         if self.try_file('/proc/xen/xenbus') and linux.which('xenstore-ls') \
                 and linux.which('nova-agent'):
             self.LOG.debug('matched user_data')
-            votes[self]['user_data'] += 2
-            votes['OpenStackQueryPvd']['user_data'] -= 1
-            votes['Ec2Pvd'].decr_each()
+            votes[self]['user_data'] += 1
+            votes['Ec2Pvd']['user_data'] -= 1
 
     def user_data(self):
         keyvalue_re = re.compile(r'([^\s]+)\s+=\s+\"{2}([^\"]+)\"{2}')
@@ -274,6 +277,8 @@ class CloudStackPvd(Provider):
             dhcp_leases_pattern='/var/lib/dhc*/dhclient*.leases'):
         self.dhcp_server = dhcp_server
         self.dhcp_leases_pattern = dhcp_leases_pattern
+        self._instance_id = None
+        self._user_data = None
 
     @property
     def base_url(self):
@@ -297,23 +302,27 @@ class CloudStackPvd(Provider):
         return router
 
     def vote(self, votes):
-        if self.try_url(self.base_url):
-            self.LOG.debug('matched')
-            votes[self].incr_each()
-            if self.try_ec2_url():
-                votes['Ec2Pvd'].decr_each()
+        self._instance_id = self.try_url(rel='instance-id')
+        if self._instance_id != False:
+            self.LOG.debug('matched instance_id')
+            votes[self]['instance_id'] += 1
+            votes['Ec2Pvd']['instance_id'] -= 1
+            self._user_data = self.try_url(rel='user-data')
+            if self._user_data != False:
+                self.LOG.debug('matched user_data')
+                votes[self]['user_data'] += 1
+                votes['Ec2Pvd']['user_data'] -= 1
 
     def instance_id(self):
-        value = self.get_url(rel='instance-id')
-        if len(value) == 36:
+        if len(self._instance_id) == 36:
             # uuid-like (CloudStack 3)
-            return value
+            return self._instance_id
         else:
             # CloudStack 2 / IDCF
-            return value.split('-')[2]
+            return self._instance_id.split('-')[2]
 
     def user_data(self):
-        return Userdata.from_string(self.get_url(rel='user-data'))
+        return Userdata.from_string(self._user_data)
 
 
 class FileDataPvd(Provider):
@@ -325,11 +334,12 @@ class FileDataPvd(Provider):
     def vote(self, votes):
         if self.try_file(self.filename):
             if os.stat(self.filename).st_mtime > boot_time():
+                fmt = '%Y-%m-%dT%H:%M:%S'
                 self.LOG.debug(('matched user_data in file {0!r} ' 
                         '(mtime: {1!r}, boot_time: {2!r})').format(
                         self.filename,
-                        time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(os.stat(self.filename).st_mtime)),
-                        time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(boot_time()))))
+                        time.strftime(fmt, time.localtime(os.stat(self.filename).st_mtime)),
+                        time.strftime(fmt, time.localtime(boot_time()))))
                 votes[self]['user_data'] += 1
             else:
                 self.LOG.debug(('skipping user_data file {0!r}, '
