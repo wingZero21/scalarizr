@@ -568,7 +568,7 @@ class UpdClientAPI(object):
                 self.installed = self.candidate
                 self.candidate = None
                 if reports:
-                        self.report(True)
+                    self.report(True)
             return self.status(cached=True)
 
         def do_update(op):
