@@ -338,7 +338,8 @@ class FileDataPvd(Provider):
             # user-data file is not stale if it was injected
             #  1) not more then a minute before OS boot (with nova)
             #  2) after boot (with novaagent)
-            if os.stat(self.filename).st_mtime > boot_time() - 60:
+            #if os.stat(self.filename).st_mtime > boot_time() - 60:
+            if os.stat(self.filename).st_mtime > boot_time():
                 fmt = '%Y-%m-%dT%H:%M:%S'
                 times_str = '(mtime: {0!r}, boot_time: {1!r})'.format(
                         time.strftime(fmt, time.localtime(os.stat(self.filename).st_mtime)),
