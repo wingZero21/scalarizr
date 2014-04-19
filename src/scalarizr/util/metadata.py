@@ -236,12 +236,14 @@ class OpenStackQueryPvd(Provider):
             self._cache = json.loads(meta)
             votes[self]['instance_id'] += 1
             votes['Ec2Pvd']['instance_id'] -= 1
-            votes['CloudStackPvd']['instance_id'] -= 1
+            if 'CloudStackPvd' in votes:
+                votes['CloudStackPvd']['instance_id'] -= 1
         if 'meta' in self._cache:
             self.LOG.debug('matched user_data in meta_data.json')
             votes[self]['user_data'] += 1
             votes['Ec2Pvd']['user_data'] -= 1
-            votes['CloudStackPvd']['user_data'] -= 1
+            if 'CloudStackPvd' in votes:
+                votes['CloudStackPvd']['user_data'] -= 1
 
     def instance_id(self):
         return self._cache['instance_id']
