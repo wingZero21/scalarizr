@@ -139,7 +139,7 @@ class Metadata(object):
 
 class Provider(object):
     LOG = logging.getLogger(__name__)
-    HTTP_TIMEOUT = 5
+    HTTP_TIMEOUT = 10
     base_url = None
 
     def vote(self, votes):
@@ -342,8 +342,7 @@ class FileDataPvd(Provider):
             # user-data file is not stale if it was injected
             #  1) not more then a minute before OS boot (with nova)
             #  2) after boot (with novaagent)
-            #if os.stat(self.filename).st_mtime > boot_time() - 60:
-            if os.stat(self.filename).st_mtime > boot_time():
+            if os.stat(self.filename).st_mtime > boot_time() - 60:
                 self.LOG.debug('matched user_data in file {0!r} {1}'.format(
                         self.filename, times_str))
                 votes[self]['user_data'] += 1
