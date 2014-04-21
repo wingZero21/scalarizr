@@ -4,6 +4,7 @@ import shutil
 import sys
 import time
 import subprocess
+import pprint
 
 from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
@@ -188,7 +189,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 'AWS_SECRET_KEY': secret_key,
                 'EC2_URL': platform.get_access_data('ec2_url')})
         except:
-            _logger.debug('platform access data: %s' % platform._access_data)
+            _logger.debug('platform access data: %s' % pprint.pformat(platform._access_data))
             raise
 
     def _get_s3_bucket_name(self):
