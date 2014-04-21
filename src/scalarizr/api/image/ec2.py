@@ -127,6 +127,7 @@ class EBSImageMaker(object):
             instance_id,
             '--name', self.image_name,
             '--no-reboot',
+            '--region', self.platform.get_region(),
             '--debug')
         _logger.info('Image create command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
@@ -180,17 +181,14 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         cloud_cert_path = cnf.write_key('ec2-cloud-cert.pem', platform.get_ec2_cert())
 
         self.environ = os.environ.copy()
-        try:
-            self.environ.update({
-                'EC2_CERT': cert_path,
-                'EC2_PRIVATE_KEY': pk_path,
-                'EC2_USER_ID': platform.get_account_id(),
-                'AWS_ACCESS_KEY': access_key,
-                'AWS_SECRET_KEY': secret_key,
-                'EC2_URL': platform.get_access_data('ec2_url')})
-        except:
-            _logger.debug('platform access data: %s' % pprint.pformat(platform._access_data))
-            raise
+        self.environ.update({
+            'EC2_CERT': cert_path,
+            'EC2_PRIVATE_KEY': pk_path,
+            'EC2_USER_ID': platform.get_account_id(),
+            'AWS_ACCESS_KEY': access_key,
+            'AWS_SECRET_KEY': secret_key})
+            # 'EC2_URL': platform.get_access_data('ec2_url')})
+
 
     def _get_s3_bucket_name(self):
         platform = __node__['platform']
