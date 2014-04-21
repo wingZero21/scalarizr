@@ -117,6 +117,7 @@ class EBSImageMaker(object):
     def __init__(self, image_name, environ):
         self.image_name = image_name
         self.environ = environ
+        self.platform = __node__['platform']
 
     def create_image(self):
         #create imaeg with ec2-create-image or through snapshotting server first
