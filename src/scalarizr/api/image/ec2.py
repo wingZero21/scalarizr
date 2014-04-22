@@ -243,7 +243,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 image_name,
                 role_name,
                 image_size=root_disk.size / 1000,
-                s3_bucket_name=self._get_s3_bucket_name())
+                bucket_name=self._get_s3_bucket_name())
 
 
         image_id = self.image_maker.create_image()
