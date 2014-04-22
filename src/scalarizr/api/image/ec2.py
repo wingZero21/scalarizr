@@ -144,6 +144,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def __init__(self):
         self.image_maker = None
         self.environ = None
+        self.excludes = None
 
     def _get_root_device_type(self):
         platform = __node__['platform']
