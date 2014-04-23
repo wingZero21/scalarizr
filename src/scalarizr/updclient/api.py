@@ -19,6 +19,9 @@ import time
 import threading
 import urllib2
 import uuid
+import time
+import pkg_resources
+import multiprocessing
 
 from scalarizr import linux, queryenv, rpc, config
 from scalarizr.api import operation
@@ -387,6 +390,16 @@ class UpdClientAPI(object):
         if not (self.shutdown_ev.is_set() or dry_run or \
                 self.state == 'error' or self.daemon.running):
             self.daemon.start()
+        if self.state == 'completed/wait-ack':
+            obsoletes = pkg_resources.Requirement.parse('A<=2.7.2')
+            if self.installed in obsoletes:
+                def restart_self():
+                    time.sleep(5)
+                    name = 'ScalrUpdClient' if linux.os.windows else 'scalr-upd-client'
+                    service = initdv2.Daemon(name)
+                    service.restart()
+                proc = multiprocessing.Process(target=restart_self)
+                proc.start()
 
 
     def uninstall(self):
