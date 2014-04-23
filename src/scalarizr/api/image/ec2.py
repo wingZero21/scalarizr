@@ -75,7 +75,7 @@ class InstanceStoreImageMaker(object):
         manifest = os.path.join(self.destination, self.image_name) + '.manifest.xml'
         bucket = os.path.basename(self.platform.scalrfs.root())
         cmd = (
-            linux.which('euca-upload-bundle'),
+            linux.which('ec2-upload-bundle'),
             '--bucket', bucket,
             '--manifest', manifest)
         _logger.info('Image upload command: ', ' '.join(cmd))
@@ -98,8 +98,8 @@ class InstanceStoreImageMaker(object):
 
     def cleanup(self):
         # remove image from the server
-        linux.system('chmod 755 %s/keys/euca-*' % private_dir, shell=True)
-        linux.system('rm -f %s/keys/euca-*' % private_dir, shell=True)
+        linux.system('chmod 755 %s/keys/ec2-*' % private_dir, shell=True)
+        linux.system('rm -f %s/keys/ec2-*' % private_dir, shell=True)
         linux.system('rm -f %s/%s.*' % (self.destination, self.image_name), shell=True)
 
     def create_image(self):
