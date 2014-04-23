@@ -20,6 +20,9 @@ from scalarizr.node import __node__
 from scalarizr.node import base_dir as etc_dir
 from scalarizr.node import private_dir
 from scalarizr.linux import coreutils
+from scalarizr.storage2 import volume as create_volume
+from scalarizr import coreutils
+
 
 _logger = logging.getLogger(__name__)
 
@@ -114,29 +117,90 @@ class InstanceStoreImageMaker(object):
 
 class EBSImageMaker(object):
 
-    def __init__(self, image_name, environ):
+    def __init__(self, image_name, environ, image_size, destination='/mnt'):
         self.image_name = image_name
         self.environ = environ
         self.platform = __node__['platform']
+        self.destination = destination
+        self.image_size = image_size
+        self.excludes = [
+                self.destination,
+                '/selinux/*',
+                '/var/lib/dhclient',
+                '/var/lib/dhcp',
+                '/var/lib/dhcp3']
 
-    def create_image(self):
-        #create imaeg with ec2-create-image or through snapshotting server first
-        platform = __node__['platform']
-        instance_id = platform.get_instance_id()
+    def prepare_image(self):
+        # prepares imiage with ec2-bundle-vol command
         cmd = (
-            linux.which('ec2-create-image'), 
-            instance_id,
-            '--name', self.image_name,
-            '--no-reboot',
-            '--region', self.platform.get_region(),
+            linux.which('ec2-bundle-vol'), 
+            '--arch', linux.os['arch'],
+            '--size', str(self.image_size),
+            '--destination', self.destination,
+            '--exclude', ','.join(self.excludes),
+            '--prefix', self.image_name,
+            '--volume', '/',
             '--debug')
-        _logger.info('Image create command: ' + ' '.join(cmd))
+        _logger.info('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
             env=self.environ,
             stdout=subprocess.PIPE, 
             stderr=subprocess.STDOUT)[0]
-        _logger.info('Image create command out: %s' % out)
+        _logger.info('Image prepare command out: %s' % out)
+
+    def make_volume(self, size):
+        ebs_config = {'type': 'ebs'
+            'size': size}
+        ebs_config['size'] = size
+        volume = create_volume(ebs_config)
+        volume.ensure()
+        return volume
+
+    def make_snapshot(self, volume):
+        coreutils.dd(self.destination, volume.device)
+        volume.detach()
+        snapshot = volume.snapshot()
+
+    def register_image(self, snapshot):
+        cmd = (
+            linux.which('ec2-register'), 
+            '--name', self.image_name,
+            '-s', snapshot.id,
+            '--debug')
+        _logger.info('Image register command: ' + ' '.join(cmd))
+        out = linux.system(cmd, 
+            env=self.environ,
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT)[0]
         return out
+
+    def create_image(self):
+        #create imaeg with ec2-create-image or through snapshotting server first
+        # platform = __node__['platform']
+        # instance_id = platform.get_instance_id()
+        # cmd = (
+        #     linux.which('ec2-create-image'), 
+        #     instance_id,
+        #     '--name', self.image_name,
+        #     '--no-reboot',
+        #     '--region', self.platform.get_region(),
+        #     '--debug')
+        # _logger.info('Image create command: ' + ' '.join(cmd))
+        # out = linux.system(cmd, 
+        #     env=self.environ,
+        #     stdout=subprocess.PIPE, 
+        #     stderr=subprocess.STDOUT)[0]
+        # _logger.info('Image create command out: %s' % out)
+        # return out
+        try:
+            self.prepare_image()
+            size = coreutils.df('/')  # TODO: convert size to GB
+            volume = self.make_volume(size)
+            snapshot = self.make_snapshot(volume)
+            image_id = self.register_image(snapshot)
+            return image_id
+        finally:
+            self.cleanup()
 
 
 class EC2ImageAPIDelegate(ImageAPIDelegate):
