@@ -80,6 +80,8 @@ class UpdClient(util.Server):
         self.optparser = optparse.OptionParser(option_list=(
             optparse.Option('-d', '--daemonize', action='store_true', help='daemonize process'),
             optparse.Option('-P', '--pid-file', default=self.pid_file, help='file to store PID in'),
+            optparse.Option('-r', '--set-repository', 
+                help="[option removed]"),
             optparse.Option('-l', '--log-file', default=self.log_file, help='log file'),
             optparse.Option('-v', '--verbose', action='store_true', default=self.verbose, 
                             help='verbose logging'),
