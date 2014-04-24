@@ -27,7 +27,7 @@ from scalarizr import linux, queryenv, rpc, config
 from scalarizr.api import operation
 from scalarizr.api.binding import jsonrpc_http
 from scalarizr.bus import bus
-from scalarizr.linux import pkgmgr
+from scalarizr.linux import pkgmgr, coreutils
 from scalarizr.messaging import p2p as messaging
 from scalarizr.util import metadata, initdv2, sqlite_server, wait_until
 
@@ -650,6 +650,7 @@ class UpdClientAPI(object):
 
     def store(self, status=None):
         status = status or self.status(cached=True)
+        coreutils.mkdir(os.path.dirname(self.status_file), 0700)
         with open(self.status_file, 'w+') as fp:
             LOG.debug('Saving status: %s', pprint.pformat(status))
             json.dump(status, fp)     
