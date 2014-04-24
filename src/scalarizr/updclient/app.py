@@ -130,6 +130,9 @@ class UpdClient(util.Server):
         util.init_logging(self.log_file, self.verbose)
         self._wait_network()
 
+        if self.__dict__.get('set_repository'):
+            print '-r|--set-repository no more works, cause updates are controlled from Scalr'
+            sys.exit(0)
         if self.__dict__.get('get_system_id'):
             try:
                 print self.api.get_system_id()
