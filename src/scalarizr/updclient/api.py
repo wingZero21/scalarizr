@@ -460,7 +460,7 @@ class UpdClientAPI(object):
                 fp.write((
                     'Package: *\n'
                     'Pin: release a={0}\n'
-                    'Pin-Priority: 990\n'
+                    'Pin-Priority: 1001\n'
                 ).format(self.repository))
 
         # Scalr repo has all required dependencies (like python-* libs, etc), 
