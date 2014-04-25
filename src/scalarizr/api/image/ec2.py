@@ -31,6 +31,7 @@ class InstanceStoreImageMaker(object):
     def __init__(self,
         image_name,
         environ,
+        credentials,
         excludes=[],
         image_size=None,
         bucket_name=None,
@@ -38,6 +39,7 @@ class InstanceStoreImageMaker(object):
 
         self.image_name = image_name
         self.environ = environ
+        self.credentials = credentials
         self.excludes = excludes
         self.image_size = image_size
         self.bucket_name = bucket_name
@@ -56,7 +58,10 @@ class InstanceStoreImageMaker(object):
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
         cmd = (
-            linux.which('ec2-bundle-vol'), 
+            linux.which('ec2-bundle-vol'),
+            '--cert', self.credentials['cert'],
+            '--privatekey', self.credentials['key'],
+            '--user', self.credentials['user'],
             '--arch', linux.os['arch'],
             '--size', str(self.image_size),
             '--destination', self.destination,
@@ -117,9 +122,10 @@ class InstanceStoreImageMaker(object):
 
 class EBSImageMaker(object):
 
-    def __init__(self, image_name, environ, image_size, destination='/mnt'):
+    def __init__(self, image_name, environ, credentials, image_size, destination='/mnt'):
         self.image_name = image_name
         self.environ = environ
+        self.credentials = credentials
         self.platform = __node__['platform']
         self.destination = destination
         self.image_size = image_size
@@ -135,6 +141,9 @@ class EBSImageMaker(object):
         # prepares imiage with ec2-bundle-vol command
         cmd = (
             linux.which('ec2-bundle-vol'), 
+            '--cert', self.credentials['cert'],
+            '--privatekey', self.credentials['key'],
+            '--user', self.credentials['user'],
             '--arch', linux.os['arch'],
             '--size', str(self.image_size),
             '--destination', self.destination,
@@ -255,7 +264,10 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             'AWS_ACCESS_KEY': access_key,
             'AWS_SECRET_KEY': secret_key})
             # 'EC2_URL': platform.get_access_data('ec2_url')})
-
+        self.credentials = {
+            'cert': cert_path,
+            'key': pk_path,
+            'user': self.environ['EC2_USER_ID']}
 
     def _get_s3_bucket_name(self):
         platform = __node__['platform']
@@ -302,11 +314,13 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
             self.image_maker = EBSImageMaker(
                     image_name,
-                    self.environ)
+                    self.environ,
+                    self.credentials)
         else:
             self.image_maker = InstanceStoreImageMaker(
                 image_name,
                 self.environ,
+                self.credentials,
                 image_size=root_disk.size / 1000,
                 bucket_name=self._get_s3_bucket_name())
 
