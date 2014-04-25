@@ -304,7 +304,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         else:
             self.image_maker = InstanceStoreImageMaker(
                 image_name,
-                role_name,
+                self.environ,
                 image_size=root_disk.size / 1000,
                 bucket_name=self._get_s3_bucket_name())
 
