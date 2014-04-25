@@ -321,7 +321,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 image_name,
                 self.environ,
                 self.credentials,
-                image_size=root_disk.size / 1000,
+                image_size=root_disk.size / 1000 / 1000,
                 bucket_name=self._get_s3_bucket_name())
 
 
