@@ -21,7 +21,6 @@ from scalarizr.node import base_dir as etc_dir
 from scalarizr.node import private_dir
 from scalarizr.linux import coreutils
 from scalarizr.storage2 import volume as create_volume
-from scalarizr import coreutils
 
 
 _logger = logging.getLogger(__name__)
