@@ -204,7 +204,7 @@ class EBSImageMaker(object):
         # return out
         try:
             self.prepare_image()
-            size = coreutils.df('/')  # TODO: convert size to GB
+            size = int(coreutils.df('/')/1000)
             volume = self.make_volume(size)
             snapshot = self.make_snapshot(volume)
             image_id = self.register_image(snapshot)
