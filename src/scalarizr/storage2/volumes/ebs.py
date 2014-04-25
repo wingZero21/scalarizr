@@ -46,6 +46,11 @@ def get_free_name():
     s = 7 if linux.os['release'] and linux.os.redhat_family else 5
     available = set(string.ascii_lowercase[s:16])        
 
+    # Ubuntu 14.04 failed to attach volumes on device names mentioned in block device mapping, 
+    # even if this instance type doesn't support them and OS has not such devices
+    ephemerals = set(device[-1] for device in __node__['platform'].get_block_device_mapping().values())
+    available = available - ephemerals
+
     conn = __node__['ec2']['connect_ec2']()
     filters = {
         'attachment.instance-id': __node__['ec2']['instance_id']
