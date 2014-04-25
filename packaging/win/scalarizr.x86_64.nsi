@@ -98,10 +98,10 @@ Function .onInit
   Call CompareVersions
   Pop $R0
     
-  ${If} $R0 == 1
-    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} version ($installed_version-$installed_release) installed." /SD IDOK
-    Quit
-  ${EndIf}
+;  ${If} $R0 == 1
+;    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} version ($installed_version-$installed_release) installed." /SD IDOK
+;    Quit
+;  ${EndIf}
   
   ReadRegStr $0 ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "InstallDir"
   StrCmp $0 "" not_installed
