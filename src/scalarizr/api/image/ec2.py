@@ -47,10 +47,11 @@ class InstanceStoreImageMaker(object):
         if not excludes:
             self.excludes = [
                 self.destination,
-                '/selinux/',
-                '/var/lib/dhclient',
+                '/selinux',
+                # '/var/lib/dhclient',
                 '/var/lib/dhcp',
-                '/var/lib/dhcp3']
+                # '/var/lib/dhcp3'
+                ]
 
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
@@ -124,10 +125,11 @@ class EBSImageMaker(object):
         self.image_size = image_size
         self.excludes = [
                 self.destination,
-                '/selinux/',
-                '/var/lib/dhclient',
+                '/selinux',
+                # '/var/lib/dhclient',
                 '/var/lib/dhcp',
-                '/var/lib/dhcp3']
+                # '/var/lib/dhcp3'
+                ]
 
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
