@@ -47,7 +47,7 @@ class InstanceStoreImageMaker(object):
         if not excludes:
             self.excludes = [
                 self.destination,
-                '/selinux/*',
+                '/selinux/',
                 '/var/lib/dhclient',
                 '/var/lib/dhcp',
                 '/var/lib/dhcp3']
@@ -124,7 +124,7 @@ class EBSImageMaker(object):
         self.image_size = image_size
         self.excludes = [
                 self.destination,
-                '/selinux/*',
+                '/selinux/',
                 '/var/lib/dhclient',
                 '/var/lib/dhcp',
                 '/var/lib/dhcp3']
