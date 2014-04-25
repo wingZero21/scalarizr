@@ -149,7 +149,7 @@ class EBSImageMaker(object):
         _logger.info('Image prepare command out: %s' % out)
 
     def make_volume(self, size):
-        ebs_config = {'type': 'ebs'
+        ebs_config = {'type': 'ebs',
             'size': size}
         ebs_config['size'] = size
         volume = create_volume(ebs_config)
