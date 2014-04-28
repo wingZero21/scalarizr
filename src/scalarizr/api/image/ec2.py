@@ -58,16 +58,15 @@ class InstanceStoreImageMaker(object):
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
         cmd = (
-            linux.which('ec2-bundle-vol'),
+            linux.which('ec2-bundle-image'),
             '--cert', self.credentials['cert'],
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
             '--arch', linux.os['arch'],
-            '--size', str(self.image_size),
+            # '--size', str(self.image_size),
             '--destination', self.destination,
-            '--exclude', ','.join(self.excludes),
+            # '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
-            '--volume', '/',
             '--debug')
         _logger.info('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
