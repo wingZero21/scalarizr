@@ -105,6 +105,7 @@ class InstanceStoreImageMaker(object):
 
     def cleanup(self):
         # remove image from the server
+        pass
         # linux.system('chmod 755 %s/keys/ec2-*' % private_dir, shell=True)
         # linux.system('rm -f %s/keys/ec2-*' % private_dir, shell=True)
         # linux.system('rm -f %s/%s.*' % (self.destination, self.image_name), shell=True)
