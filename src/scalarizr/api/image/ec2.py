@@ -85,6 +85,8 @@ class InstanceStoreImageMaker(object):
         cmd = (
             linux.which('ec2-upload-bundle'),
             '--bucket', bucket,
+            '--access-key', self.credentials['access_key'],
+            '--secret-key', self.credentials['secret_key'],
             '--manifest', manifest)
         _logger.info('Image upload command: ', ' '.join(cmd))
         out = linux.system(cmd, env=self.environ)[0]
@@ -145,7 +147,7 @@ class EBSImageMaker(object):
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
             '--arch', linux.os['arch'],
-            '--size', str(self.image_size),
+            # '--size', str(self.image_size),
             '--destination', self.destination,
             '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
@@ -267,7 +269,9 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         self.credentials = {
             'cert': cert_path,
             'key': pk_path,
-            'user': self.environ['EC2_USER_ID']}
+            'user': self.environ['EC2_USER_ID'],
+            'access_key': access_key,
+            'secret_key': secret_key}
 
     def _get_s3_bucket_name(self):
         platform = __node__['platform']
