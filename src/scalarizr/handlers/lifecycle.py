@@ -137,7 +137,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
     def on_init(self):
-        bus.on("host_init_response", self.on_host_init_response)
+        bus.on(
+            host_init_response=self.on_host_init_response, 
+            block_device_mounted=self.on_block_device_mounted
+        )
 
         # Add internal messages to scripting skip list
         try:
@@ -483,6 +486,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         system2([sys.executable, up_script], close_fds=True)
         Flag.set('update')
 
+    def on_block_device_mounted(self, volume):
+        self.send_message(Messages.BLOCK_DEVICE_MOUNTED, {
+            'device_name': volume.device,
+            'volume_id': volume.id,
+            'mountpoint': volume.mpoint            
+            })
 
 
 class IntMessagingService(object):

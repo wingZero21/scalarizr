@@ -526,6 +526,7 @@ class ApacheAPI(object):
         self.update_log_rotate_config()
 
         #self.mod_ssl.ensure()  # [SCALARIZR-1381]
+        self.mod_ssl.set_default_certificate(SSLCertificate())
 
         if linux.os.debian_family:
             mod_rpaf_path = __apache__["mod_rpaf_path"]

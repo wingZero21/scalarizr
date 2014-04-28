@@ -229,14 +229,7 @@ class BlockDeviceHandler(handlers.Handler):
                 logger = bus.init_op.logger if bus.init_op else LOG
                 logger.info('Ensure %s: take %s, mount to %s', self._vol_type, vol.id, vol.mpoint)
 
-                vol.ensure(mount=True, mkfs=True, fstab=True)
-                bus.fire("block_device_mounted", 
-                        volume_id=vol.id, device=vol.device)
-                self.send_message(Messages.BLOCK_DEVICE_MOUNTED, 
-                    {"device_name": vol.device, 
-                    "volume_id": vol.id, 
-                    "mountpoint": vol.mpoint}
-                )                
+                vol.ensure(mount=True, mkfs=True, fstab=True)               
         except:
             LOG.exception("Can't attach volume")
 

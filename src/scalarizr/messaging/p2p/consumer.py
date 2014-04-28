@@ -84,7 +84,8 @@ class P2pMessageConsumer(MessageConsumer):
             def do_POST(self):
                 logger = logging.getLogger(__name__)
 
-                if self.headers.get('X-Server-Id'):
+                if self.headers.get('X-Server-Id') and self.consumer._handler_thread:
+                    # Skip check for internal messaging
                     if self.headers['X-Server-Id'] != __node__['server_id']:
                         self.send_response(409)
                         self.end_headers()
