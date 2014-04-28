@@ -58,15 +58,16 @@ class InstanceStoreImageMaker(object):
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
         cmd = (
-            linux.which('ec2-bundle-image'),
+            linux.which('ec2-bundle-vol'),
             '--cert', self.credentials['cert'],
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
             '--arch', linux.os['arch'],
             # '--size', str(self.image_size),
             '--destination', self.destination,
-            # '--exclude', ','.join(self.excludes),
+            '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
+            '--volume', '/',
             '--debug')
         _logger.info('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
@@ -105,10 +106,9 @@ class InstanceStoreImageMaker(object):
 
     def cleanup(self):
         # remove image from the server
-        pass
-        # linux.system('chmod 755 %s/keys/ec2-*' % private_dir, shell=True)
-        # linux.system('rm -f %s/keys/ec2-*' % private_dir, shell=True)
-        # linux.system('rm -f %s/%s.*' % (self.destination, self.image_name), shell=True)
+        linux.system('chmod 755 %s/keys/ec2-*' % private_dir, shell=True)
+        linux.system('rm -f %s/keys/ec2-*' % private_dir, shell=True)
+        linux.system('rm -f %s/%s.*' % (self.destination, self.image_name), shell=True)
 
     def create_image(self):
         try:
