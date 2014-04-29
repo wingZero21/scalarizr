@@ -207,7 +207,7 @@ class EBSImageMaker(object):
         # return out
         try:
             self.prepare_image()
-            size = int(root_disk.size/1000/1000)
+            size = int(self.root_disk.size/1000/1000)
             volume = self.make_volume(size)
             snapshot = self.make_snapshot(volume)
             image_id = self.register_image(snapshot)
