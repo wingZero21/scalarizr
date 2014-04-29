@@ -167,7 +167,8 @@ class EBSImageMaker(object):
         return volume
 
     def make_snapshot(self, volume):
-        coreutils.dd(**{'if': self.destination, 'of': volume.device})
+        prepared_image_path = os.path.join(self.destination, self.image_name)
+        coreutils.dd(**{'if': prepared_image_path, 'of': volume.device})
         volume.detach()
         snapshot = volume.snapshot()
 
