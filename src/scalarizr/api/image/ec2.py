@@ -122,8 +122,9 @@ class InstanceStoreImageMaker(object):
 
 class EBSImageMaker(object):
 
-    def __init__(self, image_name, environ, credentials, destination='/mnt'):
+    def __init__(self, image_name, root_disk, environ, credentials, destination='/mnt'):
         self.image_name = image_name
+        self.root_disk = root_disk
         self.environ = environ
         self.credentials = credentials
         self.platform = __node__['platform']
@@ -206,7 +207,7 @@ class EBSImageMaker(object):
         # return out
         try:
             self.prepare_image()
-            size = int(coreutils.df('/')/1000)
+            size = int(root_disk.size/1000/1000)
             volume = self.make_volume(size)
             snapshot = self.make_snapshot(volume)
             image_id = self.register_image(snapshot)
@@ -318,6 +319,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
             self.image_maker = EBSImageMaker(
                     image_name,
+                    root_disk,
                     self.environ,
                     self.credentials)
         else:
