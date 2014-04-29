@@ -33,7 +33,6 @@ class InstanceStoreImageMaker(object):
         environ,
         credentials,
         excludes=[],
-        image_size=None,
         bucket_name=None,
         destination='/mnt'):
 
@@ -41,7 +40,6 @@ class InstanceStoreImageMaker(object):
         self.environ = environ
         self.credentials = credentials
         self.excludes = excludes
-        self.image_size = image_size
         self.bucket_name = bucket_name
         self.destination = destination
         self.platform = __node__['platform']
@@ -124,13 +122,12 @@ class InstanceStoreImageMaker(object):
 
 class EBSImageMaker(object):
 
-    def __init__(self, image_name, environ, credentials, image_size, destination='/mnt'):
+    def __init__(self, image_name, environ, credentials, destination='/mnt'):
         self.image_name = image_name
         self.environ = environ
         self.credentials = credentials
         self.platform = __node__['platform']
         self.destination = destination
-        self.image_size = image_size
         self.excludes = [
                 self.destination,
                 '/selinux',
@@ -325,7 +322,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 image_name,
                 self.environ,
                 self.credentials,
-                image_size=root_disk.size / 1000 / 1000,
                 bucket_name=self._get_s3_bucket_name())
 
 
