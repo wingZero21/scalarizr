@@ -183,6 +183,9 @@ class EBSImageMaker(object):
             stderr=subprocess.STDOUT)[0]
         return out
 
+    def cleanup(self):
+        pass
+
     def create_image(self):
         #create imaeg with ec2-create-image or through snapshotting server first
         # platform = __node__['platform']
