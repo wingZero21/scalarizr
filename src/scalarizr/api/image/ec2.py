@@ -127,7 +127,7 @@ class EBSImageMaker(object):
     def __init__(self, image_name, root_disk, environ, credentials, destination='/mnt'):
         self.image_name = image_name
         self.root_disk = root_disk
-        self.image_size = int(self.root_disk.size/1000)
+        self.image_size = int(self.root_disk.size/1024)
         self.environ = environ
         self.credentials = credentials
         self.platform = __node__['platform']
@@ -336,7 +336,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         else:
             self.image_maker = InstanceStoreImageMaker(
                 image_name,
-                int(root_disk.size/1000),
+                int(root_disk.size/1024),
                 self.environ,
                 self.credentials,
                 bucket_name=self._get_s3_bucket_name())
