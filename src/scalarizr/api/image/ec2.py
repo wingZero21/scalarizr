@@ -30,6 +30,7 @@ class InstanceStoreImageMaker(object):
     
     def __init__(self,
         image_name,
+        image_size,
         environ,
         credentials,
         excludes=[],
@@ -37,6 +38,7 @@ class InstanceStoreImageMaker(object):
         destination='/mnt'):
 
         self.image_name = image_name
+        self.image_size = image_size
         self.environ = environ
         self.credentials = credentials
         self.excludes = excludes
@@ -61,7 +63,7 @@ class InstanceStoreImageMaker(object):
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
             '--arch', linux.os['arch'],
-            # '--size', str(self.image_size),
+            '--size', str(self.image_size),
             '--destination', self.destination,
             '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
@@ -125,6 +127,7 @@ class EBSImageMaker(object):
     def __init__(self, image_name, root_disk, environ, credentials, destination='/mnt'):
         self.image_name = image_name
         self.root_disk = root_disk
+        self.image_size = int(self.root_disk.size/1000)
         self.environ = environ
         self.credentials = credentials
         self.platform = __node__['platform']
@@ -145,7 +148,7 @@ class EBSImageMaker(object):
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
             '--arch', linux.os['arch'],
-            # '--size', str(self.image_size),
+            '--size', str(self.image_size),
             '--destination', self.destination,
             '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
@@ -215,7 +218,7 @@ class EBSImageMaker(object):
         # return out
         try:
             self.prepare_image()
-            size = int(self.root_disk.size/1000/1000)
+            size = self.image_size
             volume = self.make_volume(size)
             snapshot = self.make_snapshot(volume)
             image_id = self.register_image(snapshot)
@@ -333,6 +336,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         else:
             self.image_maker = InstanceStoreImageMaker(
                 image_name,
+                int(root_disk.size/1000),
                 self.environ,
                 self.credentials,
                 bucket_name=self._get_s3_bucket_name())
