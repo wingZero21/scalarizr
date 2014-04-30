@@ -67,17 +67,17 @@ class InstanceStoreImageMaker(object):
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
-        _logger.info('Image prepare command: ' + ' '.join(cmd))
+        _logger.debug('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
             env=self.environ,
             stdout=subprocess.PIPE, 
             stderr=subprocess.STDOUT)[0]
-        _logger.info('Image prepare command out: %s' % out)
+        _logger.debug('Image prepare command out: %s' % out)
 
 
     def upload_image(self):
         # upload image on S3 with ec2-upload-bundle or filetransfer
-        _logger.info('Uploading image (with ec2-upload-bundle)')
+        _logger.debug('Uploading image (with ec2-upload-bundle)')
         manifest = os.path.join(self.destination, self.image_name) + '.manifest.xml'
         bucket = os.path.basename(self.platform.scalrfs.root())
         cmd = (
@@ -86,21 +86,21 @@ class InstanceStoreImageMaker(object):
             '--access-key', self.credentials['access_key'],
             '--secret-key', self.credentials['secret_key'],
             '--manifest', manifest)
-        _logger.info('Image upload command: ', ' '.join(cmd))
+        _logger.debug('Image upload command: ', ' '.join(cmd))
         out = linux.system(cmd, env=self.environ)[0]
-        _logger.info('Image upload command out: %s' % out)
+        _logger.debug('Image upload command out: %s' % out)
         return bucket, manifest
 
     def register_image(self, bucket, manifest):
         # register image as AMI with ec2-register
-        _logger.info('Registering image')
+        _logger.debug('Registering image')
         s3_manifest_path = '%s/%s' % (bucket, os.path.basename(manifest))
-        _logger.info("Registering image '%s'", s3_manifest_path)
+        _logger.debug("Registering image '%s'", s3_manifest_path)
 
         ec2_conn = self.platform.new_ec2_conn()
         ami_id = ec2_conn.register_image(image_location=s3_manifest_path)
 
-        _logger.info("Image is registered.")
+        _logger.debug("Image is registered.")
         _logger.debug('Image %s is available', ami_id)
         return ami_id
 
@@ -151,26 +151,33 @@ class EBSImageMaker(object):
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
-        _logger.info('Image prepare command: ' + ' '.join(cmd))
+        _logger.debug('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
             env=self.environ,
             stdout=subprocess.PIPE, 
             stderr=subprocess.STDOUT)[0]
-        _logger.info('Image prepare command out: %s' % out)
+        _logger.debug('Image prepare command out: %s' % out)
 
     def make_volume(self, size):
         ebs_config = {'type': 'ebs',
             'size': size}
         ebs_config['size'] = size
+        _logger.debug('Creating ebs volume')
         volume = create_volume(ebs_config)
         volume.ensure()
+        _logger.debug('Volume created %s' % volume.device)
         return volume
 
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
+        _logger.debug('dd image into volume %s' % volume.device)
         coreutils.dd(**{'if': prepared_image_path, 'of': volume.device})
+        _logger.debug('detaching volume')
         volume.detach()
+        _logger.debug('Making snapshot of volume %s' % volume.device)
         snapshot = volume.snapshot()
+        _logger.debug('Snapshot is made')
+        return snapshot
 
     def register_image(self, snapshot):
         cmd = (
@@ -178,7 +185,7 @@ class EBSImageMaker(object):
             '--name', self.image_name,
             '-s', snapshot.id,
             '--debug')
-        _logger.info('Image register command: ' + ' '.join(cmd))
+        _logger.debug('Image register command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
             env=self.environ,
             stdout=subprocess.PIPE, 
@@ -199,12 +206,12 @@ class EBSImageMaker(object):
         #     '--no-reboot',
         #     '--region', self.platform.get_region(),
         #     '--debug')
-        # _logger.info('Image create command: ' + ' '.join(cmd))
+        # _logger.debug('Image create command: ' + ' '.join(cmd))
         # out = linux.system(cmd, 
         #     env=self.environ,
         #     stdout=subprocess.PIPE, 
         #     stderr=subprocess.STDOUT)[0]
-        # _logger.info('Image create command out: %s' % out)
+        # _logger.debug('Image create command out: %s' % out)
         # return out
         try:
             self.prepare_image()
