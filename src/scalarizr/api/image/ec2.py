@@ -21,6 +21,7 @@ from scalarizr.node import base_dir as etc_dir
 from scalarizr.node import private_dir
 from scalarizr.linux import coreutils
 from scalarizr.storage2 import volume as create_volume
+from scalarizr import util
 
 
 _logger = logging.getLogger(__name__)
@@ -179,6 +180,10 @@ class EBSImageMaker(object):
         volume.detach()
         _logger.debug('Making snapshot of volume %s' % volume.device)
         snapshot = volume.snapshot()
+        util.wait_until(
+                lambda: snapshot.update() and snapshot.status == 'completed',
+                logger=_logger,
+                error_text='EBS snapshot %s wasnt completed' % snapshot.id)
         _logger.debug('Snapshot is made')
         return snapshot
 
