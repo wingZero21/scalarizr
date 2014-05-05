@@ -309,8 +309,19 @@ class MySQLAPI(BehaviorAPI):
     @classmethod
     def do_check_software(cls, installed_packages=None):
         if linux.os.debian_family:
-            pkgmgr.check_dependency(
-                ['mysql-client>=5.0,<5.6', 'mysql-server>5.0,<5.6'],
+            pkgmgr.check_any_dependency(
+                [
+                    ['mysql-client>=5.0,<5.6'],
+                    ['mysql-client-5.5',
+                ],
+                installed_packages,
+                ['apparmor']
+            )
+            pkgmgr.check_any_dependency(
+                [
+                    ['mysql-server>=5.0,<5.6'],
+                    ['mysql-server-5.5',
+                ],
                 installed_packages,
                 ['apparmor']
             )
