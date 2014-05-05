@@ -91,7 +91,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         self._insert_iptables_rules()
 
         if 'running' == __node__['state']:
-            self._set_nodename_in_env()
+            self._prepare_env_config()
             rabbitmq_vol = __rabbitmq__['volume']
 
             if not __rabbitmq__['volume'].mounted_to():
