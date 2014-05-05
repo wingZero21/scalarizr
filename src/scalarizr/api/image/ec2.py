@@ -172,13 +172,6 @@ class EBSImageMaker(object):
         _logger.debug('Volume created %s' % volume.device)
         return volume
 
-    def _ebs_snapshot(self, snapshot):
-        if isinstance(snapshot, basestring):
-            ret = boto.ec2.snapshot.Snapshot(self._conn)
-            ret.id = snapshot
-            return ret
-        return snapshot
-
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
         _logger.debug('dd image into volume %s' % volume.device)
@@ -186,14 +179,13 @@ class EBSImageMaker(object):
         _logger.debug('detaching volume')
         volume.detach()
         _logger.debug('Making snapshot of volume %s' % volume.device)
-        snapshot_id = volume.snapshot()
-        snapshot = volume._ebs_snapshot(snapshot_id)
+        snapshot = volume.snapshot()
         util.wait_until(
-                lambda: snapshot.update() and snapshot.status == 'completed',
+                lambda: snapshot.status() == 'completed',
                 logger=_logger,
                 error_text='EBS snapshot %s wasnt completed' % snapshot.id)
         _logger.debug('Snapshot is made')
-        return snapshot_id
+        return snapshot.id
 
     def register_image(self, snapshot_id):
         cmd = (
