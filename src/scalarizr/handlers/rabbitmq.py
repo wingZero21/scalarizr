@@ -36,7 +36,8 @@ STORAGE_VOLUME_CNF = 'rabbitmq.json'
 RABBITMQ_MGMT_PLUGIN_NAME = 'rabbitmq_management'
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
 RABBITMQ_ENV_CFG_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
-
+inet_dist_listen_min = 40100
+inet_dist_listen_max = 40150
 
 
 
@@ -121,7 +122,9 @@ class RabbitMQHandler(ServiceCtlHandler):
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '5672'},
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '15672'},
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '55672'},
-                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'}
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '%d:%d' %
+                                                                        (inet_dist_listen_min, inet_dist_listen_max)}
             ])
 
 
@@ -234,22 +237,13 @@ class RabbitMQHandler(ServiceCtlHandler):
             self.service.stop()
 
 
-    def _set_nodename_in_env(self):
+    def _prepare_env_config(self):
         node_name = rabbitmq_svc.NODE_HOSTNAME_TPL % __rabbitmq__['hostname']
         os.environ.update(dict(RABBITMQ_NODENAME=node_name))
-
-        env_cfg = ''
-        if os.path.exists(RABBITMQ_ENV_CFG_PATH):
-            with open(RABBITMQ_ENV_CFG_PATH) as f:
-                env_cfg = f.read()
-
-        if 'RABBITMQ_NODENAME' in env_cfg:
-            env_cfg = re.sub(re.compile('^(RABBITMQ_NODENAME=(?!%s).*)$' % node_name, re.M), '#\g<0>', env_cfg)
-        if not re.search(re.compile('^RABBITMQ_NODENAME=%s' % node_name, re.M), env_cfg):
-            env_cfg += '\nRABBITMQ_NODENAME=%s' % node_name
-
         with open(RABBITMQ_ENV_CFG_PATH, 'w') as f:
-            f.write(env_cfg)
+            f.write('RABBITMQ_NODENAME=%s\n' % node_name)
+            f.write('RABBITMQ_SERVER_ERL_ARGS="-kernel inet_dist_listen_min %d -kernel inet_dist_listen_max %d"\n' %
+                    (inet_dist_listen_min, inet_dist_listen_max))
 
 
     def on_host_init_response(self, message):
@@ -282,7 +276,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
         __rabbitmq__['hostname'] = hostname
         dns.ScalrHosts.set('127.0.0.1', hostname)
-        self._set_nodename_in_env()
+        self._prepare_env_config()
 
         self.service.start()
         self.rabbitmq.stop_app()

@@ -271,7 +271,7 @@ class NginxAPI(object):
         self._load_proxies_inc()
 
     def _reload_service(self):
-        if self.service.status() == initdv2.Status.NOT_RUNNING:
+        if self.service.status() != initdv2.Status.RUNNING:
             self.service.start()
         else:
             self.service.reload()
