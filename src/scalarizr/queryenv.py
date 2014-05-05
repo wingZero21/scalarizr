@@ -26,6 +26,9 @@ else:
 class QueryEnvError(Exception):
     pass
 
+class InvalidSignatureError(QueryEnvError):
+    pass
+
 class QueryEnvService(object):
     _logger = None
 
@@ -84,16 +87,18 @@ class QueryEnvService(object):
             except:
             	e = sys.exc_info()[1]
                 if isinstance(e, urllib2.HTTPError):
-                    resp_body = e.read() if e.fp is not None else None
-                    if not resp_body:
-                        resp_body = e.msg
-                    self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, resp_body, msg_wait)
-                    if 'not supported' in resp_body:
-                        raise QueryEnvError('Unsupported method "%s"' % command)
+                    resp_body = e.read() if e.fp is not None else ""
+                    msg = resp_body or e.msg
+                    if "Signature doesn't match" in msg:
+                        raise InvalidSignatureError(msg)
+                    if "not supported" in msg:
+                        raise
+                    self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, msg, msg_wait)
                 else:
                     self._logger.warn('QueryEnv failed. %s. %s', e, msg_wait)
                 self._logger.warn('Sleep %s seconds before next attempt...', wait_seconds)
                 time.sleep(wait_seconds)
+
 
         resp_body = response.read()
         resp_body = self.htmlparser.unescape(resp_body)
@@ -298,6 +303,7 @@ class QueryEnvService(object):
         glob_vars['private'] = dict((k, v.encode('utf-8') if v else '')
                                            for k, v in private_values.items())
         return glob_vars
+
 
     def _read_get_global_config_response(self, xml):
         """

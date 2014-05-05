@@ -2,6 +2,9 @@
 
 set -x
 
+echo 'scalarizr-base.prerm'
+echo $@
+
 NAME="scalarizr"
 INIT_SCRIPT="/etc/init.d/$NAME"
 
@@ -12,8 +15,6 @@ if [ -x $INIT_SCRIPT ]; then
 	if [ $rc = '0' ]; then
 		$INIT_SCRIPT stop
 	fi
-
-	
 
 	grep -q /etc/scalr/private.d /proc/mounts && umount /etc/scalr/private.d || :
 fi

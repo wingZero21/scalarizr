@@ -4,6 +4,7 @@ import os
 import sys
 import glob
 import string
+import socket
 import threading
 from time import sleep
 
@@ -350,8 +351,12 @@ class CinderVolume(base.Volume):
         vol = [None]
 
         def exit_condition():
-            vol[0] = self._cinder.volumes.get(volume_id)
-            return vol[0].status not in ('attaching', 'detaching', 'creating')
+            try:
+                vol[0] = self._cinder.volumes.get(volume_id)
+                return vol[0].status not in ('attaching', 'detaching', 'creating')
+            except socket.gaierror, e:
+                LOG.debug('Silently ignore error: %s', e)
+                return False
 
         if not exit_condition():
             msg = 'Cinder volume %s hangs in transitional state. ' \

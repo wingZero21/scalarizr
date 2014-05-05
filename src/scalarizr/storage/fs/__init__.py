@@ -8,9 +8,8 @@ Created on Nov 11, 2010
 
 from .. import MKFS_EXEC, MOUNT_EXEC
 
-from scalarizr.linux import coreutils
+from scalarizr.linux import coreutils, pkgmgr
 from scalarizr.util import system2, PopenError
-from scalarizr.util import dynimp
 
 import os
 import re
@@ -59,14 +58,9 @@ class FileSystem:
                 error_text="Cannot load '%s' kernel module: %s" % (self.name, e)
                 raise Exception(error_text)
 
-            mgr = dynimp.package_mgr()
             if self.os_packages:
                 for package in self.os_packages:
-                    candidates = mgr.candidates(package)
-                    if candidates:
-                        mgr.install(package, candidates[-1])
-                    else:
-                        raise Exception("No installation candidates for package '%s'", package)
+                    pkgmgr.installed(package)
 
 
 

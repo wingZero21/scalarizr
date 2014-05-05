@@ -11,11 +11,11 @@ import os
 import re
 import time
 
+from scalarizr.linux import pkgmgr
 from scalarizr.util import system2
 from scalarizr.util import wait_until
 from scalarizr.util import firstmatched
 from scalarizr.util import PopenError
-from scalarizr.util import dynimp
 from scalarizr import linux
 
 
@@ -38,8 +38,7 @@ class Mdadm:
             if linux.os.redhat_family:
                 system2(('/usr/bin/yum', '-d0', '-y', 'install', 'mdadm', '-x', 'exim'), raise_exc=False)
             else:
-                mgr = dynimp.package_mgr()
-                mgr.install('mdadm', mgr.candidates('mdadm')[-1])
+                pkgmgr.installed('mdadm')
         for location in ['/etc ', '/lib']:
             path = os.path.join(location, 'udev/rules.d/85-mdadm.rules')
             if os.path.exists(path):

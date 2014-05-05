@@ -29,6 +29,11 @@ if linux.os.windows:
 else:
     from scalarizr.snmp.agent import SnmpServer
 
+if linux.os.windows:
+    import win32timezone as os_time
+else:
+    from datetime import datetime as os_time
+
 # Utils
 from scalarizr import util
 from scalarizr.util import initdv2, log, PeriodicalExecutor
@@ -163,20 +168,25 @@ class ScalarizrInitScript(initdv2.ParametrizedInitScript):
         )
 
 
-class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
+class ScalrUpdClientScript(initdv2.Daemon):
     def __init__(self):
-        initdv2.ParametrizedInitScript.__init__(self, 
-            'scalr-upd-client', 
-            '/etc/init.d/scalr-upd-client',
-            pid_file='/var/run/scalr-upd-client.pid'
-        )
+        name = 'ScalrUpdClient' if linux.os.windows_family else 'scalr-upd-client'
+        super(ScalrUpdClientScript, self).__init__(name)
 
+    if not linux.os.windows:
+        def restart(self):
+            self.stop()
+            pid_file = '/var/run/scalr-upd-client.pid'
+            if os.access(pid_file, os.R_OK):
+                pid = open(pid_file).read().strip()
+                if pid:
+                    os.kill(int(pid), signal.SIGKILL)
+                    os.unlink(pid_file)
+            self.start()
 
 def _init():
     optparser = bus.optparser
     bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
-    
-    #dynimp.setup()
     
     _init_logging()
     logger = logging.getLogger(__name__)    
@@ -325,13 +335,6 @@ def _init_platform():
         logger.debug('Enable RedHat subscription')
         urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
 
-    if cnf.state != ScalarizrState.RUNNING and not linux.os.windows_family:
-        try:
-            pkgmgr.updatedb()
-        except:
-            logger.warn('Failed to update package manager database: %s', 
-                    sys.exc_info()[1], exc_info=sys.exc_info())
-
     if httplib2_loaded:
         httplib2.CA_CERTS = os.path.join(os.path.dirname(__file__), 'cacert.pem')
 
@@ -472,7 +475,14 @@ def _cleanup_after_rebundle():
             continue
         path = os.path.join(priv_path, file)
         coreutils.chmod_r(path, 0700)
-        os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+        try:
+            os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+        except:
+            if linux.os.windows and sys.exc_info()[0] == WindowsError:         
+                # ScalrUpdClient locks db.sqlite 
+                logger.debug(sys.exc_info()[1])
+            else:
+                raise
     if not linux.os.windows_family:
         system2('sync', shell=True)
 
@@ -592,6 +602,10 @@ class Service(object):
 
 
     def start(self):
+        if linux.os.amazon:
+            print 'Amazon Linux is not supported'
+            sys.exit(1)
+            
         self._logger.debug("Initialize scalarizr...")
         _init()
 
@@ -698,16 +712,22 @@ class Service(object):
         STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__))
         STATE['global.version'] = __version__
 
-        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
-            self._logger.info('Scalarizr was updated to %s', __version__)
-
         if cnf.state == ScalarizrState.UNKNOWN:
             cnf.state = ScalarizrState.BOOTSTRAPPING
 
         # At first startup platform user-data should be applied
         if cnf.state == ScalarizrState.BOOTSTRAPPING:
             cnf.fire('apply_user_data', cnf)
-            self._start_update_client()
+            
+        if node.__node__['state'] != 'importing':
+            self._talk_to_updclient()
+
+        if node.__node__['state'] != 'running':
+            try:
+                pkgmgr.updatedb()
+            except:
+                self._logger.warn('Failed to update package manager database: %s', 
+                    sys.exc_info()[1], exc_info=sys.exc_info())
 
         # Check Scalr version
         if not bus.scalr_version:
@@ -732,6 +752,13 @@ class Service(object):
 
         # Initialize scalarizr services
         self._init_services()
+        
+        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
+            self._logger.info('Scalarizr was updated to %s', __version__)
+            node.__node__['messaging'].send(
+                'HostUpdate',
+                body={'scalarizr': {'version': __version__}}
+            )
 
         if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
             node.__node__['messaging'].send(
@@ -951,6 +978,17 @@ class Service(object):
         consumer = msg_service.get_consumer()
         consumer.listeners.append(MessageListener())
 
+        producer = msg_service.get_producer()
+        def msg_meta(queue, message):
+            """
+            Add scalarizr version to meta
+            """
+            message.meta.update({
+                'szr_version': __version__,
+                'timestamp': os_time.utcnow().strftime("%a %d %b %Y %H:%M:%S %z")
+            })
+        producer.on('before_send', msg_meta)
+
         if not linux.os.windows_family:
             logger.debug('Schedule SNMP process')
             self._snmp_scheduled_start_time = time.time()
@@ -1060,22 +1098,45 @@ class Service(object):
         ex = bus.periodical_executor
         ex.start()
 
-
-    def _start_update_client(self):
-        if linux.os['family'] == 'Windows':
-            try:
-                win32serviceutil.StartService('ScalrUpdClient')
-            except:
-                e = sys.exc_info()[1]
-                self._logger.warn('Could not start scalr update client service: %s' % e)
-
-        else:
-            upd = ScalrUpdClientScript()
-            if not upd.running:
+    def _talk_to_updclient(self):
+        try:
+            upd = jsonrpc_http.HttpServiceProxy('http://127.0.0.1:8008', bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
+            upd_svs = ScalrUpdClientScript()
+            if not upd_svs.running:
+                upd_svs.start()
+            upd_state = [None]
+            def upd_ready():
                 try:
-                    upd.start()
+                    upd_state[0] = upd.status()['state']
+                    return upd_state[0] != 'noop'
                 except:
-                    self._logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
+                    exc = sys.exc_info()[1]
+                    if 'Server-ID header not presented' in str(exc):
+                        self._logger.debug(('UpdateClient serves previous API version. '
+                            'Looks like we are in a process of migration to new update sytem. '
+                            'UpdateClient restart will handle this situation. Restarting'))
+                        upd_svs.restart()
+                    elif type(exc) in (urllib2.HTTPError, socket.error, IOError):
+                        self._logger.debug('Failed to get UpdateClient status: %s', exc)
+                    else:
+                        raise
+
+
+            wait_until(upd_ready, timeout=60, sleep=1)
+            upd_state = upd_state[0]
+            self._logger.info('UpdateClient state: %s', upd_state)
+            if upd_state == 'in-progress/restart':
+                self._logger.info('Scalarizr was restarted by update process')
+            elif upd_state.startswith('in-progress'):
+                self._logger.info('Update is in-progress, exiting')
+                sys.exit()
+            elif upd_state == 'completed/wait-ack':
+                self._logger.info('UpdateClient completed update and should be restarted, restarting')
+                upd_svs.restart()
+        except:
+            if sys.exc_info()[0] == SystemExit:
+                raise
+            self._logger.warn('Failed to talk to UpdateClient: %s', sys.exc_info()[1])
 
 
     def _shutdown(self):

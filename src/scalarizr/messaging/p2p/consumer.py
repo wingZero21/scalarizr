@@ -112,6 +112,17 @@ class P2pMessageConsumer(MessageConsumer):
             def do_POST(self):
                 logger = logging.getLogger(__name__)
 
+                if self.headers.get('X-Server-Id') and self.consumer._handler_thread:
+                    # Skip check for internal messaging
+                    if self.headers['X-Server-Id'] != __node__['server_id']:
+                        self.send_response(409)
+                        self.end_headers()
+                        msg = ("Message X-Server-Id header "
+                                "doesn't match node server_id: {0} != {1}").format(
+                                self.headers['X-Server-Id'], __node__['server_id'])
+                        self.wfile.write(msg)
+                        return
+
                 queue = os.path.basename(self.path)
                 rawmsg = self.rfile.read(int(self.headers["Content-length"]))
                 logger.debug("Received ingoing message in queue: '%s'", queue)
@@ -129,7 +140,8 @@ class P2pMessageConsumer(MessageConsumer):
                 except (BaseException, Exception), e:
                     err = 'Message consumer protocol filter raises exception: %s' % str(e)
                     logger.exception(err)
-                    self.send_response(201, 'Created')
+                    self.send_response(201)
+                    self.end_headers()
                     return
 
                 try:
@@ -152,7 +164,8 @@ class P2pMessageConsumer(MessageConsumer):
                 except (BaseException, Exception), e:
                     err = "Cannot decode message. error: %s; raw message: %s" % (str(e), rawmsg)
                     logger.exception(err)
-                    self.send_response(201, 'Created')
+                    self.send_response(201)
+                    self.end_headers()
                     return
 
 
@@ -165,10 +178,12 @@ class P2pMessageConsumer(MessageConsumer):
                     #self.consumer._not_empty.set()
                 except (BaseException, Exception), e:
                     logger.exception(e)
-                    self.send_response(500, str(e))
+                    self.send_response(500)
+                    self.end_headers()
+                    self.wfile.write(str(e))
                     return
 
-                self.send_response(201, 'Created')
+                self.send_response(201)
                 self.end_headers()
 
 

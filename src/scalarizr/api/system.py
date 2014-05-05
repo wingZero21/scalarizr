@@ -22,14 +22,16 @@ import subprocess
 from multiprocessing import pool
 
 from scalarizr import rpc, linux
+from scalarizr.api import operation as operation_api
 from scalarizr.bus import bus
 from scalarizr import util
 from scalarizr.util import system2, dns
 from scalarizr.linux import mount
-from scalarizr.util import kill_childs
+from scalarizr.util import kill_childs, Singleton
 from scalarizr.queryenv import ScalingMetric
-from scalarizr.handlers.script_executor import logs_dir
-from scalarizr.util import Singleton
+from scalarizr.api.binding import jsonrpc_http
+from scalarizr.handlers import script_executor
+
 
 LOG = logging.getLogger(__name__)
 
@@ -120,6 +122,11 @@ class SystemAPI(object):
     _LOG_FILE = '/var/log/scalarizr.log'
     _DEBUG_LOG_FILE = '/var/log/scalarizr_debug.log'
     _UPDATE_LOG_FILE = '/var/log/scalarizr_update.log'
+
+
+    def __init__(self):
+        self._op_api = operation_api.OperationAPI()
+
 
     def _readlines(self, path):
         with open(path, "r") as fp:
@@ -591,8 +598,8 @@ class SystemAPI(object):
                 assert mpoint in mounts
                 mpoint_stat = os.statvfs(mpoint)
                 res[mpoint] = dict()
-                res[mpoint]['total'] = (mpoint_stat.f_bsize * mpoint_stat.f_blocks) / 1024
-                res[mpoint]['free'] = (mpoint_stat.f_bsize * mpoint_stat.f_bavail) / 1024
+                res[mpoint]['total'] = (mpoint_stat.f_bsize * mpoint_stat.f_blocks) / 1024  # Kb
+                res[mpoint]['free'] = (mpoint_stat.f_bsize * mpoint_stat.f_bavail) / 1024   # Kb
             except:
                 res[mpoint] = None
 
@@ -650,14 +657,31 @@ class SystemAPI(object):
             wrk_pool.join()
 
 
+    @rpc.command_method
+    def execute_scripts(self, scripts=None, global_variables=None, event_name=None, 
+            role_name=None, async=False):
+        def do_execute_scripts(op):
+            msg = lambda: None
+            msg.name = event_name
+            msg.role_name = role_name
+            msg.body = {
+                'scripts': scripts or [],
+                'global_variables': global_variables or []
+            }
+            hdlr = script_executor.get_handlers()[0]
+            hdlr(msg)
+
+        return self._op_api.run('system.execute_scripts', do_execute_scripts, async=async)
+
+
     @rpc.query_method
     def get_script_logs(self, exec_script_id, maxsize=max_log_size):
-        """
+        '''
         :return: stdout and stderr scripting logs
         :rtype: dict(stdout: base64encoded, stderr: base64encoded)
-        """
-        stdout_match = glob.glob(os.path.join(logs_dir, '*%s-out.log' % exec_script_id))
-        stderr_match = glob.glob(os.path.join(logs_dir, '*%s-err.log' % exec_script_id))
+        '''
+        stdout_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-out.log' % exec_script_id))
+        stderr_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-err.log' % exec_script_id))
 
         if not stdout_match:
             stdout = binascii.b2a_base64(u'log file not found')
@@ -721,9 +745,19 @@ if linux.os.windows_family:
         @coinitialized
         @rpc.command_method
         def reboot(self):
+            updclient = jsonrpc_http.HttpServiceProxy('http://localhost:8008', 
+                            bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
+            try:
+                dont_do_it = updclient.status()['state'].startswith('in-progress')
+            except:
+                pass
+            else:
+                if dont_do_it:
+                    raise Exception('Reboot not allowed, cause Scalarizr update is in-progress')
             wmi = client.GetObject('winmgmts:')
-            for opsys in wmi.InstancesOf('Win32_OperatingSystem'):
-                opsys.Reboot()
+            wos = next(iter(wmi.InstancesOf('Win32_OperatingSystem')))
+            wos.reboot()
+                
 
         @coinitialized
         @rpc.command_method

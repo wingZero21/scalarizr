@@ -75,6 +75,7 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
                         '/etc/init.d/postgresql-9.0', 
                         '/etc/init.d/postgresql-9.1',
                         '/etc/init.d/postgresql-9.2',
+                        '/etc/init.d/postgresql-9.3',
                         '/etc/init.d/postgresql'))
         assert initd_script is not None
         initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 

@@ -1,0 +1,102 @@
+#!/bin/bash
+#
+# scalr-upd-client Scalarizr autoupdate daemon
+#
+# chkconfig:   2345 85 15
+# description: Scalarizr is a part of Scalr project
+
+
+. /etc/rc.d/init.d/functions
+
+PYTHON='/usr/bin/python2.6'
+NAME='scalr-upd-client'
+PID_FILE='/var/run/scalr-upd-client.pid'
+LOG_FILE='/var/log/scalarizr_update.log'
+BINARY='/usr/bin/scalr-upd-client'
+
+
+upd_start_daemon() {
+	echo -n "starting $NAME"
+	if upd_running; then
+		success
+	else
+		if daemon --pidfile $PID_FILE $BINARY --daemonize --pid-file $PID_FILE --log-file $LOG_FILE; then
+			success
+		else
+			failure
+		fi
+	fi	
+	echo
+}
+
+upd_stop_daemon() {
+	echo -n "stopping $NAME"
+	if upd_running; then
+		if killproc -p $PID_FILE $PYTHON -INT; then
+			success
+		else
+			failure
+		fi
+		rm -f $PID_FILE
+	else
+		success
+	fi
+	echo
+}
+
+upd_status_daemon() {
+	status -p $PID_FILE $NAME && exit 0 || exit $?
+}
+
+upd_reload_daemon() {
+	echo -n "reloading $NAME"
+	if killproc -p $PID_FILE $PYTHON -HUP; then
+		success
+	else
+		failure
+	fi
+	echo
+}
+
+upd_restart_daemon() {
+	upd_stop_daemon
+	sleep 1
+	upd_start_daemon
+}
+
+upd_running() {
+	pidofproc -p $PID_FILE $PYTHON > /dev/null 2>&1
+	return $?
+}
+
+case "$1" in
+        start)
+				upd_start_daemon
+                ;;
+
+		reload)
+				upd_reload_daemon
+				;;
+             
+		restart)
+				upd_restart_daemon
+				;;
+				
+		condrestart)
+				if upd_running; then
+					upd_restart_daemon
+				fi
+				;;
+   
+        stop)
+				upd_stop_daemon
+				;;
+
+        status)
+				upd_status_daemon
+                ;;
+
+        *)
+                echo "Usage: $0 {start|stop|restart|condrestart|reload|status}"
+                ;;
+esac

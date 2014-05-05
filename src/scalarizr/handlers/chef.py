@@ -184,7 +184,8 @@ class ChefHandler(Handler):
                     finally:
                         os.remove(self._json_attributes_path)
 
-                if self._chef_data.get('daemonize'):
+                daemonize = self._chef_data.get('daemonize')
+                if daemonize and int(daemonize):
                     log.info('Daemonizing chef-client')
                     self.run_chef_client(daemonize=True)
 

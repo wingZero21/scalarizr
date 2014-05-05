@@ -71,7 +71,7 @@ class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
         def image_completed():
             try:
                 result[0] = nova.images.get(image_id)
-                return result[0].status in ('ACTIVE', 'FAILED')
+                return result[0].status in ('ACTIVE', 'FAILED', 'DELETED')
             except:
                 e = sys.exc_info()[1]
                 if 'Unhandled exception occurred during processing' in str(e):
@@ -79,11 +79,11 @@ class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
                 raise
         wait_until(image_completed, start_text='Polling image status', sleep=30)
 
-        image_id = result[0].id
-        if result[0].status == 'FAILED':
-            raise handlers.HandlerError('Image %s becomes FAILED', image_id)
-        LOG.info('Image %s completed and available for use!', image_id)
-        return image_id
+        image = result[0]
+        if image.status != 'ACTIVE':
+            raise handlers.HandlerError('Image %s becomes %s', image.id, image.status)
+        LOG.info('Image %s completed and available for use!', image.id)
+        return image.id
 
 
     def before_rebundle(self):
