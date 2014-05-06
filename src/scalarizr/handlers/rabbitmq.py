@@ -258,6 +258,8 @@ class RabbitMQHandler(ServiceCtlHandler):
         if not rabbitmq_data['password']:
             rabbitmq_data['password'] = cryptotool.pwgen(10)
 
+        self.service.stop()
+
         self.cleanup_hosts_file('/')
 
         if os.path.exists(RABBITMQ_ENV_CFG_PATH):
@@ -270,8 +272,6 @@ class RabbitMQHandler(ServiceCtlHandler):
         os.chown(DEFAULT_STORAGE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 
         self._logger.info('Performing initial cluster reset')
-
-        self.service.stop()
 
         hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
         __rabbitmq__['hostname'] = hostname
