@@ -6,22 +6,22 @@ import time
 import subprocess
 import pprint
 
+from scalarizr import linux
+from scalarizr import util
 from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
-from scalarizr.util import system2
-from scalarizr import linux
+from scalarizr.config import ScalarizrCnf
+from scalarizr.linux import coreutils
 from scalarizr.linux import mount
 from scalarizr.linux import rsync
-from scalarizr.storage2.util import loop
-from scalarizr import linux
-from scalarizr.storage2 import filesystem
-from scalarizr.config import ScalarizrCnf
+from scalarizr.linux import pkgmgr
 from scalarizr.node import __node__
 from scalarizr.node import base_dir as etc_dir
 from scalarizr.node import private_dir
-from scalarizr.linux import coreutils
+from scalarizr.storage2 import filesystem
 from scalarizr.storage2 import volume as create_volume
-from scalarizr import util
+from scalarizr.storage2.util import loop
+from scalarizr.util import system2
 
 
 _logger = logging.getLogger(__name__)
@@ -204,23 +204,6 @@ class EBSImageMaker(object):
         pass
 
     def create_image(self):
-        #create imaeg with ec2-create-image or through snapshotting server first
-        # platform = __node__['platform']
-        # instance_id = platform.get_instance_id()
-        # cmd = (
-        #     linux.which('ec2-create-image'), 
-        #     instance_id,
-        #     '--name', self.image_name,
-        #     '--no-reboot',
-        #     '--region', self.platform.get_region(),
-        #     '--debug')
-        # _logger.debug('Image create command: ' + ' '.join(cmd))
-        # out = linux.system(cmd, 
-        #     env=self.environ,
-        #     stdout=subprocess.PIPE, 
-        #     stderr=subprocess.STDOUT)[0]
-        # _logger.debug('Image create command out: %s' % out)
-        # return out
         try:
             self.prepare_image()
             size = self.image_size / 1000
@@ -234,10 +217,74 @@ class EBSImageMaker(object):
 
 class EC2ImageAPIDelegate(ImageAPIDelegate):
 
+    _tools_dir = '/var/lib/scalr/ec2-tools'
+    _ami_tools_name = 'ec2-ami-tools'
+    _api_tools_name = 'ec2-api-tools'
+
     def __init__(self):
         self.image_maker = None
         self.environ = None
         self.excludes = None
+        self.ami_bin_dir = None
+        self.api_bin_dir = None
+        self._prepare_software()
+
+    def _get_version(self, tools_folder_name):
+        version = tools_folder_name.split('-')[-1]
+        version = tuple(int(x) for x in version.split('.'))
+        return version
+
+    def _remove_old_versions(self):
+        current_ami_tools = None
+        current_api_tools = None
+        directory_contents = os.listdir(self._tools_dir)
+        tools = [item for item in directory_contents
+            if item.startswith(self._ami_tools_name)
+            or item.startswith(self._api_tools_name)]
+
+        for tool in tools:
+            current_version = (0, 0, 0, 0)
+            for tool in tools:
+                os.removedirs(os.path.join(self._tools_dir, tool_name))
+
+    def _prepare_software(self):
+        if linux.os['family'] == 'Windows':
+            # TODO:
+            raise ImageAPIError('Windows')
+        else:
+            system2(('apt-get', 'update'),)
+
+            system2(('wget',
+                'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
+                '-P',
+                '/temp'),)
+            system2(('wget',
+                'http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip',
+                '-P',
+                '/temp'),)
+
+            if not os.path.exists(self._tools_dir):
+                os.mkdir(self._tools_dir)
+
+            self._remove_old_versions()
+            system2(('unzip', '/temp/ec2-ami-tools.zip', '-d', self._tools_dir),)
+            system2(('unzip', '/temp/ec2-api-tools.zip', '-d', self._tools_dir),)
+
+            directory_contents = os.listdir(self._tools_dir)
+            self.ami_bin_dir = None
+            self.api_bin_dir = None
+            for item in directory_contents:
+                if self.ami_bin_dir and self.api_bin_dir:
+                    break
+                elif item.startswith('ec2-ami-tools'):
+                    self.ami_bin_dir = os.path.join(item, 'bin')
+                elif item.startswith('ec2-api-tools'):
+                    self.api_bin_dir = os.path.join(item, 'bin')
+
+            system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
+                shell=True)
+            system2(('export', 'EC2_APITOOL_HOME=%s' % os.path.dirname(self.api_bin_dir)),
+                shell=True)
 
     def _get_root_device_type(self):
         platform = __node__['platform']
@@ -306,33 +353,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         self._setup_environment()
         _logger.debug('device type: %s' % root_device_type)
         if root_device_type == 'ebs':
-            # EBS-root device instance
-            # detecting root device like rdev=`sda`
-            # rdev = None
-            # for el in os.listdir('/sys/block'):
-            #     if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
-            #         rdev = el
-            #         break
-            # if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
-            #     rdev = root_disk.device
-
-            # # list partition of root device 
-            # list_rdevparts = [dev.device for dev in devices
-            #     if dev.device.startswith('/dev/%s' % rdev)]
-
-            # if len(list(set(list_rdevparts))) > 1:
-            #     # size of volume in KByte
-            #     volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
-            #     # size of volume in GByte
-            #     volume_size = int(volume_size[0].strip()) / 1024 / 1024
-            #     #TODO: need set flag, which be for few partitions
-            #     #copy_partition_table = True
-            # else:
-            #     # if one partition we use old method
-            #     volume_size = self._rebundle_message.body.get('volume_size')
-            #     if not volume_size:
-            #         volume_size = int(root_disk.size / 1000 / 1000)
-
             self.image_maker = EBSImageMaker(
                     image_name,
                     root_disk,

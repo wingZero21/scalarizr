@@ -33,27 +33,37 @@ class ImageAPI(object):
         self._op_api = OperationAPI()
         self.delegate = None
 
-    def init_delegate(self):
-        if self.delegate:
-            return
+    # TODO:
+    platform_to_delegate = {
+        BuiltinPlatforms.OPENSTACK: 'scalarizr.api.image.openstack',
+        BuiltinPlatforms.EC2: 'scalarizr.api.image.ec2',
+        BuiltinPlatforms.CLOUDSTACK: 'scalarizr.api.image.cloudstack',
+        BuiltinPlatforms.IDCF: 'scalarizr.api.image.cloudstack',
+        BuiltinPlatforms.GCE: 'scalarizr.api.image.gce',
+    }
 
-        platform_name = __node__['platform'].name
+    def delegate_for_platform(self, platform_name):
         if platform_name == BuiltinPlatforms.OPENSTACK:
             module = importlib.import_module('scalarizr.api.image.openstack')
-            self.delegate = module.OpenStackImageAPIDelegate()
+            return module.OpenStackImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.EC2:
             module = importlib.import_module('scalarizr.api.image.ec2')
-            self.delegate = module.EC2ImageAPIDelegate()
+            return module.EC2ImageAPIDelegate()
         elif platform_name in (BuiltinPlatforms.CLOUDSTACK, BuiltinPlatforms.IDCF):
             module = importlib.import_module('scalarizr.api.image.cloudstack')
-            self.delegate = module.CloudStackImageAPIDelegate()
+            return module.CloudStackImageAPIDelegate()
         elif platform_name == BuiltinPlatforms.GCE:
             module = importlib.import_module('scalarizr.api.image.gce')
-            self.delegate = module.GCEImageAPIDelegate()
+            return module.GCEImageAPIDelegate()
         # ...
         else:
             _logger.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))
             raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
+
+    def init_delegate(self):
+        if self.delegate:
+            return
+        self.delegate_for_platform(__node__['platform'].name)
 
     @rpc.command_method
     def prepare(self, role_name=None, async=False):
@@ -80,6 +90,7 @@ class ImageAPI(object):
         image_id = None
         try:
             cnf.state = ScalarizrState.REBUNDLING
+            # TODO: rename var
             image_id = self._op_api.run('api.image.snapshot',
                 func=self.delegate.snapshot,
                 async=async,
@@ -104,15 +115,10 @@ class ImageAPI(object):
     def create(self, role_name, async=True):
         """ Creates image """
         self.init_delegate()
-        create_operation = self._op_api.create('api.image.create',
+        return = self._op_api.run('api.image.create',
             func=self._create,
             func_kwds={'role_name': role_name},
             exclusive=True)
-        if async:
-            create_operation.run_async()
-        else:
-            create_operation.run()
-        return create_operation.operation_id
 
     def _create(self, op, role_name):
         prepare_result = self.prepare(role_name)
