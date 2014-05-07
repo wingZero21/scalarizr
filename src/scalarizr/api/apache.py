@@ -26,7 +26,7 @@ from telnetlib import Telnet
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
-from scalarizr.util import system2, initdv2, software
+from scalarizr.util import system2, initdv2, software, firstmatched
 from scalarizr.util import wait_until, dynimp, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
@@ -50,8 +50,9 @@ apache = {
 if linux.os.debian_family:
     apache.update({
         "httpd.conf":       "/etc/apache2/apache2.conf",
-        "ssl_conf_path":    "/etc/apache2/sites-available/default-ssl" if apache_version() < (2, 4) else
-                            "/etc/apache2/sites-available/default-ssl.conf",
+        "ssl_conf_path":    firstmatched(os.path.exists, (
+                            "/etc/apache2/sites-available/default-ssl",
+                            "/etc/apache2/sites-available/default-ssl.conf")),
         "default_vhost":    "/etc/apache2/sites-enabled/000-default",
         "ports_conf_deb":   "/etc/apache2/ports.conf",
         "ssl_load_deb":     "/etc/apache2/mods-enabled/ssl.load",
