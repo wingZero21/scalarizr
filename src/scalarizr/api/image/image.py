@@ -47,7 +47,7 @@ class ImageAPI(object):
             LOG.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))
             raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
         module = importlib.import_module(delegate[0])
-        return module.__getattribute__(delegate[1])
+        return module.__getattribute__(delegate[1])()
         # if platform_name == BuiltinPlatforms.OPENSTACK:
         #     module = importlib.import_module('scalarizr.api.image.openstack')
         #     return module.OpenStackImageAPIDelegate()
