@@ -68,7 +68,7 @@ class ImageAPI(object):
     def init_delegate(self):
         if self.delegate:
             return
-        self.delegate_for_platform(__node__['platform'].name)
+        self.delegate = self.delegate_for_platform(__node__['platform'].name)
 
     @rpc.command_method
     def prepare(self, role_name=None, async=False):
