@@ -32,16 +32,16 @@ class InstanceStoreImageMaker(object):
     def __init__(self,
         image_name,
         image_size,
-        environ,
-        credentials,
+        delegate,
         excludes=[],
         bucket_name=None,
         destination='/mnt'):
 
         self.image_name = image_name
         self.image_size = image_size
-        self.environ = environ
-        self.credentials = credentials
+        self.environ = delegate.environ
+        self.credentials = delegate.credentials
+        self.ami_bin_dir = delegate.ami_bin_dir
         self.excludes = excludes
         self.bucket_name = bucket_name
         self.destination = destination
@@ -59,7 +59,7 @@ class InstanceStoreImageMaker(object):
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
         cmd = (
-            linux.which('ec2-bundle-vol'),
+            os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
             '--cert', self.credentials['cert'],
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
@@ -77,14 +77,12 @@ class InstanceStoreImageMaker(object):
             stderr=subprocess.STDOUT)[0]
         LOG.debug('Image prepare command out: %s' % out)
 
-
     def upload_image(self):
-        # upload image on S3 with ec2-upload-bundle or filetransfer
         LOG.debug('Uploading image (with ec2-upload-bundle)')
         manifest = os.path.join(self.destination, self.image_name) + '.manifest.xml'
         bucket = os.path.basename(self.platform.scalrfs.root())
         cmd = (
-            linux.which('ec2-upload-bundle'),
+            os.path.join(self.ami_bin_dir, 'ec2-upload-bundle'),
             '--bucket', bucket,
             '--access-key', self.credentials['access_key'],
             '--secret-key', self.credentials['secret_key'],
@@ -95,7 +93,6 @@ class InstanceStoreImageMaker(object):
         return bucket, manifest
 
     def register_image(self, bucket, manifest):
-        # register image as AMI with ec2-register
         LOG.debug('Registering image')
         s3_manifest_path = '%s/%s' % (bucket, os.path.basename(manifest))
         LOG.debug("Registering image '%s'", s3_manifest_path)
@@ -125,12 +122,14 @@ class InstanceStoreImageMaker(object):
 
 class EBSImageMaker(object):
 
-    def __init__(self, image_name, root_disk, environ, credentials, destination='/mnt'):
+    def __init__(self, image_name, root_disk, delegate, destination='/mnt'):
         self.image_name = image_name
         self.root_disk = root_disk
         self.image_size = int(self.root_disk.size/1024)
-        self.environ = environ
-        self.credentials = credentials
+        self.environ = delegate.environ
+        self.credentials = delegate.credentials
+        self.ami_bin_dir = delegate.ami_bin_dir
+        self.api_bin_dir = delegate.api_bin_dir
         self.platform = __node__['platform']
         self.destination = destination
         self.excludes = [
@@ -144,7 +143,7 @@ class EBSImageMaker(object):
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
         cmd = (
-            linux.which('ec2-bundle-vol'), 
+            os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'), 
             '--cert', self.credentials['cert'],
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
@@ -175,7 +174,7 @@ class EBSImageMaker(object):
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
         LOG.debug('dd image into volume %s' % volume.device)
-        coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '4M'})
+        coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '8M'})
         LOG.debug('detaching volume')
         volume.detach()
         LOG.debug('Making snapshot of volume %s' % volume.device)
@@ -189,7 +188,7 @@ class EBSImageMaker(object):
 
     def register_image(self, snapshot_id):
         cmd = (
-            linux.which('ec2-register'), 
+            os.path.join(self.api_bin_dir, 'ec2-register'), 
             '--name', self.image_name,
             '-s', snapshot_id,
             '--debug')
@@ -253,7 +252,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             raise ImageAPIError('Windows')
         else:
             system2(('apt-get', 'update'),)
-
             system2(('wget',
                 'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
                 '-P',
@@ -356,14 +354,12 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             self.image_maker = EBSImageMaker(
                     image_name,
                     root_disk,
-                    self.environ,
-                    self.credentials)
+                    self)
         else:
             self.image_maker = InstanceStoreImageMaker(
                 image_name,
                 int(root_disk.size/1024),
-                self.environ,
-                self.credentials,
+                self,
                 bucket_name=self._get_s3_bucket_name())
 
 
