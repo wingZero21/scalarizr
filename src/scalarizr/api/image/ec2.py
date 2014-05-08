@@ -248,7 +248,10 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
     def _install_support_packages(self):
         pkgmgr.installed('unzip')
-        system2(('curl', '-sSL', 'https://get.rvm.io', '|', 'bash', '-s', 'stable'), shell=True)
+        install_script = system2(('curl', '-sSL', 'https://get.rvm.io'), shell=True)[0]
+        with open('/tmp/rvm_install.sh', 'w') as fp:
+            fp.write(install_script)
+        system2(('bash', '/tmp/rvm_install.sh', '-s', 'stable'), shell=True)
         system2(('rvm', 'install', '1.9.3'), shell=True)
 
     def _prepare_software(self):
