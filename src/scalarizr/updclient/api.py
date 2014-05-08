@@ -391,7 +391,7 @@ class UpdClientAPI(object):
                 self.state == 'error' or self.daemon.running):
             self.daemon.start()
         if self.state == 'completed/wait-ack':
-            obsoletes = pkg_resources.Requirement.parse('A<=2.7.2')
+            obsoletes = pkg_resources.Requirement.parse('A<=2.7.5')
             if self.installed in obsoletes:
                 def restart_self():
                     time.sleep(5)

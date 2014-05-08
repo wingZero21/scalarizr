@@ -760,12 +760,6 @@ class Service(object):
                 body={'scalarizr': {'version': __version__}}
             )
 
-        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
-            node.__node__['messaging'].send(
-                'HostUpdate',
-                body={'scalarizr': {'version': __version__}}
-            )
-
         if cnf.state == ScalarizrState.RUNNING:
             # ReSync user-data
             cnf.fire('apply_user_data', cnf)

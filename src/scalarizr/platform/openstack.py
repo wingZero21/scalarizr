@@ -38,6 +38,8 @@ def _create_nova_connection():
             region_name=platform.get_access_data('cloud_location'),
             service_type='compute'
         )
+        if not bool(platform.get_access_data('ssl_verify_peer')):
+            kwds['insecure'] = True
         import novaclient # NameError: name 'novaclient' is not defined
         if hasattr(novaclient, '__version__') and os.environ.get('OS_AUTH_SYSTEM'):
             try:
@@ -60,12 +62,17 @@ def _create_nova_connection():
 def _create_cinder_connection():
     try:
         platform = node.__node__['platform']
+        kwds = dict(
+            auth_url=platform.get_access_data('keystone_url'),
+            region_name=platform.get_access_data('cloud_location')
+        )
+        if not bool(platform.get_access_data('ssl_verify_peer')):
+            kwds['insecure'] = True
         conn = cinder_client.Client(
             platform.get_access_data('username'),
             platform.get_access_data('api_key') or platform.get_access_data('password'),
             platform.get_access_data('tenant_name'),
-            auth_url=platform.get_access_data('keystone_url'),
-            region_name=platform.get_access_data('cloud_location'),
+            **kwds
         )
     except PlatformError:
         raise NoCredentialsError(sys.exc_info()[1])
@@ -85,6 +92,8 @@ def _create_swift_connection():
         else:
             kwds['auth_version'] = '2'
             kwds['tenant_name'] = platform.get_access_data("tenant_name")
+        if not bool(platform.get_access_data('ssl_verify_peer')):
+            kwds['insecure'] = True        
         conn = swiftclient.Connection(
             authurl=auth_url,
             user=platform.get_access_data('username'),
@@ -98,7 +107,7 @@ def _create_swift_connection():
 
 class NovaConnectionProxy(platform.ConnectionProxy):
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwds):
         for retry in range(2):
             try:
                 return self.obj(*args, **kwds)
@@ -116,7 +125,7 @@ class NovaConnectionProxy(platform.ConnectionProxy):
 
 class CinderConnectionProxy(platform.ConnectionProxy):
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwds):
         for retry in range(2):
             try:
                 return self.obj(*args, **kwds)
@@ -134,7 +143,7 @@ class CinderConnectionProxy(platform.ConnectionProxy):
 
 class SwiftConnectionProxy(platform.ConnectionProxy):
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwds):
         for retry in range(2):
             try:
                 return self.obj(*args, **kwds)
@@ -148,69 +157,6 @@ class SwiftConnectionProxy(platform.ConnectionProxy):
                 continue
         self.conn_pool.dispose_local()
         raise ConnectionError(e)
-
-
-class OpenstackServiceWrapper(object):
-    def _make_connection(self, **kwargs):
-        raise NotImplementedError()
-
-    def __init__(self, user, password, tenant, auth_url, region_name=None):
-        self.user = user
-        self.password = password
-        self.tenant = tenant
-        self.auth_url = auth_url
-        self.region_name = region_name
-        self.auth_plugin = None
-        if os.environ.get('OS_AUTH_SYSTEM'):
-            try:
-                import novaclient.auth_plugin
-                self.auth_plugin = novaclient.auth_plugin.load_plugin(os.environ['OS_AUTH_SYSTEM'])
-            except ImportError:
-                pass
-        self.connection = None
-        self.connect = self.reconnect
-
-    def __getattr__(self, name):
-        return getattr(self.connection, name)
-
-    def reconnect(self):
-        self.connection = self._make_connection()
-
-    #TODO: make connection check more properly
-    def has_connection(self):
-        self.reconnect()
-        return self.connection is not None
-
-
-class CinderWrapper(OpenstackServiceWrapper):
-
-    def _make_connection(self, **kwargs):
-        kwargs = kwargs or {}
-        kwargs.update(dict(
-            auth_url=self.auth_url,
-            region_name=self.region_name          
-        ))
-        return cinder_client.Client(self.user,
-                                    self.password,
-                                    self.tenant,
-                                    **kwargs)
-
-
-class NovaWrapper(OpenstackServiceWrapper):
-
-    def _make_connection(self, service_type='compute', **kwargs):
-        kwargs = kwargs or {}
-        kwargs.update(dict(
-            auth_url=self.auth_url,
-            region_name=self.region_name,
-            service_type=service_type           
-        ))
-        if self.auth_plugin:
-            kwargs['auth_plugin'] = self.auth_plugin
-        return nova_client.Client(self.user,
-                                  self.password,
-                                  self.tenant,
-                                  **kwargs)
 
 
 class OpenstackPlatform(platform.Platform):
@@ -323,17 +269,6 @@ class OpenstackPlatform(platform.Platform):
             os.environ["NOVA_RAX_AUTH"] = "True"
             os.environ["OS_AUTH_SYSTEM"] = "rackspace"
 
-    def new_cinder_connection(self):
-        access_data = self.get_access_data()
-        if not access_data:
-            return None
-        api_key = access_data["api_key"]
-        password = access_data["password"]
-        return CinderWrapper(access_data["username"],
-                             password or api_key,
-                             access_data["tenant_name"],
-                             access_data["keystone_url"],
-                             access_data["cloud_location"])
 
     def get_nova_conn(self):
         conn = self._nova_conn_pool.get()
@@ -346,39 +281,6 @@ class OpenstackPlatform(platform.Platform):
     def get_swift_conn(self):
         conn = self._swift_conn_pool.get()
         return SwiftConnectionProxy(conn, self._swift_conn_pool)
-
-    def new_nova_connection(self):
-        access_data = self.get_access_data()
-        if not access_data:
-            return None
-        api_key = access_data["api_key"]
-        password = access_data["password"]
-        return NovaWrapper(access_data["username"],
-                           password or api_key,
-                           access_data["tenant_name"],
-                           access_data["keystone_url"],
-                           access_data["cloud_location"])
-
-    def new_swift_connection(self):
-        access_data = self.get_access_data()
-        if not access_data:
-            return None
-        api_key = access_data["api_key"]
-        password = access_data["password"]
-        keystone_url = access_data["keystone_url"]
-        kwds = {}
-        if 'rackspacecloud' in access_data["keystone_url"]:
-            keystone_url = re.sub(r'v2\.\d$', 'v1.0',
-                            access_data['keystone_url'])
-            kwds['auth_version'] = '1'
-        else:
-            kwds['auth_version'] = '2'
-            kwds['tenant_name'] = access_data["tenant_name"]
-
-        return swiftclient.Connection(keystone_url, 
-                    access_data["username"],
-                    password or api_key,
-                    **kwds)
 
 
 def get_platform():

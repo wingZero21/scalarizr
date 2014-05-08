@@ -253,7 +253,7 @@ class GcePersistentVolume(base.Volume):
 
         now_raw = datetime.datetime.utcnow()
         now_str = now_raw.strftime('%d-%b-%Y-%H-%M-%S-%f')
-        snap_name = ('%s-snap-%s' % (self.name, now_str)).lower()
+        snap_name = ('%s-snap-%s' % (self.name, now_str)).lower()[:62]
 
         # We could put it to separate method, like _get_self_resource
 

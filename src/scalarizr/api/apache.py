@@ -30,8 +30,8 @@ from telnetlib import Telnet
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
-from scalarizr.util import system2, initdv2
-from scalarizr.util import wait_until, software, PopenError
+from scalarizr.util import system2, initdv2, software, firstmatched
+from scalarizr.util import wait_until, dynimp, PopenError
 from scalarizr.util import Singleton
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
@@ -58,8 +58,9 @@ apache = {
 if linux.os.debian_family:
     apache.update({
         "httpd.conf":       "/etc/apache2/apache2.conf",
-        "ssl_conf_path":    "/etc/apache2/sites-available/default-ssl" if apache_version() < (2, 4) else
-                            "/etc/apache2/sites-available/default-ssl.conf",
+        "ssl_conf_path":    firstmatched(os.path.exists, (
+                            "/etc/apache2/sites-available/default-ssl",
+                            "/etc/apache2/sites-available/default-ssl.conf")),
         "default_vhost":    "/etc/apache2/sites-enabled/000-default",
         "ports_conf_deb":   "/etc/apache2/ports.conf",
         "ssl_load_deb":     "/etc/apache2/mods-enabled/ssl.load",
@@ -372,7 +373,10 @@ class ApacheAPI(BehaviorAPI):
             ssl_certificate = SSLCertificate(ssl_certificate_id)
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
-            v_host.use_certificate(ssl_certificate)
+            v_host.use_certificate(
+                    ssl_certificate.cert_path, 
+                    ssl_certificate.key_path,
+                    ssl_certificate.chain_path)
 
         path = get_virtual_host_path(hostname or old_hostname, port or old_port)
 
