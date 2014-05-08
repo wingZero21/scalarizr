@@ -260,8 +260,9 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 'http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip',
                 '-P',
                 '/temp'),)
-
             if not os.path.exists(self._tools_dir):
+                if not os.path.exists(os.path.dirname(self._tools_dir)):
+                    os.mkdir(os.path.dirname(self._tools_dir))
                 os.mkdir(self._tools_dir)
 
             self._remove_old_versions()
