@@ -255,11 +255,11 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             system2(('wget',
                 'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
                 '-P',
-                '/temp'),)
+                '/tmp'),)
             system2(('wget',
                 'http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip',
                 '-P',
-                '/temp'),)
+                '/tmp'),)
             if not os.path.exists(self._tools_dir):
                 if not os.path.exists(os.path.dirname(self._tools_dir)):
                     os.mkdir(os.path.dirname(self._tools_dir))
@@ -267,8 +267,11 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
             self._remove_old_versions()
             pkgmgr.installed('unzip')
-            system2(('unzip', '/temp/ec2-ami-tools.zip', '-d', self._tools_dir),)
-            system2(('unzip', '/temp/ec2-api-tools.zip', '-d', self._tools_dir),)
+            system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir),)
+            system2(('unzip', '/tmp/ec2-api-tools.zip', '-d', self._tools_dir),)
+
+            os.remove('/tmp/ec2-ami-tools.zip')
+            os.remove('/tmp/ec2-api-tools.zip')
 
             directory_contents = os.listdir(self._tools_dir)
             self.ami_bin_dir = None
@@ -277,9 +280,11 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 if self.ami_bin_dir and self.api_bin_dir:
                     break
                 elif item.startswith('ec2-ami-tools'):
-                    self.ami_bin_dir = os.path.join(item, 'bin')
+                    self.ami_bin_dir = os.path.join(self._tools_dir,
+                        os.path.join(item, 'bin'))
                 elif item.startswith('ec2-api-tools'):
-                    self.api_bin_dir = os.path.join(item, 'bin')
+                    self.api_bin_dir = os.path.join(self._tools_dir,
+                        os.path.join(item, 'bin'))
 
             system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
                 shell=True)
