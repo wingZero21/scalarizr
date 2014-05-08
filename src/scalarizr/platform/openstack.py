@@ -215,7 +215,7 @@ class OpenstackPlatform(platform.Platform):
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
         kwds = {}
-        if not int(self._access_data.get('ssl_verify_peer', 1)):
+        if not bool(self._access_data.get('ssl_verify_peer', 1)):
             kwds['insecure'] = True
 
         return CinderWrapper(self._access_data["username"],
@@ -231,7 +231,7 @@ class OpenstackPlatform(platform.Platform):
         api_key = self._access_data["api_key"]
         password = self._access_data["password"]
         kwds = {}
-        if not int(self._access_data.get('ssl_verify_peer', 1)):
+        if not bool(self._access_data.get('ssl_verify_peer', 1)):
             kwds['insecure'] = True   
         return NovaWrapper(self._access_data["username"],
                            password or api_key,
@@ -254,7 +254,7 @@ class OpenstackPlatform(platform.Platform):
         else:
             kwds['auth_version'] = '2'
             kwds['tenant_name'] = self._access_data["tenant_name"]
-        if not int(self._access_data.get('ssl_verify_peer', 1)):
+        if not bool(self._access_data.get('ssl_verify_peer', 1)):
             kwds['insecure'] = True   
 
         return swiftclient.Connection(keystone_url, 
