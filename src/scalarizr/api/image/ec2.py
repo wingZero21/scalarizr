@@ -246,6 +246,11 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             for tool in tools:
                 os.removedirs(os.path.join(self._tools_dir, tool))
 
+    def _install_support_packages(self):
+        pkgmgr.installed('unzip')
+        system2(('curl', '-sSL', 'https://get.rvm.io', '|', 'bash', '-s', 'stable'), shell=True)
+        system2(('rvm', 'install', '1.9.3'), shell=True)
+
     def _prepare_software(self):
         if linux.os['family'] == 'Windows':
             # TODO:
@@ -266,7 +271,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 os.mkdir(self._tools_dir)
 
             self._remove_old_versions()
-            pkgmgr.installed('unzip')
+            self._install_support_packages()
+
             system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir),)
             system2(('unzip', '/tmp/ec2-api-tools.zip', '-d', self._tools_dir),)
 
@@ -369,8 +375,9 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 self,
                 bucket_name=self._get_s3_bucket_name())
 
-
+        system2(('rvm', 'use', '1.9.3'), shell=True)
         image_id = self.image_maker.create_image()
+        system2(('rvm', 'use', 'system'), shell=True)
         return image_id
 
     def finalize(self, operation, role_name):
