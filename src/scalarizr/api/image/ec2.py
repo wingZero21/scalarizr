@@ -266,6 +266,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 os.mkdir(self._tools_dir)
 
             self._remove_old_versions()
+            pkgmgr.installed('unzip')
             system2(('unzip', '/temp/ec2-ami-tools.zip', '-d', self._tools_dir),)
             system2(('unzip', '/temp/ec2-api-tools.zip', '-d', self._tools_dir),)
 
