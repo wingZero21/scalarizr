@@ -193,10 +193,12 @@ class OpenstackPlatform(platform.Platform):
             raise platform.PlatformError, 'failed to fetch meta-data', sys.exc_info()[2]   
 
     def _fetch_metadata_from_file(self):
+        self._logger.debug('fetching meta-data from files')
         cnf = bus.cnf
         if self._userdata is None:
             for path in ('/etc/.scalr-user-data', cnf.private_path('.user-data')):
                 if os.path.exists(path):
+                    self._logger.debug('using file %s', path)
                     rawmeta = None
                     with open(path, 'r') as fp:
                         rawmeta = fp.read()

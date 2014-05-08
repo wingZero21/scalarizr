@@ -442,7 +442,7 @@ def chef_software_info():
     if not binary:
         raise SoftwareError("Can't find executable for chef client")
 
-    version_string = linux.system((binary, '-v'))[0].strip()
+    version_string = linux.system((binary, '-v'), shell=bool(linux.os.windows))[0].strip()
     if not version_string:
         raise SoftwareError
 

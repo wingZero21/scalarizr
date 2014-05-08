@@ -294,7 +294,10 @@ class ApacheAPI(object):
             ssl_certificate = SSLCertificate(ssl_certificate_id)
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
-            v_host.use_certificate(ssl_certificate)
+            v_host.use_certificate(
+                    ssl_certificate.cert_path, 
+                    ssl_certificate.key_path,
+                    ssl_certificate.chain_path)
 
         path = get_virtual_host_path(hostname or old_hostname, port or old_port)
 
@@ -803,8 +806,8 @@ class ModRPAF(BasicApacheConfiguration):
         """
         fixing bug in rpaf 0.6-2
         """
-        pm = dynimp.package_mgr()
-        if "0.6-2" == pm.installed("libapache2-mod-rpaf"):
+        mgr = pkgmgr.package_mgr()
+        if "0.6-2" == mgr.info("libapache2-mod-rpaf")['installed']:
             try:
                 self._cnf.set('./IfModule[@value="mod_rpaf.c"]', {"value": "mod_rpaf-2.0.c"})
             except NoPathError:

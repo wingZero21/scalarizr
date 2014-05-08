@@ -1,0 +1,43 @@
+
+
+commons:
+  user-data
+  queryenv
+
+
+1. --- copy-paste code 			
+2. -+ separate repo and git submodules
+
+3. --+++ join codebase into single project
+
+
+good:
+	we DRY and share queryenv, rpc and userdata libs
+
+bad:
+	we still need rpc and security for upd-server (s: place rpc to separate repo and link)
+
+
+distribution
+
+how to distribute single codebase as 2 separate packages?
+	basically separate setup.py files
+	commons should come in scalr-upd-client and scalarizr will use them
+
+how to distribute this single codebase as omnibus package?
+	A: embed should contains all python deps, all binary deps (including python), scalr-upd-client 
+		bad: 
+			not easy to update dependencies, we made a focus on a solution to update scalarizr not scalr-upd-client
+
+
+	B: two separate embeds with it's own binaries and pyps
+		good:
+			we got what we want: a two separate packages, with no cross deps
+		bad:
+			big packages
+
+distribute as a single package
+
+	distribution as a single package simplier to maintain and structucally understand 
+
+
