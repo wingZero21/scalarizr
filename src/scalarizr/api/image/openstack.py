@@ -13,7 +13,7 @@ from scalarizr.util import wait_until
 from scalarizr import linux
 
 
-_logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 class OpenStackWindowsImageTaker(object):
@@ -46,9 +46,9 @@ class OpenStackLinuxImageTaker(object):
 
         server_id = __node__['openstack']['server_id']
         system2("sync", shell=True)
-        _logger.info('Creating server image (server_id: %s)', server_id)
+        LOG.info('Creating server image (server_id: %s)', server_id)
         image_id = nova.servers.create_image(server_id, image_name)
-        _logger.info('Server image %s created', image_id)
+        LOG.info('Server image %s created', image_id)
 
         result = [None]
         def image_completed():
@@ -66,7 +66,7 @@ class OpenStackLinuxImageTaker(object):
         image_id = result[0].id
         if result[0].status == 'FAILED':
             raise ImageAPIError('Image %s becomes FAILED', image_id)
-        _logger.info('Image %s completed and available for use!', image_id)
+        LOG.info('Image %s completed and available for use!', image_id)
         return image_id
 
     def finalize(self):

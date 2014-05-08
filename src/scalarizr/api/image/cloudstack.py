@@ -9,7 +9,7 @@ from scalarizr.node import __node__
 from scalarizr.platform.cloudstack import voltool
 
 
-_logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 class CloudStackImageAPIDelegate(ImageAPIDelegate):
@@ -43,20 +43,20 @@ class CloudStackImageAPIDelegate(ImageAPIDelegate):
 
         instance = conn.listVirtualMachines(id=instance_id)[0]
 
-        _logger.info('Creating ROOT volume snapshot (volume: %s)', root_vol.id)
+        LOG.info('Creating ROOT volume snapshot (volume: %s)', root_vol.id)
         snap = voltool.create_snapshot(conn,
             root_vol.id,
             wait_completion=True,
-            logger=_logger)
-        _logger.info('ROOT volume snapshot created (snapshot: %s)', snap.id)
+            logger=LOG)
+        LOG.info('ROOT volume snapshot created (snapshot: %s)', snap.id)
 
-        _logger.info('Creating image')
+        LOG.info('Creating image')
         image = conn.createTemplate(image_name, 
             image_name,
             self.get_os_type_id(conn, instance_id),
             snapshotId=snap.id,
             passwordEnabled=instance.passwordenabled)
-        _logger.info('Image created (template: %s)', image.id)
+        LOG.info('Image created (template: %s)', image.id)
 
         return image.id
 

@@ -17,7 +17,7 @@ from scalarizr.node import __node__
 from scalarizr.storage2.cloudfs import FileTransfer
 
 
-_logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 ROLEBUILDER_USER = 'scalr-rolesbuilder'
@@ -41,7 +41,7 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
     gcimagebundle_pkg_name = 'python-gcimagebundle' if os_dist.debian_family else 'gcimagebundle'
 
     def _remove_bucket(self, bucket_name, object, cloudstorage):
-        with util.capture_exception(_logger):
+        with util.capture_exception(LOG):
             objs = cloudstorage.objects()
             objs.delete(bucket=bucket_name, object=object).execute()
         cloudstorage.buckets().delete(bucket=bucket_name).execute()
@@ -50,7 +50,7 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
         pl = __node__['platform']
         proj_id = pl.get_numeric_project_id()
         try:
-            _logger.info('Registering new image %s' % image_name)
+            LOG.info('Registering new image %s' % image_name)
             compute = pl.new_compute_client()
 
             image_url = 'http://storage.googleapis.com/%s/%s' % (bucket_name, archive_name)
@@ -62,7 +62,7 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
             req = compute.images().insert(project=proj_id, body=req_body)
             operation = req.execute()['name']
 
-            _logger.info('Waiting for image to register')
+            LOG.info('Waiting for image to register')
             def image_is_ready():
                 req = compute.globalOperations().get(project=proj_id, operation=operation)
                 res = req.execute()
@@ -75,19 +75,19 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
                         raise ImageAPIError('\n'.join(errors))
                     return True
                 return False
-            util.wait_until(image_is_ready, logger=_logger, timeout=600)
+            util.wait_until(image_is_ready, logger=LOG, timeout=600)
 
         finally:
             try:
                 self._remove_bucket(bucket_name, archive_name, cloudstorage)
             except (Exception, BaseException), e:
-                _logger.error('Faled to remove image compressed source: %s' % e)
+                LOG.error('Faled to remove image compressed source: %s' % e)
 
     def _prepare_software(self):
         try:
             pkgmgr.latest(self.gcimagebundle_pkg_name)
         except (Exception, BaseException), e:
-            _logger.warn('Gcimagebundle update failed: %s' % e)
+            LOG.warn('Gcimagebundle update failed: %s' % e)
 
         if os_dist.redhat_family:
             semanage = software.which('semanage')
@@ -125,7 +125,7 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
             if code:
                 raise ImageAPIError('Gcimagebundle util returned non-zero code %s. Stderr: %s' % (code, err))
 
-            _logger.info('Uploading compressed image to cloud storage')
+            LOG.info('Uploading compressed image to cloud storage')
             tmp_bucket_name = 'scalr-images-%s-%s' % (random.randint(1, 1000000), int(time.time()))
             remote_path = 'gcs://%s/%s' % (tmp_bucket_name, archive_name)
             arch_size = os.stat(archive_path).st_size

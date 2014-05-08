@@ -24,7 +24,7 @@ from scalarizr.storage2.util import loop
 from scalarizr.util import system2
 
 
-_logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 class InstanceStoreImageMaker(object):
@@ -70,17 +70,17 @@ class InstanceStoreImageMaker(object):
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
-        _logger.debug('Image prepare command: ' + ' '.join(cmd))
+        LOG.debug('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
             env=self.environ,
             stdout=subprocess.PIPE, 
             stderr=subprocess.STDOUT)[0]
-        _logger.debug('Image prepare command out: %s' % out)
+        LOG.debug('Image prepare command out: %s' % out)
 
 
     def upload_image(self):
         # upload image on S3 with ec2-upload-bundle or filetransfer
-        _logger.debug('Uploading image (with ec2-upload-bundle)')
+        LOG.debug('Uploading image (with ec2-upload-bundle)')
         manifest = os.path.join(self.destination, self.image_name) + '.manifest.xml'
         bucket = os.path.basename(self.platform.scalrfs.root())
         cmd = (
@@ -89,22 +89,22 @@ class InstanceStoreImageMaker(object):
             '--access-key', self.credentials['access_key'],
             '--secret-key', self.credentials['secret_key'],
             '--manifest', manifest)
-        _logger.debug('Image upload command: ', ' '.join(cmd))
+        LOG.debug('Image upload command: ', ' '.join(cmd))
         out = linux.system(cmd, env=self.environ)[0]
-        _logger.debug('Image upload command out: %s' % out)
+        LOG.debug('Image upload command out: %s' % out)
         return bucket, manifest
 
     def register_image(self, bucket, manifest):
         # register image as AMI with ec2-register
-        _logger.debug('Registering image')
+        LOG.debug('Registering image')
         s3_manifest_path = '%s/%s' % (bucket, os.path.basename(manifest))
-        _logger.debug("Registering image '%s'", s3_manifest_path)
+        LOG.debug("Registering image '%s'", s3_manifest_path)
 
         ec2_conn = self.platform.new_ec2_conn()
         ami_id = ec2_conn.register_image(image_location=s3_manifest_path)
 
-        _logger.debug("Image is registered.")
-        _logger.debug('Image %s is available', ami_id)
+        LOG.debug("Image is registered.")
+        LOG.debug('Image %s is available', ami_id)
         return ami_id
 
     def cleanup(self):
@@ -155,36 +155,36 @@ class EBSImageMaker(object):
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
-        _logger.debug('Image prepare command: ' + ' '.join(cmd))
+        LOG.debug('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
             env=self.environ,
             stdout=subprocess.PIPE, 
             stderr=subprocess.STDOUT)[0]
-        _logger.debug('Image prepare command out: %s' % out)
+        LOG.debug('Image prepare command out: %s' % out)
 
     def make_volume(self, size):
         ebs_config = {'type': 'ebs',
             'size': size}
         ebs_config['size'] = size
-        _logger.debug('Creating ebs volume')
+        LOG.debug('Creating ebs volume')
         volume = create_volume(ebs_config)
         volume.ensure()
-        _logger.debug('Volume created %s' % volume.device)
+        LOG.debug('Volume created %s' % volume.device)
         return volume
 
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
-        _logger.debug('dd image into volume %s' % volume.device)
+        LOG.debug('dd image into volume %s' % volume.device)
         coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '4M'})
-        _logger.debug('detaching volume')
+        LOG.debug('detaching volume')
         volume.detach()
-        _logger.debug('Making snapshot of volume %s' % volume.device)
+        LOG.debug('Making snapshot of volume %s' % volume.device)
         snapshot = volume.snapshot()
         util.wait_until(
                 lambda: snapshot.status() == 'completed',
-                logger=_logger,
+                logger=LOG,
                 error_text='EBS snapshot %s wasnt completed' % snapshot.id)
-        _logger.debug('Snapshot is made')
+        LOG.debug('Snapshot is made')
         return snapshot.id
 
     def register_image(self, snapshot_id):
@@ -193,7 +193,7 @@ class EBSImageMaker(object):
             '--name', self.image_name,
             '-s', snapshot_id,
             '--debug')
-        _logger.debug('Image register command: ' + ' '.join(cmd))
+        LOG.debug('Image register command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
             env=self.environ,
             stdout=subprocess.PIPE, 
@@ -351,7 +351,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         root_device_type = self._get_root_device_type()          
         root_disk = self._get_root_disk()
         self._setup_environment()
-        _logger.debug('device type: %s' % root_device_type)
+        LOG.debug('device type: %s' % root_device_type)
         if root_device_type == 'ebs':
             self.image_maker = EBSImageMaker(
                     image_name,

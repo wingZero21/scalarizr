@@ -19,7 +19,7 @@ from scalarizr.api.image import ImageAPIDelegate
 from scalarizr.api.image import ImageAPIError
 
 
-_logger = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 WALL_MESSAGE = 'Server is going to make image'
@@ -29,36 +29,41 @@ class ImageAPI(object):
 
     __metaclass__ = Singleton
 
+    platform_to_delegate = {
+        BuiltinPlatforms.OPENSTACK: ('scalarizr.api.image.openstack', 'OpenStackImageAPIDelegate'),
+        BuiltinPlatforms.EC2: ('scalarizr.api.image.ec2', 'EC2ImageAPIDelegate'),
+        BuiltinPlatforms.CLOUDSTACK: ('scalarizr.api.image.cloudstack', 'CloudStackImageAPIDelegate'),
+        BuiltinPlatforms.IDCF: ('scalarizr.api.image.cloudstack', 'CloudStackImageAPIDelegate'),
+        BuiltinPlatforms.GCE: ('scalarizr.api.image.gce', 'GCEImageAPIDelegate'),
+    }
+
     def __init__(self):
         self._op_api = OperationAPI()
         self.delegate = None
 
-    # TODO:
-    platform_to_delegate = {
-        BuiltinPlatforms.OPENSTACK: 'scalarizr.api.image.openstack',
-        BuiltinPlatforms.EC2: 'scalarizr.api.image.ec2',
-        BuiltinPlatforms.CLOUDSTACK: 'scalarizr.api.image.cloudstack',
-        BuiltinPlatforms.IDCF: 'scalarizr.api.image.cloudstack',
-        BuiltinPlatforms.GCE: 'scalarizr.api.image.gce',
-    }
-
     def delegate_for_platform(self, platform_name):
-        if platform_name == BuiltinPlatforms.OPENSTACK:
-            module = importlib.import_module('scalarizr.api.image.openstack')
-            return module.OpenStackImageAPIDelegate()
-        elif platform_name == BuiltinPlatforms.EC2:
-            module = importlib.import_module('scalarizr.api.image.ec2')
-            return module.EC2ImageAPIDelegate()
-        elif platform_name in (BuiltinPlatforms.CLOUDSTACK, BuiltinPlatforms.IDCF):
-            module = importlib.import_module('scalarizr.api.image.cloudstack')
-            return module.CloudStackImageAPIDelegate()
-        elif platform_name == BuiltinPlatforms.GCE:
-            module = importlib.import_module('scalarizr.api.image.gce')
-            return module.GCEImageAPIDelegate()
-        # ...
-        else:
-            _logger.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))
+        delegate = self.platform_to_delegate.get(platform_name)
+        if not delegate:
+            LOG.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))
             raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
+        module = importlib.import_module(delegate[0])
+        return module.__getattr__(delegate[1])
+        # if platform_name == BuiltinPlatforms.OPENSTACK:
+        #     module = importlib.import_module('scalarizr.api.image.openstack')
+        #     return module.OpenStackImageAPIDelegate()
+        # elif platform_name == BuiltinPlatforms.EC2:
+        #     module = importlib.import_module('scalarizr.api.image.ec2')
+        #     return module.EC2ImageAPIDelegate()
+        # elif platform_name in (BuiltinPlatforms.CLOUDSTACK, BuiltinPlatforms.IDCF):
+        #     module = importlib.import_module('scalarizr.api.image.cloudstack')
+        #     return module.CloudStackImageAPIDelegate()
+        # elif platform_name == BuiltinPlatforms.GCE:
+        #     module = importlib.import_module('scalarizr.api.image.gce')
+        #     return module.GCEImageAPIDelegate()
+        # # ...
+        # else:
+        #     LOG.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))
+        #     raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
 
     def init_delegate(self):
         if self.delegate:
@@ -87,18 +92,15 @@ class ImageAPI(object):
         self.init_delegate()
         cnf = bus.cnf
         saved_state = cnf.state
-        image_id = None
         try:
             cnf.state = ScalarizrState.REBUNDLING
-            # TODO: rename var
-            image_id = self._op_api.run('api.image.snapshot',
+            return self._op_api.run('api.image.snapshot',
                 func=self.delegate.snapshot,
                 async=async,
                 exclusive=True,
                 func_kwds={'role_name': role_name})
         finally:
             cnf.state = saved_state
-        return image_id
 
     @rpc.command_method
     def finalize(self, role_name=None, async=False):
@@ -108,7 +110,7 @@ class ImageAPI(object):
             async=async,
             exclusive=True,
             func_kwds={'role_name': role_name})
-        _logger.info('Image created. If you imported this server to Scalr, '
+        LOG.info('Image created. If you imported this server to Scalr, '
                      'you can terminate Scalarizr now.')
 
     @rpc.command_method
@@ -135,10 +137,8 @@ class ImageAPI(object):
 
     def _clean(self, image_rootdir):
         # TODO: revise method, rewrite if needed
-        _logger.info('Performing image cleanup')
-        # Truncate logs
-
-        _logger.debug('Truncating log files')
+        LOG.info('Performing image cleanup')
+        LOG.debug('Truncating log files')
         logs_path = os.path.join(image_rootdir, 'var/log')
         if os.path.exists(logs_path):
             for basename in os.listdir(logs_path):
@@ -147,18 +147,18 @@ class ImageAPI(object):
                     try:
                         coreutils.truncate(filename)
                     except OSError, e:
-                        _logger.error("Cannot truncate file '%s'. %s", filename, e)
+                        LOG.error("Cannot truncate file '%s'. %s", filename, e)
             shutil.rmtree(os.path.join(logs_path, 'scalarizr/scripting'))
 
         # Cleanup users homes
-        _logger.debug('Removing users activity')
+        LOG.debug('Removing users activity')
         for homedir in ('root', 'home/ubuntu', 'home/scalr'):
             homedir = os.path.join(image_rootdir, homedir)
             self._clean_user_activity(homedir)
             self._clean_ssh_keys(homedir)
 
         # Cleanup scalarizr private data
-        _logger.debug('Removing scalarizr private data')
+        LOG.debug('Removing scalarizr private data')
         etc_path = os.path.join(image_rootdir, bus.etc_path[1:])
         privated = os.path.join(etc_path, "private.d")
         if os.path.exists(privated):
@@ -168,7 +168,7 @@ class ImageAPI(object):
         # Sync filesystem buffers
         system2('sync')
 
-        _logger.debug('Cleanup completed')
+        LOG.debug('Cleanup completed')
 
     def _clean_user_activity(self, homedir):
         for name in (
@@ -186,7 +186,7 @@ class ImageAPI(object):
     def _clean_ssh_keys(self, homedir):
         filename = os.path.join(homedir, '.ssh/authorized_keys')
         if os.path.exists(filename):
-            _logger.debug('Removing Scalr SSH keys from %s', filename)
+            LOG.debug('Removing Scalr SSH keys from %s', filename)
             with open(filename + '.tmp', 'w+') as dest:
                 with open(filename) as source:
                     lines = [l for l in source if 'SCALR-ROLESBUILDER' not in l]
