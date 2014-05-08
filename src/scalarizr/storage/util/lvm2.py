@@ -14,7 +14,7 @@ import random
 import logging
 import binascii
 
-from scalarizr import wait_until
+from scalarizr.util import wait_until
 
 try:
     from collections import namedtuple

@@ -117,7 +117,7 @@ class ImageAPI(object):
     def create(self, role_name, async=True):
         """ Creates image """
         self.init_delegate()
-        return = self._op_api.run('api.image.create',
+        return self._op_api.run('api.image.create',
             func=self._create,
             func_kwds={'role_name': role_name},
             exclusive=True)

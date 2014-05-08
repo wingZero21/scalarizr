@@ -244,7 +244,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         for tool in tools:
             current_version = (0, 0, 0, 0)
             for tool in tools:
-                os.removedirs(os.path.join(self._tools_dir, tool_name))
+                os.removedirs(os.path.join(self._tools_dir, tool))
 
     def _prepare_software(self):
         if linux.os['family'] == 'Windows':
