@@ -94,7 +94,7 @@ class PackageMgr(object):
         backup_dir = self._find_backup_dir(name, installed) if installed else None
         return {
             'installed': installed,
-            'candidate': candidate if installed and installed != candidate else None,
+            'candidate': candidate if candidate and installed != candidate else None,
             'backup_id': os.path.basename(backup_dir) if backup_dir else None
         }
 
