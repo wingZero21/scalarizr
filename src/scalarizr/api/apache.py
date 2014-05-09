@@ -15,10 +15,6 @@ import shutil
 import logging
 import urllib2
 
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
 
 from scalarizr import rpc
 from scalarizr import linux
@@ -27,7 +23,7 @@ from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import system2, initdv2, software, firstmatched
-from scalarizr.util import wait_until, dynimp, PopenError
+from scalarizr.util import wait_until, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 
