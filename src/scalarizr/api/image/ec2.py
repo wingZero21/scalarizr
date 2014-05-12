@@ -222,11 +222,13 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
     def __init__(self):
         self.image_maker = None
-        self.environ = None
+        self.environ = os.environ.copy()
         self.excludes = None
         self.ami_bin_dir = None
         self.api_bin_dir = None
         self._prepare_software()
+        self.environ['PATH'] = self.environ['PATH'] + ':/usr/local/rvm/rubies/ruby-1.9.3-p545/bin'
+        self.environ['MY_RUBY_HOME'] = '/usr/local/rvm/rubies/ruby-1.9.3-p545'
 
     def _get_version(self, tools_folder_name):
         version = tools_folder_name.split('-')[-1]
@@ -248,7 +250,14 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
     def _install_support_packages(self):
         pkgmgr.installed('unzip')
+        # system2(('curl cache.ruby-lang.org/pub/ruby/1.9/ruby-1.9.3-p545.tar.gz',
+        #     '-o', 'ruby193.tar.gz'))
+        # system2(('tar xvf ruby193.tar.gz', '-C', '/tmp'))
+        # system2(('/tmp/ruby193/configure', '--prefix', self._tools_dir))
+        # system2(('make', '-C', '/tmp/ruby193'))
+        # system2(('make install', '-C', '/tmp/ruby193'))
         install_script = system2(('curl', '-sSL', 'https://get.rvm.io'),)[0]
+
         with open('/tmp/rvm_install.sh', 'w') as fp:
             fp.write(install_script)
         os.chmod('/tmp/rvm_install.sh', 0770)
@@ -337,7 +346,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         pk_path = cnf.write_key('ec2-pk.pem', pk)
         cloud_cert_path = cnf.write_key('ec2-cloud-cert.pem', platform.get_ec2_cert())
 
-        self.environ = os.environ.copy()
         self.environ.update({
             'EC2_CERT': cert_path,
             'EC2_PRIVATE_KEY': pk_path,
