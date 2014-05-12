@@ -252,8 +252,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         with open('/tmp/rvm_install.sh', 'w') as fp:
             fp.write(install_script)
         os.chmod('/tmp/rvm_install.sh', 0770)
-        system2(('/tmp/rvm_install.sh', '-s', 'stable'),)
-        system2(('rvm', 'install', '1.9.3'), shell=True)
+        system2(('/tmp/rvm_install.sh', '-s', 'stable'), shell=True)
+        system2((linux.which('rvm')+' install 1.9.3', ), shell=True)
 
     def _prepare_software(self):
         if linux.os['family'] == 'Windows':
@@ -379,9 +379,9 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 self,
                 bucket_name=self._get_s3_bucket_name())
 
-        system2(('rvm', 'use', '1.9.3'), shell=True)
+        system2((linux.which('rvm')+'use 1.9.3',), shell=True)
         image_id = self.image_maker.create_image()
-        system2(('rvm', 'use', 'system'), shell=True)
+        system2((linux.which('rvm')+'use system',), shell=True)
         return image_id
 
     def finalize(self, operation, role_name):
