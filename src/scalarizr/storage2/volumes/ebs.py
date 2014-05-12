@@ -42,8 +42,14 @@ def device2name(device):
 
 
 def get_free_name():
-    # Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-    s = 7 if linux.os['release'] and linux.os.redhat_family else 5
+    if linux.os.ubuntu and linux.os['release'] >= (14, 4):
+        # ubuntu 14.04 returns Attachment point /dev/sdf is already in used
+        s = 6
+    elif linux.os['release'] and linux.os.redhat_family:
+        # rhel 6 returns "Null body" when attach to /dev/sdf
+        s = 7
+    else:
+        s = 5
     available = set(string.ascii_lowercase[s:16])        
 
     # Ubuntu 14.04 failed to attach volumes on device names mentioned in block device mapping, 
