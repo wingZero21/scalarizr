@@ -379,9 +379,9 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 self,
                 bucket_name=self._get_s3_bucket_name())
 
-        system2((linux.which('rvm')+'use 1.9.3',), shell=True)
+        system2('/usr/local/rvm/bin/rvm use 1.9.3',), shell=True)
         image_id = self.image_maker.create_image()
-        system2((linux.which('rvm')+'use system',), shell=True)
+        system2(('/usr/local/rvm/bin/rvm use system',), shell=True)
         return image_id
 
     def finalize(self, operation, role_name):
