@@ -310,6 +310,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             system2(('export', 'EC2_APITOOL_HOME=%s' % os.path.dirname(self.api_bin_dir)),
                 shell=True)
 
+            pkgmgr.installed('kpartx')
+
     def _get_root_device_type(self):
         platform = __node__['platform']
         ec2_conn = platform.new_ec2_conn()
