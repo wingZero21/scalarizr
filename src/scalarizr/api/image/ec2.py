@@ -253,7 +253,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             fp.write(install_script)
         os.chmod('/tmp/rvm_install.sh', 0770)
         system2(('/tmp/rvm_install.sh', '-s', 'stable'), shell=True)
-        system2(('/usr/local/rvm/bin/rvm install 1.9.3', ), shell=True)
+        system2(('/usr/local/rvm/bin/rvm install 1.9.3', '--auto-dotfiles'), shell=True)
 
     def _prepare_software(self):
         if linux.os['family'] == 'Windows':
