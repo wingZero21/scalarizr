@@ -448,5 +448,8 @@ node['scalr'] = Compound({
 node['messaging'] = Compound({
     'send': Attr('scalarizr.bus', 'bus.messaging_service.send')
 })
+
+node['access_data'] = {}
+
 __node__ = Compound(node)
 

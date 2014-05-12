@@ -7,7 +7,7 @@ import urllib2
 import logging
 
 from scalarizr.bus import bus
-from scalarizr import node
+from scalarizr.node import __node__
 from scalarizr import platform
 from scalarizr.util import NullPool
 from scalarizr.platform import Ec2LikePlatform, PlatformError, PlatformFeatures
@@ -45,7 +45,7 @@ def get_platform():
 
 
 def _create_ec2_connection():
-    platform = node.__node__['platform']
+    platform = __node__['platform']
     region = platform.get_region()
     try:
         key_id, key = platform.get_access_keys()
@@ -62,7 +62,7 @@ def _create_ec2_connection():
 
 
 def _create_s3_connection():
-    platform = node.__node__['platform']
+    platform = __node__['platform']
     region = platform.get_region()
     endpoint = platform._s3_endpoint(region)
     try:
@@ -79,7 +79,7 @@ def _create_s3_connection():
 
 class Ec2ConnectionProxy(platform.ConnectionProxy):
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwds):
         for retry in range(2):
             try:
                 return self.obj(*args, **kwds)
@@ -95,7 +95,7 @@ class Ec2ConnectionProxy(platform.ConnectionProxy):
 
 class S3ConnectionProxy(platform.ConnectionProxy):
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwds):
         for retry in range(2):
             try:
                 return self.obj(*args, **kwds)
@@ -162,7 +162,7 @@ class Ec2Platform(Ec2LikePlatform):
         region = self.get_region()
         self._logger.debug("Return ec2 connection (region: %s)", region)  
         key_id, key = self.get_access_keys()
-        proxy = self._access_data.get('proxy', {})
+        proxy = __node__['access_data'].get('proxy', {})
         if proxy.get('host'):
             self._logger.debug('Use proxy %s:%s for EC2 connection', proxy['host'], proxy.get('port'))
         return boto.ec2.connect_to_region(region, 
@@ -178,7 +178,7 @@ class Ec2Platform(Ec2LikePlatform):
         endpoint = self._s3_endpoint(region)
         key_id, key = self.get_access_keys()
         self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
-        proxy = self._access_data.get('proxy', {})
+        proxy = __node__['access_data'].get('proxy', {})
         if proxy.get('host'):
             self._logger.debug('Use proxy %s:%s for S3 connection', proxy['host'], proxy.get('port'))
         return boto.connect_s3(
