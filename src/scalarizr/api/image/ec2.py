@@ -253,7 +253,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             fp.write(install_script)
         os.chmod('/tmp/rvm_install.sh', 0770)
         system2(('/tmp/rvm_install.sh', '-s', 'stable'), shell=True)
-        system2((linux.which('rvm')+' install 1.9.3', ), shell=True)
+        system2(('/usr/local/rvm/bin/rvm install 1.9.3', ), shell=True)
 
     def _prepare_software(self):
         if linux.os['family'] == 'Windows':
@@ -277,8 +277,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             self._remove_old_versions()
             self._install_support_packages()
 
-            system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir),)
-            system2(('unzip', '/tmp/ec2-api-tools.zip', '-d', self._tools_dir),)
+            system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir))
+            system2(('unzip', '/tmp/ec2-api-tools.zip', '-d', self._tools_dir))
 
             os.remove('/tmp/ec2-ami-tools.zip')
             os.remove('/tmp/ec2-api-tools.zip')
