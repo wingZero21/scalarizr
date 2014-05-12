@@ -50,7 +50,12 @@ class NoSystemUUID(Exception):
 def norm_user_data(data):
     data['server_id'] = data.pop('serverid')
     data['messaging_url'] = data.pop('p2p_producer_endpoint')
-    data['farm_role_id'] = data.pop('farm_roleid')
+    # - my uptime is 1086 days, 55 mins, o-ho-ho
+    if data['messaging_url'] == 'http://scalr.net/messaging':
+        data['messaging_url'] = 'https://my.scalr.com/messaging'
+    if data['queryenv_url'] == 'http://scalr.net/query-env':
+        data['queryenv_url'] = 'https://my.scalr.com/query-env'
+    data['farm_role_id'] = data.pop('farm_roleid', None)  
     return data
 
 
@@ -372,9 +377,15 @@ class UpdClientAPI(object):
                 os.chmod(self.crypto_file, 0400)
         self.early_bootstrapped = True
 
+        self._init_services()
+        # - my uptime is 644 days, 20 hours and 13 mins and i know nothing about 'platform' in user-data
+        if not self.platform: 
+            self.platform = bus.cnf.rawini.get('general', 'platform')
+        # - my uptime is 1086 days, 55 mins and i know nothing about 'farm_roleid' in user-data
+        if not self.farm_role_id:
+            self.farm_role_id = bus.cnf.rawini.get('general', 'farm_role_id')
         if not linux.os.windows:
             self.package = 'scalarizr-' + self.platform
-        self._init_services()
 
         self.system_matches = system_matches
         if not self.system_matches:
