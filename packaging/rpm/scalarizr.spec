@@ -46,7 +46,6 @@ Requires:		e2fsprogs
 Requires:       rsync >= 2.6.8
 Requires:       tar
 Obsoletes:      scalr-upd-client
-Obsoletes:      scalarizr-devtools
 
 BuildArch:      noarch
 BuildRoot:      %{_tmppath}/%{name}-buildroot
