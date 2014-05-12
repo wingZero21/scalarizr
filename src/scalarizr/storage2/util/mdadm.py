@@ -7,8 +7,6 @@ Created on Nov 11, 2010
 '''
 
 from scalarizr.util import system2, wait_until, firstmatched, PopenError
-from scalarizr.util import dynimp
-from scalarizr.linux import coreutils
 from scalarizr import linux
 from scalarizr.linux import coreutils, pkgmgr
 
