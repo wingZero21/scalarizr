@@ -229,6 +229,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         self._prepare_software()
         self.environ['PATH'] = self.environ['PATH'] + ':/usr/local/rvm/rubies/ruby-1.9.3-p545/bin'
         self.environ['MY_RUBY_HOME'] = '/usr/local/rvm/rubies/ruby-1.9.3-p545'
+        self.environ['EC2_HOME'] = self._tools_dir
 
     def _get_version(self, tools_folder_name):
         version = tools_folder_name.split('-')[-1]
