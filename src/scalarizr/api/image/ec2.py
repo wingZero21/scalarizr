@@ -309,6 +309,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 shell=True)
             system2(('export', 'EC2_APITOOL_HOME=%s' % os.path.dirname(self.api_bin_dir)),
                 shell=True)
+            system2(('export', 'EC2_HOME=%s' % self._tools_dir),
+                shell=True)
 
             pkgmgr.installed('kpartx')
 
@@ -389,9 +391,9 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 self,
                 bucket_name=self._get_s3_bucket_name())
 
-        system2(('/usr/local/rvm/bin/rvm use 1.9.3',), shell=True)
+        # system2(('/usr/local/rvm/bin/rvm use 1.9.3',), shell=True)
         image_id = self.image_maker.create_image()
-        system2(('/usr/local/rvm/bin/rvm use system',), shell=True)
+        # system2(('/usr/local/rvm/bin/rvm use system',), shell=True)
         return image_id
 
     def finalize(self, operation, role_name):
