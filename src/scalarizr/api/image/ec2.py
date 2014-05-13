@@ -229,7 +229,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         self._prepare_software()
         self.environ['PATH'] = self.environ['PATH'] + ':/usr/local/rvm/rubies/ruby-1.9.3-p545/bin'
         self.environ['MY_RUBY_HOME'] = '/usr/local/rvm/rubies/ruby-1.9.3-p545'
-        self.environ['EC2_HOME'] = self._tools_dir
 
     def _get_version(self, tools_folder_name):
         version = tools_folder_name.split('-')[-1]
@@ -310,7 +309,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 shell=True)
             system2(('export', 'EC2_APITOOL_HOME=%s' % os.path.dirname(self.api_bin_dir)),
                 shell=True)
-            system2(('export', 'EC2_HOME=%s' % self._tools_dir),
+            system2(('export', 'EC2_HOME=%s' % os.path.dirname(self.api_bin_dir)),
                 shell=True)
 
             pkgmgr.installed('kpartx')
@@ -356,7 +355,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             'EC2_PRIVATE_KEY': pk_path,
             'EC2_USER_ID': platform.get_account_id(),
             'AWS_ACCESS_KEY': access_key,
-            'AWS_SECRET_KEY': secret_key})
+            'AWS_SECRET_KEY': secret_key,
+            'EC2_HOME': os.path.dirname(self.api_bin_dir)})
             # 'EC2_URL': platform.get_access_data('ec2_url')})
         self.credentials = {
             'cert': cert_path,
