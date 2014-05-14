@@ -195,14 +195,14 @@ class EBSImageMaker(object):
         #     '--name', self.image_name,
         #     '-s', snapshot_id,
         #     '--debug')
-        LOG.debug('Image register command: ' + ' '.join(cmd))
+        # LOG.debug('Image register command: ' + ' '.join(cmd))
         # out = linux.system(cmd, 
         #     env=self.environ,
         #     stdout=subprocess.PIPE, 
         #     stderr=subprocess.STDOUT)[0]
 
         return connection.register_image(name=self.image_name,
-            snapshot_id=snapshot_id,)
+            snapshot_id=snapshot_id)
 
     def cleanup(self):
         pass
@@ -241,7 +241,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def _remove_old_versions(self):
         for item in os.listdir(self._tools_dir):
             if item.startswith(self._ami_tools_name):
-                os.removedirs(os.path.join(self._tools_dir, tool))
+                os.removedirs(os.path.join(self._tools_dir, item))
 
     def _install_support_packages(self):
         pkgmgr.installed('unzip')
@@ -301,7 +301,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             # system2(('export', 'EC2_HOME=%s' % os.path.dirname(self.api_bin_dir)),
             #     shell=True)
 
-            # pkgmgr.installed('kpartx')
+            pkgmgr.installed('kpartx')
 
     def _get_root_device_type(self):
         platform = __node__['platform']
