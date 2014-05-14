@@ -531,7 +531,9 @@ if [ -n "$installed_version" ]; then
 	fi
 
 	if dpkg --compare-versions "$installed_version" lt '2.7.7'; then
-		python -m scalarizr.updclient.app --make-status-file
+		if [ -f "$priv_cnf_dir/.state" ] && [ $(cat "$priv_cnf_dir/.state") = 'running' ]; then
+			python -m scalarizr.updclient.app --make-status-file
+		fi
 	fi
 fi
 
