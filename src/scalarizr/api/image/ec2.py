@@ -6,6 +6,8 @@ import time
 import subprocess
 import pprint
 
+import boto
+
 from scalarizr import linux
 from scalarizr import util
 from scalarizr.api.image import ImageAPIDelegate
@@ -129,7 +131,6 @@ class EBSImageMaker(object):
         self.environ = delegate.environ
         self.credentials = delegate.credentials
         self.ami_bin_dir = delegate.ami_bin_dir
-        self.api_bin_dir = delegate.api_bin_dir
         self.platform = __node__['platform']
         self.destination = destination
         self.excludes = [
@@ -187,17 +188,21 @@ class EBSImageMaker(object):
         return snapshot.id
 
     def register_image(self, snapshot_id):
-        cmd = (
-            os.path.join(self.api_bin_dir, 'ec2-register'), 
-            '--name', self.image_name,
-            '-s', snapshot_id,
-            '--debug')
+        connection = boto.connect_ec2(self.credentials['access_key'], 
+            self.credentials['secret_key'])
+        # cmd = (
+        #     os.path.join(self.api_bin_dir, 'ec2-register'), 
+        #     '--name', self.image_name,
+        #     '-s', snapshot_id,
+        #     '--debug')
         LOG.debug('Image register command: ' + ' '.join(cmd))
-        out = linux.system(cmd, 
-            env=self.environ,
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.STDOUT)[0]
-        return out
+        # out = linux.system(cmd, 
+        #     env=self.environ,
+        #     stdout=subprocess.PIPE, 
+        #     stderr=subprocess.STDOUT)[0]
+
+        return connection.register_image(name=self.image_name,
+            snapshot_id=snapshot_id,)
 
     def cleanup(self):
         pass
@@ -218,14 +223,12 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
     _tools_dir = '/var/lib/scalr/ec2-tools'
     _ami_tools_name = 'ec2-ami-tools'
-    _api_tools_name = 'ec2-api-tools'
 
     def __init__(self):
         self.image_maker = None
         self.environ = os.environ.copy()
         self.excludes = None
         self.ami_bin_dir = None
-        self.api_bin_dir = None
         self._prepare_software()
         self.environ['PATH'] = self.environ['PATH'] + ':/usr/local/rvm/rubies/ruby-1.9.3-p545/bin'
         self.environ['MY_RUBY_HOME'] = '/usr/local/rvm/rubies/ruby-1.9.3-p545'
@@ -236,16 +239,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         return version
 
     def _remove_old_versions(self):
-        current_ami_tools = None
-        current_api_tools = None
-        directory_contents = os.listdir(self._tools_dir)
-        tools = [item for item in directory_contents
-            if item.startswith(self._ami_tools_name)
-            or item.startswith(self._api_tools_name)]
-
-        for tool in tools:
-            current_version = (0, 0, 0, 0)
-            for tool in tools:
+        for item in os.listdir(self._tools_dir):
+            if item.startswith(self._ami_tools_name):
                 os.removedirs(os.path.join(self._tools_dir, tool))
 
     def _install_support_packages(self):
@@ -274,10 +269,10 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
                 '-P',
                 '/tmp'),)
-            system2(('wget',
-                'http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip',
-                '-P',
-                '/tmp'),)
+            # system2(('wget',
+            #     'http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip',
+            #     '-P',
+            #     '/tmp'),)
             if not os.path.exists(self._tools_dir):
                 if not os.path.exists(os.path.dirname(self._tools_dir)):
                     os.mkdir(os.path.dirname(self._tools_dir))
@@ -287,32 +282,26 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             self._install_support_packages()
 
             system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir))
-            system2(('unzip', '/tmp/ec2-api-tools.zip', '-d', self._tools_dir))
+            # system2(('unzip', '/tmp/ec2-api-tools.zip', '-d', self._tools_dir))
 
             os.remove('/tmp/ec2-ami-tools.zip')
-            os.remove('/tmp/ec2-api-tools.zip')
+            # os.remove('/tmp/ec2-api-tools.zip')
 
             directory_contents = os.listdir(self._tools_dir)
             self.ami_bin_dir = None
-            self.api_bin_dir = None
             for item in directory_contents:
-                if self.ami_bin_dir and self.api_bin_dir:
+                if self.ami_bin_dir:
                     break
                 elif item.startswith('ec2-ami-tools'):
                     self.ami_bin_dir = os.path.join(self._tools_dir,
                         os.path.join(item, 'bin'))
-                elif item.startswith('ec2-api-tools'):
-                    self.api_bin_dir = os.path.join(self._tools_dir,
-                        os.path.join(item, 'bin'))
 
             system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
                 shell=True)
-            system2(('export', 'EC2_APITOOL_HOME=%s' % os.path.dirname(self.api_bin_dir)),
-                shell=True)
-            system2(('export', 'EC2_HOME=%s' % os.path.dirname(self.api_bin_dir)),
-                shell=True)
+            # system2(('export', 'EC2_HOME=%s' % os.path.dirname(self.api_bin_dir)),
+            #     shell=True)
 
-            pkgmgr.installed('kpartx')
+            # pkgmgr.installed('kpartx')
 
     def _get_root_device_type(self):
         platform = __node__['platform']
@@ -355,8 +344,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             'EC2_PRIVATE_KEY': pk_path,
             'EC2_USER_ID': platform.get_account_id(),
             'AWS_ACCESS_KEY': access_key,
-            'AWS_SECRET_KEY': secret_key,
-            'EC2_HOME': os.path.dirname(self.api_bin_dir)})
+            'AWS_SECRET_KEY': secret_key})
             # 'EC2_URL': platform.get_access_data('ec2_url')})
         self.credentials = {
             'cert': cert_path,
