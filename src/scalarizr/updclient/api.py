@@ -716,6 +716,8 @@ class UpdClientAPI(object):
         if cached:
             keys_to_copy.extend(pkginfo_keys)
         else:
+            self._sync()
+            self._ensure_repos(False)
             self.pkgmgr.updatedb(apt_repository='scalr-{0}'.format(self.repository))
             pkginfo = self.pkgmgr.info(self.package)
             status.update((key, pkginfo[key]) for key in pkginfo_keys)
