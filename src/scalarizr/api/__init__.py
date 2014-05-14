@@ -16,7 +16,7 @@ api_routes = {
     'mysql2': 'scalarizr.api.mysql.MySQLAPI',
     'nginx': 'scalarizr.api.nginx.NginxAPI',
     'operation': 'scalarizr.api.operation.OperationAPI',
-    'percona': 'scalarizr.api.mysql.PerconaAPI',
+    'percona': 'scalarizr.api.percona.PerconaAPI',
     'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
     'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI',
     'redis': 'scalarizr.api.redis.RedisAPI',
