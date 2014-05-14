@@ -621,7 +621,7 @@ class UpdClientAPI(object):
                     LOG.info('No new version available ({0})'.format(self.package))
                     return 
                 if self.pkgmgr.version_cmp(pkginfo['candidate'], pkginfo['installed']) == -1 \
-                        and self.downgrades_enabled:
+                        and not self.downgrades_enabled:
                     self.state = 'completed'
                     LOG.info('New version {0!r} less then installed {1!r}, but downgrades disabled'.format(
                                 pkginfo['candidate'], pkginfo['installed']))
