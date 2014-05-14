@@ -36,12 +36,11 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
                         raise_exc=False
                     )
 
-                cmd = (chef_client_bin, '--daemonize', '--logfile', 
-                        '/var/log/chef-client.log', '--pid', self.pid_file)
+                cmd = " ".join((chef_client_bin, '--daemonize', '--logfile',
+                        '/var/log/chef-client.log', '--pid', self.pid_file))
                 try:
-                    out, err, rcode = linux.system(cmd, close_fds=True, 
-                                #preexec_fn=os.setsid,
-                                env=self._env)
+                    out, err, rcode = linux.system(cmd, close_fds=True, shell=True,
+                                preexec_fn=os.setsid, env=self._env)
                 except linux.LinuxError, e:
                     raise initdv2.InitdError('Failed to start chef: %s' % e)
 
