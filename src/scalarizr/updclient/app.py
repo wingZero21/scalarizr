@@ -88,7 +88,9 @@ class UpdClient(util.Server):
             optparse.Option('--get-system-id', action='store_true', default=False, 
                             help='print system-id and exit'),
             optparse.Option('--make-status-file', action='store_true', default=False,
-                            help='make status file with current state and exit')
+                            help='make status file with current state and exit'),
+            optparse.Option('--downgrades-disabled', action='store_true', default=False,
+                            help="works only with --make-status-file (introduced for migration to new update system")
         ))
         self.api = update_api.UpdClientAPI()       
 
@@ -144,6 +146,8 @@ class UpdClient(util.Server):
             if os.path.exists(self.api.status_file):
                 os.unlink(self.api.status_file)
             self.api.bootstrap(dry_run=True)
+            if self.__dict__.get('downgrades_disabled'):
+                self.api.downgrades_enabled = False
             self.api.store()
             print 'saved status file: {0}'.format(self.api.status_file)
             sys.exit() 
