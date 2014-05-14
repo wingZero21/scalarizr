@@ -959,7 +959,6 @@ class Service(object):
                 except exceptions.NotFound as e:
                     logger.error(e)
                 except exceptions.UnsupportedBehavior as e:
-                    logger.error(e)
                     node.__node__['messaging'].send(
                         'RuntimeError',
                         body={
@@ -967,6 +966,7 @@ class Service(object):
                             'message': str(e)
                         }
                     )
+                    raise sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]
 
         logger.debug('Initialize message handlers')
         consumer = msg_service.get_consumer()

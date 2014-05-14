@@ -383,12 +383,14 @@ class PostgreSQLAPI(BehaviorAPI):
             if os_vers >= '12':
                 required_list = [
                     ['postgresql-9.1', 'postgresql-client-9.1'],
+                    ['postgresql-9.2', 'postgresql-client-9.2'],
                     ['postgresql>=9.1,<9.3', 'postgresql-client>=9.1,<9.3'],
                 ]
             elif os_vers >= '10':
                 required_list = [
+                    ['postgresql-9.0', 'postgresql-client-9.0'],
                     ['postgresql-9.1', 'postgresql-client-9.1'],
-                    ['postgresql>=9.1,<9.2', 'postgresql-client>=9.1,<9.2'],
+                    ['postgresql>=9.0,<9.2', 'postgresql-client>=9.0,<9.2'],
                 ]
         elif os_name == 'debian':
                 required_list = [
@@ -398,6 +400,7 @@ class PostgreSQLAPI(BehaviorAPI):
         elif os_name == 'centos':
             if os_vers >= '6':
                 required_list = [
+                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
                     ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
                     [
                         'postgresql>=9.1,<9.3',
@@ -407,11 +410,13 @@ class PostgreSQLAPI(BehaviorAPI):
                 ]
             elif os_vers >= '5':
                 required_list = [
+                    ['postgresql90', 'postgresql90-server', 'postgresql90-devel'],
+                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
                     ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
                     [
-                        'postgresql>=9.2,<9.3',
-                        'postgresql-server>=9.2,<9.3',
-                        'postgresql-devel>=9.2,<9.3'
+                        'postgresql>=9.0,<9.3',
+                        'postgresql-server>=9.0,<9.3',
+                        'postgresql-devel>=9.0,<9.3'
                     ]
                 ]
         elif linux.os.redhat_family or linux.os.oracle_family:
@@ -435,11 +440,10 @@ class PostgreSQLAPI(BehaviorAPI):
             pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
             msg = (
                 '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 10.04: >=9.1,<9.2\n'
+                '\tUbuntu 10.04, CentOS 5: >=9.0,<9.2\n'
                 '\tUbuntu 12.04, CentOS 6: >=9.1,<9.3\n'
-                '\tDebian, CentOS 5, Oracle, RedHat, Amazon: >=9.2,<9.3').format(
+                '\tDebian, Oracle, RedHat, Amazon: >=9.2,<9.3').format(
                         pkg=pkg, ver=ver, os=linux.os['name'])
             raise exceptions.UnsupportedBehavior(cls.behavior, msg)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
-
