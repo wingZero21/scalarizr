@@ -353,7 +353,7 @@ if compare_versions "$installed_version" lt '0.9.r4762-1'; then
 	fi
 fi
 
-if compare_versions "$installed_version" lt '2.5.13'; then
+if compare_versions "$installed_version" lt '2.7.7'; then
     # scalr-upd-client binary here still points to old python module
 	%{__python} -m scalarizr.updclient.app --make-status-file
 fi
