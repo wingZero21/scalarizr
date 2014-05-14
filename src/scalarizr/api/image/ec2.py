@@ -6,7 +6,8 @@ import time
 import subprocess
 import pprint
 
-import boto
+from boto.ec2.blockdevicemapping import BlockDeviceType
+from boto.ec2.blockdevicemapping import BlockDeviceMapping
 
 from scalarizr import linux
 from scalarizr import util
@@ -187,9 +188,9 @@ class EBSImageMaker(object):
         LOG.debug('Snapshot is made')
         return snapshot.id
 
-    def register_image(self, snapshot_id):
-        connection = boto.connect_ec2(self.credentials['access_key'], 
-            self.credentials['secret_key'])
+    def register_image(self, snapshot_id, root_device_name):
+        conn = self.platform.new_ec2_conn()
+
         # cmd = (
         #     os.path.join(self.api_bin_dir, 'ec2-register'), 
         #     '--name', self.image_name,
@@ -200,9 +201,11 @@ class EBSImageMaker(object):
         #     env=self.environ,
         #     stdout=subprocess.PIPE, 
         #     stderr=subprocess.STDOUT)[0]
-
-        return connection.register_image(name=self.image_name,
-            snapshot_id=snapshot_id)
+        root_vol = BlockDeviceType(snapshot_id=snapshot_id)
+        block_device_map = BlockDeviceMapping()
+        block_device_map[root_device_name] = root_vol
+        return conn.register_image(name=self.image_name,
+            block_device_map=block_device_map)
 
     def cleanup(self):
         pass
@@ -213,7 +216,7 @@ class EBSImageMaker(object):
             size = self.image_size / 1000
             volume = self.make_volume(size)
             snapshot_id = self.make_snapshot(volume)
-            image_id = self.register_image(snapshot_id)
+            image_id = self.register_image(snapshot_id, volume.device)
             return image_id
         finally:
             self.cleanup()
