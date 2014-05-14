@@ -121,7 +121,7 @@ class RabbitMQAPI(BehaviorAPI):
             pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.2'], installed_packages)
         elif linux.os.redhat_family:
             if os_vers >= '6':
-                pkgmgr.check_dependency(['rabbitmq>=3.1,<3.2', 'erlang'], installed_packages)
+                pkgmgr.check_dependency(['rabbitmq-server>=3.1,<3.2', 'erlang'], installed_packages)
             elif os_vers >= '5':
                 raise exceptions.UnsupportedBehavior(cls.behavior,
                         "RabbitMQ doesn't supported on %s-5" % linux.os['name'])
