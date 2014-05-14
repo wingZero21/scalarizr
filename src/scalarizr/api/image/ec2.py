@@ -205,6 +205,7 @@ class EBSImageMaker(object):
         block_device_map = BlockDeviceMapping()
         block_device_map[root_device_name] = root_vol
         return conn.register_image(name=self.image_name,
+            root_device_name=root_device_name,
             block_device_map=block_device_map)
 
     def cleanup(self):
