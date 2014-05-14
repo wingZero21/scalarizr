@@ -186,7 +186,7 @@ class EBSImageMaker(object):
                 logger=LOG,
                 error_text='EBS snapshot %s wasnt completed' % snapshot.id)
         LOG.debug('Snapshot is made')
-        volume.attach()
+        volume.ensure()
         return snapshot.id
 
     def register_image(self, snapshot_id, root_device_name):
