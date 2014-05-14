@@ -456,12 +456,9 @@ class RedisAPI(BehaviorAPI):
     @classmethod
     def do_check_software(cls, installed_packages=None):
         if linux.os.debian_family:
-            if linux.os.ubuntu and linux.os['release'] <= (10, 4):
-                pkgmgr.check_dependency(['redis-server>=2.2,<2.3'], installed_packages)
-            else:
-                pkgmgr.check_dependency(['redis-server>=2.2,<2.9'], installed_packages)
+            pkgmgr.check_dependency(['redis-server>=2.2,<2.7'], installed_packages)
         elif linux.os.redhat_family or linux.os.oracle_family:
-            pkgmgr.check_dependency(['redis>=2.6,<2.9'], installed_packages, ['centalt-release'])
+            pkgmgr.check_dependency(['redis>=2.2,<2.7'], installed_packages, ['centalt-release'])
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (
                 "Unsupported operating system family '{os}'").format(os=linux.os['name'])
@@ -473,11 +470,8 @@ class RedisAPI(BehaviorAPI):
             pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
             msg = (
                 '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 10.04: >=2.2,<2.3\n'
-                '\tUbuntu >= 12.04, Debian: >=2.2,<2.9\n'
-                '\tRHEL, CentOS, Oracle, Amazon: >=2.6,<2.9').format(
+                '\tUbuntu, Debian, RHEL, CentOS, Oracle, Amazon: >=2.2,<2.7\n').format(
                         pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
             raise exceptions.UnsupportedBehavior(cls.behavior, msg)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
-
