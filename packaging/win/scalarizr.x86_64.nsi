@@ -276,7 +276,7 @@ Section -PostInstall
 
   ${Unless} $installed_version == ""
       Push $installed_version
-      Push "2.5.13"
+      Push "2.7.7"
       Call CompareVersions
       Pop $R0
 
