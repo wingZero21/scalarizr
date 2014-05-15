@@ -281,7 +281,7 @@ Section -PostInstall
       Pop $R0
 
       ${If} $R0 == 1
-          nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file'
+          nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file --downgrades-disabled'
       ${EndIf}
 
   ${EndIf}
