@@ -246,7 +246,7 @@ def apache_software_info():
         out = system2((binary, '-V'))[0]
     except PopenError, e:
         pkg_mgr = pkgmgr.package_mgr()
-        version_string = pkg_mgr.info('rabbitmq-server')['installed']
+        version_string = pkg_mgr.info('apache2')['installed']
     else:
         if not out:
             raise SoftwareError
