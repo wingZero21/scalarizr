@@ -34,8 +34,8 @@ class PerconaAPI(mysql.MySQLAPI):
         elif linux.os.redhat_family or linux.os.oracle_family:
             pkgmgr.check_any_dependency(
                 [
-                    ['Percona-Server-client-5.1', 'Percona-Server-server-5.1'],
-                    ['Percona-Server-client-5.5', 'Percona-Server-server-5.5'],
+                    ['Percona-Server-client-51', 'Percona-Server-server-51'],
+                    ['Percona-Server-client-55', 'Percona-Server-server-55'],
                 ],
                 installed_packages,
                 ['mysql']
