@@ -485,7 +485,7 @@ class UpdClientAPI(object):
             prefile = '/etc/apt/preferences'
         with open(prefile, 'w+') as fp:
             fp.write((
-                'Package: *\n'
+                'Package: scalarizr-*\n'
                 'Pin: release a={0}\n'
                 'Pin-Priority: 1001\n'
             ).format(release))        
