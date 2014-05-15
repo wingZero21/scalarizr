@@ -255,7 +255,7 @@ def apache_software_info():
     res = re.search('[\d\.]+', version_string)
     if res:
         version = res.group(0)
-        return SoftwareInfo('apache', version, out)
+        return SoftwareInfo('apache', version, version_string)
 
     raise SoftwareError
 
