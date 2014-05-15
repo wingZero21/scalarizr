@@ -77,7 +77,7 @@ class BlockDeviceHandler(handlers.Handler):
                     vol.ensure(mount=bool(vol.mpoint))
                 except:
                     # It may be because of missing cloud credentials, we shouldn't stop initialization
-                    LOG.error("Can't ensure volume {0}. Error: {1}".format(dict(vol), sys.exc_info()[1]))
+                    LOG.warn("Can't ensure volume {0}. Error: {1}".format(dict(vol), sys.exc_info()[1]))
 
     def on_before_host_init(self, *args, **kwargs):
         if linux.os.windows_family:
