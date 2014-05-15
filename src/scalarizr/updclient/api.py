@@ -433,6 +433,10 @@ class UpdClientAPI(object):
             self.pkgmgr.removed(self.package)
             if not linux.os.windows:
                 self.pkgmgr.removed('scalarizr-base', purge=True)
+                if self.pkgmgr.installed('scalr-upd-client'):
+                    # Only latest package don't stop scalr-upd-client in postrm script
+                    self.pkgmgr.latest('scalr-upd-client')
+                    self.pkgmgr.removed('scalr-upd-client', purge=True)
             if linux.os.debian_family:
                 self.pkgmgr.apt_get_command('autoremove') 
         finally:
