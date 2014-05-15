@@ -72,6 +72,7 @@ class InstanceStoreImageMaker(object):
             # '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
             '--volume', '/',
+            '--generate-fstab'
             '--debug')
         LOG.debug('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
@@ -155,6 +156,7 @@ class EBSImageMaker(object):
             # '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
             '--volume', '/',
+            '--generate-fstab',
             '--debug')
         LOG.debug('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
