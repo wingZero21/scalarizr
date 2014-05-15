@@ -5,6 +5,7 @@ Created on Oct 13, 2011
 '''
 
 import os
+import sys
 import logging
 
 from scalarizr.bus import bus
@@ -72,7 +73,11 @@ class BlockDeviceHandler(handlers.Handler):
             volumes = volumes or []  # Cast to list
             for vol in volumes:
                 vol = storage2.volume(vol)
-                vol.ensure(mount=bool(vol.mpoint))
+                try:
+                    vol.ensure(mount=bool(vol.mpoint))
+                except:
+                    # It may be because of missing cloud credentials, we shouldn't stop initialization
+                    LOG.error("Can't ensure volume {0}. Error: {1}".format(dict(vol), sys.exc_info()[1]))
 
     def on_before_host_init(self, *args, **kwargs):
         if linux.os.windows_family:
