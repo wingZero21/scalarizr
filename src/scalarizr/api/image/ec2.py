@@ -52,10 +52,10 @@ class InstanceStoreImageMaker(object):
 
         if not excludes:
             self.excludes = [
-                self.destination,
-                '/selinux',
+                # self.destination,
+                # '/selinux',
                 # '/var/lib/dhclient',
-                '/var/lib/dhcp',
+                # '/var/lib/dhcp',
                 # '/var/lib/dhcp3'
                 ]
 
@@ -69,7 +69,7 @@ class InstanceStoreImageMaker(object):
             '--arch', linux.os['arch'],
             '--size', str(self.image_size),
             '--destination', self.destination,
-            '--exclude', ','.join(self.excludes),
+            # '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
@@ -135,10 +135,10 @@ class EBSImageMaker(object):
         self.platform = __node__['platform']
         self.destination = destination
         self.excludes = [
-                self.destination,
-                '/selinux',
+                # self.destination,
+                # '/selinux',
                 # '/var/lib/dhclient',
-                '/var/lib/dhcp',
+                # '/var/lib/dhcp',
                 # '/var/lib/dhcp3'
                 ]
 
@@ -152,7 +152,7 @@ class EBSImageMaker(object):
             '--arch', linux.os['arch'],
             '--size', str(self.image_size),
             '--destination', self.destination,
-            '--exclude', ','.join(self.excludes),
+            # '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
@@ -209,8 +209,29 @@ class EBSImageMaker(object):
             root_device_name=root_device_name,
             block_device_map=block_device_map)
 
+    def _cleanup_ssh_keys(self, homedir):
+        filename = os.path.join(homedir, '.ssh/authorized_keys')
+        if os.path.exists(filename):
+            LOG.debug('Removing Scalr SSH keys from %s', filename)
+            fp = open(filename + '.tmp', 'w+')
+            for line in open(filename):
+                if 'SCALR-ROLESBUILDER' in line:
+                    continue
+                fp.write(line)
+            fp.close()
+            os.rename(filename + '.tmp', filename)
+
+    def _cleanup_user_activity(self, homedir):
+        for name in (".bash_history", ".lesshst", ".viminfo",
+            ".mysql_history", ".history", ".sqlite_history"):
+            filename = os.path.join(homedir, name)
+            if os.path.exists(filename):
+                os.remove(filename)
+
     def cleanup(self):
-        pass
+        for homedir in ('root', 'home/ubuntu', 'home/scalr'):
+            homedir = os.path.join(rootdir, homedir)
+            self._cleanup_ssh_keys(homedir)
 
     def create_image(self):
         try:
