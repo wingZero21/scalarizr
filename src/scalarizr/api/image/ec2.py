@@ -205,6 +205,7 @@ class EBSImageMaker(object):
         coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '8M'})
 
         LOG.debug('fixing fstab')
+        volume.mount()
         self.fix_fstab(volume)
 
         LOG.debug('detaching volume')
