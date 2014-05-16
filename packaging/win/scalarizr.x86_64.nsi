@@ -284,7 +284,7 @@ Section -PostInstall
 
       ${If} $R0 == 1
           nsislog::log "C:\scalarizr_installer.log" "Execute make-status-file"
-          nsExec::ExecToLog '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file --downgrades-disabled'
+          ExecWait '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file --downgrades-disabled'
           nsislog::log "C:\scalarizr_installer.log" "Executed"
       ${EndIf}
 
