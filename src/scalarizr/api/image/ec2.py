@@ -72,7 +72,6 @@ class InstanceStoreImageMaker(object):
             # '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
             '--volume', '/',
-            '--generate-fstab'
             '--debug')
         LOG.debug('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
@@ -156,7 +155,6 @@ class EBSImageMaker(object):
             # '--exclude', ','.join(self.excludes),
             '--prefix', self.image_name,
             '--volume', '/',
-            '--generate-fstab',
             '--debug')
         LOG.debug('Image prepare command: ' + ' '.join(cmd))
         out = linux.system(cmd, 
@@ -171,16 +169,43 @@ class EBSImageMaker(object):
         ebs_config['size'] = size
         LOG.debug('Creating ebs volume')
         volume = create_volume(ebs_config)
-        volume.ensure()
+        volume.ensure(mount=True)
         LOG.debug('Volume created %s' % volume.device)
         return volume
+
+    def fix_fstab(self, volume):
+        fstab_file_path = os.path.join(volume.mpoint, 'etc/fstab')
+        fstab = mount.fstab(fstab_file_path)
+        # TODO: remove all ebses
+        # ec2_conn = pl.new_ec2_conn()
+        # instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
+
+        # ebs_devs = list(vol.attach_data.device
+        #                         for vol in ec2_conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
+        #                         if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id()
+        #                                 and instance.root_device_name != vol.attach_data.device)
+
+        # for device in ebs_devs:
+        #     device = ebsvolume.name2device(device)
+        #     LOG.debug('Remove %s from fstab', device)
+        #     try:
+        #         del fstab[device]
+        #     except KeyError:
+        #         pass
+
+        del fstab[volume.mpoint]
 
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
         LOG.debug('dd image into volume %s' % volume.device)
         coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '8M'})
+
+        LOG.debug('fixing fstab')
+        self.fix_fstab(volume)
+
         LOG.debug('detaching volume')
         volume.detach()
+
         LOG.debug('Making snapshot of volume %s' % volume.device)
         snapshot = volume.snapshot()
         util.wait_until(
@@ -188,6 +213,7 @@ class EBSImageMaker(object):
                 logger=LOG,
                 error_text='EBS snapshot %s wasnt completed' % snapshot.id)
         LOG.debug('Snapshot is made')
+
         volume.ensure()
         return snapshot.id
 
@@ -242,6 +268,7 @@ class EBSImageMaker(object):
             volume = self.make_volume(size)
             snapshot_id = self.make_snapshot(volume)
             image_id = self.register_image(snapshot_id, volume.device)
+            volume.destroy()
             return image_id
         finally:
             self.cleanup()
