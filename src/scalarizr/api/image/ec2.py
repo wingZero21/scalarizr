@@ -169,6 +169,7 @@ class EBSImageMaker(object):
         ebs_config['size'] = size
         LOG.debug('Creating ebs volume')
         volume = create_volume(ebs_config)
+        volume.mpoint = '/mnt/img-mnt'
         volume.ensure(mount=True)
         LOG.debug('Volume created %s' % volume.device)
         return volume
@@ -192,8 +193,10 @@ class EBSImageMaker(object):
         #         del fstab[device]
         #     except KeyError:
         #         pass
-
-        del fstab[volume.mpoint]
+        try:
+            del fstab[volume.mpoint]
+        except KeyError:
+            pass
 
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
