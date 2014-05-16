@@ -431,7 +431,9 @@ rm -rf "$RPM_BUILD_ROOT"
 
 %files
 %defattr(-,root,root)
-/usr
+/usr/bin/*
+/usr/lib/*
+/usr/local/*
 %config	           %{_initrddir}/scalarizr
 %config            %{_initrddir}/scalr-upd-client
 %config(noreplace) %{_sysconfdir}/scalr/public.d/*
