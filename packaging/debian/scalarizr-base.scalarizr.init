@@ -8,7 +8,7 @@
 # Required-Stop:
 # Should-Start:      $named
 # Should-Stop:
-# Default-Start:     0 
+# Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: Scalarizr
 # Description:       Converts any server to Scalr-manageable node
