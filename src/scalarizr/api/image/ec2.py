@@ -214,7 +214,7 @@ class EBSImageMaker(object):
                 error_text='EBS snapshot %s wasnt completed' % snapshot.id)
         LOG.debug('Snapshot is made')
 
-        volume.ensure()
+        volume.ensure(mount=True)
         return snapshot.id
 
     def register_image(self, snapshot_id, root_device_name):
@@ -257,9 +257,10 @@ class EBSImageMaker(object):
                 os.remove(filename)
 
     def cleanup(self):
-        for homedir in ('root', 'home/ubuntu', 'home/scalr'):
-            homedir = os.path.join(rootdir, homedir)
-            self._cleanup_ssh_keys(homedir)
+        pass
+        # for homedir in ('root', 'home/ubuntu', 'home/scalr'):
+        #     homedir = os.path.join(rootdir, homedir)
+        #     self._cleanup_ssh_keys(homedir)
 
     def create_image(self):
         try:
