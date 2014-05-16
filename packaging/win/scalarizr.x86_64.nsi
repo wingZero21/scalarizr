@@ -280,8 +280,12 @@ Section -PostInstall
       Call CompareVersions
       Pop $R0
 
+      LogEx "C:\scalarizr_installer.log" "compare i: $installed_version c: 2.7.7 r: $R0"
+
       ${If} $R0 == 1
-          nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file --downgrades-disabled'
+          LogEx "C:\scalarizr_installer.log" "Execute make-status-file"
+          nsExec::ExecToLog '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file --downgrades-disabled'
+          LogEx "C:\scalarizr_installer.log" "Executed"
       ${EndIf}
 
   ${EndIf}
