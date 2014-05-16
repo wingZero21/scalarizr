@@ -434,7 +434,7 @@ rm -rf "$RPM_BUILD_ROOT"
 %{_bindir}/scalarizr
 %{_bindir}/scalr-upd-client
 %{_bindir}/szradm
-%{_libdir}/python*
+/usr/lib/python*
 /usr/local/scalarizr
 /usr/share/scalr
 
