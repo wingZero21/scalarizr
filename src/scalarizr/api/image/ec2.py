@@ -168,9 +168,9 @@ class EBSImageMaker(object):
             'size': size}
         ebs_config['size'] = size
         LOG.debug('Creating ebs volume')
-        volume = create_volume(ebs_config)
+        volume = create_volume(ebs_config, fstype='ext4')
         volume.mpoint = '/mnt/img-mnt'
-        volume.ensure(mount=True)
+        volume.ensure(mount=True, mkfs=True)
         LOG.debug('Volume created %s' % volume.device)
         return volume
 
