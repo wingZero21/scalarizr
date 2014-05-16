@@ -542,6 +542,10 @@ chmod 775 /etc/scalr/private.d
 sync
 
 rm -f /usr/local/bin/szradm
+if [ ! -d /usr/local/bin ]; then
+	mkdir -p /usr/local/bin
+	chmod 755 /usr/local/bin
+fi
 ln -s /usr/bin/szradm /usr/local/bin/szradm
 
 fi
