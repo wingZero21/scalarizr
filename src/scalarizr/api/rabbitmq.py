@@ -114,14 +114,14 @@ class RabbitMQAPI(BehaviorAPI):
         os_vers = linux.os['version']
         if os_name == 'ubuntu':
             if os_vers >= '12':
-                pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.2'], installed_packages)
+                pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.4'], installed_packages)
             elif os_vers >= '10':
                 pkgmgr.check_dependency(['rabbitmq-server>=2.6,<2.7'], installed_packages)
         elif os_name == 'debian':
-            pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.2'], installed_packages)
+            pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.4'], installed_packages)
         elif linux.os.redhat_family:
             if os_vers >= '6':
-                pkgmgr.check_dependency(['rabbitmq-server>=3.1,<3.2', 'erlang'], installed_packages)
+                pkgmgr.check_dependency(['rabbitmq-server>=3.1,<3.4', 'erlang'], installed_packages)
             elif os_vers >= '5':
                 raise exceptions.UnsupportedBehavior(cls.behavior,
                         "RabbitMQ doesn't supported on %s-5" % linux.os['name'])
@@ -137,8 +137,8 @@ class RabbitMQAPI(BehaviorAPI):
             msg = (
                 '{pkg}-{ver} is not supported on {os}. Supported:\n'
                 '\tUbuntu 10.04 >=2.6,<2.7\n'
-                '\tUbuntu 12.04, Debian: >=3.0,<3.2\n'
-                '\tCentOS-6, RedHat-6, Amazon: >=3.1,<3.2').format(
+                '\tUbuntu 12.04, Debian: >=3.0,<3.4\n'
+                '\tCentOS-6, RedHat-6, Amazon: >=3.1,<3.4').format(
                     pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
             raise exceptions.UnsupportedBehavior(cls.behavior, msg)
         else:
