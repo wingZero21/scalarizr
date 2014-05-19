@@ -485,12 +485,10 @@ def _cleanup_after_rebundle():
     # Reset private configuration
     priv_path = cnf.private_path()
     for file in os.listdir(priv_path):
-        if file in ('.user-data', '.update'):
+        if file in ('.user-data', '.update', 'keys'):
+             # keys/default maybe already refreshed by UpdateClient
             continue
         path = os.path.join(priv_path, file)
-        if path.endswith('keys/default'):
-            # It maybe already refreshed by UpdateClient
-            continue
         coreutils.chmod_r(path, 0700)
         try:
             os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
