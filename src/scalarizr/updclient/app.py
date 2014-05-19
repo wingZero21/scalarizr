@@ -273,7 +273,8 @@ class UpdClient(util.Server):
 
 def main():
 
-    if linux.os.windows_family:
+    if linux.os.windows_family \
+            and not ('--make-status-file' in sys.argv or '--get-system-id' in sys.argv):
         win32serviceutil.HandleCommandLine(WindowsService)
     else:
         svs = UpdClient()
