@@ -266,7 +266,10 @@ class UpdClientAPI(object):
                 ret = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
                 if not ret:
                     LOG.debug('dmidecide returns empty UUID')
-                return ret
+                elif len(ret) != 36:
+                    LOG.debug("dmidecode returns invalid UUID: %s", ret)
+                else:
+                    return ret
             except:
                 LOG.debug('dmidecode failed: %s', sys.exc_info()[1])
 
