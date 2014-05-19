@@ -317,6 +317,10 @@ class Script(object):
             # and therefore produce the same id. solution is to seed random millisecods number
             self.id = '%d.%d' % (time.time(), random.randint(0, 100))
 
+            if self.path and not os.access(self.path, os.X_OK):
+                msg = 'Path {0!r} is not executable'.format(self.path)
+                raise HandlerError(msg)
+
             interpreter = read_shebang(path=self.path, script=self.body)
             if not interpreter:
                 raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
@@ -324,7 +328,8 @@ class Script(object):
                                                 "interpreter directive is as follows:\n"
                                                 "#!interpreter [optional-arg]" % (self.name, ))
             self.interpreter = interpreter
-            
+
+
             if linux.os['family'] == 'Windows' and self.body:
                 # Erase first line with #!
                 self.body = '\n'.join(self.body.splitlines()[1:])
