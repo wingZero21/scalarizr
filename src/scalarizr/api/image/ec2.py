@@ -235,12 +235,18 @@ class EBSImageMaker(object):
         #     env=self.environ,
         #     stdout=subprocess.PIPE, 
         #     stderr=subprocess.STDOUT)[0]
+    
+        instance_id = self.platform.get_instance_id()
+        instance = conn.get_all_instances([instance_id])[0].instances[0]
+
+
         root_vol = BlockDeviceType(snapshot_id=snapshot_id)
         block_device_map = BlockDeviceMapping()
         block_device_map[root_device_name] = root_vol
         return conn.register_image(name=self.image_name,
             root_device_name=root_device_name,
-            block_device_map=block_device_map)
+            block_device_map=block_device_map,
+            kernel_id=instance.kernel)
 
     def _cleanup_ssh_keys(self, homedir):
         filename = os.path.join(homedir, '.ssh/authorized_keys')
@@ -291,9 +297,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         self.excludes = None
         self.ami_bin_dir = None
         self._prepare_software()
-        # TODO: make this later
-        self.environ['PATH'] = self.environ['PATH'] + ':/usr/local/rvm/rubies/ruby-1.9.3-p547/bin'
-        self.environ['MY_RUBY_HOME'] = '/usr/local/rvm/rubies/ruby-1.9.3-p547'
 
     def _get_version(self, tools_folder_name):
         version = tools_folder_name.split('-')[-1]
@@ -320,6 +323,14 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         os.chmod('/tmp/rvm_install.sh', 0770)
         system2(('/tmp/rvm_install.sh', '-s', 'stable'), shell=True)
         system2(('/usr/local/rvm/bin/rvm install 1.9.3', '--auto-dotfiles'), shell=True)
+
+        ruby_path = None
+        for item in os.listdir('/usr/local/rvm/rubies/'):
+            if item.startswith('ruby-1.9.3'):
+                ruby_path = '/usr/local/rvm/rubies/' + item
+                break
+        self.environ['PATH'] = self.environ['PATH'] + (':%s/bin' % ruby_path)
+        self.environ['MY_RUBY_HOME'] = ruby_path
 
     def _prepare_software(self):
         if linux.os['family'] == 'Windows':
