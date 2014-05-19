@@ -488,6 +488,9 @@ def _cleanup_after_rebundle():
         if file in ('.user-data', '.update'):
             continue
         path = os.path.join(priv_path, file)
+        if path.endswith('keys/default'):
+            # It maybe already refreshed by UpdateClient
+            continue
         coreutils.chmod_r(path, 0700)
         try:
             os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
