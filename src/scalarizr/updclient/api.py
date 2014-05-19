@@ -15,7 +15,6 @@ import shutil
 import sqlite3 as sqlite
 import subprocess
 import sys
-import time
 import threading
 import urllib2
 import uuid
@@ -103,6 +102,7 @@ class UpdClientAPI(object):
         rpm='http://rpm.scalr.net/rpm/rhel/$releasever/$basearch',
         win='http://win.scalr.net'
     )
+    downgrades_enabled = True
 
     server_id = farm_role_id = system_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
@@ -291,6 +291,11 @@ class UpdClientAPI(object):
             LOG.debug('Checking %s', self.status_file)
             with open(self.status_file) as fp:
                 status_data = json.load(fp)
+                if 'downgrades_enabled' not in status_data:
+                    # Field introduced in 2.7.12 
+                    # Missing field here means downgrades_enabled=False, 
+                    # cause it's setted by postinst migration to new update system 
+                    status_data['downgrades_enabled'] = False
             system_matches = status_data['system_id'] == self.system_id
             if not system_matches:
                 LOG.info('System ID in lock file and machine one are not matched: %s != %s', 
@@ -428,6 +433,10 @@ class UpdClientAPI(object):
             self.pkgmgr.removed(self.package)
             if not linux.os.windows:
                 self.pkgmgr.removed('scalarizr-base', purge=True)
+                if self.pkgmgr.installed('scalr-upd-client'):
+                    # Only latest package don't stop scalr-upd-client in postrm script
+                    self.pkgmgr.latest('scalr-upd-client')
+                    self.pkgmgr.removed('scalr-upd-client', purge=True)
             if linux.os.debian_family:
                 self.pkgmgr.apt_get_command('autoremove') 
         finally:
@@ -447,6 +456,8 @@ class UpdClientAPI(object):
                 os.remove(filename)
         if 'buildbot.scalr-labs.com' in self.repo_url and not linux.os.windows:
             self._configure_devel_repo(repo)
+        elif linux.os.debian_family:
+            self._apt_pin_release('scalr')  # make downgrades possible
         # Ensure new repository
         repo.ensure()
         if updatedb:
@@ -463,21 +474,25 @@ class UpdClientAPI(object):
             #self.pkgmgr.installed(pkg)
             repo.config += 'priority=10\n'
         else:
-            if os.path.isdir('/etc/apt/preferences.d'):
-                prefile = '/etc/apt/preferences.d/scalr'
-            else:
-                prefile = '/etc/apt/preferences'
-            with open(prefile, 'w+') as fp:
-                fp.write((
-                    'Package: *\n'
-                    'Pin: release a={0}\n'
-                    'Pin-Priority: 1001\n'
-                ).format(self.repository))
+            self._apt_pin_release(self.repository)
 
         # Scalr repo has all required dependencies (like python-* libs, etc), 
         # while Branch repository has only scalarizr package
         release_repo = pkgmgr.repository('scalr-release', devel_repo_url_for_branch('scalr'))
         release_repo.ensure()
+
+
+    def _apt_pin_release(self, release):
+        if os.path.isdir('/etc/apt/preferences.d'):
+            prefile = '/etc/apt/preferences.d/scalr'
+        else:
+            prefile = '/etc/apt/preferences'
+        with open(prefile, 'w+') as fp:
+            fp.write((
+                'Package: scalarizr-*\n'
+                'Pin: release a={0}\n'
+                'Pin-Priority: 1001\n'
+            ).format(release))        
 
 
     def _ensure_daemon(self):
@@ -609,6 +624,12 @@ class UpdClientAPI(object):
                     self.state = 'completed'
                     LOG.info('No new version available ({0})'.format(self.package))
                     return 
+                if self.pkgmgr.version_cmp(pkginfo['candidate'], pkginfo['installed']) == -1 \
+                        and not self.downgrades_enabled:
+                    self.state = 'completed'
+                    LOG.info('New version {0!r} less then installed {1!r}, but downgrades disabled'.format(
+                                pkginfo['candidate'], pkginfo['installed']))
+                    return
                 self._update_self_dict(pkginfo)
 
                 if bootstrap and not linux.os.windows:
@@ -691,7 +712,7 @@ class UpdClientAPI(object):
         keys_to_copy = [
             'server_id', 'farm_role_id', 'system_id', 'platform', 'queryenv_url', 
             'messaging_url', 'scalr_id', 'scalr_version', 
-            'repository', 'repo_url', 'package', 'executed_at', 
+            'repository', 'repo_url', 'package', 'downgrades_enabled', 'executed_at', 
             'state', 'prev_state', 'error', 'dist'
         ]
 
@@ -699,6 +720,8 @@ class UpdClientAPI(object):
         if cached:
             keys_to_copy.extend(pkginfo_keys)
         else:
+            self._sync()
+            self._ensure_repos(False)
             self.pkgmgr.updatedb(apt_repository='scalr-{0}'.format(self.repository))
             pkginfo = self.pkgmgr.info(self.package)
             status.update((key, pkginfo[key]) for key in pkginfo_keys)

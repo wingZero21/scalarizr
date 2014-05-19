@@ -5,7 +5,7 @@ Created on Sep 10, 2010
 @author: marat
 """
 
-from scalarizr.util import system2
+from scalarizr.util import system2, PopenError
 from scalarizr import linux
 from scalarizr.linux import coreutils, pkgmgr, which
 import os, re, zipfile, glob, platform
@@ -242,16 +242,21 @@ def apache_software_info():
     if not binary:
         raise SoftwareError("Can't find executable for apache http server")
 
-    out = system2((binary, '-V'))[0]
-    if not out:
-        raise SoftwareError
+    try:
+        out = system2((binary, '-V'))[0]
+    except PopenError, e:
+        pkg_mgr = pkgmgr.package_mgr()
+        version_string = pkg_mgr.info('apache2')['installed']
+    else:
+        if not out:
+            raise SoftwareError
+        version_string = out.splitlines()[0]
 
-    version_string = out.splitlines()[0]
     res = re.search('[\d\.]+', version_string)
     if res:
         version = res.group(0)
+        return SoftwareInfo('apache', version, version_string)
 
-        return SoftwareInfo('apache', version, out)
     raise SoftwareError
 
 
