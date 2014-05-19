@@ -145,7 +145,7 @@ class EBSImageMaker(object):
     def prepare_image(self):
         # prepares imiage with ec2-bundle-vol command
         cmd = (
-            os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'), 
+            os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
             '--cert', self.credentials['cert'],
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
