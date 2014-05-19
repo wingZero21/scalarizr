@@ -475,3 +475,4 @@ class RedisAPI(BehaviorAPI):
             raise exceptions.UnsupportedBehavior(cls.behavior, msg)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
+        
