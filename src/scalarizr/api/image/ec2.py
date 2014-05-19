@@ -246,7 +246,8 @@ class EBSImageMaker(object):
         return conn.register_image(name=self.image_name,
             root_device_name=root_device_name,
             block_device_map=block_device_map,
-            kernel_id=instance.kernel)
+            kernel_id=instance.kernel,
+            architecture=instance.architecture)
 
     def _cleanup_ssh_keys(self, homedir):
         filename = os.path.join(homedir, '.ssh/authorized_keys')
