@@ -184,9 +184,10 @@ class ScriptExecutor(Handler):
             if not script.start_time:
                 script.start()
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script.wait(), queue=Queues.LOG)
-        except:
+        except (BaseException, Exception), e:
             if script.asynchronous:
                 LOG.exception('Caught exception')
+            self.send_message(Messages.EXEC_SCRIPT_RESULT, script.wait(), queue=Queues.LOG)
             raise
         finally:
             self.in_progress.remove(script)
@@ -324,11 +325,10 @@ class Script(object):
             interpreter = read_shebang(path=self.path, script=self.body)
             if not interpreter:
                 raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
-                                                "First line of the script should have the form of a shebang "
-                                                "interpreter directive is as follows:\n"
-                                                "#!interpreter [optional-arg]" % (self.name, ))
+                    "First line of the script should have the form of a shebang "
+                    "interpreter directive is as follows:\n"
+                    "#!interpreter [optional-arg]" % (self.name, ))
             self.interpreter = interpreter
-
 
             if linux.os['family'] == 'Windows' and self.body:
                 # Erase first line with #!
@@ -345,7 +345,7 @@ class Script(object):
         self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
         self.exec_path = self.path or os.path.join(exec_dir_prefix + self.id, self.name)
 
-        if  self.interpreter == 'powershell' \
+        if self.interpreter == 'powershell' \
                 and os.path.splitext(self.exec_path)[1] not in ('ps1', 'psm1'):
             self.exec_path += '.ps1'
         elif self.interpreter == 'cmd' \
@@ -370,7 +370,7 @@ class Script(object):
         # installs interpreter for the next one
         if not os.path.exists(self.interpreter) and linux.os['family'] != 'Windows':
             raise HandlerError("Can't execute script '%s' cause "
-                               "interpreter '%s' not found" % (self.name, self.interpreter))
+                "interpreter '%s' not found" % (self.name, self.interpreter))
 
         if not self.path:
             # Write script to disk, prepare execution
