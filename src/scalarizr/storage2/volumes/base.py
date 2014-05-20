@@ -77,16 +77,11 @@ class Volume(Base):
         if not self.id:
             self.id = self._genid('vol-')
         if mount:
-            try:
-                LOG.debug('Mounting: %s', self.id)
-                self.mount()
-            except mod_mount.NoFileSystem:
-                if mkfs:
-                    LOG.debug('Creating %s filesystem: %s', self.fstype, self.id)
-                    self.mkfs()
-                    self.mount()
-                else:
-                    raise
+            if not self.is_fs_created() and mkfs:
+                LOG.debug('Creating %s filesystem: %s', self.fstype, self.id)
+                self.mkfs()                
+            LOG.debug('Mounting: %s', self.id)
+            self.mount()
             if fstab and self.device not in mod_mount.fstab():
                 LOG.debug('Adding to fstab: %s', self.id)
                 mod_mount.fstab().add(self.device, self.mpoint, self.fstype)
