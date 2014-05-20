@@ -100,11 +100,12 @@ class InstanceStoreImageMaker(object):
         s3_manifest_path = '%s/%s' % (bucket, os.path.basename(manifest))
         LOG.debug("Registering image '%s'", s3_manifest_path)
 
+        conn = self.platform.new_ec2_conn()
+
         instance_id = self.platform.get_instance_id()
         instance = conn.get_all_instances([instance_id])[0].instances[0]
         
-        ec2_conn = self.platform.new_ec2_conn()
-        ami_id = ec2_conn.register_image(image_location=s3_manifest_path,
+        ami_id = conn.register_image(image_location=s3_manifest_path,
             kernel_id=instance.kernel,
             architecture=instance.architecture)
 
