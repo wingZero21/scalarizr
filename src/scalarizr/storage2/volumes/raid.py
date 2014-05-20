@@ -68,7 +68,7 @@ class RaidVolume(base.Volume):
 
     def _disable_autoassembly(self):
         try:
-            mdadm_conf_path = '/etc/mdadm.conf' if os_detect.rhel_family else '/etc/mdadm/mdadm.conf'
+            mdadm_conf_path = '/etc/mdadm.conf' if os_detect.redhat_family else '/etc/mdadm/mdadm.conf'
             with open(mdadm_conf_path) as f:
                 mdadm_conf = f.read()
             # TODO: augeas candidate
