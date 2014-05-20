@@ -42,7 +42,10 @@ file_cache_path "{0}"
 '''
 
 def get_handlers():
-    return [ChefHandler()] if chef_api.ChefAPI.software_supported else []
+    if linux.os.windows_family or chef_api.ChefAPI.software_supported:
+        return [ChefHandler()]
+    else:
+        return []
 
 
 class ChefHandler(Handler):
