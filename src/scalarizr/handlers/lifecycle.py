@@ -149,11 +149,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         # Add internal messages to scripting skip list
         try:
-            map(scalarizr.handlers.script_executor.skip_events.add, (
-                Messages.INT_SERVER_REBOOT, 
-                Messages.INT_SERVER_HALT, 
-                Messages.HOST_INIT_RESPONSE
-            ))
+            for m in (Messages.INT_SERVER_REBOOT, 
+                      Messages.INT_SERVER_HALT, 
+                      Messages.HOST_INIT_RESPONSE):
+                scalarizr.handlers.script_executor.skip_events.add(m)
         except AttributeError:
             pass
 

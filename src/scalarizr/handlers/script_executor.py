@@ -46,13 +46,13 @@ def get_truncated_log(logfile, maxsize=None):
 
 LOG = logging.getLogger(__name__)
 
-skip_events = set()
-"""
-@var ScriptExecutor will doesn't request scripts on passed events
-"""
-    
 
-logs_truncate_over = 20 * 1000
+skip_events = set()
+
+
+logs_truncate_over = 20000
+
+
 if linux.os.windows_family:
     exec_dir_prefix = os.getenv('TEMP') + r'\scalr-scripting'
     logs_dir = os.getenv('PROGRAMFILES') + r'\Scalarizr\var\log\scripting'
@@ -62,9 +62,9 @@ else:
 
 
 class ScriptExecutor(Handler):
+
     name = 'script_executor'
     _data = None
-
 
     def __init__(self):
         self.queue = Queue.Queue()
@@ -183,20 +183,18 @@ class ScriptExecutor(Handler):
             self.in_progress.append(script)
             if not script.start_time:
                 script.start()
-            self.send_message(Messages.EXEC_SCRIPT_RESULT, script.wait(), queue=Queues.LOG)
+            script.wait()
         except (BaseException, Exception), e:
             if script.asynchronous:
                 LOG.exception('Caught exception')
-            self.send_message(Messages.EXEC_SCRIPT_RESULT, script.wait(), queue=Queues.LOG)
             raise
         finally:
+            self.send_message(Messages.EXEC_SCRIPT_RESULT, script.get_result(), queue=Queues.LOG)
             self.in_progress.remove(script)
 
-    def execute_scripts(self, scripts):
+    def execute_scripts(self, scripts, event_name, scripts_qty):
         if not scripts:
             return
-
-
         # read logs_dir_prefix
         ini = bus.cnf.rawini
         try:
@@ -206,10 +204,10 @@ class ScriptExecutor(Handler):
         except ConfigParser.Error:
             pass
 
-        if scripts[0].event_name:
-            msg = "Executing %d %s script(s)" % (len(scripts), scripts[0].event_name)
+        if event_name:
+            msg = "Executing %d %s script(s)" % (scripts_qty, event_name)
         else:
-            msg = 'Executing %d script(s)' % (len(scripts), )
+            msg = 'Executing %d script(s)' % (scripts_qty, )
         self._logger.info(msg)
 
         for script in scripts:
@@ -243,27 +241,29 @@ class ScriptExecutor(Handler):
                 global_variables = dict((k.encode('ascii'), v.encode('ascii')) for k, v in global_variables.items())
             environ.update(global_variables)
 
-
             LOG.debug('Fetching scripts from incoming message')
-            scripts = [Script(name=item['name'],
-                                body=item.get('body'),
-                                run_as=item.get('run_as'),
-                                path=item.get('path'),
-                                asynchronous=int(item['asynchronous']),
-                                exec_timeout=item['timeout'],
-                                role_name=role_name,
-                                event_server_id=message.body.get('server_id'),
-                                event_id=message.body.get('event_id'),
-                                event_name=event_name,
-                                environ=environ,
-                                execution_id=item.get('execution_id', None))
-                            for item in message.body['scripts']]
+
+            def _create_script(message_script_params):
+                kwds = message_script_params.copy()
+                if 'timeout' in kwds:
+                    kwds['exec_timeout'] = kwds.pop('timeout')
+                if 'asynchronous' in kwds:
+                    kwds['asynchronous'] = int(kwds['asynchronous'])
+                kwds['role_name'] = role_name
+                kwds['event_server_id'] = message.body.get('server_id')
+                kwds['event_id'] = message.body.get('event_id')
+                kwds['event_name'] = event_name
+                kwds['environ'] = environ
+                return Script(**kwds)
+
+            scripts_qty = len(message.body['scripts'])
+            scripts = (_create_script(item) for item in message.body['scripts'])
         else:
             LOG.debug("No scripts embed into message '%s'", message.name)
             return
 
-        LOG.debug('Fetched %d scripts', len(scripts))
-        self.execute_scripts(scripts)
+        LOG.debug('Fetched %d scripts', scripts_qty)
+        self.execute_scripts(scripts, event_name, script_qty)
 
 
 class Script(object):
@@ -303,7 +303,6 @@ class Script(object):
         '''
         for key, value in kwds.items():
             setattr(self, key, value)
-
 
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
@@ -364,14 +363,11 @@ class Script(object):
             self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
             self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
 
-    def start(self):
-        # Check interpreter here, and not in __init__
-        # cause scripts can create sequences when previous script
-        # installs interpreter for the next one
         if not os.path.exists(self.interpreter) and linux.os['family'] != 'Windows':
             raise HandlerError("Can't execute script '%s' cause "
                 "interpreter '%s' not found" % (self.name, self.interpreter))
 
+    def start(self):
         if not self.path:
             # Write script to disk, prepare execution
             exec_dir = os.path.dirname(self.exec_path)
@@ -457,24 +453,6 @@ class Script(object):
                             self.return_code,
                             elapsed_time)
 
-            # always send stdout/stderr (by ent client request) 
-            stdout = binascii.b2a_base64(get_truncated_log(self.stdout_path))
-            stderr = binascii.b2a_base64(get_truncated_log(self.stderr_path))
-            ret = dict(
-                    stdout=stdout,
-                    stderr=stderr,
-                    execution_id=self.execution_id,
-                    time_elapsed=elapsed_time,
-                    script_name=self.name,
-                    script_path=self.exec_path,
-                    event_name=self.event_name or '',
-                    return_code=self.return_code,
-                    event_server_id=self.event_server_id,
-                    event_id=self.event_id,
-                    run_as=self.run_as
-            )
-            return ret
-
         except:
             if threading.currentThread().name != 'MainThread':
                 self.logger.exception('Exception in script execution routine')
@@ -486,6 +464,24 @@ class Script(object):
                 f = os.path.dirname(self.exec_path)
                 if os.path.exists(f):
                     shutil.rmtree(f)
+
+    def get_result(self):
+        stdout = binascii.b2a_base64(get_truncated_log(self.stdout_path))
+        stderr = binascii.b2a_base64(get_truncated_log(self.stderr_path))
+        ret = dict(
+            stdout=stdout,
+            stderr=stderr,
+            execution_id=self.execution_id,
+            time_elapsed=elapsed_time,
+            script_name=self.name,
+            script_path=self.exec_path,
+            event_name=self.event_name or '',
+            return_code=self.return_code,
+            event_server_id=self.event_server_id,
+            event_id=self.event_id,
+            run_as=self.run_as
+        )
+        return ret
 
     def state(self):
         return {'id': self.id,
