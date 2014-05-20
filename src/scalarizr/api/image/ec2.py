@@ -105,7 +105,9 @@ class InstanceStoreImageMaker(object):
         instance_id = self.platform.get_instance_id()
         instance = conn.get_all_instances([instance_id])[0].instances[0]
         
-        ami_id = conn.register_image(image_location=s3_manifest_path,
+        ami_id = conn.register_image(
+            name=self.image_name,
+            image_location=s3_manifest_path,
             kernel_id=instance.kernel,
             architecture=instance.architecture)
 
@@ -249,7 +251,8 @@ class EBSImageMaker(object):
         root_vol = BlockDeviceType(snapshot_id=snapshot_id)
         block_device_map = BlockDeviceMapping()
         block_device_map[root_device_name] = root_vol
-        return conn.register_image(name=self.image_name,
+        return conn.register_image(
+            name=self.image_name,
             root_device_name=root_device_name,
             block_device_map=block_device_map,
             kernel_id=instance.kernel,
