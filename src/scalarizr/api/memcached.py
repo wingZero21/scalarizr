@@ -1,8 +1,9 @@
+import os
 import logging
 
 from scalarizr import rpc
 from scalarizr import linux
-from scalarizr.util import system2, initdv2
+from scalarizr.util import initdv2
 from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton
 from scalarizr import exceptions
@@ -62,7 +63,7 @@ class MemcachedInitScript(initdv2.ParametrizedInitScript):
         initd_script = '/etc/init.d/memcached'
         if not os.path.exists(initd_script):
             msg = "Cannot find Memcached init script at %s. Make sure that memcached is installed"
-            raise HandlerError(msg % initd_script)
+            raise Exception(msg % initd_script)
 
         initdv2.ParametrizedInitScript.__init__(self,
                 'memcached', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
