@@ -204,6 +204,7 @@ class OpenstackPlatform(platform.Platform):
                         rawmeta = fp.read()
                     if not rawmeta:
                         raise platform.PlatformError("Empty user-data")
+                    self._logger.info('Use user-data from %s', path)
                     return self._parse_user_data(rawmeta)
         return self._userdata
 
