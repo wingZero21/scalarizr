@@ -299,7 +299,9 @@ class ChefHandler(Handler):
                     raise
                 finally:
                     try:
-                        shutil.rmtree(temp_dir)
+                        #TODO: Debug, uncomment!!!
+                        #shutil.rmtree(temp_dir)
+                        pass
                     except:
                         pass
 
