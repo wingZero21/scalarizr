@@ -8,6 +8,7 @@ Created on Aug 29, 2010
 import socket
 import string
 import os
+import sys
 import time
 import re
 from threading import local
@@ -263,9 +264,15 @@ class Daemon(object):
     def restart(self):
         LOG.info('Restarting %s', self.name)
         if linux.os.windows_family:
-            self.ctl('stop')
+            try:
+                self.ctl('stop')
+            except:
+                LOG.debug('stop raises error', exc_info=sys.exc_info())
             time.sleep(1)
-            self.ctl('start')
+            try:
+                self.ctl('start')
+            except:
+                LOG.debug('start raises error', exc_info=sys.exc_info())
         else:
             self.ctl('restart')
     
