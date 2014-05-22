@@ -264,15 +264,9 @@ class Daemon(object):
     def restart(self):
         LOG.info('Restarting %s', self.name)
         if linux.os.windows_family:
-            try:
-                self.ctl('stop')
-            except:
-                LOG.debug('stop raises error', exc_info=sys.exc_info())
+            self.ctl('stop')
             time.sleep(1)
-            try:
-                self.ctl('start')
-            except:
-                LOG.debug('start raises error', exc_info=sys.exc_info())
+            self.ctl('start')
         else:
             self.ctl('restart')
     

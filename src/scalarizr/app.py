@@ -194,7 +194,10 @@ class ScalrUpdClientScript(initdv2.Daemon):
             if os.access(pid_file, os.R_OK):
                 pid = open(pid_file).read().strip()
                 if pid:
-                    os.kill(int(pid), signal.SIGKILL)
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                    except:
+                        pass
                     os.unlink(pid_file)
             self.start()
 
