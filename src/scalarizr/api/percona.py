@@ -22,7 +22,20 @@ class PerconaAPI(mysql.MySQLAPI):
 
     @classmethod
     def do_check_software(cls, installed_packages=None):
-        if linux.os.debian_family:
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '14':
+                pkgmgr.check_any_dependency(
+                    [
+                        ['percona-server-client-5.1', 'percona-server-server-5.1'],
+                        ['percona-server-client-5.5', 'percona-server-server-5.5'],
+                        ['percona-server-client-5.6', 'percona-server-server-5.6'],
+                    ],
+                    installed_packages,
+                    ['mysql-server', 'mysql-client']
+                )
+        elif linux.os.debian_family:
             pkgmgr.check_any_dependency(
                 [
                     ['percona-server-client-5.1', 'percona-server-server-5.1'],
@@ -51,9 +64,9 @@ class PerconaAPI(mysql.MySQLAPI):
             pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
             msg = (
                 '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 12.04, Debian, RedHat, Oracle: >=5.1,<5.6').format(
+                '\tUbuntu 14.04: >=5.1,<5.7\n'
+                '\tUbuntu 10.04, Ubuntu 12.04, Debian, RedHat, Oracle: >=5.1,<5.6').format(
                         pkg=pkg, ver=ver, os=linux.os['name'])
             raise exceptions.UnsupportedBehavior(cls.behavior, msg)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
-
