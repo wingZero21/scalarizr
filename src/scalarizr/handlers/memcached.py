@@ -1,4 +1,3 @@
-from __future__ import with_statement
 '''
 Created on Jul 23, 2010
 
@@ -6,15 +5,13 @@ Created on Jul 23, 2010
 @author: Dmytro Korsakov
 '''
 
-from __future__ import with_statement
-
 # Core
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import PresetProvider, BaseConfig
 from scalarizr.api import service as preset_service
 from scalarizr.api import memcached as memcached_api
-from scalarizr.handlers import ServiceCtlHandler, HandlerError, FarmSecurityMixin
+from scalarizr.handlers import ServiceCtlHandler, FarmSecurityMixin
 from scalarizr.messaging import Messages
 from scalarizr import linux
 
@@ -23,7 +20,7 @@ from scalarizr.util import initdv2
 
 
 # Stdlibs
-import logging, re, os
+import logging, re
 
 
 if linux.os.debian_family:
@@ -79,7 +76,7 @@ class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
         self.preset_provider = MemcachedPresetProvider()
         preset_service.services[BEHAVIOUR] = self.preset_provider
         FarmSecurityMixin.__init__(self, [11211])
-        ServiceCtlHandler.__init__(self, BEHAVIOUR, MemcachedInitScript())
+        ServiceCtlHandler.__init__(self, BEHAVIOUR, memcached_api.MemcachedInitScript())
         self._logger = logging.getLogger(__name__)
         self._queryenv = bus.queryenv_service
         bus.on("init", self.on_init)
