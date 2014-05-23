@@ -17,6 +17,7 @@ omnibus_dir = os.path.join(build_dir, 'omnibus')
 project_dir = os.path.join(home_dir, project)
 build_number_file = os.path.join(project_dir, '.build_number')
 omnibus_md5sum_file = os.path.join(project_dir, '.omnibus.md5')
+os.environ['PATH'] = ''.join([os.environ['PATH'], ':', run('which bundler')])
 build_number = None
 artifacts_dir = None
 tag = None
@@ -155,7 +156,9 @@ def build_omnibus_deps():
     # rm cache
     run("rm -rf /var/cache/ci/%s" % project)
     # build base installation
+    run("sudo su")
     with cd(omnibus_dir):
+
         run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
@@ -165,6 +168,7 @@ def build_omnibus_deps():
             run("bin/omnibus clean %s" % project)
             run("bin/omnibus build project %s" % project)
             run("rm -rf /var/cache/omnibus/pkg/*")
+    run("exit")
     # save to cache
     run("mkdir -p /var/cache/ci")
     run("mv /opt/%s /var/cache/ci/%s" % (project, project))
@@ -183,7 +187,9 @@ def build_omnibus():
     with cd(build_dir):
         run("echo '%s' >version" % (version, ))
     # build project
+    run('sudo su')
     with cd(omnibus_dir):
+
         run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
@@ -191,6 +197,8 @@ def build_omnibus():
         }
         with shell_env(**env):
             run("bin/omnibus build project --without-healthcheck %s" % project)
+
+    run('exit')
 
 
 @task
