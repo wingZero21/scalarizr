@@ -82,7 +82,7 @@ def init():
     else:
         ref = ref_head.split('refs/heads/')[-1]
     is_tag = 'refs/tags/' in local('git show-ref {0}'.format(ref), capture=True)
-    pkg_version = local('python setup_agent.py --version', capture=True)
+    pkg_version = local('python setup.py --version', capture=True)
     if is_tag:
         # it's a tag
         tag = version = ref
