@@ -21,6 +21,7 @@ import threading
 import logging
 import sys
 import os
+import copy
 import time
 import socket
 import HTMLParser
@@ -129,7 +130,7 @@ class P2pMessageConsumer(MessageConsumer):
                         message.fromxml(rawmsg)
 
                     # Create a message copy to log it without platform_access_data and with pretty identation  
-                    msg_copy = P2pMessage(message.name, message.meta.copy(), message.body.copy())
+                    msg_copy = P2pMessage(message.name, copy.deepcopy(message.meta), copy.deepcopy(message.body))
                     msg_copy.id = message.id
                     if 'platform_access_data' in msg_copy.body:
                         del msg_copy.body['platform_access_data']
