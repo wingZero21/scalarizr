@@ -848,8 +848,8 @@ def sync_globals(glob_vars=None):
     if linux.os.windows:
         glob_vars['public'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['public'].items())
         glob_vars['private'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['private'].items())
-    os.environ.update(glob_vars['public'])
-    os.environ.update(glob_vars['private'])
+    #os.environ.update(glob_vars['public'])
+    #os.environ.update(glob_vars['private'])
 
     if not linux.os.windows:
         globals_path = '/etc/profile.d/scalr_globals.sh'
