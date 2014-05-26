@@ -17,7 +17,6 @@ omnibus_dir = os.path.join(build_dir, 'omnibus')
 project_dir = os.path.join(home_dir, project)
 build_number_file = os.path.join(project_dir, '.build_number')
 omnibus_md5sum_file = os.path.join(project_dir, '.omnibus.md5')
-os.environ['PATH'] = ''.join([os.environ['PATH'], ':', '/opt/rubies/ruby-2.1.1/bin'])
 build_number = None
 artifacts_dir = None
 tag = None
@@ -151,8 +150,6 @@ def local_export():
 
 
 def build_omnibus_deps():
-    run('sudo su')
-    run('export PATH=$PATH:/opt/rubies/ruby-2.1.1/bin')
     print_green(run('echo $PATH'))
     print_green(run('whoami'))
     # rm old installation
@@ -182,8 +179,7 @@ def build_omnibus_deps():
 
 
 def build_omnibus():
-    run('sudo su')
-    run('export PATH=$PATH:/opt/rubies/ruby-2.1.1/bin')
+
     print_green(run('echo path'))
     print_green(run('whoami'))
     # rm old installation
