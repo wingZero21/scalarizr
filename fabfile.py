@@ -156,7 +156,7 @@ def build_omnibus_deps():
     # rm cache
     run("rm -rf /var/cache/ci/%s" % project)
     # build base installation
-    run("sudo su")
+    #run("sudo su")
     with cd(omnibus_dir):
         # TODO: add current bundle location to PATH if this works
         run("[ -f bin/omnibus ] || /opt/rubies/ruby-2.1.1/bin/bundle install --binstubs")
@@ -168,7 +168,7 @@ def build_omnibus_deps():
             run("bin/omnibus clean %s" % project)
             run("bin/omnibus build project %s" % project)
             run("rm -rf /var/cache/omnibus/pkg/*")
-    run("exit")
+    #run("exit")
     # save to cache
     run("mkdir -p /var/cache/ci")
     run("mv /opt/%s /var/cache/ci/%s" % (project, project))
@@ -187,7 +187,7 @@ def build_omnibus():
     with cd(build_dir):
         run("echo '%s' >version" % (version, ))
     # build project
-    run('sudo su')
+    #run('sudo su')
     with cd(omnibus_dir):
         # TODO: add current bundle location to PATH if this works
         run("[ -f bin/omnibus ] || /opt/rubies/ruby-2.1.1/bin/bundle install --binstubs")
@@ -198,7 +198,7 @@ def build_omnibus():
         with shell_env(**env):
             run("bin/omnibus build project --without-healthcheck %s" % project)
 
-    run('exit')
+    #run('exit')
 
 
 @task
