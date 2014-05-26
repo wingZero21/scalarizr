@@ -2,6 +2,7 @@ name "scalarizr-deps"
 
 default_version   "0.1"
 
+dependency "setuptools"
 dependency "sqlite3"
 dependency "bzip2"
 dependency "python"
