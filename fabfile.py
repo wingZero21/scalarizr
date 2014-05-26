@@ -159,7 +159,7 @@ def build_omnibus_deps():
     #run("sudo su")
     with cd(omnibus_dir):
         # TODO: add current bundle location to PATH if this works
-        run("[ -f bin/omnibus ] || install --binstubs")
+        run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
             'OMNIBUS_BUILD_DEPS': 'yes',
@@ -190,7 +190,7 @@ def build_omnibus():
     #run('sudo su')
     with cd(omnibus_dir):
         # TODO: add current bundle location to PATH if this works
-        run("[ -f bin/omnibus ] || install --binstubs")
+        run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
             'OMNIBUS_BUILD_VERSION': version,
