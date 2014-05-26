@@ -151,6 +151,7 @@ def local_export():
 
 
 def build_omnibus_deps():
+    os.environ['PATH'] = ''.join([os.environ['PATH'], ':', '/opt/rubies/ruby-2.1.1/bin'])
     # rm old installation
     run("rm -rf /opt/%s" % project)
     # rm cache
@@ -178,6 +179,7 @@ def build_omnibus_deps():
 
 
 def build_omnibus():
+    os.environ['PATH'] = ''.join([os.environ['PATH'], ':', '/opt/rubies/ruby-2.1.1/bin'])
     # rm old installation
     run("rm -rf /opt/%s" % project)
     run("rm -f /var/cache/omnibus/pkg/{0}*".format(project))
