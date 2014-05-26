@@ -166,7 +166,7 @@ def build_omnibus_deps():
             'OMNIBUS_BUILD_DEPS': 'yes',
         }
         with shell_env(**env):
-            run("bin/omnibus clean package-scripts/%s" % project)
+            run("bin/omnibus clean %s" % project)
             run("bin/omnibus build project %s" % project)
             run("rm -rf /var/cache/omnibus/pkg/*")
     #run("exit")
