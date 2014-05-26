@@ -151,6 +151,7 @@ def local_export():
 
 
 def build_omnibus_deps():
+    run('sudo su')
     run('export PATH=$PATH:/opt/rubies/ruby-2.1.1/bin')
     print_green(run('echo $PATH'))
     print_green(run('whoami'))
@@ -181,6 +182,7 @@ def build_omnibus_deps():
 
 
 def build_omnibus():
+    run('sudo su')
     run('export PATH=$PATH:/opt/rubies/ruby-2.1.1/bin')
     print_green(run('echo path'))
     print_green(run('whoami'))
