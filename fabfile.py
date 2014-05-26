@@ -17,7 +17,7 @@ omnibus_dir = os.path.join(build_dir, 'omnibus')
 project_dir = os.path.join(home_dir, project)
 build_number_file = os.path.join(project_dir, '.build_number')
 omnibus_md5sum_file = os.path.join(project_dir, '.omnibus.md5')
-#os.environ['PATH'] = ''.join([os.environ['PATH'], ':', run('which bundler')])
+os.environ['PATH'] = ''.join([os.environ['PATH'], ':', '/opt/rubies/ruby-2.1.1/bin/'])
 build_number = None
 artifacts_dir = None
 tag = None
@@ -159,13 +159,13 @@ def build_omnibus_deps():
     #run("sudo su")
     with cd(omnibus_dir):
         # TODO: add current bundle location to PATH if this works
-        run("[ -f bin/omnibus ] || /opt/rubies/ruby-2.1.1/bin/bundle install --binstubs")
+        run("[ -f bin/omnibus ] || install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
             'OMNIBUS_BUILD_DEPS': 'yes',
         }
         with shell_env(**env):
-            run("bin/omnibus clean %s" % project)
+            run("bin/omnibus clean package-scripts/%s" % project)
             run("bin/omnibus build project %s" % project)
             run("rm -rf /var/cache/omnibus/pkg/*")
     #run("exit")
@@ -190,7 +190,7 @@ def build_omnibus():
     #run('sudo su')
     with cd(omnibus_dir):
         # TODO: add current bundle location to PATH if this works
-        run("[ -f bin/omnibus ] || /opt/rubies/ruby-2.1.1/bin/bundle install --binstubs")
+        run("[ -f bin/omnibus ] || install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
             'OMNIBUS_BUILD_VERSION': version,
