@@ -8,7 +8,7 @@ install_path    "/opt/scalarizr"
 if ENV['OMNIBUS_BUILD_VERSION']
     build_version   ENV['OMNIBUS_BUILD_VERSION']
 else
-    build_version   Omnibus::BuildVersion.new.semver
+    build_version   1 #Omnibus::BuildVersion.new.semver
 end
 build_iteration 1
 
