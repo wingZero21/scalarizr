@@ -15,7 +15,7 @@ build_iteration 1
 # creates required build directories
 dependency "preparation"
 
-if ENV['OMNIBUS_BUILD_BASE'] == 'y'
+if ENV['OMNIBUS_BUILD_BASE']
     dependency "scalarizr-deps"
 else
     dependency "scalarizr"

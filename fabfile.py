@@ -163,7 +163,7 @@ def build_omnibus_deps():
         run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
-            'OMNIBUS_BUILD_DEPS': 'yes',
+            'OMNIBUS_BUILD_DEPS': '1',
         }
         with shell_env(**env):
             run("bin/omnibus clean %s" % project)
