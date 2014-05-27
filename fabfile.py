@@ -158,11 +158,60 @@ def local_export():
 
 
 def build_omnibus_deps():
+    pass
     # rm old installation
+    # print_green('building omnibus dependencies')
+    # run("rm -rf /opt/%s" % project)
+    # # rm cache
+    # run("rm -rf /var/cache/ci/%s" % project)
+    # # build base installation
+
+    # with cd(omnibus_dir):
+    #     # TODO: add current bundle location to PATH if this works
+    #     run("[ -f bin/omnibus ] || bundle install --binstubs")
+    #     env = {
+    #         'BUILD_DIR': build_dir,
+    #         'OMNIBUS_BUILD_DEPS': '1',
+    #     }
+    #     with shell_env(**env):
+    #         run("bin/omnibus clean %s" % project)
+    #         run("bin/omnibus build project %s --log-level=info" % project)
+    #         run("rm -rf /var/cache/omnibus/pkg/*")
+
+    # # save to cache
+    # run("mkdir -p /var/cache/ci")
+    # run("mv /opt/%s /var/cache/ci/%s" % (project, project))
+    # # save md5sum
+    # with open(omnibus_md5sum_file, 'w+') as fp:
+    #     fp.write(omnibus_md5sum())
+
+
+def build_omnibus():
+    # rm old installation
+    print_green('building omnibus with dependencies')
+    # run("rm -rf /opt/%s" % project)
+    # run("rm -f /var/cache/omnibus/pkg/{0}*".format(project))
+    # # copy base installation
+    # run("cp -r /var/cache/ci/%s /opt/" % project)
+    # # bump project version
+    # with cd(build_dir):
+    #     run("echo '%s' >version" % (version, ))
+    # # build project
+    # with cd(omnibus_dir):
+    #     # TODO: add current bundle location to PATH if this works
+    #     run("[ -f bin/omnibus ] || bundle install --binstubs")
+    #     env = {
+    #         'BUILD_DIR': build_dir,
+    #         'OMNIBUS_BUILD_VERSION': version,
+    #     }
+    #     with shell_env(**env):
+    #         run("bin/omnibus build project  %s" % project)
+
+    # TODO: cleanup this method
     print_green('building omnibus dependencies')
     run("rm -rf /opt/%s" % project)
     # rm cache
-    run("rm -rf /var/cache/ci/%s" % project)
+    # run("rm -rf /var/cache/ci/%s" % project)
     # build base installation
 
     with cd(omnibus_dir):
@@ -174,37 +223,15 @@ def build_omnibus_deps():
         }
         with shell_env(**env):
             run("bin/omnibus clean %s" % project)
-            run("bin/omnibus build project %s" % project)
+            run("bin/omnibus build project %s --log-level=info" % project)
             run("rm -rf /var/cache/omnibus/pkg/*")
 
     # save to cache
-    run("mkdir -p /var/cache/ci")
-    run("mv /opt/%s /var/cache/ci/%s" % (project, project))
+    # run("mkdir -p /var/cache/ci")
+    # run("mv /opt/%s /var/cache/ci/%s" % (project, project))
     # save md5sum
     with open(omnibus_md5sum_file, 'w+') as fp:
         fp.write(omnibus_md5sum())
-
-
-def build_omnibus():
-    # rm old installation
-    print_green('building omnibus')
-    run("rm -rf /opt/%s" % project)
-    run("rm -f /var/cache/omnibus/pkg/{0}*".format(project))
-    # copy base installation
-    run("cp -r /var/cache/ci/%s /opt/" % project)
-    # bump project version
-    with cd(build_dir):
-        run("echo '%s' >version" % (version, ))
-    # build project
-    with cd(omnibus_dir):
-        # TODO: add current bundle location to PATH if this works
-        run("[ -f bin/omnibus ] || bundle install --binstubs")
-        env = {
-            'BUILD_DIR': build_dir,
-            'OMNIBUS_BUILD_VERSION': version,
-        }
-        with shell_env(**env):
-            run("bin/omnibus build project  %s" % project)
 
 
 @task
