@@ -8,6 +8,7 @@ Created on Aug 29, 2010
 import socket
 import string
 import os
+import sys
 import time
 import re
 from threading import local

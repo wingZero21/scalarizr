@@ -79,7 +79,16 @@ class Ec2Platform(Ec2LikePlatform):
         region = self.get_region()
         self._logger.debug("Return ec2 connection (region: %s)", region)  
         key_id, key = self.get_access_keys()
-        return boto.ec2.connect_to_region(region, aws_access_key_id=key_id, aws_secret_access_key=key)
+        proxy = self._access_data.get('proxy', {})
+        if proxy.get('host'):
+            self._logger.debug('Use proxy %s:%s for EC2 connection', proxy['host'], proxy.get('port'))
+        return boto.ec2.connect_to_region(region, 
+                aws_access_key_id=key_id, 
+                aws_secret_access_key=key,
+                proxy=proxy.get('host'),
+                proxy_port=proxy.get('port'),
+                proxy_user=proxy.get('user'),
+                proxy_pass=proxy.get('pass'))
 
 
     def new_s3_conn(self):
@@ -87,7 +96,17 @@ class Ec2Platform(Ec2LikePlatform):
         endpoint = self._s3_endpoint(region)
         key_id, key = self.get_access_keys()
         self._logger.debug("Return s3 connection (endpoint: %s)", endpoint)
-        return boto.connect_s3(host=endpoint, aws_access_key_id=key_id, aws_secret_access_key=key)
+        proxy = self._access_data.get('proxy', {})
+        if proxy.get('host'):
+            self._logger.debug('Use proxy %s:%s for S3 connection', proxy['host'], proxy.get('port'))
+        return boto.connect_s3(
+                host=endpoint, 
+                aws_access_key_id=key_id, 
+                aws_secret_access_key=key, 
+                proxy=proxy.get('host'),
+                proxy_port=proxy.get('port'),
+                proxy_user=proxy.get('user'),
+                proxy_pass=proxy.get('pass'))
 
 
     @property

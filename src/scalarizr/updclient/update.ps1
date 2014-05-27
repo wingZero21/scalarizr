@@ -228,9 +228,11 @@ param (
     [switch] $force
 )
     if ($force -or (get-service "ScalrUpdClient" -errorAction silentlyContinue)) {
-        log "Starting services"
-        $servicesToOperate | foreach {
+        #log "Starting services"
+        @("ScalrUpdClient") | foreach {
+        #$servicesToOperate | foreach {
             $name = $_
+            log "Starting $name"
             start-service $name
             log "Service $name started, waiting"  
             sleep 2
@@ -286,11 +288,11 @@ function main {
         if (test-path $installDir) {
             $script:installedVersion = getSzrVersion
         }
-        setSzrState "in-progress/download-package"
-        $packageFile = downloadFile $url
-        setSzrState "in-progress/stop"
-        stopAllSzrServices
         try {
+            setSzrState "in-progress/download-package"
+            $packageFile = downloadFile $url
+            setSzrState "in-progress/stop"
+            stopAllSzrServices
             createSzrBackup
             try {
                 setSzrState "in-progress/install"

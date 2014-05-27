@@ -40,7 +40,7 @@ class Repository(object):
 
     def ensure(self):
         assert self.filename and self.config
-        LOG.info('Creating repository at: %s', self.filename)
+        LOG.info('Creating repository configuration in: %s', self.filename)
         with open(self.filename, 'w+') as fp:
             fp.write(self.config)
 
@@ -94,7 +94,7 @@ class PackageMgr(object):
         backup_dir = self._find_backup_dir(name, installed) if installed else None
         return {
             'installed': installed,
-            'candidate': candidate if installed and installed != candidate else None,
+            'candidate': candidate if candidate and installed != candidate else None,
             'backup_id': os.path.basename(backup_dir) if backup_dir else None
         }
 

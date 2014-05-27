@@ -36,7 +36,8 @@ STORAGE_VOLUME_CNF = 'rabbitmq.json'
 RABBITMQ_MGMT_PLUGIN_NAME = 'rabbitmq_management'
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
 RABBITMQ_ENV_CFG_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
-
+inet_dist_listen_min = 40100
+inet_dist_listen_max = 40150
 
 
 
@@ -90,7 +91,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         self._insert_iptables_rules()
 
         if 'running' == __node__['state']:
-            self._set_nodename_in_env()
+            self._prepare_env_config()
             rabbitmq_vol = __rabbitmq__['volume']
 
             if not __rabbitmq__['volume'].mounted_to():
@@ -121,7 +122,9 @@ class RabbitMQHandler(ServiceCtlHandler):
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '5672'},
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '15672'},
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '55672'},
-                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'}
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '%d:%d' %
+                                                                        (inet_dist_listen_min, inet_dist_listen_max)}
             ])
 
 
@@ -158,7 +161,10 @@ class RabbitMQHandler(ServiceCtlHandler):
             finally:
                 self.service.start()
 
-            panel_url = 'http://%s:55672/mgmt/' % self.platform.get_public_ip()
+            rabbit_version = software.rabbitmq_software_info()
+            panel_port = 55672 if rabbit_version.version <= (3, 0, 0) else 15672
+
+            panel_url = 'http://%s:%d/mgmt/' % (self.platform.get_public_ip(), panel_port)
             msg_body = dict(status='ok', cpanel_url=panel_url)
         except:
             error = str(sys.exc_info()[1])
@@ -234,22 +240,13 @@ class RabbitMQHandler(ServiceCtlHandler):
             self.service.stop()
 
 
-    def _set_nodename_in_env(self):
+    def _prepare_env_config(self):
         node_name = rabbitmq_svc.NODE_HOSTNAME_TPL % __rabbitmq__['hostname']
         os.environ.update(dict(RABBITMQ_NODENAME=node_name))
-
-        env_cfg = ''
-        if os.path.exists(RABBITMQ_ENV_CFG_PATH):
-            with open(RABBITMQ_ENV_CFG_PATH) as f:
-                env_cfg = f.read()
-
-        if 'RABBITMQ_NODENAME' in env_cfg:
-            env_cfg = re.sub(re.compile('^(RABBITMQ_NODENAME=(?!%s).*)$' % node_name, re.M), '#\g<0>', env_cfg)
-        if not re.search(re.compile('^RABBITMQ_NODENAME=%s' % node_name, re.M), env_cfg):
-            env_cfg += '\nRABBITMQ_NODENAME=%s' % node_name
-
         with open(RABBITMQ_ENV_CFG_PATH, 'w') as f:
-            f.write(env_cfg)
+            f.write('RABBITMQ_NODENAME=%s\n' % node_name)
+            f.write('RABBITMQ_SERVER_ERL_ARGS="-kernel inet_dist_listen_min %d -kernel inet_dist_listen_max %d"\n' %
+                    (inet_dist_listen_min, inet_dist_listen_max))
 
 
     def on_host_init_response(self, message):
@@ -264,6 +261,8 @@ class RabbitMQHandler(ServiceCtlHandler):
         if not rabbitmq_data['password']:
             rabbitmq_data['password'] = cryptotool.pwgen(10)
 
+        self.service.stop()
+
         self.cleanup_hosts_file('/')
 
         if os.path.exists(RABBITMQ_ENV_CFG_PATH):
@@ -277,12 +276,10 @@ class RabbitMQHandler(ServiceCtlHandler):
 
         self._logger.info('Performing initial cluster reset')
 
-        self.service.stop()
-
         hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
         __rabbitmq__['hostname'] = hostname
         dns.ScalrHosts.set('127.0.0.1', hostname)
-        self._set_nodename_in_env()
+        self._prepare_env_config()
 
         self.service.start()
         self.rabbitmq.stop_app()

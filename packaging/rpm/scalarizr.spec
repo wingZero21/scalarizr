@@ -46,7 +46,6 @@ Requires:		e2fsprogs
 Requires:       rsync >= 2.6.8
 Requires:       tar
 Obsoletes:      scalr-upd-client
-Obsoletes:      scalarizr-devtools
 
 BuildArch:      noarch
 BuildRoot:      %{_tmppath}/%{name}-buildroot
@@ -93,6 +92,10 @@ Requires:       euca2ools >= 3.0.2
 %description -n scalarizr-eucalyptus
 Scalarizr converts any server to Scalr-manageable node
 
+%post -n scalarizr-eucalyptus
+set -x
+
+sed -i 's/platform = ec2/platform = eucalyptus/i' /etc/scalr/public.d/config.ini
 
 %package -n scalarizr-rackspace
 Summary:        Scalarizr Rackspace edition
@@ -116,6 +119,11 @@ Conflicts:		scalarizr-idcf
 
 %description -n scalarizr-rackspace
 Scalarizr converts any server to Scalr-manageable node
+
+%post -n scalarizr-rackspace
+set -x
+
+sed -i 's/platform = ec2/platform = rackspace/i' /etc/scalr/public.d/config.ini
 
 
 %package -n scalarizr-openstack
@@ -147,6 +155,10 @@ Conflicts:		scalarizr-idcf
 %description -n scalarizr-openstack
 Scalarizr converts any server to Scalr-manageable node
 
+%post -n scalarizr-openstack
+set -x
+
+sed -i 's/platform = ec2/platform = openstack/i' /etc/scalr/public.d/config.ini
 
 %package -n scalarizr-cloudstack
 Summary:        Scalarizr CloudStack (cloud.com) edition
@@ -170,6 +182,11 @@ Conflicts:		scalarizr-idcf
 %description -n scalarizr-cloudstack
 Scalarizr converts any server to Scalr-manageable node
 
+%post -n scalarizr-cloudstack
+set -x
+
+sed -i 's/platform = ec2/platform = cloudstack/i' /etc/scalr/public.d/config.ini
+
 %package -n scalarizr-ucloud
 Summary:        Scalarizr uCloud (Korea Telecom) edition
 Group:          Applications/Internet
@@ -190,6 +207,10 @@ Conflicts:		scalarizr-idcf
 %description -n scalarizr-ucloud
 Scalarizr converts any server to Scalr-manageable node
 
+%post -n scalarizr-ucloud
+set -x
+
+sed -i 's/platform = ec2/platform = ucloud/i' /etc/scalr/public.d/config.ini
 
 %package -n scalarizr-idcf
 Summary:        Scalarizr IDCF edition
@@ -211,6 +232,10 @@ Conflicts:		scalarizr-ucloud
 %description -n scalarizr-idcf
 Scalarizr converts any server to Scalr-manageable node
 
+%post -n scalarizr-idcf
+set -x
+
+sed -i 's/platform = ec2/platform = idcf/i' /etc/scalr/public.d/config.ini
 
 %package -n scalarizr-nimbula
 Summary:        Scalarizr Nimbula edition
@@ -228,6 +253,10 @@ Conflicts:		scalarizr-idcf
 %description -n scalarizr-nimbula
 Scalarizr converts any server to Scalr-manageable node
 
+%post -n scalarizr-nimbula
+set -x
+
+sed -i 's/platform = ec2/platform = nimbula/i' /etc/scalr/public.d/config.ini
 
 %package -n scalarizr-gce
 Summary:        Scalarizr Google Compute Engine edition
@@ -246,6 +275,11 @@ Conflicts:		scalarizr-idcf
 
 %description -n scalarizr-gce
 Scalarizr converts any server to Scalr-manageable node
+
+%post -n scalarizr-gce
+set -x
+
+sed -i 's/platform = ec2/platform = gce/i' /etc/scalr/public.d/config.ini
 
 
 
@@ -319,9 +353,11 @@ if compare_versions "$installed_version" lt '0.9.r4762-1'; then
 	fi
 fi
 
-if compare_versions "$installed_version" lt '2.5.13'; then
-    # scalr-upd-client binary here still points to old python module
-	%{__python} -m scalarizr.updclient.app --make-status-file
+if compare_versions "$installed_version" lt '2.7.7'; then
+	if [ -f "$priv_cnf_dir/.state" ] && [ $(cat "$priv_cnf_dir/.state") = 'running' ]; then
+    	# scalr-upd-client binary here still points to old python module
+		%{__python} -m scalarizr.updclient.app --make-status-file --downgrades-disabled
+	fi
 fi
 
 sync

@@ -220,6 +220,17 @@ class PopenError(BaseException):
     def proc_args(self):
         return self.args[4]
 
+
+def apply_english_env(env):
+    """
+    Forces LANG and/or LANGUAGE to be English.
+    Forces encoding to UTF-8 for subprocesses.
+    """
+    for name in ('LANG', 'LANGUAGE'):
+        if not env.get(name, '').startswith('en'):
+            env[name] = 'en_US.UTF-8'
+
+
 def system2(*popenargs, **kwargs):
     import subprocess, cStringIO
     
@@ -254,18 +265,9 @@ def system2(*popenargs, **kwargs):
         popenargs = list(popenargs)
         popenargs[0] = tuple('%s' % arg for arg in popenargs[0])
         
-
-    if not 'env' in kwargs:
-        kwargs['env'] = os.environ
-        
-    # Set en_US locale or C
-    if not kwargs['env'].get('LANG'):
-        default_locale = locale.getdefaultlocale()
-        if default_locale == ('en_US', 'UTF-8'):
-            kwargs['env']['LANG'] = 'en_US.UTF-8'
-        else:
-            kwargs['env']['LANG'] = 'C'
-    
+    env = kwargs.setdefault('env', dict(os.environ.items()))
+    apply_english_env(env)
+   
     logger.debug('system: %s' % (popenargs[0],))
     p = subprocess.Popen(*popenargs, **kwargs)
     out, err = p.communicate(input=input)

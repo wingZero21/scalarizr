@@ -28,13 +28,17 @@ class OpenstackServiceWrapper(object):
     def _make_connection(self, **kwargs):
         raise NotImplementedError()
 
-    def __init__(self, user, password, tenant, auth_url, region_name=None):
+    def __init__(self, user, password, tenant, auth_url, region_name=None, ssl_verify_peer=True):
         self.user = user
         self.password = password
         self.tenant = tenant
         self.auth_url = auth_url
         self.region_name = region_name
         self.auth_plugin = None
+        if isinstance(ssl_verify_peer, basestring):
+            ssl_verify_peer = bool(ssl_verify_peer)
+        self.ssl_verify_peer = ssl_verify_peer
+
         if os.environ.get('OS_AUTH_SYSTEM'):
             try:
                 import novaclient.auth_plugin
@@ -48,7 +52,10 @@ class OpenstackServiceWrapper(object):
         return getattr(self.connection, name)
 
     def reconnect(self):
-        self.connection = self._make_connection()
+        kwds = {}
+        if not self.ssl_verify_peer:
+            kwds['insecure'] = True
+        self.connection = self._make_connection(**kwds)
 
     #TODO: make connection check more properly
     def has_connection(self):
@@ -197,6 +204,7 @@ class OpenstackPlatform(platform.Platform):
                         rawmeta = fp.read()
                     if not rawmeta:
                         raise platform.PlatformError("Empty user-data")
+                    self._logger.info('Use user-data from %s', path)
                     return self._parse_user_data(rawmeta)
         return self._userdata
 
@@ -220,7 +228,8 @@ class OpenstackPlatform(platform.Platform):
                              password or api_key,
                              self._access_data["tenant_name"],
                              self._access_data["keystone_url"],
-                             self._access_data["cloud_location"])
+                             self._access_data["cloud_location"],
+                             self._access_data.get('ssl_verify_peer', True))
 
     def new_nova_connection(self):
         if not self._access_data:
@@ -231,7 +240,8 @@ class OpenstackPlatform(platform.Platform):
                            password or api_key,
                            self._access_data["tenant_name"],
                            self._access_data["keystone_url"],
-                           self._access_data["cloud_location"])
+                           self._access_data["cloud_location"],
+                           self._access_data.get('ssl_verify_peer', True))
 
     def new_swift_connection(self):
         if not self._access_data:
@@ -247,6 +257,7 @@ class OpenstackPlatform(platform.Platform):
         else:
             kwds['auth_version'] = '2'
             kwds['tenant_name'] = self._access_data["tenant_name"]
+        kwds['insecure'] = not bool(self._access_data.get('ssl_verify_peer', True))
 
         return swiftclient.Connection(keystone_url, 
                     self._access_data["username"],
