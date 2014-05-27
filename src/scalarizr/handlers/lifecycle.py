@@ -287,7 +287,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             # only mysql2 should be returned to Scalr
             try:
                 behs.remove('mysql')
-            except IndexError:
+            except (IndexError, ValueError):
                 pass
         msg.body['behaviour'] = behs
         bus.fire("before_hello", msg)
