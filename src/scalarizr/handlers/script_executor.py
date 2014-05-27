@@ -234,6 +234,7 @@ class ScriptExecutor(Handler):
             return
 
         scripts = []
+        scripts_qty = 0
 
         if 'scripts' in message.body:
             if not message.body['scripts']:
@@ -381,6 +382,8 @@ class Script(object):
             raise HandlerError("Can't execute script '%s' cause "
                 "interpreter '%s' not found" % (self.name, self.interpreter))
 
+        self.elapsed_time = 0
+
     def start(self):
         if not self.path:
             # Write script to disk, prepare execution
@@ -454,7 +457,7 @@ class Script(object):
             if not os.path.exists(self.stderr_path):
                 open(self.stderr_path, 'w+').close()
 
-            elapsed_time = time.time() - self.start_time
+            self.elapsed_time = time.time() - self.start_time
             self.logger.debug('Finished %s'
                             '\n  %s'
                             '\n  1: %s'
@@ -465,7 +468,7 @@ class Script(object):
                             format_size(os.path.getsize(self.stdout_path)),
                             format_size(os.path.getsize(self.stderr_path)),
                             self.return_code,
-                            elapsed_time)
+                            self.elapsed_time)
 
         except:
             if threading.currentThread().name != 'MainThread':
@@ -486,7 +489,7 @@ class Script(object):
             stdout=stdout,
             stderr=stderr,
             execution_id=self.execution_id,
-            time_elapsed=elapsed_time,
+            time_elapsed=self.elapsed_time,
             script_name=self.name,
             script_path=self.exec_path,
             event_name=self.event_name or '',
