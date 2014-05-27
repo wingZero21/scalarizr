@@ -129,7 +129,7 @@ def git_export():
     run("mkdir -p %s" % build_dir)
     put(archive, build_dir)
     local('rm -f %s' % archive)
-    put(archive, build_dir)
+
     with cd(build_dir):
         run("tar -xf %s" % archive)
 
@@ -145,7 +145,7 @@ def local_export():
     run("mkdir -p %s" % build_dir)
     put(archive, build_dir)
     local('rm -f %s' % archive)
-    put(archive, build_dir)
+
     with cd(build_dir):
         run("tar -xf %s" % archive)
 
