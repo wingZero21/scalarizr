@@ -805,19 +805,14 @@ def get_role_servers(role_id=None, role_name=None):
 
 
 def sync_globals(glob_vars=None):
+    if linux.os.windows:
+        return
     if not glob_vars:
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
-    if linux.os.windows:
-        glob_vars['public'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['public'].items())
-        glob_vars['private'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['private'].items())
-    os.environ.update(glob_vars['public'])
-    os.environ.update(glob_vars['private'])
-
-    if not linux.os.windows:
-        globals_path = '/etc/profile.d/scalr_globals.sh'
-        with open(globals_path, 'w') as fp:
-            for k, v in glob_vars['public'].items():
-                v = v.replace('"', '\\"')
-                fp.write('export %s="%s"\n' % (k, v))
-        os.chmod(globals_path, 0644)
+    globals_path = '/etc/profile.d/scalr_globals.sh'
+    with open(globals_path, 'w') as fp:
+        for k, v in glob_vars['public'].items():
+            v = v.replace('"', '\\"')
+            fp.write('export %s="%s"\n' % (k, v))
+    os.chmod(globals_path, 0644)
