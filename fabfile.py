@@ -129,6 +129,7 @@ def git_export():
     run("mkdir -p %s" % build_dir)
     put(archive, build_dir)
     local('rm -f %s' % archive)
+    put(archive, build_dir)
     with cd(build_dir):
         run("tar -xf %s" % archive)
 
@@ -150,14 +151,12 @@ def local_export():
 
 
 def build_omnibus_deps():
-    print_green(run('echo $PATH'))
-    print_green(run('whoami'))
     # rm old installation
     run("rm -rf /opt/%s" % project)
     # rm cache
     run("rm -rf /var/cache/ci/%s" % project)
     # build base installation
-    #run("sudo su")
+
     with cd(omnibus_dir):
         # TODO: add current bundle location to PATH if this works
         run("[ -f bin/omnibus ] || bundle install --binstubs")
@@ -169,7 +168,7 @@ def build_omnibus_deps():
             run("bin/omnibus clean %s" % project)
             run("bin/omnibus build project %s" % project)
             run("rm -rf /var/cache/omnibus/pkg/*")
-    #run("exit")
+
     # save to cache
     run("mkdir -p /var/cache/ci")
     run("mv /opt/%s /var/cache/ci/%s" % (project, project))
@@ -179,9 +178,6 @@ def build_omnibus_deps():
 
 
 def build_omnibus():
-
-    print_green(run('echo path'))
-    print_green(run('whoami'))
     # rm old installation
     run("rm -rf /opt/%s" % project)
     run("rm -f /var/cache/omnibus/pkg/{0}*".format(project))
@@ -191,7 +187,6 @@ def build_omnibus():
     with cd(build_dir):
         run("echo '%s' >version" % (version, ))
     # build project
-    #run('sudo su')
     with cd(omnibus_dir):
         # TODO: add current bundle location to PATH if this works
         run("[ -f bin/omnibus ] || bundle install --binstubs")
@@ -201,8 +196,6 @@ def build_omnibus():
         }
         with shell_env(**env):
             run("bin/omnibus build project  %s" % project)
-
-    #run('exit')
 
 
 @task
