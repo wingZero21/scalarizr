@@ -33,6 +33,7 @@ from scalarizr.queryenv import ScalingMetric
 from scalarizr.api.binding import jsonrpc_http
 from scalarizr.handlers import script_executor
 
+
 LOG = logging.getLogger(__name__)
 
 

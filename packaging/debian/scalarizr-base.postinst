@@ -530,8 +530,10 @@ if [ -n "$installed_version" ]; then
 		fi
 	fi
 
-	if dpkg --compare-versions "$installed_version" lt '2.5.13'; then
-		python -m scalarizr.updclient.app --make-status-file
+	if dpkg --compare-versions "$installed_version" lt '2.7.7'; then
+		if [ -f "$priv_cnf_dir/.state" ] && [ $(cat "$priv_cnf_dir/.state") = 'running' ]; then
+			python -m scalarizr.updclient.app --make-status-file  --downgrades-disabled
+		fi
 	fi
 fi
 
@@ -540,6 +542,10 @@ chmod 775 /etc/scalr/private.d
 sync
 
 rm -f /usr/local/bin/szradm
+if [ ! -d /usr/local/bin ]; then
+	mkdir -p /usr/local/bin
+	chmod 755 /usr/local/bin
+fi
 ln -s /usr/bin/szradm /usr/local/bin/szradm
 
 fi
@@ -549,6 +555,8 @@ NAME="scalarizr"
 INIT_SCRIPT="/etc/init.d/$NAME"
 
 
+# We've reverted back scalarizr autostart because some clients have scalarizr bundled without scalr-upd-client,
+# and Ubuntu 10.04 init doesn't execute new init scripts, that was installed during init
 if [ -x $INIT_SCRIPT ]; then
 	if which insserv > /dev/null && test -e /etc/issue.net && ! grep -q 'Ubuntu' /etc/issue.net; then
 		insserv -r scalarizr_update || :
@@ -560,7 +568,8 @@ if [ -x $INIT_SCRIPT ]; then
 		rm -f /etc/init.d/scalarizr_update
 		update-rc.d scalarizr_update remove || :
 		update-rc.d -f $NAME remove || :
-		update-rc.d scalarizr stop 99 0 1 6 .
+		#update-rc.d scalarizr stop 99 0 1 6 .
+		update-rc.d $NAME defaults 99 >/dev/null
 		update-rc.d scalr-upd-client defaults 98 >/dev/null
 	fi
 

@@ -80,13 +80,17 @@ class UpdClient(util.Server):
         self.optparser = optparse.OptionParser(option_list=(
             optparse.Option('-d', '--daemonize', action='store_true', help='daemonize process'),
             optparse.Option('-P', '--pid-file', default=self.pid_file, help='file to store PID in'),
+            optparse.Option('-r', '--set-repository', 
+                help="[option removed]"),
             optparse.Option('-l', '--log-file', default=self.log_file, help='log file'),
             optparse.Option('-v', '--verbose', action='store_true', default=self.verbose, 
                             help='verbose logging'),
             optparse.Option('--get-system-id', action='store_true', default=False, 
                             help='print system-id and exit'),
             optparse.Option('--make-status-file', action='store_true', default=False,
-                            help='make status file with current state and exit')
+                            help='make status file with current state and exit'),
+            optparse.Option('--downgrades-disabled', action='store_true', default=False,
+                            help="works only with --make-status-file (introduced for migration to new update system")
         ))
         self.api = update_api.UpdClientAPI()       
 
@@ -128,6 +132,9 @@ class UpdClient(util.Server):
         util.init_logging(self.log_file, self.verbose)
         self._wait_network()
 
+        if self.__dict__.get('set_repository'):
+            print '-r|--set-repository no more works, cause updates are controlled from Scalr'
+            sys.exit(0)
         if self.__dict__.get('get_system_id'):
             try:
                 print self.api.get_system_id()
@@ -139,6 +146,8 @@ class UpdClient(util.Server):
             if os.path.exists(self.api.status_file):
                 os.unlink(self.api.status_file)
             self.api.bootstrap(dry_run=True)
+            if self.__dict__.get('downgrades_disabled'):
+                self.api.downgrades_enabled = False
             self.api.store()
             print 'saved status file: {0}'.format(self.api.status_file)
             sys.exit() 
@@ -264,7 +273,8 @@ class UpdClient(util.Server):
 
 def main():
 
-    if linux.os.windows_family:
+    if linux.os.windows_family \
+            and not ('--make-status-file' in sys.argv or '--get-system-id' in sys.argv):
         win32serviceutil.HandleCommandLine(WindowsService)
     else:
         svs = UpdClient()

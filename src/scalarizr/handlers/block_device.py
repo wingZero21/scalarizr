@@ -5,6 +5,7 @@ Created on Oct 13, 2011
 '''
 
 import os
+import sys
 import logging
 
 from scalarizr.bus import bus
@@ -72,7 +73,11 @@ class BlockDeviceHandler(handlers.Handler):
             volumes = volumes or []  # Cast to list
             for vol in volumes:
                 vol = storage2.volume(vol)
-                vol.ensure(mount=bool(vol.mpoint))
+                try:
+                    vol.ensure(mount=bool(vol.mpoint))
+                except:
+                    # It may be because of missing cloud credentials, we shouldn't stop initialization
+                    LOG.warn("Can't ensure volume {0}. Error: {1}".format(dict(vol), sys.exc_info()[1]))
 
     def on_before_host_init(self, *args, **kwargs):
         if linux.os.windows_family:
@@ -229,14 +234,7 @@ class BlockDeviceHandler(handlers.Handler):
                 logger = bus.init_op.logger if bus.init_op else LOG
                 logger.info('Ensure %s: take %s, mount to %s', self._vol_type, vol.id, vol.mpoint)
 
-                vol.ensure(mount=True, mkfs=True, fstab=True)
-                bus.fire("block_device_mounted", 
-                        volume_id=vol.id, device=vol.device)
-                self.send_message(Messages.BLOCK_DEVICE_MOUNTED, 
-                    {"device_name": vol.device, 
-                    "volume_id": vol.id, 
-                    "mountpoint": vol.mpoint}
-                )                
+                vol.ensure(mount=True, mkfs=True, fstab=True)               
         except:
             LOG.exception("Can't attach volume")
 

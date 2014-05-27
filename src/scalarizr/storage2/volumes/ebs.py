@@ -42,9 +42,20 @@ def device2name(device):
 
 
 def get_free_name():
-    # Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-    s = 7 if linux.os['release'] and linux.os.redhat_family else 5
+    if linux.os.ubuntu and linux.os['release'] >= (14, 4):
+        # ubuntu 14.04 returns Attachment point /dev/sdf is already in used
+        s = 6
+    elif linux.os['release'] and linux.os.redhat_family:
+        # rhel 6 returns "Null body" when attach to /dev/sdf
+        s = 7
+    else:
+        s = 5
     available = set(string.ascii_lowercase[s:16])        
+
+    # Ubuntu 14.04 failed to attach volumes on device names mentioned in block device mapping, 
+    # even if this instance type doesn't support them and OS has not such devices
+    ephemerals = set(device[-1] for device in __node__['platform'].get_block_device_mapping().values())
+    available = available - ephemerals
 
     conn = __node__['ec2']['connect_ec2']()
     filters = {
@@ -388,12 +399,23 @@ class EbsVolume(base.Volume, EbsMixin):
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
         LOG.debug('Creating snapshot of EBS volume %s', volume)
         coreutils.sync()
-        snapshot = self._conn.create_snapshot(volume, description)
-        LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
-        if tags:
-            self._create_tags_async(snapshot.id, tags)
-        if not nowait:
-            self._wait_snapshot(snapshot)
+
+        # conn.create_snapshot leaks snapshots when RequestLimitExceeded occured 
+        params = {'VolumeId': volume}
+        if description:
+            params['Description'] = description[0:255]
+        snapshot = self._conn.get_object('CreateSnapshot', params, 
+                    boto.ec2.snapshot.Snapshot, verb='POST')
+
+        try:
+            LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
+            if tags:
+                self._create_tags_async(snapshot.id, tags)
+            if not nowait:
+                self._wait_snapshot(snapshot)
+        except boto.exception.BotoServerError, e:
+            if e.code != 'RequestLimitExceeded':
+                raise
         return snapshot
 
 

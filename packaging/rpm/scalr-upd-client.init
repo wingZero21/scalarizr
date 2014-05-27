@@ -33,6 +33,13 @@ upd_stop_daemon() {
 	echo -n "stopping $NAME"
 	if upd_running; then
 		if killproc -p $PID_FILE $PYTHON -INT; then
+			sleep 1
+			zomby_pids=$(ps -efww | grep 'bin/scalr-upd-client' | awk '{ print $2 }')
+			if [ "$zomby_pids" ]; then
+				for zomby_pid in $zomby_pids; do
+					kill -9 $zomby_pid 2>/dev/null
+				done
+			fi
 			success
 		else
 			failure
@@ -60,7 +67,6 @@ upd_reload_daemon() {
 
 upd_restart_daemon() {
 	upd_stop_daemon
-	sleep 1
 	upd_start_daemon
 }
 

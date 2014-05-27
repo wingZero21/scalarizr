@@ -118,9 +118,15 @@ class SnapBackup(Backup):
             snap = self.volume.snapshot(self.description, tags=self.tags)
         finally:
             self.fire('unfreeze', self.volume, state)
-        util.wait_until(lambda: snap.status() in (snap.COMPLETED, snap.FAILED),
-                                start_text='Polling snapshot status (%s)' % snap.id,
-                                logger=LOG)
+        try:
+            util.wait_until(lambda: snap.status() in (snap.COMPLETED, snap.FAILED),
+                                    start_text='Polling snapshot status (%s)' % snap.id,
+                                    logger=LOG)
+        except:
+            if 'Request limit exceeded' in str(sys.exc_info()[1]):
+                pass
+            else:
+                raise
         if snap.status() == snap.FAILED:
             msg = 'Backup failed because snapshot %s failed' % snap.id
             raise Error(msg)

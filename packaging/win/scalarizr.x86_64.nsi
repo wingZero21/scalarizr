@@ -98,10 +98,10 @@ Function .onInit
   Call CompareVersions
   Pop $R0
     
-  ${If} $R0 == 1
-    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} version ($installed_version-$installed_release) installed." /SD IDOK
-    Quit
-  ${EndIf}
+;  ${If} $R0 == 1
+;    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} version ($installed_version-$installed_release) installed." /SD IDOK
+;    Quit
+;  ${EndIf}
   
   ReadRegStr $0 ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "InstallDir"
   StrCmp $0 "" not_installed
@@ -276,12 +276,12 @@ Section -PostInstall
 
   ${Unless} $installed_version == ""
       Push $installed_version
-      Push "2.5.13"
+      Push "2.7.7"
       Call CompareVersions
       Pop $R0
 
       ${If} $R0 == 1
-          nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file'
+          nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file --downgrades-disabled'
       ${EndIf}
 
   ${EndIf}

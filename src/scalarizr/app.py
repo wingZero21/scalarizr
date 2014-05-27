@@ -194,7 +194,10 @@ class ScalrUpdClientScript(initdv2.Daemon):
             if os.access(pid_file, os.R_OK):
                 pid = open(pid_file).read().strip()
                 if pid:
-                    os.kill(int(pid), signal.SIGKILL)
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                    except:
+                        pass
                     os.unlink(pid_file)
             self.start()
 
@@ -485,11 +488,19 @@ def _cleanup_after_rebundle():
     # Reset private configuration
     priv_path = cnf.private_path()
     for file in os.listdir(priv_path):
-        if file in ('.user-data', '.update'):
+        if file in ('.user-data', '.update', 'keys'):
+             # keys/default maybe already refreshed by UpdateClient
             continue
         path = os.path.join(priv_path, file)
         coreutils.chmod_r(path, 0700)
-        os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+        try:
+            os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+        except:
+            if linux.os.windows and sys.exc_info()[0] == WindowsError:         
+                # ScalrUpdClient locks db.sqlite 
+                logger.debug(sys.exc_info()[1])
+            else:
+                raise
     if not linux.os.windows_family:
         system2('sync', shell=True)
 
@@ -609,6 +620,10 @@ class Service(object):
 
 
     def start(self):
+        if linux.os.amazon:
+            print 'Amazon Linux is not supported'
+            sys.exit(1)
+            
         self._logger.debug("Initialize scalarizr...")
         _init()
 
@@ -723,6 +738,13 @@ class Service(object):
             
         if node.__node__['state'] != 'importing':
             self._talk_to_updclient()
+
+        if node.__node__['state'] != 'running':
+            try:
+                pkgmgr.updatedb()
+            except:
+                self._logger.warn('Failed to update package manager database: %s', 
+                    sys.exc_info()[1], exc_info=sys.exc_info())
 
         # Check Scalr version
         if not bus.scalr_version:
@@ -1060,7 +1082,7 @@ class Service(object):
 
     def _talk_to_updclient(self):
         try:
-            upd = jsonrpc_http.HttpServiceProxy('http://localhost:8008', bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
+            upd = jsonrpc_http.HttpServiceProxy('http://127.0.0.1:8008', bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
             upd_svs = ScalrUpdClientScript()
             if not upd_svs.running:
                 upd_svs.start()
@@ -1072,7 +1094,7 @@ class Service(object):
                 except:
                     exc = sys.exc_info()[1]
                     if 'Server-ID header not presented' in str(exc):
-                        self._logger.debug(('UpdateClient serves previous API version. '
+                        self._logger.info(('UpdateClient serves previous API version. '
                             'Looks like we are in a process of migration to new update sytem. '
                             'UpdateClient restart will handle this situation. Restarting'))
                         upd_svs.restart()
@@ -1094,6 +1116,8 @@ class Service(object):
                 self._logger.info('UpdateClient completed update and should be restarted, restarting')
                 upd_svs.restart()
         except:
+            if sys.exc_info()[0] == SystemExit:
+                raise
             self._logger.warn('Failed to talk to UpdateClient: %s', sys.exc_info()[1])
 
 

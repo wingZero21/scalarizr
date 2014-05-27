@@ -15,18 +15,20 @@ import shutil
 import sqlite3 as sqlite
 import subprocess
 import sys
-import time
 import threading
 import urllib2
 import uuid
+import time
+import pkg_resources
+import multiprocessing
 
 from scalarizr import linux, queryenv, rpc, config
 from scalarizr.api import operation
 from scalarizr.api.binding import jsonrpc_http
 from scalarizr.bus import bus
-from scalarizr.linux import pkgmgr
+from scalarizr.linux import pkgmgr, coreutils
 from scalarizr.messaging import p2p as messaging
-from scalarizr.util import metadata, initdv2, sqlite_server
+from scalarizr.util import metadata, initdv2, sqlite_server, wait_until
 
 if linux.os.windows:
     import win32com
@@ -47,7 +49,12 @@ class NoSystemUUID(Exception):
 def norm_user_data(data):
     data['server_id'] = data.pop('serverid')
     data['messaging_url'] = data.pop('p2p_producer_endpoint')
-    data['farm_role_id'] = data.pop('farm_roleid')
+    # - my uptime is 1086 days, 55 mins, o-ho-ho
+    if data['messaging_url'] == 'http://scalr.net/messaging':
+        data['messaging_url'] = 'https://my.scalr.com/messaging'
+    if data['queryenv_url'] == 'http://scalr.net/query-env':
+        data['queryenv_url'] = 'https://my.scalr.com/query-env'
+    data['farm_role_id'] = data.pop('farm_roleid', None)  
     return data
 
 
@@ -95,6 +102,7 @@ class UpdClientAPI(object):
         rpm='http://rpm.scalr.net/rpm/rhel/$releasever/$basearch',
         win='http://win.scalr.net'
     )
+    downgrades_enabled = True
 
     server_id = farm_role_id = system_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
@@ -144,6 +152,7 @@ class UpdClientAPI(object):
         def fset(self, state):
             self.prev_state = self._state
             self._state = state
+            LOG.info('State transition: {0} -> {1}'.format(self.prev_state, state))
         return locals()
     state = property(**state())
 
@@ -157,6 +166,7 @@ class UpdClientAPI(object):
         self.state = 'noop'
         self.meta = metadata.Metadata()
         self.shutdown_ev = threading.Event()
+        self.early_bootstrapped = False
 
 
     def _update_self_dict(self, data):
@@ -203,15 +213,25 @@ class UpdClientAPI(object):
 
 
     def _init_services(self):
-        if not self.queryenv:
-            self._init_queryenv()
-
         if not bus.db:
             self._init_db()
 
         if not bus.cnf:
             bus.cnf = config.ScalarizrCnf(self.etc_path)
             bus.cnf.bootstrap()
+
+        if not self.queryenv:
+            def init_queryenv():
+                try:
+                    self._init_queryenv()
+                    return True
+                except queryenv.InvalidSignatureError:
+                    if bus.cnf.state == 'bootstrapping':
+                        LOG.debug('Ignore InvalidSignatureError while Scalarizr is bootstrapping, retrying...')
+                        return False
+                    else:
+                        raise
+            wait_until(init_queryenv, timeout=120, sleep=10)
 
         if not self.messaging_service:
             LOG.debug('Initializing messaging')
@@ -231,21 +251,29 @@ class UpdClientAPI(object):
 
 
     def get_system_id(self):
-        if linux.os.windows:
-            wmi = win32com.client.GetObject('winmgmts:')
-            for row in wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS'):
-                ret = row.SerialNumber
-                break
-            else:
-                LOG.debug('WMI returns empty UUID')
-        else:
-            ret = None
+        def win32_serial_number():
+            try:
+                wmi = win32com.client.GetObject('winmgmts:')
+                for row in wmi.ExecQuery('SELECT SerialNumber FROM Win32_BIOS'):
+                    return row.SerialNumber
+                else:
+                    LOG.debug('WMI returns empty UUID')
+            except:
+                LOG.debug('WMI query failed: %s', sys.exc_info()[1])
+
+        def dmidecode_uuid():
             try:
                 ret = linux.system('dmidecode -s system-uuid', shell=True)[0].strip()
                 if not ret:
                     LOG.debug('dmidecide returns empty UUID')
+                elif len(ret) != 36:
+                    LOG.debug("dmidecode returns invalid UUID: %s", ret)
+                else:
+                    return ret
             except:
-                LOG.debug(sys.exc_info()[1])
+                LOG.debug('dmidecode failed: %s', sys.exc_info()[1])
+
+        ret = win32_serial_number() if linux.os.windows else dmidecode_uuid()
         if not ret:
             ret = self.meta['instance_id']
         if not ret:
@@ -266,9 +294,14 @@ class UpdClientAPI(object):
             LOG.debug('Checking %s', self.status_file)
             with open(self.status_file) as fp:
                 status_data = json.load(fp)
+                if 'downgrades_enabled' not in status_data:
+                    # Field introduced in 2.7.12 
+                    # Missing field here means downgrades_enabled=False, 
+                    # cause it's setted by postinst migration to new update system 
+                    status_data['downgrades_enabled'] = False
             system_matches = status_data['system_id'] == self.system_id
             if not system_matches:
-                LOG.debug('System ID in lock file and machine one not matched: %s != %s', 
+                LOG.info('System ID in lock file and machine one are not matched: %s != %s', 
                         status_data['system_id'], self.system_id)
             else:
                 LOG.debug('Serial number in lock file matches machine one')
@@ -285,12 +318,15 @@ class UpdClientAPI(object):
                             self._update_self_dict(json.load(fp))
                         if self.state.startswith('in-progress'):
                             if log_polling:
-                                LOG.debug("Script update.ps1 is in '%s', start polling", self.state)
+                                LOG.info("Script update.ps1 is in '%s', start polling", self.state)
                                 log_polling = False
                             self.shutdown_ev.wait(1)
                             continue
                         else:
-                            LOG.debug('Script update.ps1 finished, state: %s', self.state)
+                            msg = 'Script update.ps1 finished, state: {0}'.format(self.state)
+                            if self.error:
+                                msg += '. {0}'.format(self.error)
+                            LOG.info(msg)
                             os.unlink(self.win_status_file)
                             return
                 wait_thread = threading.Thread(target=wait_update_script)
@@ -299,39 +335,65 @@ class UpdClientAPI(object):
                 if self.shutdown_ev.is_set():
                     return
         else:
-            LOG.debug('Getting cloud user-data')
+            LOG.info('Getting cloud user-data')
             try:
                 user_data = self.meta['user_data']
             except metadata.NoUserDataError:
-                if self.platform == 'openstack':
-                    LOG.info('Found no user-data on OpenStack platform, '
-                            'this mean that all providers failed and we should '
-                            'wait for an injected user-data file')
-                    time.sleep(20)
-                    self.meta = metadata.Metadata()
-                    user_data = self.meta['user_data']
+                if 'NoData' in str(self.meta.provider_for_capability['instance_id']):  
+                    retry_int = 5
+                    num_attempts = 10
+                    LOG.info('Found no user-data and no instance-id, '
+                            'this mean that all data providers failed. I should '
+                            'wait {0} seconds and retry'.format(retry_int))
+                    for attempt in range(0, num_attempts):
+                        time.sleep(retry_int)
+                        self.meta = metadata.Metadata()
+                        try:
+                            user_data = self.meta['user_data']
+                            break
+                        except metadata.NoUserDataError:
+                            if attempt == num_attempts - 1:
+                                LOG.error(('Still no user-data, '
+                                        'check why $ETC_DIR/.scalr-user-data not exists. '))
+                                raise
+                            else:
+                                LOG.debug(('Still no user-data, '
+                                        'retrying after {0} seconds...').format(retry_int))
+                else:
+                    raise
             norm_user_data(user_data)
-            LOG.debug('Apply user-data settings')
+            LOG.info('Applying user-data settings')
             self._update_self_dict(user_data)
 
             crypto_dir = os.path.dirname(self.crypto_file)
             if not os.path.exists(crypto_dir):
                 os.makedirs(crypto_dir)
             if os.path.exists(self.crypto_file): 
-                LOG.debug('Testing that crypto key works (file: %s)', self.crypto_file) 
+                LOG.info('Testing that crypto key works (file: %s)', self.crypto_file) 
                 try:
                     self._init_queryenv()
-                    LOG.debug('Crypto key works')
+                    LOG.info('Crypto key works')
                 except queryenv.InvalidSignatureError:
-                    LOG.debug("Crypto key doesn't work")
+                    LOG.info("Crypto key doesn't work: got invalid signature error")
+                    self.queryenv = None
             if not self.queryenv:
-                LOG.debug("Use crypto key from user-data")
+                LOG.info("Use crypto key from user-data")
+                if os.path.exists(self.crypto_file):
+                    os.chmod(self.crypto_file, 0600)
                 with open(self.crypto_file, 'w+') as fp:
                     fp.write(user_data['szr_key'])
+                os.chmod(self.crypto_file, 0400)
+        self.early_bootstrapped = True
 
+        self._init_services()
+        # - my uptime is 644 days, 20 hours and 13 mins and i know nothing about 'platform' in user-data
+        if not self.platform: 
+            self.platform = bus.cnf.rawini.get('general', 'platform')
+        # - my uptime is 1086 days, 55 mins and i know nothing about 'farm_roleid' in user-data
+        if not self.farm_role_id:
+            self.farm_role_id = bus.cnf.rawini.get('general', 'farm_role_id')
         if not linux.os.windows:
             self.package = 'scalarizr-' + self.platform
-        self._init_services()
 
         self.system_matches = system_matches
         if not self.system_matches:
@@ -344,8 +406,19 @@ class UpdClientAPI(object):
             if self.state in ('completed/wait-ack', 'noop'):
                 self.state = 'completed'
             self.store()
-        if not dry_run and self.state != 'error' and not self.daemon.running:
+        if not (self.shutdown_ev.is_set() or dry_run or \
+                self.state == 'error' or self.daemon.running):
             self.daemon.start()
+        if self.state == 'completed/wait-ack':
+            obsoletes = pkg_resources.Requirement.parse('A<=2.7.5')
+            if self.installed in obsoletes:
+                def restart_self():
+                    time.sleep(5)
+                    name = 'ScalrUpdClient' if linux.os.windows else 'scalr-upd-client'
+                    service = initdv2.Daemon(name)
+                    service.restart()
+                proc = multiprocessing.Process(target=restart_self)
+                proc.start()
 
 
     def uninstall(self):
@@ -363,6 +436,10 @@ class UpdClientAPI(object):
             self.pkgmgr.removed(self.package)
             if not linux.os.windows:
                 self.pkgmgr.removed('scalarizr-base', purge=True)
+                if self.pkgmgr.info('scalr-upd-client')['installed']:
+                    # Only latest package don't stop scalr-upd-client in postrm script
+                    self.pkgmgr.latest('scalr-upd-client')
+                    self.pkgmgr.removed('scalr-upd-client', purge=True)
             if linux.os.debian_family:
                 self.pkgmgr.apt_get_command('autoremove') 
         finally:
@@ -382,6 +459,8 @@ class UpdClientAPI(object):
                 os.remove(filename)
         if 'buildbot.scalr-labs.com' in self.repo_url and not linux.os.windows:
             self._configure_devel_repo(repo)
+        elif linux.os.debian_family:
+            self._apt_pin_release('scalr')  # make downgrades possible
         # Ensure new repository
         repo.ensure()
         if updatedb:
@@ -398,21 +477,25 @@ class UpdClientAPI(object):
             #self.pkgmgr.installed(pkg)
             repo.config += 'priority=10\n'
         else:
-            if os.path.isdir('/etc/apt/preferences.d'):
-                prefile = '/etc/apt/preferences.d/scalr'
-            else:
-                prefile = '/etc/apt/preferences'
-            with open(prefile, 'w+') as fp:
-                fp.write((
-                    'Package: *\n'
-                    'Pin: release a={0}\n'
-                    'Pin-Priority: 990\n'
-                ).format(self.repository))
+            self._apt_pin_release(self.repository)
 
         # Scalr repo has all required dependencies (like python-* libs, etc), 
         # while Branch repository has only scalarizr package
         release_repo = pkgmgr.repository('scalr-release', devel_repo_url_for_branch('scalr'))
         release_repo.ensure()
+
+
+    def _apt_pin_release(self, release):
+        if os.path.isdir('/etc/apt/preferences.d'):
+            prefile = '/etc/apt/preferences.d/scalr'
+        else:
+            prefile = '/etc/apt/preferences'
+        with open(prefile, 'w+') as fp:
+            fp.write((
+                'Package: scalarizr-*\n'
+                'Pin: release a={0}\n'
+                'Pin-Priority: 1001\n'
+            ).format(release))        
 
 
     def _ensure_daemon(self):
@@ -494,7 +577,8 @@ class UpdClientAPI(object):
             LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)
             self.shutdown_ev.wait(self.win_update_timeout)
             if self.shutdown_ev.is_set():
-                raise KeyboardInterrupt()
+                LOG.debug('Interrupting...')
+                return
             else:
                 msg = ('UpdateClient expected to be terminated by update.ps1, '
                         'but never happened')
@@ -526,7 +610,7 @@ class UpdClientAPI(object):
                 self.installed = self.candidate
                 self.candidate = None
                 if reports:
-                        self.report(True)
+                    self.report(True)
             return self.status(cached=True)
 
         def do_update(op):
@@ -543,6 +627,12 @@ class UpdClientAPI(object):
                     self.state = 'completed'
                     LOG.info('No new version available ({0})'.format(self.package))
                     return 
+                if self.pkgmgr.version_cmp(pkginfo['candidate'], pkginfo['installed']) == -1 \
+                        and not self.downgrades_enabled:
+                    self.state = 'completed'
+                    LOG.info('New version {0!r} less then installed {1!r}, but downgrades disabled'.format(
+                                pkginfo['candidate'], pkginfo['installed']))
+                    return
                 self._update_self_dict(pkginfo)
 
                 if bootstrap and not linux.os.windows:
@@ -554,13 +644,14 @@ class UpdClientAPI(object):
                 try:
                     self.state = 'in-progress/install'
                     self.store()
+                    LOG.info('Installing {0}={1}'.format(
+                            self.package, pkginfo['candidate']))
                     if linux.os.windows:
-                        # raises KeyboardInterrupt
                         update_windows(pkginfo)
                     else:
                         return update_linux(pkginfo)
+
                 except KeyboardInterrupt:
-                    LOG.debug('Caught KeyboardInterrupt')
                     if not linux.os.windows:
                         op.cancel()
                     return
@@ -578,7 +669,8 @@ class UpdClientAPI(object):
                 else:
                     raise
             finally:
-                self.store()
+                if not self.shutdown_ev.is_set():
+                    self.store()
                 pkgmgr.LOG.removeHandler(op.logger.handlers[0])
 
         return self.op_api.run('scalarizr.update', do_update, async=async, 
@@ -586,12 +678,14 @@ class UpdClientAPI(object):
 
 
     def shutdown(self):
-        self.store()
+        if self.early_bootstrapped:
+            self.store()
         self.shutdown_ev.set()
 
 
     def store(self, status=None):
         status = status or self.status(cached=True)
+        coreutils.mkdir(os.path.dirname(self.status_file), 0700)
         with open(self.status_file, 'w+') as fp:
             LOG.debug('Saving status: %s', pprint.pformat(status))
             json.dump(status, fp)     
@@ -621,7 +715,7 @@ class UpdClientAPI(object):
         keys_to_copy = [
             'server_id', 'farm_role_id', 'system_id', 'platform', 'queryenv_url', 
             'messaging_url', 'scalr_id', 'scalr_version', 
-            'repository', 'repo_url', 'package', 'executed_at', 
+            'repository', 'repo_url', 'package', 'downgrades_enabled', 'executed_at', 
             'state', 'prev_state', 'error', 'dist'
         ]
 
@@ -629,6 +723,8 @@ class UpdClientAPI(object):
         if cached:
             keys_to_copy.extend(pkginfo_keys)
         else:
+            self._sync()
+            self._ensure_repos(False)
             self.pkgmgr.updatedb(apt_repository='scalr-{0}'.format(self.repository))
             pkginfo = self.pkgmgr.info(self.package)
             status.update((key, pkginfo[key]) for key in pkginfo_keys)
