@@ -142,6 +142,7 @@ class EBSImageMaker(object):
         self.ami_bin_dir = delegate.ami_bin_dir
         self.platform = __node__['platform']
         self.destination = destination
+        self.temp_vol = None
         self.excludes = [
                 # self.destination,
                 # '/selinux',
@@ -150,8 +151,19 @@ class EBSImageMaker(object):
                 # '/var/lib/dhcp3'
                 ]
 
+    def _assure_space(self):
+        """
+        Assures that there is enough free space on destination device for image
+        """
+        avail_space = coreutils.statvfs(self.destination) / 1024 / 1024
+        if avail_space <= self.image_size:
+            os.mkdir('/mnt/temp-vol')
+            self.temp_vol = self.make_volume(self.image_size/1000, '/mnt/temp-vol')
+            self.destination = '/mnt/temp-vol'
+
     def prepare_image(self):
-        # prepares imiage with ec2-bundle-vol command
+        """Prepares imiage with ec2-bundle-vol command"""
+        self._assure_space()
         cmd = (
             os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
             '--cert', self.credentials['cert'],
@@ -171,13 +183,13 @@ class EBSImageMaker(object):
             stderr=subprocess.STDOUT)[0]
         LOG.debug('Image prepare command out: %s' % out)
 
-    def make_volume(self, size):
+    def make_volume(self, size, mpoint):
         ebs_config = {'type': 'ebs',
             'size': size}
         ebs_config['size'] = size
         LOG.debug('Creating ebs volume')
         volume = create_volume(ebs_config, fstype='ext4')
-        volume.mpoint = '/mnt/img-mnt'
+        volume.mpoint = mpoint
         volume.ensure(mount=True, mkfs=True)
         volume.umount()
         LOG.debug('Volume created %s' % volume.device)
@@ -287,10 +299,12 @@ class EBSImageMaker(object):
         try:
             self.prepare_image()
             size = self.image_size / 1000
-            volume = self.make_volume(size)
+            volume = self.make_volume(size, '/mnt/img-mnt')
             snapshot_id = self.make_snapshot(volume)
             image_id = self.register_image(snapshot_id, volume.device)
             volume.destroy()
+            if self.temp_vol:
+                self.temp_vol.destroy()
             return image_id
         finally:
             self.cleanup()
