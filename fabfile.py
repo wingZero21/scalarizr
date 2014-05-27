@@ -68,7 +68,7 @@ def init():
     '''
     Initialize current build.
     '''
-    global tag, branch, version, repo, build_number, artifacts_dir
+    global tag, branch, version, repo, build_number, artifacts_dir, initial_run
 
     build_number = read_build_number()
     print_green('build_number: {0}'.format(build_number))
@@ -98,6 +98,13 @@ def init():
         repo = branch
         print_green('branch: {0}'.format(branch))
         print_green('version: {0}'.format(version))
+    initialrun_switch_location = os.path.join(project_dir, '.initialrun')
+    if not os.path.exists(initialrun_switch_location):
+        with open(initialrun_switch_location, 'w+'):
+            initial_run = True
+    else:
+        initial_run = False
+
     print_green('repo: {0}'.format(repo))
 
 
@@ -152,6 +159,7 @@ def local_export():
 
 def build_omnibus_deps():
     # rm old installation
+    print_green('building omnibus dependencies')
     run("rm -rf /opt/%s" % project)
     # rm cache
     run("rm -rf /var/cache/ci/%s" % project)
@@ -179,6 +187,7 @@ def build_omnibus_deps():
 
 def build_omnibus():
     # rm old installation
+    print_green('building omnibus')
     run("rm -rf /opt/%s" % project)
     run("rm -f /var/cache/omnibus/pkg/{0}*".format(project))
     # copy base installation
@@ -232,7 +241,7 @@ def build_binary():
     init()
     git_export()
     generate_changelog()
-    if omnibus_md5sum_changed():
+    if omnibus_md5sum_changed() or initial_run:
         build_omnibus_deps()
     build_omnibus()
     import_artifact('/var/cache/omnibus/pkg/{0}*'.format(project))
