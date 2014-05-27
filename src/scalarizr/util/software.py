@@ -376,6 +376,8 @@ explore('cassandra', cassandra_software_info)
 
 
 def rabbitmq_software_info():
+    if linux.os.windows_family:
+        raise SoftwareError()
 
     pkg_mgr = pkgmgr.package_mgr()
     version = pkg_mgr.info('rabbitmq-server')['installed']
