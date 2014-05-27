@@ -193,6 +193,13 @@ class ScriptExecutor(Handler):
             self.in_progress.remove(script)
 
     def execute_scripts(self, scripts, event_name, scripts_qty):
+        """
+        Scripts will be executing in order given by script generator.
+        Construction-time script errors (such as missing interpreter) will stop
+        all execution.
+        Runtime error that were caused by synchronous scripts will stop all
+        execution. Asynchronous will not.
+        """
         if not scripts:
             return
         # read logs_dir_prefix
@@ -254,7 +261,14 @@ class ScriptExecutor(Handler):
                 kwds['event_id'] = message.body.get('event_id')
                 kwds['event_name'] = event_name
                 kwds['environ'] = environ
-                return Script(**kwds)
+                try:
+                    return Script(**kwds)
+                except (BaseException, Exception), e:
+                    self.send_message(
+                        Messages.EXEC_SCRIPT_RESULT,
+                        {'stderr': e.message},
+                        queue=Queues.LOG)
+                    raise
 
             scripts_qty = len(message.body['scripts'])
             scripts = (_create_script(item) for item in message.body['scripts'])
