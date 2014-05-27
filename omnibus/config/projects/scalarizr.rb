@@ -5,6 +5,7 @@ homepage   "http://scalr.com"
 
 replaces        "scalarizr"
 install_path    "/opt/scalarizr"
+install_dir     "/opt/scalarizr"
 if ENV['OMNIBUS_BUILD_VERSION']
     build_version   ENV['OMNIBUS_BUILD_VERSION']
 else
