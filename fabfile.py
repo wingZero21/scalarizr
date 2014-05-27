@@ -220,11 +220,12 @@ def build_omnibus():
         env = {
             'BUILD_DIR': build_dir,
             'OMNIBUS_BUILD_DEPS': '1',
+            'OMNIBUS_BUILD_VERSION': version,
         }
         with shell_env(**env):
             run("bin/omnibus clean %s" % project)
             run("bin/omnibus build project %s --log-level=info" % project)
-            run("rm -rf /var/cache/omnibus/pkg/*")
+            #run("rm -rf /var/cache/omnibus/pkg/*")
 
     # save to cache
     # run("mkdir -p /var/cache/ci")
