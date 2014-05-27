@@ -378,12 +378,12 @@ class Script(object):
                 fp.write(self.body.encode('utf-8'))
             if not linux.os.windows_family:
                 os.chmod(self.exec_path,
-                         stat.S_IREAD)
-                         # stat.S_IRGRP |
-                         # stat.S_IROTH |
-                         # stat.S_IEXEC |
-                         # stat.S_IXGRP |
-                         # stat.S_IXOTH)
+                         stat.S_IREAD |
+                         stat.S_IRGRP |
+                         stat.S_IROTH |
+                         stat.S_IEXEC |
+                         stat.S_IXGRP |
+                         stat.S_IXOTH)
 
         stdout = open(self.stdout_path, 'w+')
         stderr = open(self.stderr_path, 'w+')
