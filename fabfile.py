@@ -200,7 +200,7 @@ def build_omnibus():
             'OMNIBUS_BUILD_VERSION': version,
         }
         with shell_env(**env):
-            run("bin/omnibus build project --without-healthcheck %s" % project)
+            run("bin/omnibus build project  %s" % project)
 
     #run('exit')
 
