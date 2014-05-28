@@ -266,8 +266,18 @@ class ScriptExecutor(Handler):
                     return Script(**kwds)
                 except (BaseException, Exception), e:
                     self.send_message(
-                        Messages.EXEC_SCRIPT_RESULT,
-                        {'stderr': e.message},
+                        Messages.EXEC_SCRIPT_RESULT, {
+                            'stdout': ''
+                            'stderr': e.message,
+                            'return_code': 1,
+                            'time_elapsed': 0,
+                            'event_name': event_name,
+                            'event_id': kwds.get('event_id'),
+                            'execution_id': kwds.get('execution_id'),
+                            'script_name': kwds.get('name'),
+                            'script_path': kwds.get('path'),
+                            'run_as': kwds.get('run_as')
+                        },
                         queue=Queues.LOG)
                     raise
 
