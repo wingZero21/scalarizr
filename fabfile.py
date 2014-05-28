@@ -29,7 +29,7 @@ current_contents = None
 with open('/etc/environment', 'r+') as fp:
     current_contents = fp.read()
 with open('/etc/environment', 'w+') as fp:
-    res = ''
+    result = ''
     for line in current_contents.splitlines():
         if 'PATH' in line and rubies not in line:
             line = ''.join([line, ':', rubies])
