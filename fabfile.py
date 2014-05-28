@@ -23,6 +23,18 @@ tag = None
 branch = None
 version = None
 repo = None
+rubies = '/opt/rubies/ruby-2.1.1/bin'
+
+current_contents = None
+with open('/etc/environment', 'r+') as fp:
+    current_contents = fp.read()
+with open('/etc/environment', 'w+') as fp:
+    res = ''
+    for line in current_contents.splitlines():
+        if 'PATH' in line and rubies not in line:
+            line = ''.join([line, ':', rubies])
+        result += line
+    fp.write(result)
 
 
 def read_build_number():
@@ -162,12 +174,12 @@ def build_omnibus_deps():
     # rm old installation
     # print_green('building omnibus dependencies')
     # run("rm -rf /opt/%s" % project)
-    # # rm cache
+    # rm cache
     # run("rm -rf /var/cache/ci/%s" % project)
-    # # build base installation
+    # build base installation
 
     # with cd(omnibus_dir):
-    #     # TODO: add current bundle location to PATH if this works
+    # TODO: add current bundle location to PATH if this works
     #     run("[ -f bin/omnibus ] || bundle install --binstubs")
     #     env = {
     #         'BUILD_DIR': build_dir,
@@ -178,10 +190,10 @@ def build_omnibus_deps():
     #         run("bin/omnibus build project %s --log-level=info" % project)
     #         run("rm -rf /var/cache/omnibus/pkg/*")
 
-    # # save to cache
+    # save to cache
     # run("mkdir -p /var/cache/ci")
     # run("mv /opt/%s /var/cache/ci/%s" % (project, project))
-    # # save md5sum
+    # save md5sum
     # with open(omnibus_md5sum_file, 'w+') as fp:
     #     fp.write(omnibus_md5sum())
 
@@ -191,14 +203,14 @@ def build_omnibus():
     print_green('building omnibus with dependencies')
     # run("rm -rf /opt/%s" % project)
     # run("rm -f /var/cache/omnibus/pkg/{0}*".format(project))
-    # # copy base installation
+    # copy base installation
     # run("cp -r /var/cache/ci/%s /opt/" % project)
-    # # bump project version
+    # bump project version
     # with cd(build_dir):
     #     run("echo '%s' >version" % (version, ))
-    # # build project
+    # build project
     # with cd(omnibus_dir):
-    #     # TODO: add current bundle location to PATH if this works
+    # TODO: add current bundle location to PATH if this works
     #     run("[ -f bin/omnibus ] || bundle install --binstubs")
     #     env = {
     #         'BUILD_DIR': build_dir,
