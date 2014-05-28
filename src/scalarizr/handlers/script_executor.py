@@ -267,7 +267,7 @@ class ScriptExecutor(Handler):
                 except (BaseException, Exception), e:
                     self.send_message(
                         Messages.EXEC_SCRIPT_RESULT, {
-                            'stdout': ''
+                            'stdout': '',
                             'stderr': e.message,
                             'return_code': 1,
                             'time_elapsed': 0,
