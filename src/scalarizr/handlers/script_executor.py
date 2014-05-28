@@ -278,7 +278,7 @@ class ScriptExecutor(Handler):
             return
 
         LOG.debug('Fetched %d scripts', scripts_qty)
-        self.execute_scripts(scripts, event_name, script_qty)
+        self.execute_scripts(scripts, event_name, scripts_qty)
 
 
 class Script(object):
