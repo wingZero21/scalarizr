@@ -436,7 +436,7 @@ class PostgreSQLAPI(BehaviorAPI):
             ]
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+                "Unsupported operating system '{os}'").format(os=linux.os['name'])
             )
         pkgmgr.check_any_dependency(required_list, installed_packages)
 

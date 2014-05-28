@@ -332,7 +332,7 @@ class MySQLAPI(BehaviorAPI):
             )
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+                "Unsupported operating system '{os}'").format(os=linux.os['name'])
             )
 
     @classmethod

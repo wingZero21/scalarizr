@@ -200,7 +200,7 @@ class TomcatAPI(BehaviorAPI):
             pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin-webapps'], installed_packages)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+                "Unsupported operating system '{os}'").format(os=linux.os['name'])
             )
 
     @classmethod

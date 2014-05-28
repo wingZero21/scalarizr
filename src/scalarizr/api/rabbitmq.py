@@ -127,7 +127,7 @@ class RabbitMQAPI(BehaviorAPI):
                         "RabbitMQ doesn't supported on %s-5" % linux.os['name'])
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+                "Unsupported operating system '{os}'").format(os=linux.os['name'])
             )
 
     @classmethod

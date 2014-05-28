@@ -187,13 +187,14 @@ class MongoDBAPI(BehaviorAPI):
         Asserts MongoDB version.
         """
         os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
         if os_name == 'ubuntu':
-            if linux.os['version'] >= '12':
+            if os_vers >= '12':
                 required_list = [
                     ['mongodb-10gen>=2.0,<2.5'],
                     ['mongodb>=2.0,<2.5']
                 ]
-            elif linux.os['version'] >= '10':
+            elif os_vers >= '10':
                 required_list = [
                     ['mongodb-10gen>=2.0,<2.1'],
                     ['mongodb>=2.0,<2.1']
@@ -204,12 +205,12 @@ class MongoDBAPI(BehaviorAPI):
                 ['mongodb>=2.4,<2.5']
             ]
         elif os_name == 'centos':
-            if linux.os['version'] >= '6':
+            if os_vers >= '6':
                 required_list = [
                     ['mongo-10gen-server>=2.0,<2.5'],
                     ['mongo-server>=2.0,<2.5']
                 ]
-            elif linux.os['version'] >= '5':
+            elif os_vers >= '5':
                 required_list = [
                     ['mongo-10gen-server>=2.0,<2.1'],
                     ['mongo-server>=2.0,<2.1']
@@ -226,7 +227,7 @@ class MongoDBAPI(BehaviorAPI):
             ]
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system family '{os}'").format(os=linux.os['name'])
+                "Unsupported operating system '{os}'").format(os=linux.os['name'])
             )
         pkgmgr.check_any_dependency(required_list, installed_packages)
 
@@ -242,4 +243,3 @@ class MongoDBAPI(BehaviorAPI):
             raise exceptions.UnsupportedBehavior(cls.behavior, msg)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
-
