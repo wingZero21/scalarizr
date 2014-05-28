@@ -25,6 +25,8 @@ import copy
 import time
 import socket
 import HTMLParser
+from copy import deepcopy
+
 
 class P2pMessageConsumer(MessageConsumer):
     endpoint = None
@@ -57,7 +59,6 @@ class P2pMessageConsumer(MessageConsumer):
         r = urlparse(self.endpoint)
         try:
             if self._server is None:
-                #port = __node__['base']['messaging_port']
                 self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
                 self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
@@ -82,19 +83,35 @@ class P2pMessageConsumer(MessageConsumer):
             @type consumer: P2pMessageConsumer
             '''
 
+            def _msg_without_sensitive_data(self, message):
+                msg_copy = P2pMessage(message.name, message.meta.copy(), deepcopy(message.body))
+                msg_copy.id = message.id
+
+                if 'platform_access_data' in msg_copy.body:
+                    del msg_copy.body['platform_access_data']
+
+                if 'global_variables' in msg_copy.body:
+                    glob_vars = msg_copy.body['global_variables']
+                    i = 0
+                    for v in list(glob_vars):
+                        if v.get('private'):
+                            del glob_vars[i]
+                            i -= 1
+                        elif 'private' in v:
+                            del glob_vars[i]['private']
+                        i += 1
+
+                if 'chef' in msg_copy.body:
+                    try:
+                        # msg_copy.body['chef'] = msg_copy.body['chef'].copy()
+                        del msg_copy.body['chef']['validator_name']
+                        del msg_copy.body['chef']['validator_key']
+                    except (KeyError, TypeError):
+                        pass
+                return msg_copy
+
             def do_POST(self):
                 logger = logging.getLogger(__name__)
-
-                if self.headers.get('X-Server-Id') and self.consumer._handler_thread:
-                    # Skip check for internal messaging
-                    if self.headers['X-Server-Id'] != __node__['server_id']:
-                        self.send_response(409)
-                        self.end_headers()
-                        msg = ("Message X-Server-Id header "
-                                "doesn't match node server_id: {0} != {1}").format(
-                                self.headers['X-Server-Id'], __node__['server_id'])
-                        self.wfile.write(msg)
-                        return
 
                 queue = os.path.basename(self.path)
                 rawmsg = self.rfile.read(int(self.headers["Content-length"]))
@@ -113,8 +130,7 @@ class P2pMessageConsumer(MessageConsumer):
                 except (BaseException, Exception), e:
                     err = 'Message consumer protocol filter raises exception: %s' % str(e)
                     logger.exception(err)
-                    self.send_response(201)
-                    self.end_headers()
+                    self.send_response(201, 'Created')
                     return
 
                 try:
@@ -129,29 +145,14 @@ class P2pMessageConsumer(MessageConsumer):
                     else:
                         message.fromxml(rawmsg)
 
-                    # Create a message copy to log it without platform_access_data and with pretty identation  
-                    msg_copy = P2pMessage(message.name, copy.deepcopy(message.meta), copy.deepcopy(message.body))
-                    msg_copy.id = message.id
-                    if 'platform_access_data' in msg_copy.body:
-                        del msg_copy.body['platform_access_data']
-                    if 'global_variables' in msg_copy.body:
-                        glob_vars = msg_copy.body.get('global_variables', []) or []
-                        i = 0
-                        for v in list(glob_vars):
-                            if v.get('private'):
-                                del glob_vars[i]
-                                i -= 1
-                            elif 'private' in v:
-                                del glob_vars[i]['private']
-                            i += 1
+                    msg_copy = self._msg_without_sensitive_data(message)
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
 
                 except (BaseException, Exception), e:
                     err = "Cannot decode message. error: %s; raw message: %s" % (str(e), rawmsg)
                     logger.exception(err)
-                    self.send_response(201)
-                    self.end_headers()
+                    self.send_response(201, 'Created')
                     return
 
 
@@ -164,12 +165,10 @@ class P2pMessageConsumer(MessageConsumer):
                     #self.consumer._not_empty.set()
                 except (BaseException, Exception), e:
                     logger.exception(e)
-                    self.send_response(500)
-                    self.end_headers()
-                    self.wfile.write(str(e))
+                    self.send_response(500, str(e))
                     return
 
-                self.send_response(201)
+                self.send_response(201, 'Created')
                 self.end_headers()
 
 
@@ -240,7 +239,7 @@ class P2pMessageConsumer(MessageConsumer):
     def wait_subhandler(self, message):
         pl = bus.platform
 
-        saved_access_data = pl._access_data
+        saved_access_data = pl.get_access_data()
         if saved_access_data:
             saved_access_data = dict(saved_access_data)
 
