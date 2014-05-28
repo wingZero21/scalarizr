@@ -403,7 +403,9 @@ class UpdClientAPI(object):
             else:
                 self.update(bootstrap=True)
         else:
-            if self.state in ('completed/wait-ack', 'noop'):
+            #if self.state in ('completed/wait-ack', 'noop'):
+            if state not in ('error', 'rollbacked'):
+                # forcefully finish any in-progress operations
                 self.state = 'completed'
             self.store()
         if not (self.shutdown_ev.is_set() or dry_run or \
