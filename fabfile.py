@@ -30,10 +30,14 @@ with open('/etc/environment', 'r+') as fp:
     current_contents = fp.read()
 with open('/etc/environment', 'w+') as fp:
     result = ''
-    for line in current_contents.splitlines():
-        if 'PATH' in line and rubies not in line:
-            line = ''.join([line, ':', rubies])
-        result += line
+    if 'PATH' in current_contents:
+        for line in current_contents.splitlines():
+            if 'PATH' in line and rubies not in line:
+                path = line.split('=')[1].strip()
+                line = ''.join(['PATH="', line, ':', rubies, '"'])
+            result += line
+    else:
+        result = current_contents + '\nPATH="{0}"'.format(rubies)
     fp.write(result)
 
 
