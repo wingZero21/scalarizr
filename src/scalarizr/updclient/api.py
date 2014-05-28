@@ -404,7 +404,7 @@ class UpdClientAPI(object):
                 self.update(bootstrap=True)
         else:
             #if self.state in ('completed/wait-ack', 'noop'):
-            if state not in ('error', 'rollbacked'):
+            if self.state not in ('error', 'rollbacked'):
                 # forcefully finish any in-progress operations
                 self.state = 'completed'
             self.store()
