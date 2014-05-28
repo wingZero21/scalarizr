@@ -55,15 +55,14 @@ class P2pMessageConsumer(MessageConsumer):
         if self.running:
             raise MessagingError('Message consumer is already running')
 
+        r = urlparse(self.endpoint)
         try:
             if self._server is None:
-                r = urlparse(self.endpoint)
-                port = __node__['base']['messaging_port']
-                self._logger.info('Building message consumer server on %s:%s', r.hostname, port)
+                self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-                self._server = HTTPServer((r.hostname, port), self._get_request_handler_class())
+                self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
         except (BaseException, Exception), e:
-            self._logger.error("Cannot build server on port %s. %s", port, e)
+            self._logger.error("Cannot build server on port %s. %s", r.port, e)
             return
 
         self._logger.debug('Starting message consumer %s', self.endpoint)
