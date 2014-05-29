@@ -346,18 +346,54 @@ def publish_rpm():
     '''
     try:
         arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
-        remote_source = '/var/cache/omnibus/pkg/{0}*'.format(project)
-        host_destination = '/var/www/rpm/{branch}/5/{arch}/'.format(branch=branch, arch=arch)
+        remote_source = '/var/cache/omnibus/pkg/{0}*.rpm'.format(project)
+        host_dest_str = '/var/www/rpm/%s/rhel/{alias}/%s'
+        hds_cp = host_dest_str % (branch, arch + '/')  # host destination string for copying
+        hds_ln = host_dest_str % (branch + '/', '')  # host destination string for symlinks
+        host_destination = hds_cp.format(alias='5')
+        # remove previous packages
         if os.path.exists(host_destination):
             local('rm -rf {0}'.format(host_destination))
+
+        # download package file from remote to host machine
         get(remote_source, host_destination + '%(path)s')
-        destination = '/var/www/rpm/{branch}/6/{arch}/'.format(branch=branch, arch=arch)
-        if os.path.exists(destination):
-            local('rm {0}*'.format(destination))
-        else:
-            os.makedirs(destination)
-        local('cp -r {source} {dest}' .format(source=host_destination, dest=destination))
+
+        # create symlink for 5server
+        if not os.path.exists(hds_ln.format(alias='5server')):
+            os.makedirs(hds_ln.format(alias='5server'))
+            local(
+                'ln -s {five} {fivesrv}'.format(
+                    five=host_destination,
+                    fivesrv=hds_ln.format(alias='5server')
+                )
+            )
+        # on host copy contents for 5 into 6
+        # and create repo in six
+        if not os.path.exists(hds_cp.format(alias='6')):
+            os.makedirs(hds_cp.format(alias='6'))
+        local(
+            'cp -r {five} {six}; createrepo {six}'.format(
+                five=host_destination,
+                six=hds_cp.format(alias='6')
+            )
+        )
+        # now it's ok to create repo in 5
+        local('createrepo {five}'.format(five=host_destination))
+
+        # create symlinks for alternate 6 versions
+        for alias in ('6Server', '6.0', '6.1',
+                      '6.2', '6.3', '6.4', '6.5', 'latest',):
+            destination = hds_ln.format(alias=alias)
+            if not os.path.exists(destination):
+                os.makedirs(hds_ln.format(alias=alias))
+                local('ln -s {source} {dest}'.format(
+                    source=host_destination, dest=destination)
+                )
+
+        with cd(host_destination):
+            local('createrepo {0}'.format(host_destination))
     finally:
+        # cleanup contents of remote .rpm source
         run("rm -rf /var/cache/omnibus/pkg/*")
 
 
