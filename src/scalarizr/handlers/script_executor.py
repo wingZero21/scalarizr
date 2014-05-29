@@ -4,28 +4,28 @@ Created on Dec 24, 2009
 @author: marat
 '''
 
-from scalarizr.bus import bus
+import binascii
+import ConfigParser
+import logging
+import os
+import Queue
+import random
+import shutil
+import signal
+import stat
+import subprocess
+import sys
+import threading
+import time
+
 from scalarizr import config as szrconfig
 from scalarizr import linux
-from scalarizr.node import __node__
+from scalarizr.bus import bus
+from scalarizr.config import ScalarizrState
 from scalarizr.handlers import Handler, HandlerError
 from scalarizr.messaging import Queues, Messages
+from scalarizr.node import __node__
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
-from scalarizr.config import ScalarizrState
-
-
-import time
-import random
-import ConfigParser
-import subprocess
-import threading
-import os
-import shutil
-import stat
-import signal
-import logging
-import Queue
-import binascii
 
 
 def get_handlers():
@@ -186,7 +186,7 @@ class ScriptExecutor(Handler):
             script.wait()
         except (BaseException, Exception), e:
             if script.asynchronous:
-                LOG.exception('Caught exception')
+                LOG.warn('Caught exception', exc_info=sys.exc_info())
             raise
         finally:
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script.get_result(), queue=Queues.LOG)
@@ -328,36 +328,22 @@ class Script(object):
         '''
         for key, value in kwds.items():
             setattr(self, key, value)
+        self.elapsed_time = 0
 
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
-        if linux.os['family'] == 'Windows' and self.run_as:
-            raise HandlerError("Windows can't execute scripts remotely " \
-                               "under user other than Administrator. " \
-                               "Script '%s', given user: '%s'" % (self.name, self.run_as))
 
         if self.name and (self.body or self.path):
-            random.seed()
             # time.time() can produce the same microseconds fraction in different async script execution threads, 
             # and therefore produce the same id. solution is to seed random millisecods number
+            random.seed()
             self.id = '%d.%d' % (time.time(), random.randint(0, 100))
 
-            if self.path and not os.access(self.path, os.X_OK):
-                msg = 'Path {0!r} is not executable'.format(self.path)
-                raise HandlerError(msg)
-
-            interpreter = read_shebang(path=self.path, script=self.body)
-            if not interpreter:
-                raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
-                    "First line of the script should have the form of a shebang "
-                    "interpreter directive is as follows:\n"
-                    "#!interpreter [optional-arg]" % (self.name, ))
-            self.interpreter = interpreter
+            self.interpreter = read_shebang(path=self.path, script=self.body)
 
             if linux.os['family'] == 'Windows' and self.body:
                 # Erase first line with #!
                 self.body = '\n'.join(self.body.splitlines()[1:])
-
         else:
             assert self.id, '`id` required'
             assert self.pid, '`pid` required'
@@ -365,7 +351,6 @@ class Script(object):
             if self.interpreter:
                 self.interpreter = split_strip(self.interpreter)[0]
                 
-
         self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
         self.exec_path = self.path or os.path.join(exec_dir_prefix + self.id, self.name)
 
@@ -388,13 +373,25 @@ class Script(object):
             self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
             self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
 
+    def check_runability(self):
+        if self.path and not os.access(self.path, os.X_OK):
+            msg = 'Path {0!r} is not executable'.format(self.path)
+            raise HandlerError(msg)
+        if linux.os['family'] == 'Windows' and self.run_as:
+            raise HandlerError("Windows can't execute scripts remotely " \
+                               "under user other than Administrator. " \
+                               "Script '%s', given user: '%s'" % (self.name, self.run_as))
+        if not self.interpreter:
+            raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
+                "First line of the script should have the form of a shebang "
+                "interpreter directive is as follows:\n"
+                "#!interpreter [optional-arg]" % (self.name, ))
         if not os.path.exists(self.interpreter) and linux.os['family'] != 'Windows':
             raise HandlerError("Can't execute script '%s' cause "
                 "interpreter '%s' not found" % (self.name, self.interpreter))
 
-        self.elapsed_time = 0
-
     def start(self):
+        self.check_runability()
         if not self.path:
             # Write script to disk, prepare execution
             exec_dir = os.path.dirname(self.exec_path)
