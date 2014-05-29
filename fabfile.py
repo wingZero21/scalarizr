@@ -146,12 +146,14 @@ def git_export():
     local("git archive --format=tar HEAD | gzip >%s" % archive)
     if '.strider' in build_dir:
         build_dir_pattern = build_dir.rsplit('-', 1)[0] + '-*'
-        run("rm -rf {0}".format(build_dir_pattern))
-    else:
+        if os.path.exists(build_dir_pattern):
+            run("rm -rf {0}".format(build_dir_pattern))
+    elif os.path.exists(build_dir):
         run("rm -rf %s" % build_dir)
     run("mkdir -p %s" % build_dir)
     put(archive, build_dir)
-    local('rm -f %s' % archive)
+    if os.path.exists(archive):
+        local('rm -f %s' % archive)
 
     with cd(build_dir):
         run("tar -xf %s" % archive)
