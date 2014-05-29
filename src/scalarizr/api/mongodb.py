@@ -189,10 +189,15 @@ class MongoDBAPI(BehaviorAPI):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         if os_name == 'ubuntu':
-            if os_vers >= '12':
+            if os_vers >= '14':
                 required_list = [
-                    ['mongodb-10gen>=2.0,<2.5'],
-                    ['mongodb>=2.0,<2.5']
+                    ['mongodb-10gen>=2.4,<2.7'],
+                    ['mongodb>=2.4,<2.7']
+                ]
+            elif os_vers >= '12':
+                required_list = [
+                    ['mongodb-10gen>=2.0,<2.7'],
+                    ['mongodb>=2.0,<2.7']
                 ]
             elif os_vers >= '10':
                 required_list = [
@@ -200,15 +205,21 @@ class MongoDBAPI(BehaviorAPI):
                     ['mongodb>=2.0,<2.1']
                 ]
         elif os_name == 'debian':
-            required_list = [
-                ['mongodb-10gen>=2.4,<2.5'],
-                ['mongodb>=2.4,<2.5']
-            ]
+            if os_vers >= '7':
+                required_list = [
+                    ['mongodb-10gen>=2.4,<2.7'],
+                    ['mongodb>=2.4,<2.7']
+                ]
+            elif os_vers >= '6':
+                required_list = [
+                    ['mongodb-10gen>=2.4,<2.5'],
+                    ['mongodb>=2.4,<2.5']
+                ]
         elif os_name == 'centos':
             if os_vers >= '6':
                 required_list = [
-                    ['mongo-10gen-server>=2.0,<2.5'],
-                    ['mongo-server>=2.0,<2.5']
+                    ['mongo-10gen-server>=2.0,<2.7'],
+                    ['mongo-server>=2.0,<2.7']
                 ]
             elif os_vers >= '5':
                 required_list = [
@@ -217,8 +228,8 @@ class MongoDBAPI(BehaviorAPI):
                 ]
         elif linux.os.redhat_family:
             required_list = [
-                ['mongo-10gen-server>=2.4,<2.5'],
-                ['mongo-server>=2.4,<2.5']
+                ['mongo-10gen-server>=2.4,<2.7'],
+                ['mongo-server>=2.4,<2.7']
             ]
         elif linux.os.oracle_family:
             required_list = [
@@ -238,8 +249,9 @@ class MongoDBAPI(BehaviorAPI):
             msg = (
                 '{pkg}-{ver} is not supported on {os}. Supported:\n'
                 '\tUbuntu 10.04, CentOS 5, Oracle: >=2.0,<2.1\n'
-                '\tUbuntu 12.04, CentOS 6, RedHat, Amazon: >=2.0,<2.5').format(
-                        pkg=pkg, ver=ver, os=linux.os['name'])
+                '\tUbuntu 12.04, CentOS 6: >=2.0,<2.7\n'
+                '\tUbuntu 14.04, Debian 7, RHEL 6, Amazon 14.03: >=2.4,<2.7\n'
+                '\tDebian 6: >=2.4,<2.5').format(pkg=pkg, ver=ver, os=linux.os['name'])
             raise exceptions.UnsupportedBehavior(cls.behavior, msg)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
