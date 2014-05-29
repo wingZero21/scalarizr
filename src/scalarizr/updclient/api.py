@@ -321,36 +321,41 @@ class UpdClientAPI(object):
 
             if self.ps_script_pid:
                 def wait_update_script(): 
-                    polling_started = False
-                    polling_finished = False
-                    while not self.shutdown_ev.is_set():
-                        if not polling_started:
-                            polling_started = True
-                            LOG.info("Start polling update.ps1 (pid: %s)", self.ps_script_pid)
-                        try:
-                            proc = get_win_process(self.ps_script_pid)
-                        except LookupError:
-                            polling_finished = True
-                        else:
-                            if not proc.name.startswith('powershell'):
+                    try:
+                        polling_started = False
+                        polling_finished = False
+                        while not self.shutdown_ev.is_set():
+                            if not polling_started:
+                                polling_started = True
+                                LOG.info("Start polling update.ps1 (pid: %s)", self.ps_script_pid)
+                            try:
+                                LOG.debug('getting win process')
+                                proc = get_win_process(self.ps_script_pid)
+                                LOG.debug('got it')
+                            except LookupError:
                                 polling_finished = True
                             else:
-                                self.shutdown_ev.wait(1)
-                                continue
-                        if polling_finished:
-                            LOG.info('update.ps1 (pid: %s) finished', self.ps_script_pid)
-                            if os.path.exists(self.win_status_file):
-                                with open(self.win_status_file) as fp:
-                                    LOG.debug('Apply %s settings', self.win_status_file)
-                                    self._update_self_dict(json.load(fp))
-                                os.unlink(self.win_status_file)   
-                            if self.error:
-                                LOG.info('Update error: %s', self.error)
-                            if self.state.startswith('in-progress') and self.ps_attempt < 3:
-                                LOG.warn('Update was interrupted in {0!r}, scheduling it again')
-                                system_matches = False
-                                self.state = 'noop'
-                            return
+                                if not proc.name.startswith('powershell'):
+                                    polling_finished = True
+                                else:
+                                    self.shutdown_ev.wait(1)
+                                    continue
+                            if polling_finished:
+                                LOG.info('update.ps1 (pid: %s) finished', self.ps_script_pid)
+                                if os.path.exists(self.win_status_file):
+                                    with open(self.win_status_file) as fp:
+                                        LOG.debug('Apply %s settings', self.win_status_file)
+                                        self._update_self_dict(json.load(fp))
+                                    os.unlink(self.win_status_file)   
+                                if self.error:
+                                    LOG.info('Update error: %s', self.error)
+                                if self.state.startswith('in-progress') and self.ps_attempt < 3:
+                                    LOG.warn('Update was interrupted in {0!r}, scheduling it again')
+                                    system_matches = False
+                                    self.state = 'noop'
+                                return
+                    except:
+                        LOG.warn('Caught in wait_update_script', exc_info=sys.exc_info())
 
                 wait_thread = threading.Thread(target=wait_update_script)
                 wait_thread.start()
