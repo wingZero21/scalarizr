@@ -158,6 +158,7 @@ class EBSImageMaker(object):
         avail_space = coreutils.statvfs(self.destination)['avail'] / 1024 / 1024
         if avail_space <= self.image_size:
             os.mkdir('/mnt/temp-vol')
+            LOG.debug('Making temp volume')
             self.temp_vol = self.make_volume(self.image_size/1000, '/mnt/temp-vol')
             self.destination = '/mnt/temp-vol'
 
