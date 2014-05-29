@@ -424,7 +424,7 @@ node['cloudstack'] = Compound({
 node['openstack'] = Compound({
         'connect_nova': Attr('scalarizr.bus', 'bus.platform.get_nova_conn'),
         'connect_cinder': Attr('scalarizr.bus', 'bus.platform.get_cinder_conn'),
-        'connect_swift': Attr('scalarizr.bus', 'bus.platform.get_swift_connection'),
+        'connect_swift': Attr('scalarizr.bus', 'bus.platform.get_swift_conn'),
         'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
 node['rackspace'] = Compound({
