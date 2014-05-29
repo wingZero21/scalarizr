@@ -155,7 +155,7 @@ class EBSImageMaker(object):
         """
         Assures that there is enough free space on destination device for image
         """
-        avail_space = coreutils.statvfs(self.destination) / 1024 / 1024
+        avail_space = coreutils.statvfs(self.destination)['avail'] / 1024 / 1024
         if avail_space <= self.image_size:
             os.mkdir('/mnt/temp-vol')
             self.temp_vol = self.make_volume(self.image_size/1000, '/mnt/temp-vol')
