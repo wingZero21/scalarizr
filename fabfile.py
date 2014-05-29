@@ -241,7 +241,6 @@ def build_omnibus():
         with shell_env(**env):
             run("bin/omnibus clean %s" % project)
             run("bin/omnibus build project %s --log-level=info" % project)
-            #run("rm -rf /var/cache/omnibus/pkg/*")
 
     # save to cache
     # run("mkdir -p /var/cache/ci")
@@ -345,12 +344,21 @@ def publish_rpm():
     '''
     publish .rpm packages into local repository
     '''
-    arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
-    remote_source = '/var/cache/omnibus/pkg/{0}*'.format(project)
-    host_destination = '/var/www/rpm/{branch}/5/{arch}/'.format(branch=branch, arch=arch)
-    get(remote_source, host_destination)
-    destination = '/var/www/rpm/{branch}/6/{arch}/'.format(branch=branch, arch=arch)
-    local('cp -r {source}* {dest}' .format(source=host_destination, dest=destination))
+    try:
+        arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
+        remote_source = '/var/cache/omnibus/pkg/{0}*'.format(project)
+        host_destination = '/var/www/rpm/{branch}/5/{arch}/'.format(branch=branch, arch=arch)
+        if os.path.exists(host_destination):
+            local('rm -rf {0}'.format(host_destination))
+        get(remote_source, host_destination + '%(path)s')
+        destination = '/var/www/rpm/{branch}/6/{arch}/'.format(branch=branch, arch=arch)
+        if os.path.exists(destination):
+            local('rm {0}*'.format(destination))
+        else:
+            os.makedirs(destination)
+        local('cp -r {source} {dest}' .format(source=host_destination, dest=destination))
+    finally:
+        run("rm -rf /var/cache/omnibus/pkg/*")
 
 
 @task
