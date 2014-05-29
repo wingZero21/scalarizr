@@ -347,10 +347,10 @@ def publish_rpm():
     '''
     arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
     remote_source = '/var/cache/omnibus/pkg/{0}*'.format(project)
-    host_destination = '/var/www/rpm/{branch}/5/{arch}'.format(branch=branch, arch=arch)
+    host_destination = '/var/www/rpm/{branch}/5/{arch}/'.format(branch=branch, arch=arch)
     get(remote_source, host_destination)
-    destination = '/var/www/rpm/{branch}/6/{arch}'.format(branch=branch, arch=arch)
-    local('cp -r {source} {dest}' .format(source=host_destination, dest=destination))
+    destination = '/var/www/rpm/{branch}/6/{arch}/'.format(branch=branch, arch=arch)
+    local('cp -r {source}* {dest}' .format(source=host_destination, dest=destination))
 
 
 @task
