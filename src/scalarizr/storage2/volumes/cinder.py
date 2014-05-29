@@ -248,7 +248,12 @@ class CinderVolume(base.Volume):
             for _ in xrange(5):
                 LOG.debug('Attaching Cinder volume %s', volume_id)
                 taken_before = base.taken_devices()
-                attachment = self._nova.volumes.create_server_volume(server_id, volume_id, None)
+                try:
+                    attachment = self._nova.volumes.create_server_volume(server_id, volume_id, None)
+                except TypeError, e:
+                    if "'NoneType' object has no attribute '__getitem__'" not in str(e):
+                        # Very often (2/5 times) we got this error on RaxNG, because of incorrect API response
+                        raise
 
                 #waiting for attaching transitional state
                 LOG.debug('Checking that Cinder volume %s is attached', volume_id)
