@@ -272,21 +272,31 @@ def _init_db(file=None):
     cnf = bus.cnf
 
     # Check that database exists (after rebundle for example)    
-    db_file = file or cnf.private_path(DB_NAME)
-    if not os.path.exists(db_file) or not os.stat(db_file).st_size:
-        logger.debug("Database doesn't exist, creating new one from script")
-        _create_db(file)
+    try:
+        db_file = file or cnf.private_path(DB_NAME)
+        if not os.path.exists(db_file) or not os.stat(db_file).st_size:
+            logger.debug("Database doesn't exist, creating new one from script")
+            _create_db(file)
 
-    # XXX(marat) Added here cause postinst script sometimes failed and we get
-    # OperationalError: table p2pmessage has no column named format
-    conn = _db_connect()
-    cur = conn.cursor()
-    cur.execute('pragma table_info(p2p_message)')
-    if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
-        cur.execute("alter table p2p_message add column format TEXT default 'xml'")
-        conn.commit()
-    cur.close()
-    conn.close()
+        # XXX(marat) Added here cause postinst script sometimes failed and we get
+        # OperationalError: table p2pmessage has no column named format
+        conn = _db_connect()
+        cur = conn.cursor()
+        cur.execute('pragma table_info(p2p_message)')
+        if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
+            cur.execute("alter table p2p_message add column format TEXT default 'xml'")
+            conn.commit()
+        cur.close()
+        conn.close()
+    except sqlite.OperationalError, e:
+        if 'database schema has changed' not in str(e):
+            # This caused by UpdateClient paralled startup.
+            #  
+            # By initial plan, Scalarizr should be started by UpdateClient, 
+            # but old Ubuntu 10.04 roles don't have UpdateClient. 
+            # Whereas it's installed during migration, but scalr-upd-client init script added to rc2.d 
+            # in run time never executed and migration to latest Scalarizr fails.
+            raise
 
         
     # Configure database connection pool
