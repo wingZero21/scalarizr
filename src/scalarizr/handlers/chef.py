@@ -12,12 +12,14 @@ import signal
 import shutil
 import logging
 import tempfile
+import subprocess
 
 from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.util import system2, initdv2, PopenError
 from scalarizr.util.software import which
+from scalarizr.linux.execute import eradicate
 from scalarizr.handlers import Handler, HandlerError, deploy
 
 if linux.os.windows_family:
@@ -323,7 +325,7 @@ class ChefHandler(Handler):
 class ChefSolo(object):
 
     def __init__(self, cookbook_url, cookbook_url_type, json_attributes,
-                 relative_path=None, environment=None, ssh_private_key=None, binary_path=None):
+                 relative_path=None, environment=None, ssh_private_key=None, binary_path=None, run_as='root'):
         """
         @param cookbook_url:
         @param cookbook_url_type:
@@ -341,40 +343,52 @@ class ChefSolo(object):
         self.ssh_private_key = ssh_private_key
         self.binary_path = binary_path or (r'C:\opscode\chef\bin\chef-solo.bat' if
                                            linux.os.windows_family else which('chef-solo'))
+        self.run_as = run_as
         self.output = None
         self.stacktrace = None
-
+        self.temp_dir = None
 
     def run(self, timeout=None):
-        temp_dir = tempfile.mkdtemp()
+        self.temp_dir = tempfile.mkdtemp()
         try:
             if self.cookbook_url_type == 'git':
                 downloader = deploy.GitSource(self.cookbook_url, ssh_private_key=self.ssh_private_key)
-                downloader.update(temp_dir)
+                downloader.update(self.temp_dir)
             elif self.cookbook_url_type == 'http':
                 downloader = deploy.HttpSource(self.cookbook_url)
-                downloader.update(temp_dir)
+                downloader.update(self.temp_dir)
             else:
                 raise HandlerError('Unknown cookbook source type: %s' % self.cookbook_url_type)
-            cookbook_path = os.path.join(temp_dir, self.relative_path or '')
+            cookbook_path = os.path.join(self.temp_dir, self.relative_path or '')
 
-            chef_solo_cfg_path = os.path.join(temp_dir, 'solo.rb')
+            chef_solo_cfg_path = os.path.join(self.temp_dir, 'solo.rb')
             with open(chef_solo_cfg_path, 'w') as f:
                 f.write(SOLO_CONF_TPL.format(cookbook_path))
 
-            attrs_path = os.path.join(temp_dir, 'runlist.json')
+            attrs_path = os.path.join(self.temp_dir, 'runlist.json')
             with open(attrs_path, 'w') as f:
                 json.dump(self.json_attributes, f)
 
+            cmd = [self.binary_path, '-c', chef_solo_cfg_path, '-j', attrs_path]
+            if self.run_as != 'root':
+                cmd = ['sudo', '-u', self.run_as] + cmd
 
-            self.output, err, retcode = system2([self.binary_path, '-c', chef_solo_cfg_path, '-j', attrs_path],
-                    close_fds=not linux.os.windows_family,
-                    log_level=logging.INFO,
-                    preexec_fn=not linux.os.windows_family and os.setsid or None,
-                    env=self.environment,
-                    raise_exc=False,
-                    err2out=True)
-            if retcode:
+            start_time = time.time()
+
+            chef_solo = subprocess.Popen(cmd,
+                                         close_fds=not linux.os.windows_family,
+                                         preexec_fn=not linux.os.windows_family and os.setsid or None,
+                                         env=self.environment,
+                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+            while chef_solo.poll() is None:
+                time.sleep(1)
+                if timeout and (time.time() - start_time) >= timeout:
+                    eradicate(chef_solo)
+                    raise Exception('Chef-solo timeouted %s sec. exceeded' % timeout)
+
+            self.output = chef_solo.stdout.read()
+            if chef_solo.returncode:
                 chef_stacktrace_path = os.path.join(cookbook_path, 'chef-stacktrace.out')
                 if os.path.exists(chef_stacktrace_path):
                     with open(chef_stacktrace_path) as f:
@@ -382,6 +396,6 @@ class ChefSolo(object):
                 raise Exception('Chef run returned non-zero code, see output or stacktrace for more info.')
         finally:
             try:
-                shutil.rmtree(temp_dir)
+                shutil.rmtree(self.temp_dir)
             except:
                 pass
