@@ -179,27 +179,28 @@ class ScriptExecutor(Handler):
             self._execute_one_script0(script)
 
     def _execute_one_script0(self, script):
-        exc_msg = None
+        exc_info = None
         try:
             self.in_progress.append(script)
             if not script.start_time:
                 script.start()
             script.wait()
         except (BaseException, Exception), e:
-            exc_msg = sys.exc_info()
+            exc_info = sys.exc_info()
             if script.asynchronous:
-                LOG.warn('Caught exception', exc_info=exc_msg)
+                LOG.warn('Caught exception', exc_info=exc_info)
             # raise
         finally:
             try:
                 script_result = script.get_result()
-                if exc_msg:
-                    script_result['stderr'] = exc_msg
+                if exc_info:
+                    script_result['stderr'] = exc_info[1][1]
+                    script_result['return_code'] = exc_info[1][0]
                 self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
                 self.in_progress.remove(script)
             except:
-                exc_msg = sys.exc_info()
-                LOG.warn('Caught 123', exc_info=exc_msg)
+                exc_info = sys.exc_info()
+                LOG.warn('Caught 123', exc_info=exc_info)
 
     def execute_scripts(self, scripts, event_name, scripts_qty):
         """
