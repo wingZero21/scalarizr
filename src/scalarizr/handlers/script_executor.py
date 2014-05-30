@@ -189,13 +189,17 @@ class ScriptExecutor(Handler):
             exc_msg = sys.exc_info()
             if script.asynchronous:
                 LOG.warn('Caught exception', exc_info=exc_msg)
-            raise
+            # raise
         finally:
-            script_result = script.get_result()
-            if exc_msg:
-                script_result['stderr'] = exc_msg
-            self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
-            self.in_progress.remove(script)
+            try:
+                script_result = script.get_result()
+                if exc_msg:
+                    script_result['stderr'] = exc_msg
+                self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
+                self.in_progress.remove(script)
+            except:
+                exc_msg = sys.exc_info()
+                LOG.warn('Caught 123', exc_info=exc_msg)
 
     def execute_scripts(self, scripts, event_name, scripts_qty):
         """
