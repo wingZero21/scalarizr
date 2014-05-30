@@ -953,7 +953,15 @@ class MongoCLI(object):
 
         for i in range(5):
             time.sleep(i)
-            res = self.connection.admin.command('replSetInitiate')
+            try:
+                res = self.connection.admin.command('replSetInitiate')
+            except:
+                e = sys.exc_info()[1]
+                if 'all members and seeds must be reachable' in str(e):
+                    continue
+                else:
+                    raise
+
             if int(res['ok']) != 0:
                 break
             self._logger.warning('Replica set initiation failed: %s' % res['errmsg'])
