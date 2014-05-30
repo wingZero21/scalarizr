@@ -397,6 +397,10 @@ class Script(object):
                 "interpreter '%s' not found" % (self.name, self.interpreter))
 
     def start(self):
+        if not os.path.exists(self.stdout_path):
+            open(self.stdout_path, 'w+').close()
+        if not os.path.exists(self.stderr_path):
+            open(self.stderr_path, 'w+').close()
         self.check_runability()
         if not self.path:
             # Write script to disk, prepare execution
@@ -464,11 +468,6 @@ class Script(object):
                 self.logger.debug('Timeouted: %s seconds. Killing process %s (pid: %s)',
                                                         self.exec_timeout, self.interpreter, self.pid)
                 self.return_code = self._proc_kill()
-
-            if not os.path.exists(self.stdout_path):
-                open(self.stdout_path, 'w+').close()
-            if not os.path.exists(self.stderr_path):
-                open(self.stderr_path, 'w+').close()
 
             self.elapsed_time = time.time() - self.start_time
             self.logger.debug('Finished %s'
