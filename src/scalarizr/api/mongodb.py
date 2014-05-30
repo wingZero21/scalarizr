@@ -191,48 +191,57 @@ class MongoDBAPI(BehaviorAPI):
         if os_name == 'ubuntu':
             if os_vers >= '14':
                 required_list = [
+                    ['mongodb-org>=2.4,<2.7'],
                     ['mongodb-10gen>=2.4,<2.7'],
                     ['mongodb>=2.4,<2.7']
                 ]
             elif os_vers >= '12':
                 required_list = [
+                    ['mongodb-org>=2.0,<2.7'],
                     ['mongodb-10gen>=2.0,<2.7'],
                     ['mongodb>=2.0,<2.7']
                 ]
             elif os_vers >= '10':
                 required_list = [
+                    ['mongodb-org>=2.0,<2.1'],
                     ['mongodb-10gen>=2.0,<2.1'],
                     ['mongodb>=2.0,<2.1']
                 ]
         elif os_name == 'debian':
             if os_vers >= '7':
                 required_list = [
+                    ['mongodb-org>=2.4,<2.7'],
                     ['mongodb-10gen>=2.4,<2.7'],
                     ['mongodb>=2.4,<2.7']
                 ]
             elif os_vers >= '6':
                 required_list = [
+                    ['mongodb-org>=2.4,<2.5'],
                     ['mongodb-10gen>=2.4,<2.5'],
                     ['mongodb>=2.4,<2.5']
                 ]
         elif os_name == 'centos':
             if os_vers >= '6':
                 required_list = [
+                    ['mongodb-org>=2.0,<2.7'],
                     ['mongo-10gen-server>=2.0,<2.7'],
                     ['mongo-server>=2.0,<2.7']
                 ]
             elif os_vers >= '5':
                 required_list = [
+                    ['mongodb-org>=2.0,<2.1'],
                     ['mongo-10gen-server>=2.0,<2.1'],
                     ['mongo-server>=2.0,<2.1']
                 ]
         elif linux.os.redhat_family:
             required_list = [
+                ['mongodb-org>=2.4,<2.7'],
                 ['mongo-10gen-server>=2.4,<2.7'],
                 ['mongo-server>=2.4,<2.7']
             ]
         elif linux.os.oracle_family:
             required_list = [
+                ['mongodb-org>=2.0,<2.1'],
                 ['mongo-10gen-server>=2.0,<2.1'],
                 ['mongo-server>=2.0,<2.1']
             ]
