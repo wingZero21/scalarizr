@@ -328,9 +328,7 @@ class UpdClientAPI(object):
                             polling_started = True
                             LOG.info("Start polling update.ps1 (pid: %s)", self.ps_script_pid)
                         try:
-                            LOG.debug('getting win process')
                             proc = get_win_process(self.ps_script_pid)
-                            LOG.debug('got it')
                         except LookupError:
                             polling_finished = True
                         else:
@@ -349,12 +347,12 @@ class UpdClientAPI(object):
                             if self.error:
                                 LOG.info('Update error: %s', self.error)
                             if self.state.startswith('in-progress') and self.ps_attempt < 3:
-                                LOG.warn('Update was interrupted in {0!r}, scheduling it again')
-                                system_matches = False
+                                LOG.warn('Update was interrupted in {0!r}, scheduling it again'.format(self.state))
                                 self.state = 'noop'
+                                return True
                             return
                 try:
-                    wait_update_script()
+                    system_matches = not wait_update_script()
                 except:
                     LOG.warn('Caught from wait_update_script', exc_info=sys.exc_info())
                 if self.shutdown_ev.is_set():
