@@ -346,10 +346,15 @@ class UpdClientAPI(object):
                                 os.unlink(self.win_status_file)   
                             if self.error:
                                 LOG.info('Update error: %s', self.error)
-                            if self.state.startswith('in-progress') and self.ps_attempt < 3:
-                                LOG.warn('Update was interrupted in {0!r}, scheduling it again'.format(self.state))
-                                self.state = 'noop'
-                                return True
+                            if self.state.startswith('in-progress'):
+                                if self.ps_attempt < 3:
+                                    LOG.warn('Update was interrupted in {0!r}, scheduling it again'.format(self.state))
+                                    self.state = 'noop'
+                                    return True
+                                else:
+                                    LOG.warn(('Update was interrupted in {0!r}'
+                                            ' and it was already executed {1} times, '
+                                            'skip updating this time').format(self.state, self.ps_attempt))
                             return
                 try:
                     system_matches = not wait_update_script()
