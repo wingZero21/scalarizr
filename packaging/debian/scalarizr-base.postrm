@@ -6,6 +6,7 @@ if [ "$1" = "purge" ]; then
 	rm -f /mnt/privated.img
     # Preserve .user-data file
 	#rm -rf /etc/scalr/private.d  
+    rm -f /etc/scalr/private.d/.state
 	rm -rf /etc/scalr/public.d
 	rm -f /etc/scalr/logging*
 	rm -f /tmp/scalarizr.status
