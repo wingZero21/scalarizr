@@ -252,56 +252,22 @@ class ChefHandler(Handler):
                     self.run_chef_client(daemonize=True)
 
             elif self._chef_data.get('cookbook_url'):
-                cookbook_url = self._chef_data['cookbook_url']
-                temp_dir = tempfile.mkdtemp()
+                solo = ChefSolo(self._chef_data['cookbook_url'],
+                                self._chef_data['cookbook_url_type'],
+                                self._with_json_attributes,
+                                relative_path=self._chef_data.get('relative_path'),
+                                environment=self._environ_variables,
+                                ssh_private_key=self._chef_data.get('ssh_private_key'),
+                                binary_path=self._chef_solo_bin)
                 try:
-                    try:
-                        src_type = self._chef_data['cookbook_url_type']
-                    except KeyError:
-                        raise HandlerError('Cookbook source type was not specified')
-
-                    if src_type == 'git':
-                        ssh_key = self._chef_data.get('ssh_private_key')
-                        downloader = deploy.GitSource(cookbook_url, ssh_private_key=ssh_key)
-                        downloader.update(temp_dir)
-                    elif src_type == 'http':
-                        downloader = deploy.HttpSource(cookbook_url)
-                        downloader.update(temp_dir)
-                    else:
-                        raise HandlerError('Unknown cookbook source type: %s' % src_type)
-                    cookbook_path = os.path.join(temp_dir, self._chef_data.get('relative_path') or '')
-
-                    chef_solo_cfg_path = os.path.join(temp_dir, 'solo.rb')
-                    with open(chef_solo_cfg_path, 'w') as f:
-                        f.write(SOLO_CONF_TPL.format(cookbook_path))
-
-                    attrs_path = os.path.join(temp_dir, 'runlist.json')
-                    with open(attrs_path, 'w') as f:
-                        json.dump(self._with_json_attributes, f)
-
-                    try:
-                        system2([self._chef_solo_bin, '-c', chef_solo_cfg_path, '-j', attrs_path],
-                                close_fds=not linux.os.windows_family,
-                                log_level=logging.INFO,
-                                preexec_fn=not linux.os.windows_family and os.setsid or None,
-                                env=self._environ_variables)
-                    except:
-                        e_type, e, tb = sys.exc_info()
-                        if cookbook_path:
-                            chef_stacktrace_path = os.path.join(cookbook_path, 'chef-stacktrace.out')
-                            if os.path.exists(chef_stacktrace_path):
-                                with open(chef_stacktrace_path) as f:
-                                    e = e_type(str(e) + '\nChef traceback:\n' + f.read())
-                        raise e_type, e, tb
-
+                    solo.run()
                 except:
-                    self._logger.error('Chef-solo bootstrap failed', exc_info=sys.exc_info())
-                    raise
-                finally:
-                    try:
-                        shutil.rmtree(temp_dir)
-                    except:
-                        pass
+                    err_cmd = 'Chef-solo bootstrap failed.'
+                    if solo.output:
+                        err_cmd += ('\n' + solo.output)
+                    if solo.stacktrace:
+                        err_cmd += ('\n' + solo.stacktrace)
+                    raise Exception(err_cmd)
 
             else:
                 raise HandlerError('Neither chef server nor cookbook url were specified')
@@ -352,3 +318,70 @@ class ChefHandler(Handler):
                     self._platform.name, 
                     self._platform.get_public_ip(), 
                     time.time())
+
+
+class ChefSolo(object):
+
+    def __init__(self, cookbook_url, cookbook_url_type, json_attributes,
+                 relative_path=None, environment=None, ssh_private_key=None, binary_path=None):
+        """
+        @param cookbook_url:
+        @param cookbook_url_type:
+        @param json_attributes: dictionary to pass to -j argument of chef-solo, contains run_list
+        @param relative_path:
+        @param environment:
+        @param ssh_private_key:
+        @param binary_path:
+        """
+        self.cookbook_url = cookbook_url
+        self.cookbook_url_type = cookbook_url_type
+        self.relative_path = relative_path
+        self.json_attributes = json_attributes
+        self.environment = environment or dict()
+        self.ssh_private_key = ssh_private_key
+        self.binary_path = binary_path or (r'C:\opscode\chef\bin\chef-solo.bat' if
+                                           linux.os.windows_family else which('chef-solo'))
+        self.output = None
+        self.stacktrace = None
+
+
+    def run(self, timeout=None):
+        temp_dir = tempfile.mkdtemp()
+        try:
+            if self.cookbook_url_type == 'git':
+                downloader = deploy.GitSource(self.cookbook_url, ssh_private_key=self.ssh_private_key)
+                downloader.update(temp_dir)
+            elif self.cookbook_url_type == 'http':
+                downloader = deploy.HttpSource(self.cookbook_url)
+                downloader.update(temp_dir)
+            else:
+                raise HandlerError('Unknown cookbook source type: %s' % self.cookbook_url_type)
+            cookbook_path = os.path.join(temp_dir, self.relative_path or '')
+
+            chef_solo_cfg_path = os.path.join(temp_dir, 'solo.rb')
+            with open(chef_solo_cfg_path, 'w') as f:
+                f.write(SOLO_CONF_TPL.format(cookbook_path))
+
+            attrs_path = os.path.join(temp_dir, 'runlist.json')
+            with open(attrs_path, 'w') as f:
+                json.dump(self.json_attributes, f)
+
+
+            self.output, err, retcode = system2([self.binary_path, '-c', chef_solo_cfg_path, '-j', attrs_path],
+                    close_fds=not linux.os.windows_family,
+                    log_level=logging.INFO,
+                    preexec_fn=not linux.os.windows_family and os.setsid or None,
+                    env=self.environment,
+                    raise_exc=False,
+                    err2out=True)
+            if retcode:
+                chef_stacktrace_path = os.path.join(cookbook_path, 'chef-stacktrace.out')
+                if os.path.exists(chef_stacktrace_path):
+                    with open(chef_stacktrace_path) as f:
+                        self.stacktrace = f.read()
+                raise Exception('Chef run returned non-zero code, see output or stacktrace for more info.')
+        finally:
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass

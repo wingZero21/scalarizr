@@ -9,6 +9,7 @@ from scalarizr import config as szrconfig
 from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.handlers import Handler, HandlerError
+from scalarizr.handlers.chef import ChefSolo
 from scalarizr.messaging import Queues, Messages
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
 from scalarizr.config import ScalarizrState
@@ -253,6 +254,7 @@ class ScriptExecutor(Handler):
 
             def _create_script(message_script_params):
                 kwds = message_script_params.copy()
+
                 if 'timeout' in kwds:
                     kwds['exec_timeout'] = kwds.pop('timeout')
                 if 'asynchronous' in kwds:
