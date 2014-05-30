@@ -189,6 +189,7 @@ class ScriptExecutor(Handler):
                 LOG.warn('Caught exception', exc_info=sys.exc_info())
             raise
         finally:
+            LOG.debug('sending result: %s' % script.get_result())
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script.get_result(), queue=Queues.LOG)
             self.in_progress.remove(script)
 
