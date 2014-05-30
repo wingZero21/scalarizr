@@ -75,6 +75,13 @@ def devel_repo_url_for_branch(branch):
         win='http://buildbot.scalr-labs.com/win/{0}/'.format(norm_branch))
 
 
+def get_win_process(pid):
+    wmi = win32com.client.GetObject('winmgmts:')
+    for proc in wmi.ExecQuery('SELECT * FROM Win32_Process WHERE ProcessId = {0}'.format(pid)):
+        return proc
+    raise LookupError('Process {0!r} not found'.format(pid))
+
+
 class UpdClientAPI(object):
     '''
     States:
@@ -107,6 +114,8 @@ class UpdClientAPI(object):
     server_id = farm_role_id = system_id = platform = queryenv_url = messaging_url = None
     scalr_id = scalr_version = None
     _state = prev_state = installed = candidate = executed_at = error = dist = None
+    ps_script_pid = None
+    ps_attempt = 0
 
     update_server = None
     messaging_service = None
@@ -309,32 +318,51 @@ class UpdClientAPI(object):
         if system_matches:
             LOG.debug('Apply %s settings', self.status_file)
             self._update_self_dict(status_data)
-            if os.path.exists(self.win_status_file):
+
+            if self.ps_script_pid:
                 def wait_update_script(): 
-                    LOG.debug('Apply %s settings', self.win_status_file)
-                    log_polling = True
+                    polling_started = False
+                    polling_finished = False
                     while not self.shutdown_ev.is_set():
-                        with open(self.win_status_file) as fp:
-                            self._update_self_dict(json.load(fp))
-                        if self.state.startswith('in-progress'):
-                            if log_polling:
-                                LOG.info("Script update.ps1 is in '%s', start polling", self.state)
-                                log_polling = False
-                            self.shutdown_ev.wait(1)
-                            continue
+                        if not polling_started:
+                            polling_started = True
+                            LOG.info("Start polling update.ps1 (pid: %s)", self.ps_script_pid)
+                        try:
+                            proc = get_win_process(self.ps_script_pid)
+                        except LookupError:
+                            polling_finished = True
                         else:
-                            msg = 'Script update.ps1 finished, state: {0}'.format(self.state)
+                            if not proc.name.startswith('powershell'):
+                                polling_finished = True
+                            else:
+                                self.shutdown_ev.wait(1)
+                                continue
+                        if polling_finished:
+                            LOG.info('update.ps1 (pid: %s) finished', self.ps_script_pid)
+                            if os.path.exists(self.win_status_file):
+                                with open(self.win_status_file) as fp:
+                                    LOG.debug('Apply %s settings', self.win_status_file)
+                                    self._update_self_dict(json.load(fp))
+                                os.unlink(self.win_status_file)   
                             if self.error:
-                                msg += '. {0}'.format(self.error)
-                            LOG.info(msg)
-                            os.unlink(self.win_status_file)
+                                LOG.info('Update error: %s', self.error)
+                            if self.state.startswith('in-progress'):
+                                if self.ps_attempt < 3:
+                                    LOG.warn('Update was interrupted in {0!r}, scheduling it again'.format(self.state))
+                                    self.state = 'noop'
+                                    return True
+                                else:
+                                    LOG.warn(('Update was interrupted in {0!r}'
+                                            ' and it was already executed {1} times, '
+                                            'skip updating this time').format(self.state, self.ps_attempt))
                             return
-                wait_thread = threading.Thread(target=wait_update_script)
-                wait_thread.start()
-                wait_thread.join()
+                try:
+                    system_matches = not wait_update_script()
+                except:
+                    LOG.warn('Caught from wait_update_script', exc_info=sys.exc_info())
                 if self.shutdown_ev.is_set():
                     return
-        else:
+        if not system_matches:
             LOG.info('Getting cloud user-data')
             try:
                 user_data = self.meta['user_data']
@@ -403,7 +431,9 @@ class UpdClientAPI(object):
             else:
                 self.update(bootstrap=True)
         else:
-            if self.state in ('completed/wait-ack', 'noop'):
+            #if self.state in ('completed/wait-ack', 'noop'):
+            if self.state not in ('error', 'rollbacked'):
+                # forcefully finish any in-progress operations
                 self.state = 'completed'
             self.store()
         if not (self.shutdown_ev.is_set() or dry_run or \
@@ -573,6 +603,8 @@ class UpdClientAPI(object):
                 close_fds=True,
                 cwd='C:\\'
             )
+            self.ps_script_pid = proc.pid
+            self.ps_attempt += 1
             LOG.debug('Started powershell process (pid: %s)', proc.pid)
             LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)
             self.shutdown_ev.wait(self.win_update_timeout)
@@ -716,6 +748,7 @@ class UpdClientAPI(object):
             'server_id', 'farm_role_id', 'system_id', 'platform', 'queryenv_url', 
             'messaging_url', 'scalr_id', 'scalr_version', 
             'repository', 'repo_url', 'package', 'downgrades_enabled', 'executed_at', 
+            'ps_script_pid', 'ps_attempt',
             'state', 'prev_state', 'error', 'dist'
         ]
 
