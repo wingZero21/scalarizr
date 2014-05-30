@@ -186,9 +186,9 @@ class ScriptExecutor(Handler):
                 script.start()
             script.wait()
         except (BaseException, Exception), e:
-            exc_msg = e.message
+            exc_msg = sys.exc_info()
             if script.asynchronous:
-                LOG.warn('Caught exception', exc_info=sys.exc_info())
+                LOG.warn('Caught exception', exc_info=exc_msg)
             raise
         finally:
             script_result = script.get_result()
