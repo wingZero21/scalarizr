@@ -333,17 +333,12 @@ class Script(object):
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
 
-        if self.name and (self.body or self.path):
+        if self.body or self.path:
             # time.time() can produce the same microseconds fraction in different async script execution threads, 
             # and therefore produce the same id. solution is to seed random millisecods number
             random.seed()
             self.id = '%d.%d' % (time.time(), random.randint(0, 100))
 
-            self.interpreter = read_shebang(path=self.path, script=self.body)
-
-            if linux.os['family'] == 'Windows' and self.body:
-                # Erase first line with #!
-                self.body = '\n'.join(self.body.splitlines()[1:])
         else:
             assert self.id, '`id` required'
             assert self.pid, '`pid` required'
@@ -374,6 +369,12 @@ class Script(object):
             self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
 
     def check_runability(self):
+        if self.body or self.path:
+            self.interpreter = read_shebang(path=self.path, script=self.body)
+            if linux.os['family'] == 'Windows' and self.body:
+                # Erase first line with #!
+                self.body = '\n'.join(self.body.splitlines()[1:])
+
         if self.path and not os.access(self.path, os.X_OK):
             msg = 'Path {0!r} is not executable'.format(self.path)
             raise HandlerError(msg)
