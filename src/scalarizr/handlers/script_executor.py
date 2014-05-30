@@ -179,22 +179,22 @@ class ScriptExecutor(Handler):
             self._execute_one_script0(script)
 
     def _execute_one_script0(self, script):
+        exc_msg = None
         try:
             self.in_progress.append(script)
             if not script.start_time:
                 script.start()
             script.wait()
         except (BaseException, Exception), e:
+            exc_msg = e.message
             if script.asynchronous:
                 LOG.warn('Caught exception', exc_info=sys.exc_info())
-                try:
-                    self.send_message(Messages.EXEC_SCRIPT_RESULT, script.get_result(), queue=Queues.LOG)
-                except:
-                    LOG.warn('Caught exception in sending call', exc_info=sys.exc_info())
-            # raise
+            raise
         finally:
-            LOG.debug('sending result: %s' % script.get_result())
-            self.send_message(Messages.EXEC_SCRIPT_RESULT, script.get_result(), queue=Queues.LOG)
+            script_result = script.get_result()
+            if exc_msg:
+                script_result['stderr'] = exc_msg
+            self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
             self.in_progress.remove(script)
 
     def execute_scripts(self, scripts, event_name, scripts_qty):
@@ -334,7 +334,7 @@ class Script(object):
         for key, value in kwds.items():
             setattr(self, key, value)
         self.elapsed_time = 0
-
+        self.return_code = 1
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
 
