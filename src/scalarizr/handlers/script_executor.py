@@ -194,7 +194,7 @@ class ScriptExecutor(Handler):
             script_result = script.get_result()
             if exc_info:
                 script_result['stderr'] = exc_info[1][1]
-                script_result['return_code'] = exc_info[1][0]
+                script_result['return_code'] = 1
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
             self.in_progress.remove(script)
 
