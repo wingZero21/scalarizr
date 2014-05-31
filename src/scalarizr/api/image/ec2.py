@@ -159,7 +159,9 @@ class EBSImageMaker(object):
         if avail_space <= self.image_size:
             os.mkdir('/mnt/temp-vol')
             LOG.debug('Making temp volume')
-            self.temp_vol = self.make_volume((self.image_size/1000)+1, '/mnt/temp-vol')
+            self.temp_vol = self.make_volume(self.image_size/1000,
+                '/mnt/temp-vol',
+                mount=True)
             self.destination = '/mnt/temp-vol'
 
     def prepare_image(self):
@@ -173,7 +175,7 @@ class EBSImageMaker(object):
             '--arch', linux.os['arch'],
             '--size', str(self.image_size),
             '--destination', self.destination,
-            '--exclude', self.destination,
+            # '--exclude', self.destination,
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
@@ -184,7 +186,7 @@ class EBSImageMaker(object):
             stderr=subprocess.STDOUT)[0]
         LOG.debug('Image prepare command out: %s' % out)
 
-    def make_volume(self, size, mpoint):
+    def make_volume(self, size, mpoint, mount=False):
         ebs_config = {'type': 'ebs',
             'size': size}
         ebs_config['size'] = size
@@ -192,7 +194,8 @@ class EBSImageMaker(object):
         volume = create_volume(ebs_config, fstype='ext4')
         volume.mpoint = mpoint
         volume.ensure(mount=True, mkfs=True)
-        volume.umount()
+        if not mount:
+            volume.umount()
         LOG.debug('Volume created %s' % volume.device)
         return volume
 
