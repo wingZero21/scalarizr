@@ -159,7 +159,7 @@ class EBSImageMaker(object):
         if avail_space <= self.image_size:
             os.mkdir('/mnt/temp-vol')
             LOG.debug('Making temp volume')
-            self.temp_vol = self.make_volume(self.image_size/1000, '/mnt/temp-vol')
+            self.temp_vol = self.make_volume((self.image_size/1000)+1, '/mnt/temp-vol')
             self.destination = '/mnt/temp-vol'
 
     def prepare_image(self):
@@ -173,7 +173,7 @@ class EBSImageMaker(object):
             '--arch', linux.os['arch'],
             '--size', str(self.image_size),
             '--destination', self.destination,
-            # '--exclude', ','.join(self.excludes),
+            '--exclude', self.destination,
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
@@ -304,8 +304,8 @@ class EBSImageMaker(object):
             snapshot_id = self.make_snapshot(volume)
             image_id = self.register_image(snapshot_id, volume.device)
             volume.destroy()
-            if self.temp_vol:
-                self.temp_vol.destroy()
+            # if self.temp_vol:
+            #     self.temp_vol.destroy()
             return image_id
         finally:
             self.cleanup()
