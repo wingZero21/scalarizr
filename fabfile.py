@@ -25,6 +25,7 @@ version = None
 repo = None
 rubies = '/opt/rubies/ruby-2.1.1/bin'
 
+
 current_contents = None
 with open('/etc/environment', 'r+') as fp:
     current_contents = fp.read()
@@ -142,6 +143,7 @@ def git_export():
     '''
     Export current git tree to slave server into the same directory name
     '''
+    print_green('in git export')
     archive = '%s.tar.gz' % project
     local("git archive --format=tar HEAD | gzip >%s" % archive)
     if '.strider' in build_dir:
@@ -154,7 +156,7 @@ def git_export():
     put(archive, build_dir)
     if os.path.exists(archive):
         local('rm -f %s' % archive)
-
+    print_green('build_dir is %s ' % build_dir)
     with cd(build_dir):
         run("tar -xf %s" % archive)
 
@@ -175,65 +177,11 @@ def local_export():
         run("tar -xf %s" % archive)
 
 
-def build_omnibus_deps():
-    pass
-    # rm old installation
-    # print_green('building omnibus dependencies')
-    # run("rm -rf /opt/%s" % project)
-    # rm cache
-    # run("rm -rf /var/cache/ci/%s" % project)
-    # build base installation
-
-    # with cd(omnibus_dir):
-    # TODO: add current bundle location to PATH if this works
-    #     run("[ -f bin/omnibus ] || bundle install --binstubs")
-    #     env = {
-    #         'BUILD_DIR': build_dir,
-    #         'OMNIBUS_BUILD_DEPS': '1',
-    #     }
-    #     with shell_env(**env):
-    #         run("bin/omnibus clean %s" % project)
-    #         run("bin/omnibus build project %s --log-level=info" % project)
-    #         run("rm -rf /var/cache/omnibus/pkg/*")
-
-    # save to cache
-    # run("mkdir -p /var/cache/ci")
-    # run("mv /opt/%s /var/cache/ci/%s" % (project, project))
-    # save md5sum
-    # with open(omnibus_md5sum_file, 'w+') as fp:
-    #     fp.write(omnibus_md5sum())
-
-
 def build_omnibus():
     # rm old installation
     print_green('building omnibus with dependencies')
-    # run("rm -rf /opt/%s" % project)
-    # run("rm -f /var/cache/omnibus/pkg/{0}*".format(project))
-    # copy base installation
-    # run("cp -r /var/cache/ci/%s /opt/" % project)
-    # bump project version
-    # with cd(build_dir):
-    #     run("echo '%s' >version" % (version, ))
-    # build project
-    # with cd(omnibus_dir):
-    # TODO: add current bundle location to PATH if this works
-    #     run("[ -f bin/omnibus ] || bundle install --binstubs")
-    #     env = {
-    #         'BUILD_DIR': build_dir,
-    #         'OMNIBUS_BUILD_VERSION': version,
-    #     }
-    #     with shell_env(**env):
-    #         run("bin/omnibus build project  %s" % project)
-
-    # TODO: cleanup this method
-    print_green('building omnibus dependencies')
     run("rm -rf /opt/%s" % project)
-    # rm cache
-    # run("rm -rf /var/cache/ci/%s" % project)
-    # build base installation
-
     with cd(omnibus_dir):
-        # TODO: add current bundle location to PATH if this works
         run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
@@ -244,10 +192,6 @@ def build_omnibus():
             run("bin/omnibus clean %s" % project)
             run("bin/omnibus build project %s --log-level=info" % project)
 
-    # save to cache
-    # run("mkdir -p /var/cache/ci")
-    # run("mv /opt/%s /var/cache/ci/%s" % (project, project))
-    # save md5sum
     with open(omnibus_md5sum_file, 'w+') as fp:
         fp.write(omnibus_md5sum())
 
@@ -269,16 +213,6 @@ def build_source():
 
 
 @task
-def build_binary_deps():
-    '''
-    create binary distribution base (execute once before 'build_binary' and when requirements.txt changed)
-    '''
-    init()
-    git_export()
-    build_omnibus_deps()
-
-
-@task
 def build_binary():
     '''
     create binary distribution (.deb .rpm)
@@ -286,8 +220,7 @@ def build_binary():
     init()
     git_export()
     generate_changelog()
-    if omnibus_md5sum_changed() or initial_run:
-        build_omnibus_deps()
+
     build_omnibus()
     import_artifact('/var/cache/omnibus/pkg/{0}*'.format(project))
 
@@ -406,6 +339,15 @@ def release(repo='latest'):
     sync packages from local repository to Scalr.net
     '''
     pass
+
+
+@task
+@runs_once
+def publish_binary():
+    if 'centos' in env.host_string:
+        publish_rpm()
+    else:
+        publish_deb()
 
 
 def print_green(msg):
