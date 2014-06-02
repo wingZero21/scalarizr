@@ -175,7 +175,7 @@ class EBSImageMaker(object):
             '--arch', linux.os['arch'],
             '--size', str(self.image_size),
             '--destination', self.destination,
-            # '--exclude', self.destination,
+            '--exclude', self.destination,
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
