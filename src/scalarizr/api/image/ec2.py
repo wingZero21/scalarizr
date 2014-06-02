@@ -203,21 +203,7 @@ class EBSImageMaker(object):
         fstab_file_path = os.path.join(volume.mpoint, 'etc/fstab')
         fstab = mount.fstab(fstab_file_path)
         # TODO: remove all ebses
-        # ec2_conn = pl.new_ec2_conn()
-        # instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
 
-        # ebs_devs = list(vol.attach_data.device
-        #                         for vol in ec2_conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
-        #                         if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id()
-        #                                 and instance.root_device_name != vol.attach_data.device)
-
-        # for device in ebs_devs:
-        #     device = ebsvolume.name2device(device)
-        #     LOG.debug('Remove %s from fstab', device)
-        #     try:
-        #         del fstab[device]
-        #     except KeyError:
-        #         pass
         try:
             del fstab[volume.mpoint]
         except KeyError:
@@ -248,21 +234,9 @@ class EBSImageMaker(object):
 
     def register_image(self, snapshot_id, root_device_name):
         conn = self.platform.new_ec2_conn()
-
-        # cmd = (
-        #     os.path.join(self.api_bin_dir, 'ec2-register'), 
-        #     '--name', self.image_name,
-        #     '-s', snapshot_id,
-        #     '--debug')
-        # LOG.debug('Image register command: ' + ' '.join(cmd))
-        # out = linux.system(cmd, 
-        #     env=self.environ,
-        #     stdout=subprocess.PIPE, 
-        #     stderr=subprocess.STDOUT)[0]
     
         instance_id = self.platform.get_instance_id()
         instance = conn.get_all_instances([instance_id])[0].instances[0]
-
 
         root_vol = BlockDeviceType(snapshot_id=snapshot_id)
         block_device_map = BlockDeviceMapping()
@@ -307,8 +281,8 @@ class EBSImageMaker(object):
             snapshot_id = self.make_snapshot(volume)
             image_id = self.register_image(snapshot_id, volume.device)
             volume.destroy()
-            # if self.temp_vol:
-            #     self.temp_vol.destroy()
+            if self.temp_vol:
+                self.temp_vol.destroy()
             return image_id
         finally:
             self.cleanup()
