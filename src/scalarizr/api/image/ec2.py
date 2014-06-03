@@ -53,10 +53,6 @@ class InstanceStoreImageMaker(object):
         if not excludes:
             self.excludes = [
                 # self.destination,
-                # '/selinux',
-                # '/var/lib/dhclient',
-                # '/var/lib/dhcp',
-                # '/var/lib/dhcp3'
                 ]
 
     def prepare_image(self):
@@ -145,10 +141,6 @@ class EBSImageMaker(object):
         self.temp_vol = None
         self.excludes = [
                 # self.destination,
-                # '/selinux',
-                # '/var/lib/dhclient',
-                # '/var/lib/dhcp',
-                # '/var/lib/dhcp3'
                 ]
 
     def _assure_space(self):
