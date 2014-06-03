@@ -85,7 +85,7 @@ def init():
     '''
     Initialize current build.
     '''
-    global tag, branch, version, repo, build_number, artifacts_dir, initial_run
+    global tag, branch, version, repo, build_number, artifacts_dir
 
     build_number = read_build_number()
     print_green('build_number: {0}'.format(build_number))
@@ -108,6 +108,7 @@ def init():
     else:
         # it's a branch
         branch = ref.replace('/', '-').replace('_', '-').replace('.', '')
+        env.branch = branch
         version = '{version}.b{build_number}.{revision}'.format(
             version=pkg_version,
             build_number=build_number,
@@ -115,12 +116,6 @@ def init():
         repo = branch
         print_green('branch: {0}'.format(branch))
         print_green('version: {0}'.format(version))
-    initialrun_switch_location = os.path.join(project_dir, '.initialrun')
-    if not os.path.exists(initialrun_switch_location):
-        with open(initialrun_switch_location, 'w+'):
-            initial_run = True
-    else:
-        initial_run = False
 
     print_green('repo: {0}'.format(repo))
 
@@ -146,6 +141,9 @@ def git_export():
     print_green('in git export')
     archive = '%s.tar.gz' % project
     local("git archive --format=tar HEAD | gzip >%s" % archive)
+    if not os.path.exists(archive):
+        f = open(arhive, 'w+')
+        f.close()
     if '.strider' in build_dir:
         build_dir_pattern = build_dir.rsplit('-', 1)[0] + '-*'
         if os.path.exists(build_dir_pattern):
@@ -344,10 +342,22 @@ def release(repo='latest'):
 @task
 @runs_once
 def publish_binary():
+    '''
+    Create .deb or .rpm binary according to current host name.
+    '''
     if 'centos' in env.host_string:
         publish_rpm()
     else:
         publish_deb()
+
+
+@task
+def build_and_publish_binary():
+    """
+    Build and publish an approptiate binary package.
+    """
+    build_binary()
+    publish_binary()
 
 
 def print_green(msg):
