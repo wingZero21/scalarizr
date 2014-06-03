@@ -16,6 +16,7 @@ from scalarizr.config import ScalarizrState
 
 
 import time
+import json
 import random
 import ConfigParser
 import subprocess
@@ -255,6 +256,13 @@ class ScriptExecutor(Handler):
             def _create_script(message_script_params):
                 kwds = message_script_params.copy()
 
+                if 'chef' in kwds:
+                    chef = kwds.pop('chef')
+                    kwds.update(chef)
+                    script_class = ChefSoloScript
+                else:
+                    script_class = Script
+
                 if 'timeout' in kwds:
                     kwds['exec_timeout'] = kwds.pop('timeout')
                 if 'asynchronous' in kwds:
@@ -265,10 +273,9 @@ class ScriptExecutor(Handler):
                 kwds['event_name'] = event_name
                 kwds['environ'] = environ
                 try:
-                    return Script(**kwds)
+                    return script_class(**kwds)
                 except (BaseException, Exception), e:
-                    self.send_message(
-                        Messages.EXEC_SCRIPT_RESULT, {
+                    message_body = {
                             'stdout': '',
                             'stderr': e.message,
                             'return_code': 1,
@@ -276,11 +283,13 @@ class ScriptExecutor(Handler):
                             'event_name': event_name,
                             'event_id': kwds.get('event_id'),
                             'execution_id': kwds.get('execution_id'),
-                            'script_name': kwds.get('name'),
-                            'script_path': kwds.get('path'),
                             'run_as': kwds.get('run_as')
-                        },
-                        queue=Queues.LOG)
+                        }
+                    if script_class is ChefSoloScript:
+                        message_body.update({'cookbook_url': kwds.get('cookbook_url')})
+                    else:
+                        message_body.update({'script_name': kwds.get('name'), 'script_path': kwds.get('path')})
+                    self.send_message(Messages.EXEC_SCRIPT_RESULT, message_body, queue=Queues.LOG)
                     raise
 
             scripts_qty = len(message.body['scripts'])
@@ -568,6 +577,69 @@ class Script(object):
                 os.fsync(self.proc.stderr.fileno())
             except:
                 pass
+
+
+class ChefSoloScript(Script):
+
+    cookbook_url = None
+    cookbook_url_type = None
+    json_attributes = None
+    relative_path = None
+    ssh_private_key = None
+    run_list = None
+    role = None
+
+
+    def __init__(self, **kwds):
+        for k, v in kwds.items():
+            setattr(self, k ,v)
+
+        if not self.id:
+            random.seed()
+            self.id = '%d.%d' % (time.time(), random.randint(0, 100))
+
+        assert self.cookbook_url, '`cookbook_url` required'
+        assert self.json_attributes, '`json_attributes` required'
+        assert self.cookbook_url_type, '`cookbook_url_type` required'
+
+        json_attributes = self.json_attributes and json.loads(self.json_attributes) or dict()
+
+        if self.run_list:
+            json_attributes['run_list'] = self.run_list
+        elif self.role:
+            json_attributes['run_list'] = ["role[%s]" % self.role]
+        else:
+            raise Exception('Neither runlist nor role was specified.')
+
+        self._chef_solo = ChefSolo(self.cookbook_url,
+                                   self.cookbook_url_type,
+                                   json_attributes,
+                                   self.relative_path,
+                                   self.environ,
+                                   self.ssh_private_key,
+                                   run_as=self.run_as)
+
+
+
+    def state(self):
+        return {'id': self.id,
+                'pid': self.pid,
+                'json_attributes': self.json_attributes,
+                'start_time': self.start_time,
+                'asynchronous': False,
+                'event_name': self.event_name,
+                'role_name': self.role_name,
+                'exec_timeout': self.exec_timeout,
+                'run_as': self.run_as}
+
+    def wait(self):
+        pass
+
+    def get_result(self):
+        pass
+
+    def start(self):
+        pass
 
 
 class LogRotateRunnable(object):

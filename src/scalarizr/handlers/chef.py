@@ -344,7 +344,7 @@ class ChefSolo(object):
         self.binary_path = binary_path or (r'C:\opscode\chef\bin\chef-solo.bat' if
                                            linux.os.windows_family else which('chef-solo'))
         self.run_as = run_as
-        self.output = None
+        self.stdout = None
         self.stacktrace = None
         self.temp_dir = None
 
@@ -379,7 +379,7 @@ class ChefSolo(object):
                                          close_fds=not linux.os.windows_family,
                                          preexec_fn=not linux.os.windows_family and os.setsid or None,
                                          env=self.environment,
-                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
             while chef_solo.poll() is None:
                 time.sleep(1)
@@ -387,7 +387,9 @@ class ChefSolo(object):
                     eradicate(chef_solo)
                     raise Exception('Chef-solo timeouted %s sec. exceeded' % timeout)
 
-            self.output = chef_solo.stdout.read()
+            self.stdout = chef_solo.stdout.read()
+            self.stderr = chef_solo.stderr.read()
+
             if chef_solo.returncode:
                 chef_stacktrace_path = os.path.join(cookbook_path, 'chef-stacktrace.out')
                 if os.path.exists(chef_stacktrace_path):
