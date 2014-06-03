@@ -278,6 +278,7 @@ def publish_rpm():
     publish .rpm packages into local repository
     '''
     try:
+        branch = env.branch
         arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
         remote_source = '/var/cache/omnibus/pkg/{0}*.rpm'.format(project)
         host_dest_str = '/var/www/rpm/%s/rhel/{alias}/%s'
