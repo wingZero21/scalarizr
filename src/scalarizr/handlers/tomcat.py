@@ -7,7 +7,7 @@ import glob
 
 from scalarizr import handlers, linux
 from scalarizr.bus import bus
-from scalarizr.linux import pkgmgr, execute
+from scalarizr.linux import pkgmgr, execute, iptables
 from scalarizr.messaging import Messages
 from scalarizr.util import initdv2, firstmatched
 from scalarizr.node import __node__
@@ -83,11 +83,10 @@ def augtool(script_lines):
     return linux.system(('augtool', ), stdin=augscript)[0].strip()
 
 
-class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
+class TomcatHandler(handlers.Handler):
 
     def __init__(self):
         handlers.Handler.__init__(self)
-        handlers.FarmSecurityMixin.__init__(self, [8080, 8443])
         bus.on(
             init=self.on_init, 
             start=self.on_start
@@ -129,6 +128,7 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
             host_init_response=self.on_host_init_response,
             before_host_up=self.on_before_host_up
         )
+        self._insert_iptables_rules()
 
     def on_start(self):
         if __node__['state'] == 'running':
@@ -246,3 +246,13 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
         self.service.start()
 
+
+    def _insert_iptables_rules(self):
+        if iptables.enabled():
+            for port in (8080, 8443):
+                iptables.FIREWALL.ensure([{
+                    "jump": "ACCEPT", 
+                    "protocol": "tcp", 
+                    "match": "tcp", 
+                    "dport": str(port)
+                }])
