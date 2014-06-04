@@ -133,7 +133,7 @@ def import_artifact(src):
     print_green('imported artifacts: {0!r}'.format(
         [os.path.basename(f) for f in files]))
 
-
+@serial
 def git_export():
     '''
     Export current git tree to slave server into the same directory name
@@ -357,8 +357,11 @@ def build_and_publish_binary():
     """
     Build and publish an approptiate binary package.
     """
-    build_binary()
-    publish_binary()
+    try:
+        build_binary()
+        publish_binary()
+    finally:
+        run('rm -rf /root/.strider/data/scalr-{0}-*'.format(project))
 
 
 def print_green(msg):
