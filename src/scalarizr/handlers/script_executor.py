@@ -591,33 +591,35 @@ class ChefSoloScript(Script):
 
 
     def __init__(self, **kwds):
-        for k, v in kwds.items():
-            setattr(self, k ,v)
 
-        if not self.id:
-            random.seed()
-            self.id = '%d.%d' % (time.time(), random.randint(0, 100))
+        if "chef" in kwds:
+            # TODO: generate name
+            self.name = "chef-solo"
 
-        assert self.cookbook_url, '`cookbook_url` required'
-        assert self.json_attributes, '`json_attributes` required'
-        assert self.cookbook_url_type, '`cookbook_url_type` required'
+            chef = kwds.pop("chef")
+            self.json_attributes = json.loads(kwds.get('json_attributes', "{}"))
 
-        json_attributes = self.json_attributes and json.loads(self.json_attributes) or dict()
+            if kwds.get("run_list"):
+                self.json_attributes['run_list'] = json.loads(kwds.get("run_list"))
+            elif kwds.get("role"):
+                self.json_attributes['run_list'] = ["role[%s]" % kwds.get("role")]
+            else:
+                raise Exception('Neither runlist nor role was specified.')
 
-        if self.run_list:
-            json_attributes['run_list'] = self.run_list
-        elif self.role:
-            json_attributes['run_list'] = ["role[%s]" % self.role]
+            self._chef_solo = ChefSolo(kwds.get("cookbook_url"),
+                                       self.cookbook_url_type,
+                                       self.json_attributes,
+                                       self.relative_path,
+                                       self.environ,
+                                       self.ssh_private_key,
+                                       run_as=self.run_as)
+
+            cmd = self._chef_solo.get_cmd()
+            shebang = "#!%s" % ("cmd" if linux.os.windows_family else "/bin/bash")
+            self.body = shebang + "\n" + " ".join(cmd)
+
         else:
-            raise Exception('Neither runlist nor role was specified.')
-
-        self._chef_solo = ChefSolo(self.cookbook_url,
-                                   self.cookbook_url_type,
-                                   json_attributes,
-                                   self.relative_path,
-                                   self.environ,
-                                   self.ssh_private_key,
-                                   run_as=self.run_as)
+            pass
 
 
 
@@ -625,6 +627,7 @@ class ChefSoloScript(Script):
         return {'id': self.id,
                 'pid': self.pid,
                 'json_attributes': self.json_attributes,
+                'cookbook_url_type': self.cookbook_url_type,
                 'start_time': self.start_time,
                 'asynchronous': False,
                 'event_name': self.event_name,
@@ -636,9 +639,6 @@ class ChefSoloScript(Script):
         pass
 
     def get_result(self):
-        pass
-
-    def start(self):
         pass
 
 
