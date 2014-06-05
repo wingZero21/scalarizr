@@ -647,10 +647,10 @@ class DbMsrMessages:
 
 
 class FarmSecurityMixin(object):
-    def __init__(self, ports, enabled=True):
+    def __init__(self, ports, allow_all=False):
         self._logger = logging.getLogger(__name__)
         self._ports = ports
-        self._enabled = enabled
+        self._allow_all = allow_all
         self._iptables = iptables
         if self._iptables.enabled():
             bus.on('init', self.__on_init)
@@ -662,15 +662,16 @@ class FarmSecurityMixin(object):
                 reload=self.__on_reload
         )
         self.__on_reload()
-        if self._enabled:
-            self.__insert_iptables_rules()
+        if self._allow_all and __node__['state'] == 'running':
+            self._fix_allow_all()
+        self.__insert_iptables_rules()
 
     def __on_reload(self):
         self._queryenv = bus.queryenv_service
         self._platform = bus.platform
 
-    def security_off(self):
-        self._enabled = False
+
+    def _fix_allow_all(self):
         for port in self._ports:
             try:
                 self._iptables.FIREWALL.remove({
@@ -684,12 +685,11 @@ class FarmSecurityMixin(object):
                 pass
 
     def on_HostInit(self, message):
-        if not self._enabled:
+        if self._allow_all:
             return
-        # Append new server to allowed list
         if not self._iptables.enabled():
             return
-
+        # Append new server to allowed list
         rules = []
         for port in self._ports:
             rules += self.__accept_host(message.local_ip, message.remote_ip, port)
@@ -698,12 +698,11 @@ class FarmSecurityMixin(object):
 
 
     def on_HostDown(self, message):
-        if not self._enabled:
+        if self._allow_all:
             return
-        # Remove terminated server from allowed list
         if not self._iptables.enabled():
             return
-
+        # Remove terminated server from allowed list
         rules = []
         for port in self._ports:
             rules += self.__accept_host(message.local_ip, message.remote_ip, port)
@@ -720,7 +719,10 @@ class FarmSecurityMixin(object):
 
 
     def __create_rule(self, source, dport, jump):
-        rule = {"jump": jump, "protocol": "tcp", "match": "tcp", "dport": str(dport)}
+        rule = {"jump": jump, 
+                "protocol": "tcp", 
+                "match": "tcp", 
+                "dport": str(dport)}
         if source:
             rule["source"] = source
         return rule
@@ -745,30 +747,39 @@ class FarmSecurityMixin(object):
 
 
     def __insert_iptables_rules(self, *args, **kwds):
-        # Collect farm servers IP-s
-        hosts = []
-        for role in self._queryenv.list_roles(with_init=True):
-            for host in role.hosts:
-                hosts.append((host.internal_ip, host.external_ip))
+        if self._allow_all:
+            for port in self._ports:
+                self._iptables.FIREWALL.ensure({
+                    "protocol": "tcp", 
+                    "match": "tcp", 
+                    "dport": port,
+                    "jump": "ACCEPT"
+                })
+        else:
+            # Collect farm servers IP-s
+            hosts = []
+            for role in self._queryenv.list_roles(with_init=True):
+                for host in role.hosts:
+                    hosts.append((host.internal_ip, host.external_ip))
 
-        rules = []
-        for port in self._ports:
-            # TODO: this will be duplicated, because current host is in the
-            # hosts list too
-            # TODO: this also duplicates the rules, inserted in on_HostInit
-            # for the current host
-            rules += self.__accept_host(self._platform.get_private_ip(),
-                                                            self._platform.get_public_ip(), port)
-            for local_ip, public_ip in hosts:
-                rules += self.__accept_host(local_ip, public_ip, port)
+            rules = []
+            for port in self._ports:
+                # TODO: this will be duplicated, because current host is in the
+                # hosts list too
+                # TODO: this also duplicates the rules, inserted in on_HostInit
+                # for the current host
+                rules += self.__accept_host(self._platform.get_private_ip(),
+                                        self._platform.get_public_ip(), port)
+                for local_ip, public_ip in hosts:
+                    rules += self.__accept_host(local_ip, public_ip, port)
 
-        # Deny from all
-        drop_rules = []
-        for port in self._ports:
-            drop_rules.append(self.__create_drop_rule(port))
+            # Deny from all
+            drop_rules = []
+            for port in self._ports:
+                drop_rules.append(self.__create_drop_rule(port))
 
-        self._iptables.FIREWALL.ensure(rules)
-        self._iptables.FIREWALL.ensure(drop_rules, append=True)
+            self._iptables.FIREWALL.ensure(rules)
+            self._iptables.FIREWALL.ensure(drop_rules, append=True)
 
 
 def build_tags(purpose=None, state=None, set_owner=True, **kwargs):
