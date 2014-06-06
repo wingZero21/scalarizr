@@ -49,12 +49,15 @@ class SSHKeys(Handler):
         sshd_config.close()
 
         updates = {
-                'RSAAuthentication' : 'yes',
-                'PubkeyAuthentication' : 'yes',
-                'AuthorizedKeysFile' :  '%h/.ssh/authorized_keys',
+            'RSAAuthentication' : 'yes',
+            'PubkeyAuthentication' : 'yes',
+            'AuthorizedKeysFile' :  '%h/.ssh/authorized_keys'
         }
         if linux.os.amazon:
             updates.update({'PermitRootLogin': 'without-password'})
+
+        for key in updates:
+            self._logger.debug(linux.system('grep {0} {1}'.format(key, self.sshd_config_path))[0])
 
         updated_keys = set()
         new_lines = []
@@ -78,7 +81,7 @@ class SSHKeys(Handler):
         for key, new_value in updates.items():
             if key not in updated_keys:
                 # add
-                self._logger.debug('Update %s, set %s: %s', 
+                self._logger.debug('Update %s, add %s: %s', 
                         self.sshd_config_path, key, new_value)
                 line = '{0} {1}\n'.format(key, new_value)
                 new_lines.append(line)
