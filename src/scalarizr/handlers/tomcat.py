@@ -134,10 +134,6 @@ class TomcatHandler(handlers.Handler):
         if __node__['state'] == 'running':
             self.service.start()
 
-    def accept(self, message, queue, behaviour=None, **kwds):
-        return message.name in (
-                Messages.HOST_INIT, 
-                Messages.HOST_DOWN) and 'tomcat' in behaviour
 
     def on_host_init_response(self, hir_message):
         '''
