@@ -111,17 +111,11 @@ class TomcatHandler(handlers.Handler):
                 self.service = CatalinaInitScript()
         else:
             __tomcat__['install_type'] = 'package'
-            if linux.os.debian_family:
-                if (linux.os['name'] == 'Ubuntu' and linux.os['version'] >= (12, 4)) or \
-                    (linux.os['name'] == 'Debian' and linux.os['version'] >= (7, 0)):
-                    tomcat_version = 7
-                else:
-                    tomcat_version = 6
-            else:
-                tomcat_version = 6
-            __tomcat__['config_dir'] = '/etc/tomcat{0}'.format(tomcat_version)
+            __tomcat__['config_dir'] = sorted(glob.glob('/etc/tomcat?'))[-1]
+            tomcat_version = __tomcat__['config_dir'][-1]
             init_script_path = '/etc/init.d/tomcat{0}'.format(tomcat_version)  
             self.service = initdv2.ParametrizedInitScript('tomcat', init_script_path)
+
 
     def on_init(self):
         bus.on(
