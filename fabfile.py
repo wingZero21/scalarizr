@@ -140,8 +140,9 @@ def git_export():
     Export current git tree to slave server into the same directory name
     '''
     print_green('in git export')
-    archive = '%s.tar.gz' % project
-    local("git archive --format=tar HEAD | gzip >%s" % archive)
+    print_green('current dir is %s ' % local('echo pwd'))
+    archive = '{0}-{1}.tar.gz'.format(project, env.host_string)  # add host str, for safe concurrent execution
+    local("git archive --format=tar HEAD | gzip >{0}".format(archive))
     if not os.path.exists(archive):
         f = open(arhive, 'w+')
         f.close()
@@ -152,7 +153,10 @@ def git_export():
     elif os.path.exists(build_dir):
         run("rm -rf %s" % build_dir)
     run("mkdir -p %s" % build_dir)
-    put(archive, build_dir)
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    archive_path = os.path.join(current_dir, archive)
+    put(archive_path, build_dir)
     if os.path.exists(archive):
         local('rm -f %s' % archive)
     print_green('build_dir is %s ' % build_dir)
@@ -165,7 +169,7 @@ def local_export():
     Export current working copy to slave server into the same directory
     '''
     # TODO: merge with git_export
-    archive = '%s.tar.gz' % project
+    archive = '{0}-{1}.tar.gz'.format(project, env.host_string)  # add host str, for safe concurrent execution
     local("tar -czf %s ." % archive)
     run("rm -rf %s" % build_dir)
     run("mkdir -p %s" % build_dir)
