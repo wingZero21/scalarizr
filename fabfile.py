@@ -220,12 +220,15 @@ def build_binary():
     '''
     create binary distribution (.deb .rpm)
     '''
+    time0 = time.time()
     init()
     git_export()
     generate_changelog()
 
     build_omnibus()
     import_artifact('/var/cache/omnibus/pkg/{0}*'.format(project))
+    time_delta = time.time() - time0
+    print_green('build binary took {0}'.format(time_delta))
 
 
 def omnibus_md5sum_changed():
@@ -265,15 +268,22 @@ def publish_deb():
     '''
     publish .deb packages into local repository
     '''
-    init()
-    if repo not in local('aptly repo list', capture=True):
-        local('aptly repo create -distribution {0} {0}'.format(repo))
-    local('aptly repo remove {0} {1}'.format(repo, project))
-    local('aptly repo add {0} {1}'.format(
-        repo, ' '.join(glob.glob(artifacts_dir + '/*.deb'))))
-    if repo in local('aptly publish list', capture=True):
-        local('aptly publish drop {0}'.format(repo))
-    local('aptly publish repo {0}'.format(repo))
+    time0 = time.time()
+    try:
+        init()
+        if repo not in local('aptly repo list', capture=True):
+            local('aptly repo create -distribution {0} {0}'.format(repo))
+        local('aptly repo remove {0} {1}'.format(repo, project))
+        local('aptly repo add {0} {1}'.format(
+            repo, ' '.join(glob.glob(artifacts_dir + '/*.deb'))))
+        if repo in local('aptly publish list', capture=True):
+            local('aptly publish drop {0}'.format(repo))
+        local('aptly publish repo {0}'.format(repo))
+    finally:
+        # cleanup contents of remote .deb source
+        run("rm -rf /var/cache/omnibus/pkg/*")
+        time_delta = time.time() - time0
+        print_green('publish deb took {0}'.format(time_delta))
 
 
 @task
@@ -282,6 +292,7 @@ def publish_rpm():
     '''
     publish .rpm packages into local repository
     '''
+    time0 = time.time()
     try:
         branch = env.branch
         arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
@@ -334,6 +345,8 @@ def publish_rpm():
     finally:
         # cleanup contents of remote .rpm source
         run("rm -rf /var/cache/omnibus/pkg/*")
+        time_delta = time.time() - time0
+        print_green('publish rpm took {0}'.format(time_delta))
 
 
 @task
