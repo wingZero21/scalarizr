@@ -72,6 +72,9 @@ class SSHKeys(Handler):
                         line = '{0} {1}\n'.format(key, new_value)
                         updated_keys.add(key)
             new_lines.append(line)
+        # Ensure NL at the end of the file
+        if new_lines[-1][-1] != '\n':
+            new_lines[-1][-1] = '\n'
         for key, new_value in updates.items():
             if key not in updated_keys:
                 # add
