@@ -81,9 +81,13 @@ class TomcatAPI(BehaviorAPI):
 
     behavior = 'tomcat'
 
+    @classmethod
+    def catalina_home_dir(cls):
+        return linux.system('echo $CATALINA_HOME', shell=True)[0].strip()
+
     def _find_service(self):
         # try to read CATALINA_HOME from environment
-        __tomcat__['catalina_home_dir'] = linux.system('echo $CATALINA_HOME', shell=True)[0].strip()
+        __tomcat__['catalina_home_dir'] = self.catalina_home_dir()
         if not __tomcat__['catalina_home_dir']:
             # try to locate CATALINA_HOME in /opt/apache-tomcat*
             try:
@@ -101,16 +105,12 @@ class TomcatAPI(BehaviorAPI):
                 return CatalinaInitScript()
         else:
             __tomcat__['install_type'] = 'package'
-            if linux.os.debian_family:
-                if (linux.os['name'] == 'Ubuntu' and linux.os['version'] >= (12, 4)) or \
-                    (linux.os['name'] == 'Debian' and linux.os['version'] >= (7, 0)):
-                    tomcat_version = 7
-                else:
-                    tomcat_version = 6
+            if os.path.exists('/etc/tomcat'):
+                __tomcat__['config_dir'] = '/etc/tomcat'
+                init_script_path = '/etc/init.d/tomcat'
             else:
-                tomcat_version = 6
-            __tomcat__['config_dir'] = '/etc/tomcat{0}'.format(tomcat_version)
-            init_script_path = '/etc/init.d/tomcat{0}'.format(tomcat_version)  
+                __tomcat__['config_dir'] = glob.glob( '/etc/tomcat?')[0]
+                init_script_path = '/etc/init.d/tomcat{0}'.format(__tomcat__['config_dir'][-1])  
             return initdv2.ParametrizedInitScript('tomcat', init_script_path)
 
     def __init__(self):
@@ -186,6 +186,8 @@ class TomcatAPI(BehaviorAPI):
     def do_check_software(cls, installed_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
+        if cls.catalina_home_dir():
+            return
         if os_name == 'ubuntu':
             if os_vers >= '12':
                 pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
@@ -197,7 +199,7 @@ class TomcatAPI(BehaviorAPI):
             elif os_vers >= '6':
                 pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed_packages)
         elif linux.os.redhat_family or linux.os.oracle_family:
-            pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin-webapps'], installed_packages)
+            pkgmgr.check_any_dependency(['tomcat6', 'tomcat'], installed_packages)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (
                 "Unsupported operating system '{os}'").format(os=linux.os['name'])
