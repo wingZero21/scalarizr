@@ -356,13 +356,6 @@ class Script(object):
         self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
         self.exec_path = self.path or os.path.join(exec_dir_prefix + self.id, self.name)
 
-        if self.interpreter == 'powershell' \
-                and os.path.splitext(self.exec_path)[1] not in ('ps1', 'psm1'):
-            self.exec_path += '.ps1'
-        elif self.interpreter == 'cmd' \
-                and os.path.splitext(self.exec_path)[1] not in ('cmd', 'bat'):
-            self.exec_path += '.bat'
-
         if self.exec_timeout:
             self.exec_timeout = int(self.exec_timeout)
 
@@ -381,6 +374,13 @@ class Script(object):
             if linux.os['family'] == 'Windows' and self.body:
                 # Erase first line with #!
                 self.body = '\n'.join(self.body.splitlines()[1:])
+
+        if self.interpreter == 'powershell' \
+                and os.path.splitext(self.exec_path)[1] not in ('ps1', 'psm1'):
+            self.exec_path += '.ps1'
+        elif self.interpreter == 'cmd' \
+                and os.path.splitext(self.exec_path)[1] not in ('cmd', 'bat'):
+            self.exec_path += '.bat'
 
         if self.path and not os.access(self.path, os.X_OK):
             msg = 'Path {0!r} is not executable'.format(self.path)
