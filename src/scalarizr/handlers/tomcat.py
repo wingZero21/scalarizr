@@ -111,9 +111,12 @@ class TomcatHandler(handlers.Handler):
                 self.service = CatalinaInitScript()
         else:
             __tomcat__['install_type'] = 'package'
-            __tomcat__['config_dir'] = sorted(glob.glob('/etc/tomcat?'))[-1]
-            tomcat_version = __tomcat__['config_dir'][-1]
-            init_script_path = '/etc/init.d/tomcat{0}'.format(tomcat_version)  
+            if os.path.exists('/etc/tomcat'):
+                __tomcat__['config_dir'] = '/etc/tomcat'
+                init_script_path = '/etc/init.d/tomcat'
+            else:
+                __tomcat__['config_dir'] = glob.glob( '/etc/tomcat?')[0]
+                init_script_path = '/etc/init.d/tomcat{0}'.format(__tomcat__['config_dir'][-1]) 
             self.service = initdv2.ParametrizedInitScript('tomcat', init_script_path)
 
 
