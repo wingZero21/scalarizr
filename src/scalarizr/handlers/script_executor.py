@@ -185,10 +185,11 @@ class ScriptExecutor(Handler):
             if not script.start_time:
                 script.start()
             script.wait()
-        except (BaseException, Exception), e:
-            exc_info = sys.exc_info()
+        except:
             if script.asynchronous:
-                LOG.warn('Caught exception', exc_info=exc_info)
+                msg = 'Asynchronous script {0!r} error: {1}'.format(
+                        script.name, str(sys.exc_info()[1]))
+                LOG.warn(msg, exc_info=sys.exc_info())
             raise
         finally:
             script_result = script.get_result()
