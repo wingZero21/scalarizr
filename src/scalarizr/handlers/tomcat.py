@@ -7,7 +7,7 @@ import glob
 
 from scalarizr import handlers, linux
 from scalarizr.bus import bus
-from scalarizr.linux import pkgmgr, execute
+from scalarizr.linux import pkgmgr, execute, iptables
 from scalarizr.messaging import Messages
 from scalarizr.util import initdv2, firstmatched
 from scalarizr.node import __node__
@@ -83,11 +83,10 @@ def augtool(script_lines):
     return linux.system(('augtool', ), stdin=augscript)[0].strip()
 
 
-class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
+class TomcatHandler(handlers.Handler):
 
     def __init__(self):
         handlers.Handler.__init__(self)
-        handlers.FarmSecurityMixin.__init__(self, [8080, 8443])
         bus.on(
             init=self.on_init, 
             start=self.on_start
@@ -112,32 +111,26 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
                 self.service = CatalinaInitScript()
         else:
             __tomcat__['install_type'] = 'package'
-            if linux.os.debian_family:
-                if (linux.os['name'] == 'Ubuntu' and linux.os['version'] >= (12, 4)) or \
-                    (linux.os['name'] == 'Debian' and linux.os['version'] >= (7, 0)):
-                    tomcat_version = 7
-                else:
-                    tomcat_version = 6
+            if os.path.exists('/etc/tomcat'):
+                __tomcat__['config_dir'] = '/etc/tomcat'
+                init_script_path = '/etc/init.d/tomcat'
             else:
-                tomcat_version = 6
-            __tomcat__['config_dir'] = '/etc/tomcat{0}'.format(tomcat_version)
-            init_script_path = '/etc/init.d/tomcat{0}'.format(tomcat_version)  
+                __tomcat__['config_dir'] = glob.glob( '/etc/tomcat?')[0]
+                init_script_path = '/etc/init.d/tomcat{0}'.format(__tomcat__['config_dir'][-1]) 
             self.service = initdv2.ParametrizedInitScript('tomcat', init_script_path)
+
 
     def on_init(self):
         bus.on(
             host_init_response=self.on_host_init_response,
             before_host_up=self.on_before_host_up
         )
+        self._insert_iptables_rules()
 
     def on_start(self):
         if __node__['state'] == 'running':
             self.service.start()
 
-    def accept(self, message, queue, behaviour=None, **kwds):
-        return message.name in (
-                Messages.HOST_INIT, 
-                Messages.HOST_DOWN) and 'tomcat' in behaviour
 
     def on_host_init_response(self, hir_message):
         '''
@@ -246,3 +239,13 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
         self.service.start()
 
+
+    def _insert_iptables_rules(self):
+        if iptables.enabled():
+            for port in (8080, 8443):
+                iptables.FIREWALL.ensure([{
+                    "jump": "ACCEPT", 
+                    "protocol": "tcp", 
+                    "match": "tcp", 
+                    "dport": str(port)
+                }])

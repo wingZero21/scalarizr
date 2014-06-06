@@ -647,70 +647,49 @@ class DbMsrMessages:
 
 
 class FarmSecurityMixin(object):
-    def __init__(self, ports, enabled=True):
+    def __init__(self):
+        self.__enabled = False
+
+    def init_farm_security(self, ports):
         self._logger = logging.getLogger(__name__)
         self._ports = ports
-        self._enabled = enabled
         self._iptables = iptables
         if self._iptables.enabled():
-            bus.on('init', self.__on_init)
-        else:
-            LOG.warn("iptables is not enabled. ports %s won't be protected by firewall" %  (ports, ))
-
-    def __on_init(self):
-        bus.on(
+            bus.on(
                 reload=self.__on_reload
-        )
-        self.__on_reload()
-        if self._enabled:
+            )
+            self.__on_reload()
             self.__insert_iptables_rules()
+            self.__enabled = True  
+        else:
+            LOG.warn("iptables is not enabled. ports %s won't be protected by firewall" %  (ports, ))   
+
 
     def __on_reload(self):
         self._queryenv = bus.queryenv_service
         self._platform = bus.platform
 
-    def security_off(self):
-        self._enabled = False
-        for port in self._ports:
-            try:
-                self._iptables.FIREWALL.remove({
-                    "protocol": "tcp", 
-                    "match": "tcp", 
-                    "dport": port,
-                    "jump": "DROP"
-                })
-            except:
-                # silently ignore non existed rule error
-                pass
 
     def on_HostInit(self, message):
-        if not self._enabled:
+        if not self.__enabled:
             return
         # Append new server to allowed list
-        if not self._iptables.enabled():
-            return
-
         rules = []
         for port in self._ports:
             rules += self.__accept_host(message.local_ip, message.remote_ip, port)
-
         self._iptables.FIREWALL.ensure(rules)
 
 
     def on_HostDown(self, message):
-        if not self._enabled:
+        if not self.__enabled:
             return
         # Remove terminated server from allowed list
-        if not self._iptables.enabled():
-            return
-
         rules = []
         for port in self._ports:
             rules += self.__accept_host(message.local_ip, message.remote_ip, port)
         for rule in rules:
             try:
                 self._iptables.FIREWALL.remove(rule)
-                #self._iptables.delete_rule(rule)
             except: #?
                 if 'does a matching rule exist in that chain' in str(sys.exc_info()[1]):
                     # When HostDown comes from a server that didn't send HostInit
@@ -720,7 +699,10 @@ class FarmSecurityMixin(object):
 
 
     def __create_rule(self, source, dport, jump):
-        rule = {"jump": jump, "protocol": "tcp", "match": "tcp", "dport": str(dport)}
+        rule = {"jump": jump, 
+                "protocol": "tcp", 
+                "match": "tcp", 
+                "dport": str(dport)}
         if source:
             rule["source"] = source
         return rule
@@ -758,7 +740,7 @@ class FarmSecurityMixin(object):
             # TODO: this also duplicates the rules, inserted in on_HostInit
             # for the current host
             rules += self.__accept_host(self._platform.get_private_ip(),
-                                                            self._platform.get_public_ip(), port)
+                                    self._platform.get_public_ip(), port)
             for local_ip, public_ip in hosts:
                 rules += self.__accept_host(local_ip, public_ip, port)
 
@@ -842,19 +824,14 @@ def get_role_servers(role_id=None, role_name=None):
 
 
 def sync_globals(glob_vars=None):
+    if linux.os.windows:
+        return
     if not glob_vars:
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
-    if linux.os.windows:
-        glob_vars['public'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['public'].items())
-        glob_vars['private'] = dict((k.encode('ascii'), v.encode('ascii')) for k, v in glob_vars['private'].items())
-    os.environ.update(glob_vars['public'])
-    os.environ.update(glob_vars['private'])
-
-    if not linux.os.windows:
-        globals_path = '/etc/profile.d/scalr_globals.sh'
-        with open(globals_path, 'w') as fp:
-            for k, v in glob_vars['public'].items():
-                v = v.replace('"', '\\"')
-                fp.write('export %s="%s"\n' % (k, v))
-        os.chmod(globals_path, 0644)
+    globals_path = '/etc/profile.d/scalr_globals.sh'
+    with open(globals_path, 'w') as fp:
+        for k, v in glob_vars['public'].items():
+            v = v.replace('"', '\\"')
+            fp.write('export %s="%s"\n' % (k, v))
+    os.chmod(globals_path, 0644)

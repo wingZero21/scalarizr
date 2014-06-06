@@ -12,6 +12,7 @@ import urllib
 import urllib2
 import time
 import HTMLParser
+from copy import deepcopy
 
 from scalarizr.util import cryptotool
 from scalarizr.util import urltool
@@ -35,6 +36,9 @@ class QueryEnvService(object):
     api_version = None
     key_path = None
     server_id = None
+
+    def _log_parsed_response(self, response):
+        self._logger.debug("QueryEnv response (parsed): %s", response)
 
     def __init__(self, url, server_id=None, key_path=None, api_version='2012-04-17'):
         self._logger = logging.getLogger(__name__)
@@ -155,7 +159,19 @@ class QueryEnvService(object):
         parameters = {}
         if farm_role_id:
             parameters["farm-role-id"] = farm_role_id
-        return {'params':self._request("list-farm-role-params", parameters, self._read_list_farm_role_params_response) or {}}
+        response = self._request("list-farm-role-params",
+                               parameters,
+                               self._read_list_farm_role_params_response,
+                               log_response=False)
+
+        response_log_copy = deepcopy(response)
+        try:
+            del response_log_copy['chef']['validator_name']
+            del response_log_copy['chef']['validator_key']
+        except (KeyError, TypeError):
+            pass
+        self._log_parsed_response(response_log_copy)
+        return {'params': response or {}}
 
 
     def get_server_user_data(self):
@@ -250,7 +266,7 @@ class QueryEnvService(object):
                                   self._read_list_global_variables,
                                   log_response=False)
 
-        self._logger.debug("QueryEnv response (parsed): %s", glob_vars['public'])
+        self._log_parsed_response(glob_vars['public'])
         return glob_vars
 
 ###############################################################################
@@ -266,7 +282,7 @@ class QueryEnvService(object):
         try:
             parsed_response = response_reader(xml, *response_reader_args)
             if log_response:
-                self._logger.debug("QueryEnv response (parsed): %s", parsed_response)
+                self._log_parsed_response(parsed_response)
             return parsed_response
         except (Exception, BaseException), e:
             self._logger.debug("QueryEnv response: %s", xml)
@@ -287,7 +303,6 @@ class QueryEnvService(object):
         glob_vars['private'] = dict((k, v.encode('utf-8') if v else '')
                                            for k, v in private_values.items())
         return glob_vars
-
 
     def _read_get_global_config_response(self, xml):
         """
@@ -458,10 +473,10 @@ class Mountpoint(object):
 
     def __repr__(self):
         return "name = " + str(self.name) \
-+ "; dir = " + str(self.dir) \
-+ "; create_fs = " + str(self.create_fs) \
-+ "; is_array = " + str(self.is_array) \
-+ "; volumes = " + str(self.volumes)
+            + "; dir = " + str(self.dir) \
+            + "; create_fs = " + str(self.create_fs) \
+            + "; is_array = " + str(self.is_array) \
+            + "; volumes = " + str(self.volumes)
 
 class Volume(object):
     volume_id  = None
@@ -476,7 +491,7 @@ class Volume(object):
 
     def __repr__(self):
         return 'volume_id = ' + str(self.volume_id) \
-+ "; device = " + str(self.device)
+            + "; device = " + str(self.device)
 
 class Role(object):
     behaviour = None
@@ -496,9 +511,9 @@ class Role(object):
 
     def __repr__(self):
         return 'behaviour = ' + str(self.behaviour) \
-+ "; name = " + str(self.name) \
-+ "; hosts = " + str(self.hosts) \
-+ "; farm_role_id = " + str(self.farm_role_id) + ";"
+            + "; name = " + str(self.name) \
+            + "; hosts = " + str(self.hosts) \
+            + "; farm_role_id = " + str(self.farm_role_id) + ";"
 
 
 class QueryEnvResult(object):

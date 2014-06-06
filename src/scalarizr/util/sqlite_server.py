@@ -60,7 +60,16 @@ class CursorProxy(Proxy):
         args = [sql]
         if parameters:
             args += [parameters]
-        self._execute_result = self._call('cursor_execute', args)
+        for _ in range(0, GLOBAL_TIMEOUT):
+            try:
+                self._execute_result = self._call('cursor_execute', args)
+                break
+            except sqlite3.OperationalError, e:
+                if 'database is locked' in str(e):
+                    LOG.debug('Caught %s, retrying', e)
+                    time.sleep(1)
+                else:
+                    raise
 
         if not self._execute_result:
             self._execute_result = dict(data=[], rowcount=0)
@@ -120,7 +129,7 @@ class ConnectionProxy(Proxy):
         return self._call('conn_get_row_factory')
 
 
-    def _set_row_factory(self,f):
+    def _set_row_factory(self, f):
         return self._call('conn_set_row_factory', [f])
 
 
@@ -131,7 +140,7 @@ class ConnectionProxy(Proxy):
         return self._call('conn_get_text_factory')
 
 
-    def _set_text_factory(self,f):
+    def _set_text_factory(self, f):
         return self._call('conn_set_text_factory', [f])
 
 

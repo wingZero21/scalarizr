@@ -194,7 +194,10 @@ class ScalrUpdClientScript(initdv2.Daemon):
             if os.access(pid_file, os.R_OK):
                 pid = open(pid_file).read().strip()
                 if pid:
-                    os.kill(int(pid), signal.SIGKILL)
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                    except:
+                        pass
                     os.unlink(pid_file)
             self.start()
 
@@ -485,7 +488,8 @@ def _cleanup_after_rebundle():
     # Reset private configuration
     priv_path = cnf.private_path()
     for file in os.listdir(priv_path):
-        if file in ('.user-data', '.update'):
+        if file in ('.user-data', '.update', 'keys'):
+             # keys/default maybe already refreshed by UpdateClient
             continue
         path = os.path.join(priv_path, file)
         coreutils.chmod_r(path, 0700)
@@ -1086,7 +1090,7 @@ class Service(object):
                 except:
                     exc = sys.exc_info()[1]
                     if 'Server-ID header not presented' in str(exc):
-                        self._logger.debug(('UpdateClient serves previous API version. '
+                        self._logger.info(('UpdateClient serves previous API version. '
                             'Looks like we are in a process of migration to new update sytem. '
                             'UpdateClient restart will handle this situation. Restarting'))
                         upd_svs.restart()
