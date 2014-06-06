@@ -129,7 +129,7 @@ class InstanceStoreImageMaker(object):
 
 class EBSImageMaker(object):
 
-    def __init__(self, image_name, root_disk, delegate, destination='/mnt'):
+    def __init__(self, image_name, root_disk, delegate, destination='/mnt/scalr_image'):
         self.image_name = image_name
         self.root_disk = root_disk
         self.image_size = int(self.root_disk.size/1024)
@@ -159,6 +159,8 @@ class EBSImageMaker(object):
     def prepare_image(self):
         """Prepares imiage with ec2-bundle-vol command"""
         self._assure_space()
+        if not os.path.exists(self.destination):
+            os.mkdir(self.destination)
         cmd = (
             os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
             '--cert', self.credentials['cert'],
@@ -201,15 +203,43 @@ class EBSImageMaker(object):
         except KeyError:
             pass
 
+    def cleanup_ssh_keys(self, homedir):
+        filename = os.path.join(homedir, '.ssh/authorized_keys')
+        if os.path.exists(filename):
+            LOG.debug('Removing Scalr SSH keys from %s', filename)
+            fp = open(filename + '.tmp', 'w+')
+            for line in open(filename):
+                if 'SCALR-ROLESBUILDER' in line:
+                    continue
+                fp.write(line)
+            fp.close()
+            os.rename(filename + '.tmp', filename)
+
+    def cleanup_user_activity(self, homedir):
+        for name in (".bash_history", ".lesshst", ".viminfo",
+            ".mysql_history", ".history", ".sqlite_history"):
+            LOG.debug('Removing user activity file %s', name)
+            filename = os.path.join(homedir, name)
+            if os.path.exists(filename):
+                os.remove(filename)
+
+    def clean_snapshot(self, volume):
+        LOG.debug('fixing fstab')
+        self.fix_fstab(volume)
+
+        homedirs = [os.path.join('/home', userdir) for userdir 
+            in os.listdir(volume.mpoint+'/home')] + [volume.mpoint+'/root']
+        for homedir in homedirs:
+            self.cleanup_ssh_keys(homedir)
+            self.cleanup_user_activity(homedir)
+        
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
         LOG.debug('dd image into volume %s' % volume.device)
         coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '8M'})
 
-        LOG.debug('fixing fstab')
         volume.mount()
-        self.fix_fstab(volume)
-
+        self.clean_snapshot(volume)
         LOG.debug('detaching volume')
         volume.detach()
 
@@ -240,43 +270,24 @@ class EBSImageMaker(object):
             kernel_id=instance.kernel,
             architecture=instance.architecture)
 
-    def _cleanup_ssh_keys(self, homedir):
-        filename = os.path.join(homedir, '.ssh/authorized_keys')
-        if os.path.exists(filename):
-            LOG.debug('Removing Scalr SSH keys from %s', filename)
-            fp = open(filename + '.tmp', 'w+')
-            for line in open(filename):
-                if 'SCALR-ROLESBUILDER' in line:
-                    continue
-                fp.write(line)
-            fp.close()
-            os.rename(filename + '.tmp', filename)
-
-    def _cleanup_user_activity(self, homedir):
-        for name in (".bash_history", ".lesshst", ".viminfo",
-            ".mysql_history", ".history", ".sqlite_history"):
-            filename = os.path.join(homedir, name)
-            if os.path.exists(filename):
-                os.remove(filename)
 
     def cleanup(self):
-        pass
-        # for homedir in ('root', 'home/ubuntu', 'home/scalr'):
-        #     homedir = os.path.join(rootdir, homedir)
-        #     self._cleanup_ssh_keys(homedir)
+        os.removedirs(self.destination)
 
     def create_image(self):
+        volume = None
         try:
             self.prepare_image()
             size = self.image_size / 1000
             volume = self.make_volume(size, '/mnt/img-mnt')
             snapshot_id = self.make_snapshot(volume)
             image_id = self.register_image(snapshot_id, volume.device)
-            volume.destroy()
-            if self.temp_vol:
-                self.temp_vol.destroy()
             return image_id
         finally:
+            if volume:
+                volume.destroy()
+            if self.temp_vol:
+                self.temp_vol.destroy()
             self.cleanup()
 
 
