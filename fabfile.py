@@ -133,6 +133,7 @@ def import_artifact(src):
     print_green('imported artifacts: {0!r}'.format(
         [os.path.basename(f) for f in files]))
 
+
 @serial
 def git_export():
     '''
@@ -187,7 +188,7 @@ def build_omnibus():
             'OMNIBUS_BUILD_VERSION': version,
         }
         with shell_env(**env):
-            run("bin/omnibus clean %s" % project)
+            #run("bin/omnibus clean %s" % project)
             run("bin/omnibus build project %s --log-level=info" % project)
 
     with open(omnibus_md5sum_file, 'w+') as fp:
