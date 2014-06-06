@@ -56,9 +56,6 @@ class SSHKeys(Handler):
         if linux.os.amazon:
             updates.update({'PermitRootLogin': 'without-password'})
 
-        for key in updates:
-            self._logger.debug(linux.system('grep {0} {1}'.format(key, self.sshd_config_path), shell=True, raise_exc=False)[0])
-
         updated_keys = set()
         new_lines = []
         for line in lines:
