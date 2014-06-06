@@ -70,10 +70,9 @@ class SSHKeys(Handler):
                         old_value = None
                     if old_value != new_value:
                         # update
-                        self._logger.debug('Update %s, set %s: %s', 
-                                self.sshd_config_path, key, new_value)
+                        self._logger.debug('Updating %s, old/new: %s/%s', key, old_value, new_value)
                         line = '{0} {1}\n'.format(key, new_value)
-                        updated_keys.add(key)
+                    updated_keys.add(key)
             new_lines.append(line)
         # Ensure NL at the end of the file
         if new_lines[-1][-1] != '\n':
@@ -81,8 +80,7 @@ class SSHKeys(Handler):
         for key, new_value in updates.items():
             if key not in updated_keys:
                 # add
-                self._logger.debug('Update %s, add %s: %s', 
-                        self.sshd_config_path, key, new_value)
+                self._logger.debug('Adding %s: %s', key, new_value)
                 line = '{0} {1}\n'.format(key, new_value)
                 new_lines.append(line)
 
