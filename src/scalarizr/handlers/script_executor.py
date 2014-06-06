@@ -179,17 +179,24 @@ class ScriptExecutor(Handler):
             self._execute_one_script0(script)
 
     def _execute_one_script0(self, script):
+        exc_info = None
         try:
             self.in_progress.append(script)
             if not script.start_time:
                 script.start()
             script.wait()
-        except (BaseException, Exception), e:
+        except:
             if script.asynchronous:
-                LOG.warn('Caught exception', exc_info=sys.exc_info())
+                msg = 'Asynchronous script {0!r} error: {1}'.format(
+                        script.name, str(sys.exc_info()[1]))
+                LOG.warn(msg, exc_info=sys.exc_info())
             raise
         finally:
-            self.send_message(Messages.EXEC_SCRIPT_RESULT, script.get_result(), queue=Queues.LOG)
+            script_result = script.get_result()
+            if exc_info:
+                script_result['stderr'] = binascii.b2a_base64(exc_info[1][1])
+                script_result['return_code'] = 1
+            self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
             self.in_progress.remove(script)
 
     def execute_scripts(self, scripts, event_name, scripts_qty):
@@ -329,21 +336,15 @@ class Script(object):
         for key, value in kwds.items():
             setattr(self, key, value)
         self.elapsed_time = 0
-
+        self.return_code = 1
         assert self.name, '`name` required'
         assert self.exec_timeout, '`exec_timeout` required'
 
-        if self.name and (self.body or self.path):
+        if self.body or self.path:
             # time.time() can produce the same microseconds fraction in different async script execution threads, 
             # and therefore produce the same id. solution is to seed random millisecods number
             random.seed()
             self.id = '%d.%d' % (time.time(), random.randint(0, 100))
-
-            self.interpreter = read_shebang(path=self.path, script=self.body)
-
-            if linux.os['family'] == 'Windows' and self.body:
-                # Erase first line with #!
-                self.body = '\n'.join(self.body.splitlines()[1:])
         else:
             assert self.id, '`id` required'
             assert self.pid, '`pid` required'
@@ -374,6 +375,12 @@ class Script(object):
             self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
 
     def check_runability(self):
+        if self.body or self.path:
+            self.interpreter = read_shebang(path=self.path, script=self.body)
+            if linux.os['family'] == 'Windows' and self.body:
+                # Erase first line with #!
+                self.body = '\n'.join(self.body.splitlines()[1:])
+
         if self.path and not os.access(self.path, os.X_OK):
             msg = 'Path {0!r} is not executable'.format(self.path)
             raise HandlerError(msg)
@@ -391,6 +398,10 @@ class Script(object):
                 "interpreter '%s' not found" % (self.name, self.interpreter))
 
     def start(self):
+        if not os.path.exists(self.stdout_path):
+            open(self.stdout_path, 'w+').close()
+        if not os.path.exists(self.stderr_path):
+            open(self.stderr_path, 'w+').close()
         self.check_runability()
         if not self.path:
             # Write script to disk, prepare execution
@@ -458,11 +469,6 @@ class Script(object):
                 self.logger.debug('Timeouted: %s seconds. Killing process %s (pid: %s)',
                                                         self.exec_timeout, self.interpreter, self.pid)
                 self.return_code = self._proc_kill()
-
-            if not os.path.exists(self.stdout_path):
-                open(self.stdout_path, 'w+').close()
-            if not os.path.exists(self.stderr_path):
-                open(self.stderr_path, 'w+').close()
 
             self.elapsed_time = time.time() - self.start_time
             self.logger.debug('Finished %s'
