@@ -187,6 +187,7 @@ def build_omnibus():
         run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
+            'OMNIBUS_BUILD_DEPS': '0',
             'OMNIBUS_BUILD_VERSION': version,
         }
         with shell_env(**env):
