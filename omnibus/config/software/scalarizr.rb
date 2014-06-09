@@ -1,6 +1,6 @@
 name "scalarizr"
 
-dependency "scalarizr-deps"
+dependency "python"
 
 source :path => ENV['BUILD_DIR']
 

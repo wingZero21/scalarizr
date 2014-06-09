@@ -1,6 +1,6 @@
 name "setuptools"
 #version "1.1.6"
-version "3.6"
+default_version "3.6"
 dependency "python"
 
 source :url => "https://pypi.python.org/packages/source/s/setuptools/setuptools-#{version}.tar.gz",       
