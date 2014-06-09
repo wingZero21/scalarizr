@@ -73,6 +73,7 @@ class BlockDeviceHandler(handlers.Handler):
             volumes = volumes or []  # Cast to list
             for vol in volumes:
                 vol = storage2.volume(vol)
+                LOG.debug("Volume TAGS: %s" % str(self.volume.tags))
                 try:
                     vol.ensure(mount=bool(vol.mpoint))
                 except:
