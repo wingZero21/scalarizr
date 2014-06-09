@@ -327,7 +327,7 @@ class ChefSolo(object):
 
     def __init__(self, cookbook_url, cookbook_url_type, json_attributes,
                  relative_path=None, environment=None, ssh_private_key=None,
-                 binary_path=None, run_as='root', log_level='auto'):
+                 binary_path=None, run_as=None, log_level='auto', temp_dir=None):
         """
         @param cookbook_url:
         @param cookbook_url_type:
@@ -345,9 +345,12 @@ class ChefSolo(object):
         self.ssh_private_key = ssh_private_key
         self.binary_path = binary_path or (r'C:\opscode\chef\bin\chef-solo.bat' if
                                            linux.os.windows_family else which('chef-solo'))
-        self.run_as = run_as
+        if not self.binary_path or not os.path.exists(self.binary_path):
+            raise Exception('Could not find chef-solo binary')
+
+        self.run_as = run_as or 'root'
         self.log_level = log_level
-        self.temp_dir = tempfile.mkdtemp()
+        self.temp_dir = temp_dir or tempfile.mkdtemp()
 
     def prepare(self):
         if self.cookbook_url_type == 'git':
@@ -388,6 +391,14 @@ class ChefSolo(object):
             except:
                 pass
 
+    def get_stacktrace(self):
+        chef_stacktrace_path = os.path.join(self.temp_dir, 'chef-stacktrace.out')
+        if os.path.exists(chef_stacktrace_path):
+            with open(chef_stacktrace_path) as f:
+                return f.read()
+        return None
+
+
     def run(self):
         try:
             system2(self.get_cmd(),
@@ -397,9 +408,6 @@ class ChefSolo(object):
                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except:
             e_type, e, tb = sys.exc_info()
-
-            chef_stacktrace_path = os.path.join(self.temp_dir, 'chef-stacktrace.out')
-            if os.path.exists(chef_stacktrace_path):
-                with open(chef_stacktrace_path) as f:
-                    e = e_type(str(e) + '\n' + f.read())
+            stacktrace = self.get_stacktrace() or ''
+            e = e_type(str(e) + '\n' + stacktrace)
             raise e_type, e, tb
