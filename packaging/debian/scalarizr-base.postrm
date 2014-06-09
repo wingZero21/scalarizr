@@ -4,7 +4,9 @@ set -x
 
 if [ "$1" = "purge" ]; then
 	rm -f /mnt/privated.img
-	rm -rf /etc/scalr/private.d
+    # Preserve .user-data file
+	find /etc/scalr/private.d -maxdepth 1 -mindepth 1 | grep -v '.user-data' | xargs rm -rf 
+    rm -f /etc/scalr/private.d/.state
 	rm -rf /etc/scalr/public.d
 	rm -f /etc/scalr/logging*
 	rm -f /tmp/scalarizr.status

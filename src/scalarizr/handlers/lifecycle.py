@@ -144,11 +144,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         # Add internal messages to scripting skip list
         try:
-            map(scalarizr.handlers.script_executor.skip_events.add, (
-                Messages.INT_SERVER_REBOOT, 
-                Messages.INT_SERVER_HALT, 
-                Messages.HOST_INIT_RESPONSE
-            ))
+            for m in (Messages.INT_SERVER_REBOOT, 
+                      Messages.INT_SERVER_HALT, 
+                      Messages.HOST_INIT_RESPONSE):
+                scalarizr.handlers.script_executor.skip_events.add(m)
         except AttributeError:
             pass
 
@@ -159,7 +158,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         # Add firewall rules
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
         self._insert_iptables_rules()
-        if __node__['state'] !=  ScalarizrState.IMPORTING:
+        #if __node__['state'] !=  ScalarizrState.IMPORTING:
+        if __node__['state'] == 'running':
             scalarizr.handlers.sync_globals()
 
 
@@ -340,7 +340,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
                     + "Cross-scalarizr messaging not initialized")
 
-        scalarizr.handlers.sync_globals()
+        # Not necessary, cause we've got fresh GV in HIR
+        # scalarizr.handlers.sync_globals()
         self._assign_hostname()
 
 

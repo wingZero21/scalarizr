@@ -720,11 +720,11 @@ class ApacheAPI(BehaviorAPI):
         self.enable_virtual_hosts_directory()
 
         self.fix_default_virtual_host()
+        self.fix_default_ssl_virtual_host()
 
         self.update_log_rotate_config()
 
         #self.mod_ssl.ensure()  # [SCALARIZR-1381]
-        self.mod_ssl.set_default_certificate(SSLCertificate())
 
         if linux.os.debian_family:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
@@ -876,6 +876,9 @@ class ApacheAPI(BehaviorAPI):
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
 
+    def fix_default_ssl_virtual_host(self):
+        self.mod_ssl.set_default_certificate(SSLCertificate())
+
 
 class BasicApacheConfiguration(object):
 
@@ -970,6 +973,7 @@ class VirtualHost(BasicApacheConfiguration):
                 parent.insert(list(parent).index(before_el), ch)
         else:
             self._cnf.comment(".//SSLCertificateChainFile")
+            self._cnf.comment(".//SSLCACertificateFile")  # [SCALARIZR-1461]
 
     def _get_port(self):
         raw_host = self._cnf.get(".//VirtualHost").split(":")

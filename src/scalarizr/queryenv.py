@@ -304,7 +304,6 @@ class QueryEnvService(object):
                                            for k, v in private_values.items())
         return glob_vars
 
-
     def _read_get_global_config_response(self, xml):
         """
         @return dict

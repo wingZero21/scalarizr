@@ -1,5 +1,6 @@
 import os
 import signal
+import logging
 
 from scalarizr import rpc
 from scalarizr import linux
@@ -7,6 +8,9 @@ from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton, initdv2
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
+
+
+LOG = logging.getLogger(__name__)
 
 
 class ChefInitScript(initdv2.ParametrizedInitScript):
@@ -36,17 +40,16 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
                         raise_exc=False
                     )
 
-                cmd = (chef_client_bin, '--daemonize', '--logfile',
+                cmd = (chef_client_bin, '--daemonize', '--logfile', 
                         '/var/log/chef-client.log', '--pid', self.pid_file)
-                try:
-                    # standart streams overrided due to hanging on Centos 5
-                    out, err, rcode = linux.system(cmd, close_fds=True,
-                                preexec_fn=os.setsid, env=self._env,
-                                stdin=None, stdout=None, stderr=None)
-                except linux.LinuxError, e:
-                    raise initdv2.InitdError('Failed to start chef: %s' % e)
-
-                if rcode:
+                out, err, rcode = linux.system(cmd, close_fds=True, 
+                            preexec_fn=os.setsid, env=self._env,
+                            stdout=open(os.devnull, 'w+'), 
+                            stderr=open(os.devnull, 'w+'), 
+                            raise_exc=False)
+                if rcode == 255:
+                    LOG.debug('chef-client daemon already started')
+                elif rcode:
                     msg = (
                         'Chef failed to start daemonized. '
                         'Return code: %s\nOut:%s\nErr:%s'
@@ -154,7 +157,13 @@ class ChefAPI(BehaviorAPI):
 
     @classmethod
     def do_check_software(cls, installed_packages=None):
-        pkgmgr.check_dependency(['chef'], installed_packages)
+        if linux.os.windows:
+            if not linux.which('chef-client'):
+                msg = ("Can't find chef-client in %PATH%, "
+                        "check that chef was properly installed")
+                raise Exception(msg)
+        else:
+            pkgmgr.check_dependency(['chef'], installed_packages)
 
     @classmethod
     def do_handle_check_software_error(cls, e):

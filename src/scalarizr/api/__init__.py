@@ -37,10 +37,10 @@ class BehaviorAPI(object):
     @classmethod
     def check_software(cls, installed_packages=None):
         try:
-            if not (linux.os.debian_family or linux.os.redhat_family or linux.os.oracle_family):
+            if linux.os.windows and cls.behavior != 'chef':
                 raise exceptions.UnsupportedBehavior(cls.behavior, (
                     "'{beh}' behavior is only supported on "
-                    "Debian, RedHat or Oracle operating system family").format(beh=cls.behavior)
+                    "Linux operation systems").format(beh=cls.behavior)
                 )
             cls.do_check_software(installed_packages=installed_packages)
             BehaviorAPI.software_supported = True
@@ -68,9 +68,9 @@ class BehaviorAPI(object):
 
     @classmethod
     def do_check_software(cls, installed_packages=None):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @classmethod
     def do_handle_check_software_error(cls, e):
-        raise NotImplementedError
+        raise NotImplementedError()
 

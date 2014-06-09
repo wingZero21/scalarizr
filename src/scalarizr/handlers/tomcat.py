@@ -2,17 +2,13 @@ import os
 import re
 import shutil
 import logging
-import socket
-import glob
 
 from scalarizr import handlers, linux
 from scalarizr.bus import bus
-from scalarizr.linux import pkgmgr, execute
-from scalarizr.messaging import Messages
-from scalarizr.util import initdv2, firstmatched
+from scalarizr.linux import pkgmgr, execute, iptables
 from scalarizr.node import __node__
 from scalarizr.api import tomcat as tomcat_api
-from scalarizr.api.tomcat import augtool, augload
+from scalarizr.api.tomcat import augtool
 
 
 LOG = logging.getLogger(__name__)
@@ -37,11 +33,10 @@ class KeytoolExec(execute.BaseExec):
         return ['-{0}'.format(cmd_args[-1])] + cmd_args[0:-1]
 
 
-class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
+class TomcatHandler(handlers.Handler):
 
     def __init__(self):
         handlers.Handler.__init__(self)
-        handlers.FarmSecurityMixin.__init__(self, [8080, 8443])
         bus.on(
             init=self.on_init, 
             start=self.on_start
@@ -49,20 +44,18 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
         self.api = tomcat_api.TomcatAPI()
         self.service = self.api.service
 
+
     def on_init(self):
         bus.on(
             host_init_response=self.on_host_init_response,
             before_host_up=self.on_before_host_up
         )
+        self._insert_iptables_rules()
 
     def on_start(self):
         if __node__['state'] == 'running':
             self.service.start()
 
-    def accept(self, message, queue, behaviour=None, **kwds):
-        return message.name in (
-                Messages.HOST_INIT, 
-                Messages.HOST_DOWN) and 'tomcat' in behaviour
 
     def on_host_init_response(self, hir_message):
         '''
@@ -171,3 +164,13 @@ class TomcatHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
         self.service.start()
 
+
+    def _insert_iptables_rules(self):
+        if iptables.enabled():
+            for port in (8080, 8443):
+                iptables.FIREWALL.ensure([{
+                    "jump": "ACCEPT", 
+                    "protocol": "tcp", 
+                    "match": "tcp", 
+                    "dport": str(port)
+                }])
