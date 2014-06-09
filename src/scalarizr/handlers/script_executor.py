@@ -471,6 +471,11 @@ class Script(object):
                                                         self.exec_timeout, self.interpreter, self.pid)
                 self.return_code = self._proc_kill()
 
+            if not os.path.exists(self.stdout_path):
+                open(self.stdout_path, 'w+').close()
+            if not os.path.exists(self.stderr_path):
+                open(self.stderr_path, 'w+').close()
+
             self.elapsed_time = time.time() - self.start_time
             self.logger.debug('Finished %s'
                             '\n  %s'
