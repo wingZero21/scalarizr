@@ -12,7 +12,8 @@ boxes = {
 
 Vagrant.configure("2") do |config|
   boxes.each do |name, box|
-   config.berkshelf.enabled = true 
+   config.berkshelf.enabled = true
+   config.omnibus.chef_version = :latest
    config.vm.define name do |machine|
       machine.vm.box = box
       machine.vm.provision :chef_solo do |chef|

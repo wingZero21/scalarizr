@@ -64,7 +64,7 @@ Vagrant.configure("2") do |config|
   config.vm.provision :chef_solo do |chef|
     #chef.cookbooks_path = ["../../cookbooks/cookbooks", "../../public_cookbooks/cookbooks"]
 
-$recipes_for_behaviors
+    $recipes_for_behaviors
 
     chef.add_recipe "vagrant_boxes::scalarizr_lxc"
     chef.json = { :user_data => "$user_data" }
