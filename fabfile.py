@@ -187,42 +187,12 @@ def build_omnibus():
         run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
-            'OMNIBUS_BUILD_DEPS': '0',
-            'OMNIBUS_BUILD_VERSION': version,
-        }
-        with shell_env(**env):
-            # run("bin/omnibus clean %s" % project)
-            run("bin/omnibus build project %s --log-level=info" % project)
-
-    with open(omnibus_md5sum_file, 'w+') as fp:
-        fp.write(omnibus_md5sum())
-
-
-def build_omnibus_deps():
-    pass
-    # rm old installation
-    print_green('building omnibus dependencies')
-    run("rm -rf /opt/%s" % project)
-    # rm cache
-    run("rm -rf /var/cache/ci/%s" % project)
-
-    # build base installation
-    with cd(omnibus_dir):
-
-        run("[ -f bin/omnibus ] || bundle install --binstubs")
-        env = {
-            'BUILD_DIR': build_dir,
-            'OMNIBUS_BUILD_DEPS': '1',
             'OMNIBUS_BUILD_VERSION': version,
         }
         with shell_env(**env):
             run("bin/omnibus clean %s --log-level=warning" % project)
-            run("bin/omnibus build project %s --log-level=info" % project)
+            run("bin/omnibus build project %s --log-level=warning" % project)
 
-    # save to cache
-    run("mkdir -p /var/cache/ci")
-    run("mv /opt/%s /var/cache/ci/%s" % (project, project))
-    # save md5sum
     with open(omnibus_md5sum_file, 'w+') as fp:
         fp.write(omnibus_md5sum())
 
@@ -252,14 +222,7 @@ def build_binary():
     init()
     git_export()
     generate_changelog()
-    if omnibus_md5sum_changed():
-        print_green('Application dependencies have changed. '
-                    'Building new dependencies')
-        build_omnibus_deps()
-    else:
-        print_green('Application dependencies do not seem to have changed.'
-                    ' Building with the same dependencies')
-        build_omnibus()
+    build_omnibus()
     import_artifact('/var/cache/omnibus/pkg/{0}*'.format(project))
     time_delta = time.time() - time0
     print_green('build binary took {0}'.format(time_delta))
@@ -418,7 +381,7 @@ def build_and_publish_binary():
     finally:
         run('rm -rf /root/.strider/data/scalr-{0}-*'.format(project))
         time_delta = time.time() - time0
-        print_green('build_and_publish_binary took {0} minutes '.format(time_delta/60))
+        print_green('build_and_publish_binary took {0} minutes '.format(time_delta / 60))
 
 
 def print_green(msg):
