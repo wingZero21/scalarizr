@@ -16,6 +16,7 @@ from scalarizr.node import __node__
 from scalarizr.messaging import Messages
 from scalarizr.util import wait_until
 from scalarizr.linux import mount
+from scalarizr.handlers import build_tags
 
 
 LOG = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ class BlockDeviceHandler(handlers.Handler):
             volumes = volumes or []  # Cast to list
             for vol in volumes:
                 vol = storage2.volume(vol)
-                LOG.debug("(on_init) Volume TAGS: %s" % str(vol.tags))
+                vol.tags.update(build_tags())
                 try:
                     vol.ensure(mount=bool(vol.mpoint))
                 except:
