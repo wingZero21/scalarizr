@@ -23,23 +23,6 @@ tag = None
 branch = None
 version = None
 repo = None
-rubies = '/opt/rubies/ruby-2.1.1/bin'
-
-
-current_contents = None
-with open('/etc/environment', 'r+') as fp:
-    current_contents = fp.read()
-with open('/etc/environment', 'w+') as fp:
-    result = ''
-    if 'PATH' in current_contents:
-        for line in current_contents.splitlines():
-            if 'PATH' in line and rubies not in line:
-                path = line.split('=')[1].strip()
-                line = ''.join(['PATH="', line, ':', rubies, '"'])
-            result += line
-    else:
-        result = current_contents + '\nPATH="{0}:{1}"'.format(os.environ['PATH'], rubies)
-    fp.write(result)
 
 
 def read_build_number():
@@ -168,7 +151,6 @@ def local_export():
     '''
     Export current working copy to slave server into the same directory
     '''
-    # TODO: merge with git_export
     archive = '{0}-{1}.tar.gz'.format(project, env.host_string)  # add host str, for safe concurrent execution
     local("tar -czf %s ." % archive)
     run("rm -rf %s" % build_dir)
@@ -289,7 +271,28 @@ def publish_deb():
 @runs_once
 def publish_rpm():
     '''
-    publish .rpm packages into local repository
+    publish .rpm packages into local repository.
+
+    Create the following directory structurerhel/
+    5/
+        x86_64/
+        i386/
+    symlink:
+        5Server -> 5
+    6/
+        x86_64
+        i386/
+    symlink:
+        6.0 -> 6
+        6.1 -> 6
+        6.2 -> 6
+        6.3 -> 6
+        6.4 -> 6
+        6.5 -> 6
+        6Server -> 6
+        6x -> 6
+        latest -> 6
+
     '''
     time0 = time.time()
     try:
