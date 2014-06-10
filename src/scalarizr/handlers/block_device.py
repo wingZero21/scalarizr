@@ -73,7 +73,7 @@ class BlockDeviceHandler(handlers.Handler):
             volumes = volumes or []  # Cast to list
             for vol in volumes:
                 vol = storage2.volume(vol)
-                LOG.debug("Volume TAGS: %s" % str(self.volume.tags))
+                LOG.debug("(on_init) Volume TAGS: %s" % str(vol.tags))
                 try:
                     vol.ensure(mount=bool(vol.mpoint))
                 except:
@@ -228,7 +228,8 @@ class BlockDeviceHandler(handlers.Handler):
                 type=self._vol_type, 
                 id=qe_volume.volume_id, 
                 name=qe_volume.device,
-                mpoint=mpoint
+                mpoint=mpoint,
+
             )
 
             if mpoint:
