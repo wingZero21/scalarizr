@@ -229,15 +229,17 @@ class BlockDeviceHandler(handlers.Handler):
                 type=self._vol_type, 
                 id=qe_volume.volume_id, 
                 name=qe_volume.device,
-                mpoint=mpoint,
-                tags=build_tags()
+                mpoint=mpoint
             )
             LOG.info("Plugging volume with tags: %s" % str(vol.tags))
             if mpoint:
                 logger = bus.init_op.logger if bus.init_op else LOG
                 logger.info('Ensure %s: take %s, mount to %s', self._vol_type, vol.id, vol.mpoint)
 
-                vol.ensure(mount=True, mkfs=True, fstab=True)               
+                vol.ensure(mount=True, mkfs=True, fstab=True)
+
+            self._create_tags_async(qe_volume.volume_id, build_tags())  # [SCALARIZR-1012]
+
         except:
             LOG.exception("Can't attach volume")
 
