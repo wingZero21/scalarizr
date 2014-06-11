@@ -439,6 +439,8 @@ class EbsVolume(base.Volume, EbsMixin):
             )
             LOG.debug('EBS volume %s attached', volume_id)
 
+            if volume.tags:
+                self._create_tags_async(ebs.id, volume.tags)  # [SCALARIZR-1012]
 
             if not linux.os.windows:
                 util.wait_until(lambda: base.taken_devices() > taken_before,
