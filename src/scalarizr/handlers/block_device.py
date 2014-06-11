@@ -232,7 +232,7 @@ class BlockDeviceHandler(handlers.Handler):
                 mpoint=mpoint,
                 tags=build_tags()
             )
-
+            LOG.info("Plugging volume with tags: %s" % str(vol.tags))
             if mpoint:
                 logger = bus.init_op.logger if bus.init_op else LOG
                 logger.info('Ensure %s: take %s, mount to %s', self._vol_type, vol.id, vol.mpoint)
