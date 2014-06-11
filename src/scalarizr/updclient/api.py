@@ -764,10 +764,7 @@ class UpdClientAPI(object):
 
         for key in keys_to_copy:
             status[key] = getattr(self, key)
-        if not cached:
-            status['service_status'] = 'running' if self.daemon.running else 'stopped'
-        else:
-            status['service_status'] = 'unknown'
+        status['service_status'] = 'running' if self.daemon.running else 'stopped'
         return status
             
 
