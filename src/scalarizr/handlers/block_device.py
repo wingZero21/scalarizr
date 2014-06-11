@@ -74,7 +74,6 @@ class BlockDeviceHandler(handlers.Handler):
             volumes = volumes or []  # Cast to list
             for vol in volumes:
                 vol = storage2.volume(vol)
-                vol.tags.update(build_tags())
                 try:
                     vol.ensure(mount=bool(vol.mpoint))
                 except:
@@ -119,6 +118,7 @@ class BlockDeviceHandler(handlers.Handler):
             template = vol.pop('template', None)
             from_template_if_missing = vol.pop('from_template_if_missing', False)
             vol = storage2.volume(**vol)
+            vol.tags.update(build_tags())
             self._log_ensure_volume(vol)
             try:
                 vol.ensure(mount=bool(vol.mpoint), mkfs=True)
@@ -230,7 +230,7 @@ class BlockDeviceHandler(handlers.Handler):
                 id=qe_volume.volume_id, 
                 name=qe_volume.device,
                 mpoint=mpoint,
-
+                tags=build_tags()
             )
 
             if mpoint:
