@@ -190,6 +190,7 @@ class ScriptExecutor(Handler):
                 script.start()
             script.wait()
         except (BaseException, Exception), e:
+            LOG.debug(e)
             if script.asynchronous:
                 LOG.exception('Caught exception')
             raise
@@ -260,8 +261,6 @@ class ScriptExecutor(Handler):
                 kwds = message_script_params.copy()
 
                 if 'chef' in kwds:
-                    chef = kwds.pop('chef')
-                    kwds.update(chef)
                     script_class = ChefSoloScript
                 else:
                     script_class = Script
@@ -591,7 +590,7 @@ class ChefSoloScript(Script):
 
 
     def __init__(self, **kwds):
-
+        LOG.debug("KWDS: %s" % kwds)
         if kwds.get("asynchronous"):
             raise Exception('Chef script could only be executed in synchronous mode')
 
