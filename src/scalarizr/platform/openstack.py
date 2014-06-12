@@ -198,6 +198,7 @@ class OpenstackPlatform(platform.Platform):
         if self._userdata is None:
             for path in ('/etc/.scalr-user-data', cnf.private_path('.user-data')):
                 if os.path.exists(path):
+                    self._logger.debug('using file %s', path)
                     rawmeta = None
                     with open(path, 'r') as fp:
                         rawmeta = fp.read()

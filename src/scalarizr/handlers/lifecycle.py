@@ -24,15 +24,12 @@ from scalarizr.util.flag import Flag
 # Libs
 from scalarizr.util import cryptotool, software
 from scalarizr.linux import iptables, os as os_dist
-if os_dist.windows_family:
-    import win32timezone as os_time
-else:
-    from datetime import datetime as os_time
 
 # Stdlibs
 import logging, os, sys, threading
 from scalarizr.config import STATE
 import time
+import re
 
 
 _lifecycle = None
@@ -145,7 +142,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             host_init_response=self.on_host_init_response, 
             block_device_mounted=self.on_block_device_mounted
         )
-        self._producer.on("before_send", self.on_before_message_send)
 
         # Add internal messages to scripting skip list
         try:
@@ -160,10 +156,21 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if os_dist['family'] != 'Windows':
             system2(('mount', '-a'), raise_exc=False)
 
+        # cloud-init scripts may disable root ssh login
+        for path in ('/etc/ec2-init/ec2-config.cfg', '/etc/cloud/cloud.cfg'):
+            if os.path.exists(path):
+                c = None
+                with open(path, 'r') as fp:
+                    c = fp.read()
+                c = re.sub(re.compile(r'^disable_root[^:=]*([:=]).*', re.M), r'disable_root\1 0', c)
+                with open(path, 'w') as fp:
+                    fp.write(c)
+
         # Add firewall rules
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
         self._insert_iptables_rules()
-        if __node__['state'] !=  ScalarizrState.IMPORTING:
+        #if __node__['state'] !=  ScalarizrState.IMPORTING:
+        if __node__['state'] == 'running':
             scalarizr.handlers.sync_globals()
 
 
@@ -344,7 +351,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
                     + "Cross-scalarizr messaging not initialized")
 
-        scalarizr.handlers.sync_globals()
+        # Not necessary, cause we've got fresh GV in HIR
+        # scalarizr.handlers.sync_globals()
         self._assign_hostname()
 
 
@@ -489,17 +497,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         up_script = self._cnf.rawini.get(config.SECT_GENERAL, config.OPT_SCRIPTS_PATH) + '/update'
         system2([sys.executable, up_script], close_fds=True)
         Flag.set('update')
-
-
-    def on_before_message_send(self, queue, message):
-        """
-        Add scalarizr version to meta
-        """
-        message.meta.update({
-            'szr_version': scalarizr.__version__,
-            'timestamp': os_time.utcnow().strftime("%a %d %b %Y %H:%M:%S %z")
-        })
-
 
     def on_block_device_mounted(self, volume):
         self.send_message(Messages.BLOCK_DEVICE_MOUNTED, {

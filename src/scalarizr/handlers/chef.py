@@ -17,9 +17,8 @@ import subprocess
 from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.bus import bus
-from scalarizr.util import system2, initdv2, PopenError, deploy
+from scalarizr.util import system2, initdv2, deploy
 from scalarizr.util.software import which
-from scalarizr.linux.execute import eradicate
 from scalarizr.handlers import Handler, HandlerError
 
 if linux.os.windows_family:
@@ -79,13 +78,14 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
 
                 cmd = (chef_client_bin, '--daemonize', '--logfile', 
                         '/var/log/chef-client.log', '--pid', PID_FILE)
-                try:
-                    out, err, rcode = system2(cmd, close_fds=True, 
-                                preexec_fn=os.setsid, env=self._env)
-                except PopenError, e:
-                    raise initdv2.InitdError('Failed to start chef: %s' % e)
-
-                if rcode:
+                out, err, rcode = system2(cmd, close_fds=True, 
+                            preexec_fn=os.setsid, env=self._env,
+                            stdout=open(os.devnull, 'w+'), 
+                            stderr=open(os.devnull, 'w+'), 
+                            raise_exc=False)
+                if rcode == 255:
+                    LOG.debug('chef-client daemon already started')
+                elif rcode:
                     msg = (
                         'Chef failed to start daemonized. '
                         'Return code: %s\nOut:%s\nErr:%s'

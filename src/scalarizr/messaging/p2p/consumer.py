@@ -21,6 +21,7 @@ import threading
 import logging
 import sys
 import os
+import copy
 import time
 import socket
 import HTMLParser
@@ -145,7 +146,6 @@ class P2pMessageConsumer(MessageConsumer):
                         message.fromxml(rawmsg)
 
                     msg_copy = self._msg_without_sensitive_data(message)
-
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
 

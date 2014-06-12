@@ -129,6 +129,11 @@ def clean_dir(path, recursive=True):
             remove(item)
 
 
+def mkdir(path, mode=0777):
+    if not os.path.exists(path):
+        os.makedirs(path, mode)
+
+
 def blkid(device_path, **kwargs):
     if not os.path.exists(device_path):
         raise Exception("Device %s doesn't exist")

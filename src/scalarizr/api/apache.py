@@ -15,10 +15,6 @@ import shutil
 import logging
 import urllib2
 
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
 
 from scalarizr import rpc
 from scalarizr import linux
@@ -27,7 +23,7 @@ from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
 from scalarizr.util import system2, initdv2, software, firstmatched
-from scalarizr.util import wait_until, dynimp, PopenError
+from scalarizr.util import wait_until, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 
@@ -294,7 +290,10 @@ class ApacheAPI(object):
             ssl_certificate = SSLCertificate(ssl_certificate_id)
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
-            v_host.use_certificate(ssl_certificate)
+            v_host.use_certificate(
+                    ssl_certificate.cert_path, 
+                    ssl_certificate.key_path,
+                    ssl_certificate.chain_path)
 
         path = get_virtual_host_path(hostname or old_hostname, port or old_port)
 
@@ -807,8 +806,8 @@ class ModRPAF(BasicApacheConfiguration):
         """
         fixing bug in rpaf 0.6-2
         """
-        pm = dynimp.package_mgr()
-        if "0.6-2" == pm.installed("libapache2-mod-rpaf"):
+        mgr = pkgmgr.package_mgr()
+        if "0.6-2" == mgr.info("libapache2-mod-rpaf")['installed']:
             try:
                 self._cnf.set('./IfModule[@value="mod_rpaf.c"]', {"value": "mod_rpaf-2.0.c"})
             except NoPathError:
@@ -1129,7 +1128,10 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
         pid_file = None
         if linux.os.redhat_family:
-            pid_file = "/var/run/httpd/httpd.pid" if linux.os["release"].version[0] == 6 else "/var/run/httpd.pid"
+            if linux.os["name"] == 'Amazon' or linux.os["release"].version[0] == 6:
+                pid_file = "/var/run/httpd/httpd.pid"
+            else:
+                pid_file = "/var/run/httpd.pid"
         elif linux.os.debian_family:
             if os.path.exists("/etc/apache2/envvars"):
                 pid_file = system2("/bin/sh", stdin=". /etc/apache2/envvars; echo -n $APACHE_PID_FILE")[0]

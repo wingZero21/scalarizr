@@ -41,15 +41,7 @@ RABBITMQ_SERVER = software.which('rabbitmq-server')
 # RabbitMQ from ubuntu repo puts rabbitmq-plugins
 # binary in non-obvious place
 
-try:
-    RABBITMQ_PLUGINS = software.which('rabbitmq-plugins')
-except LookupError:
-    possible_path = '/usr/lib/rabbitmq/bin/rabbitmq-plugins'
-
-    if os.path.exists(possible_path):
-        RABBITMQ_PLUGINS = possible_path
-    else:
-        raise
+RABBITMQ_PLUGINS = software.which('rabbitmq-plugins', '/usr/lib/rabbitmq/bin/')
 
 RABBITMQ_VERSION = software.rabbitmq_software_info().version
 
