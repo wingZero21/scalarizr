@@ -245,8 +245,10 @@ class HAProxyHandler(Handler):
         farm_role_id = msg.body.get('farm_role_id')
 
         calls = []
+        LOG.debug('self.haproxy_params["proxies"]: %s', self.haproxy_params["proxies"])
         for proxy in self.haproxy_params["proxies"]:
             for backend in proxy["backends"]:
+                LOG.debug('compare %s and %s', backend["farm_role_id"], farm_role_id)
                 if backend["farm_role_id"] == farm_role_id:
                     kwargs = {}
                     calls.append(kwargs)
