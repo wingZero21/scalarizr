@@ -430,8 +430,14 @@ rm -rf "$RPM_BUILD_ROOT"
 
 
 %files
-%defattr(-,root,root)
-/usr
+%defattr(-,root,root,0755)
+%{_bindir}/scalarizr
+%{_bindir}/scalr-upd-client
+%{_bindir}/szradm
+/usr/lib/python*
+/usr/local/scalarizr
+/usr/share/scalr
+
 %config	           %{_initrddir}/scalarizr
 %config            %{_initrddir}/scalr-upd-client
 %config(noreplace) %{_sysconfdir}/scalr/public.d/*

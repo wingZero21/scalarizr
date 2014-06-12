@@ -620,10 +620,6 @@ class Service(object):
 
 
     def start(self):
-        if linux.os.amazon:
-            print 'Amazon Linux is not supported'
-            sys.exit(1)
-            
         self._logger.debug("Initialize scalarizr...")
         _init()
 

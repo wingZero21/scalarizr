@@ -605,16 +605,16 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('config contains proxies.include: %s \n%s' %
                                (self.api.proxies_inc_path, include_list))
 
-        if remove_server_section:
-            self._logger.debug('removing http/server section')
-            try:
-                config.remove('http/server')
-            except (ValueError, IndexError):
-                self._logger.debug('no http/server section')
-        else:
-            self._logger.debug('Do not removing http/server section')
-            if not config.get_list('http/server'):
-                config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
+        # First remove then rewrite or leave it removed
+        self._logger.debug('removing http/server section')
+        try:
+            config.remove('http/server')
+        except (ValueError, IndexError):
+            self._logger.debug('no http/server section')
+
+        if not remove_server_section:
+            self._logger.debug('Rewriting http/server section')
+            config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
 
         if disttool.is_debian_based():
         # Comment /etc/nginx/sites-enabled/*

@@ -944,17 +944,30 @@ class MongoCLI(object):
     @autoreconnect
     def initiate_rs(self):
         '''
-    initializes replica set
-    '''
+        initializes replica set
+        '''
         self._logger.info('Initializing replica set')
         if self.connection.local.system.replset.find_one():
-            self._logger.debug('Replica set already initialized. Nothing to do')
+            self._logger.warning('Replica set already initialized. Nothing to do')
             return
-    
-        res = self.connection.admin.command('replSetInitiate')
-        if int(res['ok']) == 0:
-            raise BaseException('Could not initialize replica set: %s' % res['errmsg'])
 
+        for i in range(5):
+            time.sleep(i)
+            try:
+                res = self.connection.admin.command('replSetInitiate')
+            except:
+                e = sys.exc_info()[1]
+                if 'all members and seeds must be reachable' in str(e):
+                    continue
+                else:
+                    raise
+
+            if int(res['ok']) != 0:
+                break
+            self._logger.warning('Replica set initiation failed: %s' % res['errmsg'])
+
+        else:
+            raise BaseException('Could not initialize replica set: %s' % res['errmsg'])
 
     @autoreconnect
     def add_shard(self, shard_name, rs_name, rs_members):
@@ -1008,18 +1021,29 @@ class MongoCLI(object):
     @autoreconnect
     def rs_reconfig(self, config, force=False):
         self._logger.debug('Reconfiguring replica set (config: %s)', config)
-        try:
-            ret = self.connection.admin.command("replSetReconfig", config)
-            self._logger.debug('Mongo replSetReconfig answer: %s', ret)
-        except:
-            if force:
-                self._logger.debug('Reconfiguring failed. Retrying with "force" argument')
-                ret = self.connection.admin.command("replSetReconfig", config, force=force)
-                self._logger.debug('Mongo replSetReconfig answer: %s', ret)
-            else:
-                raise
-        return ret
 
+        for i in range(4):
+            time.sleep(i)
+            try:
+                try:
+                    ret = self.connection.admin.command("replSetReconfig", config)
+                    self._logger.debug('Mongo replSetReconfig answer: %s', ret)
+                except:
+                    if force:
+                        self._logger.debug('Reconfiguring failed. Retrying with "force" argument')
+                        ret = self.connection.admin.command("replSetReconfig", config, force=force)
+                        self._logger.debug('Mongo replSetReconfig result: %s', ret)
+                    else:
+                        raise
+                return ret
+            except:
+                e = sys.exc_info()[1]
+                if 'need most members up to reconfigure' in str(e):
+                    self._logger.warning('Got "%s" error while reconfiguring replica set' % e)
+                else:
+                    raise
+        else:
+            raise Exception('Could not reconfigure replica set. See logs for details.')
 
     def add_arbiter(self,ip, port=None):
         self._logger.debug('Registering new arbiter %s' % ip)

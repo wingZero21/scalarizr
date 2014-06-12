@@ -1128,7 +1128,10 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
         pid_file = None
         if linux.os.redhat_family:
-            pid_file = "/var/run/httpd/httpd.pid" if linux.os["release"].version[0] == 6 else "/var/run/httpd.pid"
+            if linux.os["name"] == 'Amazon' or linux.os["release"].version[0] == 6:
+                pid_file = "/var/run/httpd/httpd.pid"
+            else:
+                pid_file = "/var/run/httpd.pid"
         elif linux.os.debian_family:
             if os.path.exists("/etc/apache2/envvars"):
                 pid_file = system2("/bin/sh", stdin=". /etc/apache2/envvars; echo -n $APACHE_PID_FILE")[0]
