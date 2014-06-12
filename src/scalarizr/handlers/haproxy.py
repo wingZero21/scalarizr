@@ -195,6 +195,7 @@ class HAProxyHandler(Handler):
         proxies = haproxy.get('haproxy')
         if proxies is None:
             proxies = []
+        self.haproxy_params = {'proxies': proxies}
         self._configure(proxies)
 
 
