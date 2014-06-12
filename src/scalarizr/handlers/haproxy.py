@@ -192,7 +192,7 @@ class HAProxyHandler(Handler):
         haproxy = msg.body.get('haproxy')
         if haproxy is None:
             haproxy = {}
-        proxies = haproxy.get('haproxy')
+        proxies = haproxy.get('proxies')
         if proxies is None:
             proxies = []
         self.haproxy_params = {'proxies': proxies}
