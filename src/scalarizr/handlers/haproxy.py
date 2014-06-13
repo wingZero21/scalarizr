@@ -140,7 +140,7 @@ class HAProxyHandler(Handler):
         self.svs = haproxy_svs.HAProxyInitScript()
 
 
-    def _fix_haproxy_data(haproxy_params):
+    def _fix_haproxy_data(self, haproxy_params):
         healthcheck_names = {
             "healthcheck.fallthreshold": "fall_threshold",
             "healthcheck.interval": "check_interval",
