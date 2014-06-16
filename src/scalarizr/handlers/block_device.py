@@ -238,7 +238,7 @@ class BlockDeviceHandler(handlers.Handler):
 
                 vol.ensure(mount=True, mkfs=True, fstab=True)
 
-            self._create_tags_async(qe_volume.volume_id, build_tags())  # [SCALARIZR-1012]
+            vol._create_tags_async(qe_volume.volume_id, build_tags())  # [SCALARIZR-1012]
 
         except:
             LOG.exception("Can't attach volume")
