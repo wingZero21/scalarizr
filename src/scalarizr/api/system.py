@@ -171,11 +171,7 @@ class SystemAPI(object):
         with open(self._HOSTNAME, 'w+') as fp:
             fp.write(hostname) 
         hosts = dns.HostsFile()
-        if not hosts.resolve('localhost'):
-            hosts.map('127.0.0.1', 'localhost', hostname)
-        else:
-            hosts.alias('localhost', hostname)
-
+        hosts.map(bus.platform.get_private_ip(), hostname)
 
         '''
         TODO: test and correct this code 
