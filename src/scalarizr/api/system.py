@@ -175,6 +175,7 @@ class SystemAPI(object):
         LOG.debug('Setting hostname %s for ip %s' % (hostname, ip))
         hosts = dns.HostsFile()
         hosts.map(ip, hostname)
+        LOG.debug(hosts._hosts)
 
         '''
         TODO: test and correct this code 
