@@ -191,7 +191,7 @@ class ScriptExecutor(Handler):
                 msg = 'Asynchronous script {0!r} error: {1}'.format(
                         script.name, str(exc_info[1]))
                 LOG.warn(msg, exc_info=exc_info)
-            raise
+            # raise
         finally:
             script_result = script.get_result()
             if exc_info:
