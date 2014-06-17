@@ -692,4 +692,7 @@ def mysqlbinlog_head():
 
 def innodb_enabled():
     opts = my_print_defaults('mysqld')
-    return not (opts.get('ignore-builtin-innodb') or opts.get('skip-innodb'))
+    return not (opts.get('ignore-builtin-innodb') or \
+                opts.get('ignore_builtin_innodb') or \
+                opts.get('skip-innodb') or \
+                opts.get('skip_innodb'))

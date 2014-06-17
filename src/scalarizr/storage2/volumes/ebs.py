@@ -438,7 +438,6 @@ class EbsVolume(base.Volume, EbsMixin):
             )
             LOG.debug('EBS volume %s attached', volume_id)
 
-
             if not linux.os.windows:
                 util.wait_until(lambda: base.taken_devices() > taken_before,
                         start_text='Checking that volume %s is available in OS' % volume_id,

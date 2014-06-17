@@ -195,6 +195,8 @@ class ScriptExecutor(Handler):
         finally:
             script_result = script.get_result()
             if exc_info:
+                with open(script.stderr_path, 'w+') as stderr_log:
+                    stderr_log.write(exc_info[1][1])
                 script_result['stderr'] = binascii.b2a_base64(exc_info[1][1])
                 script_result['return_code'] = 1
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
@@ -470,6 +472,11 @@ class Script(object):
                 self.logger.debug('Timeouted: %s seconds. Killing process %s (pid: %s)',
                                                         self.exec_timeout, self.interpreter, self.pid)
                 self.return_code = self._proc_kill()
+
+            if not os.path.exists(self.stdout_path):
+                open(self.stdout_path, 'w+').close()
+            if not os.path.exists(self.stderr_path):
+                open(self.stderr_path, 'w+').close()
 
             self.elapsed_time = time.time() - self.start_time
             self.logger.debug('Finished %s'

@@ -173,15 +173,9 @@ class __os(dict):
         elif osmod.path.isfile('/etc/system-release'):
             self['family'] = 'RedHat'
             data = open('/etc/system-release', 'r').read().strip()
-            if 'amazon' in data.lower():
+            if data.lower().startswith('amazon'):
                 self['name'] = 'Amazon'
-                code = data[-7:]
-                bases = {
-                '2012.09': '6.3',
-                '2013.03': '6.4'
-                }
-                self['release'] = Version(bases.get(code, '6.3'))
-                self['codename'] = code
+                self['release'] = Version(data[-7:])
         elif osmod.path.isfile('/etc/SuSE-release'):
             self['family'] = 'Suse'
             data = open('/etc/SuSE-release', 'r').read()
@@ -238,7 +232,9 @@ ubuntu_release_to_codename = {
         '12.04': 'precise',
         '12.10': 'quantal',
         '13.04': 'raring',
-        '13.10': 'saucy'
+        '13.10': 'saucy',
+        '14.04': 'trusty',
+        '14.10': 'utopic'
 }
 
 def build_cmd_args(executable=None,

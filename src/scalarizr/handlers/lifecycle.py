@@ -29,6 +29,7 @@ from scalarizr.linux import iptables, os as os_dist
 import logging, os, sys, threading
 from scalarizr.config import STATE
 import time
+import re
 
 
 _lifecycle = None
@@ -154,6 +155,16 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         # Mount all filesystems
         if os_dist['family'] != 'Windows':
             system2(('mount', '-a'), raise_exc=False)
+
+        # cloud-init scripts may disable root ssh login
+        for path in ('/etc/ec2-init/ec2-config.cfg', '/etc/cloud/cloud.cfg'):
+            if os.path.exists(path):
+                c = None
+                with open(path, 'r') as fp:
+                    c = fp.read()
+                c = re.sub(re.compile(r'^disable_root[^:=]*([:=]).*', re.M), r'disable_root\1 0', c)
+                with open(path, 'w') as fp:
+                    fp.write(c)
 
         # Add firewall rules
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
