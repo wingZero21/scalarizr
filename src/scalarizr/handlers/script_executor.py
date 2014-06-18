@@ -303,6 +303,8 @@ class ScriptExecutor(Handler):
 
 
 class Script(object):
+    TIMEOUT_RETURN_CODE = 130
+
     name = None
     body = None
     run_as = None
@@ -469,9 +471,7 @@ class Script(object):
                     self.return_code = self._proc_complete()
                     break
             else:
-                # Process timeouted
-                self.logger.debug('Timeouted: %s seconds. Killing process %s (pid: %s)',
-                                                        self.exec_timeout, self.interpreter, self.pid)
+                # Process timed out
                 self.return_code = self._proc_kill()
 
             if not os.path.exists(self.stdout_path):
@@ -548,15 +548,15 @@ class Script(object):
             return 0
 
     def _proc_kill(self):
-        self.logger.debug('Timeouted: %s seconds. Killing process %s (pid: %s)',
-                                                self.exec_timeout, self.interpreter, self.pid)
+        self.logger.warn('Script %s reached timeout %d seconds, sending TERM signal (pid: %s)',
+            self.name, self.exec_timeout, self.pid)
         if self.proc and self._proc_poll() is None:
             os.kill(self.pid, signal.SIGTERM)
             if not wait_until(lambda: self._proc_poll() is not None,
                             timeout=2, sleep=.5, raise_exc=False):
-                os.kill(self.pid, signal.SIGKILL)
-                return -9
-            return self.proc.returncode
+                self.logger.warn('Script %s timed out, killing entire process tree', self.name)
+                linux.eradicate(self.pid)
+            return self.TIMEOUT_RETURN_CODE
 
     def _proc_complete(self):
         if self.proc:
