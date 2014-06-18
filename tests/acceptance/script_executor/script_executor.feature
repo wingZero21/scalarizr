@@ -6,3 +6,5 @@ Feature: Chef scripts on events
         And I add chef scripts to HostInit event
        When I start server
        Then I see that chef scripts were successfully executed
+
+
