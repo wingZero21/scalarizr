@@ -474,6 +474,7 @@ class Script(object):
             # Communicate with process
             self.logger.debug('Communicating with %s (pid: %s)', self.interpreter, self.pid)
             while time.time() - self.start_time < self.exec_timeout:
+                time.sleep(5)
                 if self._proc_poll() is None:
                     time.sleep(0.5)
                 else:
