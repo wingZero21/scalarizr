@@ -172,10 +172,8 @@ class SystemAPI(object):
         with open(self._HOSTNAME, 'w+') as fp:
             fp.write(hostname)
         ip = __node__['private_ip']
-        LOG.debug('Setting hostname %s for ip %s' % (hostname, ip))
         hosts = dns.HostsFile()
         hosts.map(ip, hostname)
-        LOG.debug(hosts._hosts)
 
         '''
         TODO: test and correct this code 

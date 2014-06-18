@@ -7,6 +7,9 @@ from collections import namedtuple
 import string
 import re
 
+import logging
+LOG = logging.getLogger(__name__)
+
 
 HostLine=namedtuple('host', ['ipaddr', 'hostname', 'aliases'])
 
@@ -81,13 +84,16 @@ class HostsFile(object):
             host = self._hosts[hostname]
             host['ipaddr'] = ipaddr
             host['aliases'] = set(aliases)
+            LOG.debug('Mapped existed hostname %s' % hostname)
         except KeyError:
+            LOG.debug('Adding %s as %s to hosts' % (ipaddr, hostname))
             self._hosts.append({
                     'ipaddr': ipaddr,
                     'hostname': hostname,
                     'aliases': set(aliases)
             })
         finally:
+            LOG.debug(self._hosts)
             return self._flush()
 
 
