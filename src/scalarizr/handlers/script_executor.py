@@ -194,12 +194,15 @@ class ScriptExecutor(Handler):
             # raise
         finally:
             LOG.debug('entering finally')
-            script_result = script.get_result()
-            if exc_info:
-                with open(script.stderr_path, 'w+') as stderr_log:
-                    stderr_log.write(exc_info[1][1])
-                script_result['stderr'] = binascii.b2a_base64(exc_info[1][1])
-                script_result['return_code'] = 1
+            try:
+                script_result = script.get_result()
+                if exc_info:
+                    with open(script.stderr_path, 'w+') as stderr_log:
+                        stderr_log.write(exc_info[1][1])
+                    script_result['stderr'] = binascii.b2a_base64(exc_info[1][1])
+                    script_result['return_code'] = 1
+            except:
+                LOG.debug('exception in send result: %s' % sys.exc_info())
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
             self.in_progress.remove(script)
 
