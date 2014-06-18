@@ -198,11 +198,14 @@ class ScriptExecutor(Handler):
                 script_result = script.get_result()
                 LOG.debug('script result: %s' % script_result)
                 if exc_info:
+                    LOG.debug('exception was occured')
                     with open(script.stderr_path, 'w+') as stderr_log:
                         stderr_log.write(exc_info[1][1])
                     script_result['stderr'] = binascii.b2a_base64(exc_info[1][1])
                     script_result['return_code'] = 1
                     LOG.debug('script result after err: %s' % script_result)
+                else:
+                    LOG.debug('exception wasnt occured')
             except:
                 LOG.debug('exception in send result: %s' % sys.exc_info())
             LOG.debug('sending exec script result message')
