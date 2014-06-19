@@ -193,26 +193,24 @@ class ScriptExecutor(Handler):
                 msg = 'Asynchronous script {0!r} error: {1}'.format(
                         script.name, str(exc_info[1]))
                 LOG.warn(msg, exc_info=exc_info)
-            # raise
+            raise
         finally:
             LOG.debug('entering finally')
-            # try:
-            script_result = script.get_result()
-            LOG.debug('script result: %s' % script_result)
-                # if exc_info:
-                #     LOG.debug('exception was occured :%s' % exc_info)
-                #     with open(script.stderr_path, 'w+') as stderr_log:
-                #         LOG.debug('writing stderr log: %s' % script.stderr_path)
-                #         stderr_log.write(exc_info[1][1])
-                #     script_result['stderr'] = binascii.b2a_base64(exc_info[1][1])
-                #     script_result['return_code'] = 1
-                #     LOG.debug('script result after err: %s' % script_result)
-                # else:
-                #     LOG.debug('exception wasnt occured')
-            # except:
-            #     LOG.debug('exception in send result: %s' % sys.exc_info())
-            # script_result['stderr'] = binascii.b2a_base64(exc_info[1][1])
-            script_result['return_code'] = 1
+            try:
+                script_result = script.get_result()
+                LOG.debug('script result: %s' % script_result)
+                if exc_info:
+                    LOG.debug('exception was occured :%s' % exc_info)
+                    with open(script.stderr_path, 'w+') as stderr_log:
+                        LOG.debug('writing stderr log: %s' % script.stderr_path)
+                        stderr_log.write(exc_info[1][1])
+                    script_result['stderr'] = exc_info[1][1]  #binascii.b2a_base64(exc_info[1][1])
+                    script_result['return_code'] = 1
+                    LOG.debug('script result after err: %s' % script_result)
+                else:
+                    LOG.debug('exception wasnt occured')
+            except:
+                LOG.debug('exception in send result: %s' % sys.exc_info())
             LOG.debug('sending exec script result message')
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
             LOG.debug('removing script from progress')
