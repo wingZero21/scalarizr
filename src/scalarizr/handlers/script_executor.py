@@ -199,7 +199,7 @@ class ScriptExecutor(Handler):
             
         script_result = script.get_result()
         LOG.debug('script result: %s' % script_result)
-        r
+        
         if exc_info:
             LOG.debug('exception was occured :%s' % exc_info)
             # with open(script.stderr_path, 'w+') as stderr_log:
