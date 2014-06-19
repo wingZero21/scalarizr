@@ -211,7 +211,7 @@ class ScriptExecutor(Handler):
                 #     LOG.debug('exception wasnt occured')
             # except:
             #     LOG.debug('exception in send result: %s' % sys.exc_info())
-            script_result['stderr'] = binascii.b2a_base64(exc_info[1][1])
+            # script_result['stderr'] = binascii.b2a_base64(exc_info[1][1])
             script_result['return_code'] = 1
             LOG.debug('sending exec script result message')
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
