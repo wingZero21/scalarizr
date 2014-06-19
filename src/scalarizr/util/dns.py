@@ -6,6 +6,7 @@ from __future__ import with_statement
 from collections import namedtuple
 import string
 import re
+import sys
 
 import logging
 LOG = logging.getLogger(__name__)
@@ -93,6 +94,8 @@ class HostsFile(object):
                     'aliases': set(aliases)
             })
         finally:
+            e = sys.exc_info()[1]
+            LOG.debug(str(e))
             LOG.debug(self._hosts)
             return self._flush()
 
