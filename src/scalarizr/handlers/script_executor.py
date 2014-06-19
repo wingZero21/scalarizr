@@ -173,8 +173,9 @@ class ScriptExecutor(Handler):
 
     def _execute_one_script(self, script):
         if script.asynchronous:
-            threading.Thread(target=self._execute_one_script0,
-                                            args=(script, )).start()
+            execution_thread = threading.Thread(target=self._execute_one_script0, args=(script, ))
+            self.running_threads.append(execution_thread)
+            execution_thread.start()
         else:
             self._execute_one_script0(script)
 
@@ -474,7 +475,6 @@ class Script(object):
             # Communicate with process
             self.logger.debug('Communicating with %s (pid: %s)', self.interpreter, self.pid)
             while time.time() - self.start_time < self.exec_timeout:
-                time.sleep(5)
                 if self._proc_poll() is None:
                     time.sleep(0.5)
                 else:
