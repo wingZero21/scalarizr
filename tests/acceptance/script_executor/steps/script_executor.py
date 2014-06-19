@@ -41,8 +41,12 @@ def start_server(context):
 
 @then('I see that chef scripts were successfully executed')
 def i_see_results(context):
-    event = context.farm.event_mgr.wait({'event': 'incoming_message', 'message.name': 'ExecScriptResult'}, timeout=300)
-    assert int(event.message.body['return_code']) == 0
+    def check_exec_result(event):
+        assert int(event.message.body['return_code']) == 0
+
+    context.farm.event_mgr.wait({'event': 'incoming_message', 'message.name': 'ExecScriptResult'}, timeout=300,
+                                        fn=check_exec_result)
+
     file_path = os.path.join(context.server.rootfs_path, "tmp/test_file")
     assert os.path.exists(file_path), "%s doesnt exist" % file_path
 
