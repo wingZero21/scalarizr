@@ -69,6 +69,7 @@ class ScriptExecutor(Handler):
     def __init__(self):
         self.queue = Queue.Queue()
         self.in_progress = []
+        self.running_threads = []
         self.global_variables = None
         bus.on(
                 init=self.on_init,
