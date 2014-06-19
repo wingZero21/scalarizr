@@ -6,10 +6,6 @@ from __future__ import with_statement
 from collections import namedtuple
 import string
 import re
-import sys
-
-import logging
-LOG = logging.getLogger(__name__)
 
 
 HostLine=namedtuple('host', ['ipaddr', 'hostname', 'aliases'])
@@ -17,7 +13,7 @@ HostLine=namedtuple('host', ['ipaddr', 'hostname', 'aliases'])
 class Items(list):
 
     def __getitem__(self, index):
-        if isinstance(index, str):
+        if isinstance(index, (str, unicode)):
             for item in self:
                 if isinstance(item, dict) and item['hostname'] == index:
                     return item
@@ -85,18 +81,13 @@ class HostsFile(object):
             host = self._hosts[hostname]
             host['ipaddr'] = ipaddr
             host['aliases'] = set(aliases)
-            LOG.debug('Mapped existed hostname %s' % hostname)
         except KeyError:
-            LOG.debug('Adding %s as %s to hosts' % (ipaddr, hostname))
             self._hosts.append({
                     'ipaddr': ipaddr,
                     'hostname': hostname,
                     'aliases': set(aliases)
             })
         finally:
-            e = sys.exc_info()[1]
-            LOG.debug(str(e))
-            LOG.debug(self._hosts)
             return self._flush()
 
 
