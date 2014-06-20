@@ -20,6 +20,7 @@ import time
 
 from scalarizr import config as szrconfig
 from scalarizr import linux
+import scalarizr.linux.execute
 from scalarizr.bus import bus
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import Handler, HandlerError
@@ -559,7 +560,7 @@ class Script(object):
                 if linux.os.windows_family:
                     os.kill(self.pid, signal.SIGKILL)
                 else:
-                    linux.eradicate(self.pid)
+                    linux.execute.eradicate(self.pid)
             return self.TIMEOUT_RETURN_CODE
 
     def _proc_complete(self):
