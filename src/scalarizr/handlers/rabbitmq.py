@@ -394,9 +394,9 @@ class RabbitMQHandler(ServiceCtlHandler):
 
     def _get_cluster_nodes(self):
         nodes = []
-        for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
-            for host in role.hosts:
-                ip = host.internal_ip
-                hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % host.index
-                nodes.append((hostname, ip))
+        role = self.queryenv.list_roles(farm_role_id=__node__['farm_role_id'])[0]
+        for host in role.hosts:
+            ip = host.internal_ip
+            hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % host.index
+            nodes.append((hostname, ip))
         return nodes
