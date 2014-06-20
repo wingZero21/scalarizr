@@ -556,7 +556,10 @@ class Script(object):
             if not wait_until(lambda: self._proc_poll() is not None,
                             timeout=2, sleep=.5, raise_exc=False):
                 self.logger.warn('Script %s timed out, killing entire process tree', self.name)
-                linux.eradicate(self.pid)
+                if linux.os.windows_family:
+                    os.kill(self.pid, signal.SIGKILL)
+                else:
+                    linux.eradicate(self.pid)
             return self.TIMEOUT_RETURN_CODE
 
     def _proc_complete(self):
