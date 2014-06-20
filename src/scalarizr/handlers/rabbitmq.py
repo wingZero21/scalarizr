@@ -36,8 +36,9 @@ STORAGE_VOLUME_CNF = 'rabbitmq.json'
 RABBITMQ_MGMT_PLUGIN_NAME = 'rabbitmq_management'
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
 RABBITMQ_ENV_CFG_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
-inet_dist_listen_min = 40100
-inet_dist_listen_max = 40150
+
+RABBITMQ_CLUSTERING_PORT = 25672
+
 
 
 
@@ -123,8 +124,7 @@ class RabbitMQHandler(ServiceCtlHandler):
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '15672'},
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '55672'},
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'},
-                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '%d:%d' %
-                                                                        (inet_dist_listen_min, inet_dist_listen_max)}
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(RABBITMQ_CLUSTERING_PORT)}
             ])
 
 
@@ -245,8 +245,8 @@ class RabbitMQHandler(ServiceCtlHandler):
         os.environ.update(dict(RABBITMQ_NODENAME=node_name))
         with open(RABBITMQ_ENV_CFG_PATH, 'w') as f:
             f.write('RABBITMQ_NODENAME=%s\n' % node_name)
-            f.write('RABBITMQ_SERVER_ERL_ARGS="-kernel inet_dist_listen_min %d -kernel inet_dist_listen_max %d"\n' %
-                    (inet_dist_listen_min, inet_dist_listen_max))
+            f.write('RABBITMQ_SERVER_ERL_ARGS="-kernel inet_dist_listen_min {0}'
+                    ' -kernel inet_dist_listen_max {0}"\n'.format(RABBITMQ_CLUSTERING_PORT))
 
 
     def on_host_init_response(self, message):
