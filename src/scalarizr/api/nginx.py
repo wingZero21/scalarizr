@@ -636,14 +636,14 @@ class NginxAPI(BehaviorAPI):
                                (self.proxies_inc_path, include_list))
 
         # First remove then rewrite or leave it removed
-        self._logger.debug('removing http/server section')
+        _logger.debug('removing http/server section')
         try:
             config.remove('http/server')
         except (ValueError, IndexError):
-            self._logger.debug('no http/server section')
+            _logger.debug('no http/server section')
         
         if not remove_server_section:
-            self._logger.debug('Rewriting http/server section')
+            _logger.debug('Rewriting http/server section')
             config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
 
         if linux.os.debian_family:
