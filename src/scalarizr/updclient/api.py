@@ -764,10 +764,22 @@ class UpdClientAPI(object):
 
         for key in keys_to_copy:
             status[key] = getattr(self, key)
-        try:
+
+        # we should exclude status from realtime data, 
+        # cause postinst for < 2.7.7 calls --make-status-file that fails to call scalarizr status
+        #
+        # \_ /bin/bash /etc/rc3.d/S84scalarizr_update start
+        #     \_ /usr/bin/python2.6 -c ?from upd.client.package_mgr import YumPackageMgr?mgr = YumPackageMgr()?try:??mgr.u
+        #         \_ /usr/bin/python /usr/bin/yum -d0 -y --disableplugin=priorities install scalarizr-base-2.7.28-1.el6 sc
+        #             \_ /bin/sh /var/tmp/rpm-tmp.OXe7Fi 2
+        #                 \_ /usr/bin/python2.6 -m scalarizr.updclient.app --make-status-file --downgrades-disabled
+        #                     \_ /usr/bin/python2.6 /usr/bin/scalarizr status
+        #                         \_ /usr/bin/python2.6 /usr/bin/scalr-upd-client status
+        #                             \_ /usr/bin/python /usr/bin/yum -d0 -y clean expire-cache --exclude *.i386 --exclude
+        if not cached:
             status['service_status'] = 'running' if self.daemon.running else 'stopped'
-        except:
-            status['service_status'] = 'stopped'
+        else:
+            status['service_status'] = 'unknown'
         return status
             
 
