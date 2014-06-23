@@ -117,12 +117,18 @@ class GcePersistentVolume(base.Volume):
                 else:
                     if self.last_attached_to and self.last_attached_to != server_name:
                         LOG.debug("Making sure that disk %s detached from previous attachment place." % self.name)
-                        gce_util.ensure_disk_detached(connection,
-                                                      project_id,
-                                                      zone,
-                                                      self.last_attached_to,
-                                                      self.link)
-
+                        try:
+                            gce_util.ensure_disk_detached(connection,
+                                                          project_id,
+                                                          zone,
+                                                          self.last_attached_to,
+                                                          self.link)
+                        except:
+                            e = sys.exc_info()[1]
+                            if 'resource was not found' in str(e):
+                                raise storage2.VolumeNotExistsError(self.link)
+                            raise
+                        
                     attachment_inf = self._attachment_info(connection)
                     if attachment_inf:
                         disk_devicename = attachment_inf['deviceName']
@@ -131,11 +137,18 @@ class GcePersistentVolume(base.Volume):
 
                 if attach:
                     LOG.debug('Attaching disk %s to current instance' % self.name)
-                    op = connection.instances().attachDisk(instance=server_name, project=project_id,
+                    try:
+                        op = connection.instances().attachDisk(instance=server_name, project=project_id,
                                             zone=zone, body=dict(deviceName=self.name,
                                                                     source=self.link,
                                                                     mode="READ_WRITE",
                                                                     type="PERSISTENT")).execute()
+                    except:
+                        e = sys.exc_info()[1]
+                        if 'resource was not found' in str(e):
+                            raise storage2.VolumeNotExistsError(self.link)
+                        raise
+
                     gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
                     disk_devicename = self.name
 
