@@ -31,7 +31,7 @@ Requires:       python >= 2.5 m2crypto >= 0.20 pexpect >= 2.3
 # snmp
 Requires:       pysnmp >= 4.2.4 python-pyasn1 >= 0.1.7 python-pysnmp-mibs >= 0.0.8a 
 # szradm
-Requires:       python-prettytable PyYAML python-docopt
+Requires:       python-prettytable PyYAML python-docopt >= 0.6.2
 # mongodb behavior
 #Requires:		pymongo >= 2.1
 #Requires:		python-bson >= 2.1

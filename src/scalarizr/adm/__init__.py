@@ -1,1 +1,1 @@
-from scalarizr.adm import szradm
+from scalarizr.adm import app as szradm
