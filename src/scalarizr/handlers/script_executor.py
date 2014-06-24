@@ -262,6 +262,8 @@ class ScriptExecutor(Handler):
             environ.update(global_variables)
 
             LOG.debug('Fetching scripts from incoming message')
+            event_id = message.body.get('event_id')
+            event_server_id = message.body.get('server_id')
 
             def _create_script(message_script_params):
                 kwds = message_script_params.copy()
@@ -270,8 +272,8 @@ class ScriptExecutor(Handler):
                 if 'asynchronous' in kwds:
                     kwds['asynchronous'] = int(kwds['asynchronous'])
                 kwds['role_name'] = role_name
-                kwds['event_server_id'] = message.body.get('server_id')
-                kwds['event_id'] = message.body.get('event_id')
+                kwds['event_server_id'] = event_server_id
+                kwds['event_id'] = event_id
                 kwds['event_name'] = event_name
                 kwds['environ'] = environ
                 try:
@@ -283,9 +285,10 @@ class ScriptExecutor(Handler):
                             'stderr': e.message,
                             'return_code': 1,
                             'time_elapsed': 0,
-                            'event_name': event_name,
-                            'event_id': kwds.get('event_id'),
-                            'execution_id': kwds.get('execution_id'),
+                            'event_name': kwds['event_name'],
+                            'event_id': kwds['event_id'],
+                            'event_server_id': kwds['event_server_id'],
+                            'execution_id': kwds['execution_id'],
                             'script_name': kwds.get('name'),
                             'script_path': kwds.get('path'),
                             'run_as': kwds.get('run_as')
