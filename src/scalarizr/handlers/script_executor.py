@@ -534,7 +534,10 @@ class Script(object):
                 'interpreter': self.interpreter,
                 'start_time': self.start_time,
                 'asynchronous': self.asynchronous,
+                'execution_id': self.execution_id,
                 'event_name': self.event_name,
+                'event_server_id': self.event_server_id,
+                'event_id': self.event_id,
                 'role_name': self.role_name,
                 'exec_timeout': self.exec_timeout,
                 'run_as': self.run_as}
