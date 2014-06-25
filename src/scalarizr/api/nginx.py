@@ -210,12 +210,14 @@ class NginxAPI(object):
         error_pages_dir = os.path.dirname(__nginx__['app_include_path'])
         self.error_pages_inc = os.path.join(error_pages_dir,
                                             'error-pages.include')
-
-        error_pages_conf = metaconf.Configuration('nginx')
-        _add_static_location(error_pages_conf, '/500.html', '0')
-        _add_static_location(error_pages_conf, '/502.html', '0')
-        _add_static_location(error_pages_conf, '/noapp.html')
-        error_pages_conf.write(self.error_pages_inc)
+        # error-pages.include is overwritten only if it is not exist,
+        # so clients can modify it and be sure their changes are persist
+        if not os.path.exists(self.error_pages_inc):
+            error_pages_conf = metaconf.Configuration('nginx')
+            _add_static_location(error_pages_conf, '/500.html', '0')
+            _add_static_location(error_pages_conf, '/502.html', '0')
+            _add_static_location(error_pages_conf, '/noapp.html')
+            error_pages_conf.write(self.error_pages_inc)
 
     def _save_proxies_inc(self):
         self.proxies_inc.write(self.proxies_inc_path)
