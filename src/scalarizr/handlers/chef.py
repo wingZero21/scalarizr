@@ -325,7 +325,8 @@ class ChefClient(object):
             if not os.path.exists(_dir):
                 os.makedirs(_dir)
             with open(CLIENT_CONF_PATH, 'w+') as fp:
-                fp.write(CLIENT_CONF_TPL % (self.chef_server_url, self.environment, self.validator_name. self.node_name))
+                fp.write(CLIENT_CONF_TPL % (self.chef_server_url, self.environment,
+                                            self.validator_name, self.node_name))
             os.chmod(CLIENT_CONF_PATH, 0644)
 
             if not os.path.exists(CLIENT_KEY_PATH):
