@@ -833,5 +833,6 @@ def sync_globals(glob_vars=None):
     with open(globals_path, 'w') as fp:
         for k, v in glob_vars['public'].items():
             v = v.replace('"', '\\"')
-            fp.write('export %s="%s"\n' % (k, v))
+            LOG.debug('GV %s=%s', k, v)
+            fp.write(u'export %s="%s"\n' % (k, v))
     os.chmod(globals_path, 0644)
