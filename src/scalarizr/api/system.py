@@ -565,12 +565,12 @@ class SystemAPI(object):
         stderr_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-err.log' % exec_script_id))
 
         if not stdout_match:
-            stdout = binascii.b2a_base64(u'log file not found')
+            stdout = binascii.b2a_base64('log file not found')
         else:
             stdout_path = stdout_match[0]
             stdout = binascii.b2a_base64(_get_log(stdout_path))
         if not stderr_match:
-            stderr = binascii.b2a_base64(u'errlog file not found')
+            stderr = binascii.b2a_base64('errlog file not found')
         else:
             stderr_path = stderr_match[0]
             stderr = binascii.b2a_base64(_get_log(stderr_path))
@@ -592,13 +592,12 @@ class SystemAPI(object):
 
 def _get_log(logfile, maxsize=max_log_size):
     if maxsize != -1 and (os.path.getsize(logfile) > maxsize):
-        return u'Unable to fetch Log file %s: file is larger than %s bytes' % (logfile, maxsize)
+        return 'Unable to fetch Log file %s: file is larger than %s bytes' % (logfile, maxsize)
     try:
         with open(logfile, "r") as fp:
-            ret = unicode(fp.read(int(maxsize)), 'utf-8')
-            return ret.encode('utf-8')
+            return fp.read(int(maxsize))
     except IOError:
-        return u'Log file %s is not readable' % logfile
+        return 'Log file %s is not readable' % logfile
 
 
 if linux.os.windows_family:
