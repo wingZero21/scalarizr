@@ -26,6 +26,10 @@ if linux.os.windows_family:
     import win32serviceutil
 
 
+def get_handlers():
+    return (ChefHandler(), )
+
+
 WIN_SERVICE_NAME = 'chef-client'
 LOG = logging.getLogger(__name__)
 CLIENT_CONF_TPL = '''
@@ -43,8 +47,20 @@ file_cache_path "{1}"
 log_level :{2}
 '''
 
-def get_handlers():
-    return (ChefHandler(), )
+if linux.os.windows_family:
+    CLIENT_CONF_PATH = r'C:\chef\client.rb'
+    VALIDATOR_KEY_PATH = r'C:\chef\validation.pem'
+    CLIENT_KEY_PATH = r'C:\chef\client.pem'
+    JSON_ATTRIBUTES_PATH = r'C:\chef\json_attributes.json'
+    CHEF_CLIENT_BIN = r'C:\opscode\chef\bin\chef-client.bat'
+    CHEF_SOLO_BIN = r'C:\opscode\chef\bin\chef-solo.bat'
+else:
+    CLIENT_CONF_PATH = '/etc/chef/client.rb'
+    VALIDATOR_KEY_PATH =  '/etc/chef/validation.pem'
+    CLIENT_KEY_PATH = '/etc/chef/client.pem'
+    JSON_ATTRIBUTES_PATH = '/etc/chef/json_attributes.json'
+    CHEF_CLIENT_BIN = which('chef-client')
+    CHEF_SOLO_BIN = which('chef-solo')
 
 
 PID_FILE = '/var/run/chef-client.pid'
@@ -114,21 +130,10 @@ class ChefHandler(Handler):
     def __init__(self):
         super(ChefHandler, self).__init__()
         bus.on(init=self.on_init)
-        self._chef_client_bin = None
         self._chef_data = None
-        self._run_list = []
-        if linux.os.windows_family:
-            self._client_conf_path = r'C:\chef\client.rb'
-            self._validator_key_path = r'C:\chef\validation.pem' 
-            self._client_key_path = r'C:\chef\client.pem'
-            self._json_attributes_path = r'C:\chef\first-run.json'
-        else:
-            self._client_conf_path = '/etc/chef/client.rb'
-            self._validator_key_path =  '/etc/chef/validation.pem'
-            self._client_key_path = '/etc/chef/client.pem'
-            self._json_attributes_path = '/etc/chef/first-run.json'
+        self._run_list = None
 
-        self._with_json_attributes = False
+        self._with_json_attributes = None
         self._platform = bus.platform
         self._global_variables = {}
         self._init_script = initdv2.lookup('chef')
@@ -148,7 +153,7 @@ class ChefHandler(Handler):
             if params_dict:
                 daemonize = int(params_dict.get('daemonize', False))
                 if daemonize:
-                    self.run_chef_client(daemonize=True)
+                    self.daemonize()
 
 
     def on_host_init_response(self, message):
@@ -157,14 +162,6 @@ class ChefHandler(Handler):
             self._global_variables[kv['name']] = kv['value'].encode('utf-8') if kv['value'] else ''
 
         if 'chef' in message.body and message.body['chef']:
-            if linux.os.windows_family:
-                self._chef_client_bin = r'C:\opscode\chef\bin\chef-client.bat'
-                self._chef_solo_bin = r'C:\opscode\chef\bin\chef-solo.bat'
-            else:
-                # Workaround for 'chef' behavior enabled, but chef not installed
-                self._chef_client_bin = which('chef-client')
-                self._chef_solo_bin = which('chef-solo')
-
             self._chef_data = message.chef.copy()
             if not self._chef_data.get('node_name'):
                 self._chef_data['node_name'] = self.get_node_name()
@@ -173,11 +170,10 @@ class ChefHandler(Handler):
             if self._with_json_attributes:
                 self._with_json_attributes = json.loads(self._with_json_attributes)
 
-            self._run_list = self._chef_data.get('run_list')
-            if self._run_list:
-                self._with_json_attributes['run_list'] = json.loads(self._run_list)
+            if self._chef_data.get('run_list'):
+                self._run_list = json.loads(self._chef_data.get('run_list'))
             elif self._chef_data.get('role'):
-                self._with_json_attributes['run_list'] = ["role[%s]" % self._chef_data['role']]
+                self._run_list = ["role[%s]" % self._chef_data['role']]
 
             if linux.os.windows_family:
                 # TODO: why not doing the same on linux?
@@ -214,45 +210,26 @@ class ChefHandler(Handler):
         try:
             # Create client configuration
             if self._chef_data.get('server_url'):
-                _dir = os.path.dirname(self._client_conf_path)
-                if not os.path.exists(_dir):
-                    os.makedirs(_dir)
-                with open(self._client_conf_path, 'w+') as fp:
-                    fp.write(CLIENT_CONF_TPL % self._chef_data)
-                os.chmod(self._client_conf_path, 0644)
-
                 # Delete client.pem
-                if os.path.exists(self._client_key_path):
-                    os.remove(self._client_key_path)
+                if os.path.exists(CLIENT_KEY_PATH):
+                    os.remove(CLIENT_KEY_PATH)
 
-                # Write validation cert
-                with open(self._validator_key_path, 'w+') as fp:
-                    fp.write(self._chef_data['validator_key'])
-
-                log.info('Registering Chef node %s',
-                        self._chef_data['node_name'])
-                try:
-                    self.run_chef_client()
-                finally:
-                    os.remove(self._validator_key_path)
+                chef_client = ChefClient(self._chef_data['server_url'],
+                                         self._with_json_attributes,
+                                         self._chef_data['node_name'],
+                                         self._chef_data['validator_name'],
+                                         self._chef_data['validator_key'],
+                                         self._environ_variables)
+                chef_client.prepare()
 
                 self.send_message('HostUpdate', dict(chef=self._chef_data))
 
-                if self._with_json_attributes:
-                    try:
-                        log.info('Applying Chef run list %s',
-                                self._with_json_attributes['run_list'])
-                        with open(self._json_attributes_path, 'w+') as fp:
-                            json.dump(self._with_json_attributes, fp)
-
-                        self.run_chef_client(with_json_attributes=True)
-                    finally:
-                        os.remove(self._json_attributes_path)
+                chef_client.run()
 
                 daemonize = self._chef_data.get('daemonize')
                 if daemonize and int(daemonize):
                     log.info('Daemonizing chef-client')
-                    self.run_chef_client(daemonize=True)
+                    self.daemonize()
 
             elif self._chef_data.get('cookbook_url'):
                 solo = ChefSolo(self._chef_data['cookbook_url'],
@@ -261,7 +238,7 @@ class ChefHandler(Handler):
                                 relative_path=self._chef_data.get('relative_path'),
                                 environment=self._environ_variables,
                                 ssh_private_key=self._chef_data.get('ssh_private_key'),
-                                binary_path=self._chef_solo_bin)
+                                binary_path=CHEF_SOLO_BIN)
                 try:
                     solo.prepare()
                     solo.run()
@@ -275,24 +252,13 @@ class ChefHandler(Handler):
             self._chef_data = None
 
 
-    def run_chef_client(self, with_json_attributes=False, daemonize=False):
-        if daemonize:
-            if linux.os.windows_family:
-                self._logger.info('Starting chef-client service')
-                win32serviceutil.StartService(WIN_SERVICE_NAME)
-            else:
-                self._init_script.start(env=self._environ_variables)
-            return
+    def daemonize(self):
+        if linux.os.windows_family:
+            self._logger.info('Starting chef-client service')
+            win32serviceutil.StartService(WIN_SERVICE_NAME)
+        else:
+            self._init_script.start(env=self._environ_variables)
 
-        cmd = [self._chef_client_bin]
-        if with_json_attributes:
-            cmd += ['--json-attributes', self._json_attributes_path]
-        system2(cmd,
-            close_fds=not linux.os.windows_family,
-            log_level=logging.INFO,
-            preexec_fn=not linux.os.windows_family and os.setsid or None,
-            env=self._environ_variables
-        )
 
     @property
     def _environ_variables(self):
@@ -317,6 +283,89 @@ class ChefHandler(Handler):
                     self._platform.name, 
                     self._platform.get_public_ip(), 
                     time.time())
+
+class ChefClient(object):
+
+    def __init__(self,
+                 chef_server_url,
+                 json_attributes,
+                 node_name=None,
+                 validator_name=None,
+                 validation_pem=None,
+                 environment=None):
+
+        self.chef_server_url = chef_server_url
+        self.validation_pem = validation_pem
+
+        self.json_attributes = json_attributes
+
+        self.node_name = node_name
+        self.validator_name = validator_name
+        self.environment = environment or dict()
+
+    def prepare(self):
+        if os.path.exists(CLIENT_KEY_PATH) and os.path.exists(CLIENT_CONF_PATH):
+            with open(CLIENT_CONF_PATH) as f:
+                for line in f:
+                    if line.strip().startswith("chef_server_url"):
+                        splitted_line = line.strip().split(None, 1)
+                        if len(splitted_line) != 2:
+                            break
+                        server_url = splitted_line[1].strip("'\"")
+                        if server_url == self.chef_server_url:
+                            break
+                        raise Exception("Can not configure chef to use {0} as server url, because it's"
+                            ' already configured to use {1}'.format(self.chef_server_url, server_url))
+        else:
+            assert self.node_name
+            assert self.chef_server_url
+            assert self.environment
+
+            _dir = os.path.dirname(CLIENT_CONF_PATH)
+            if not os.path.exists(_dir):
+                os.makedirs(_dir)
+            with open(CLIENT_CONF_PATH, 'w+') as fp:
+                fp.write(CLIENT_CONF_TPL % (self.chef_server_url, self.environment, self.validator_name. self.node_name))
+            os.chmod(CLIENT_CONF_PATH, 0644)
+
+            if not os.path.exists(CLIENT_KEY_PATH):
+                assert  self.validation_pem
+                assert self.validator_name
+                # Write validation cert
+                with open(VALIDATOR_KEY_PATH, 'w+') as fp:
+                    fp.write(self.validation_pem)
+
+                log = bus.init_op.logger if bus.init_op else LOG
+                log.info('Registering Chef node %s', self.node_name)
+                try:
+                    self._run_chef_client(validate=True)
+                finally:
+                    os.remove(VALIDATOR_KEY_PATH)
+
+
+    def _run_chef_client(self, validate=False):
+        system2(self.get_cmd(validate=validate),
+            close_fds=not linux.os.windows_family,
+            log_level=logging.INFO,
+            preexec_fn=not linux.os.windows_family and os.setsid or None,
+            env=self.environment
+        )
+
+    def get_cmd(self, validate=False):
+        cmd = [CHEF_CLIENT_BIN]
+        if not validate:
+            cmd += ['--json-attributes', JSON_ATTRIBUTES_PATH]
+        return cmd
+
+    def run(self):
+        LOG.info('Applying Chef run list %s' % self.json_attributes.get('run_list', list()))
+        try:
+            with open(JSON_ATTRIBUTES_PATH, 'w+') as fp:
+                json.dump(self.json_attributes, fp)
+            self._run_chef_client()
+        finally:
+            if os.path.exists(JSON_ATTRIBUTES_PATH):
+                os.remove(JSON_ATTRIBUTES_PATH)
 
 
 class ChefSolo(object):
@@ -343,8 +392,7 @@ class ChefSolo(object):
         self.json_attributes = json_attributes
         self.environment = environment or dict()
         self.ssh_private_key = ssh_private_key
-        self.binary_path = binary_path or (r'C:\opscode\chef\bin\chef-solo.bat' if
-                                           linux.os.windows_family else which('chef-solo'))
+        self.binary_path = binary_path or CHEF_SOLO_BIN
         if not self.binary_path or not os.path.exists(self.binary_path):
             raise Exception('Could not find chef-solo binary')
 

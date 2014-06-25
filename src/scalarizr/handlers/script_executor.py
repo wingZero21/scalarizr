@@ -599,7 +599,6 @@ class ChefSoloScript(Script):
 
 
     def __init__(self, **kwds):
-        LOG.debug("KWDS: %s" % kwds)
         if kwds.get("asynchronous"):
             raise Exception('Chef script could only be executed in synchronous mode')
 
