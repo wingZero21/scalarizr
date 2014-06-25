@@ -7,7 +7,6 @@ from xml.dom import minidom
 
 from scalarizr.util import system2
 from scalarizr.adm.command import Command
-# from scalarizr.adm.command import get_section
 from scalarizr.adm.command import printable_usage
 from scalarizr.adm.command import TAB_SIZE
 from scalarizr.adm.command import CommandError
@@ -78,7 +77,7 @@ class Queryenv(Command):
 
     @classmethod
     def get_supported_methods(cls):
-        usage_section = printable_usage(cls.__doc__) #get_section('usage', cls.__doc__)[0]
+        usage_section = printable_usage(cls.__doc__)
         usages = re.findall(r'queryenv .+?\s', usage_section)
         methods = [s.split()[1] for s in usages if '<method>' not in s]
         return methods

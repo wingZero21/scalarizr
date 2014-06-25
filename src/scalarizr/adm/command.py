@@ -5,7 +5,6 @@ from textwrap import dedent
 from docopt import docopt
 from docopt import DocoptExit
 from docopt import DocoptLanguageError
-# from docopt import parse_section as get_section
 from docopt import printable_usage
 
 
@@ -134,7 +133,7 @@ class Command(object):
             if subcommand == name or is_alias:
                 return sub_cmd
 
-        usage = printable_usage(self.help()) #''.join(get_section('usage', self.help()))
+        usage = printable_usage(self.help())
         raise UnknownCommand('%s: unknown subcommand %s' % (get_command_name(self), subcommand),
                              subcommand,
                              usage)
@@ -164,7 +163,7 @@ class Command(object):
             kwds.update(parse_command_line(args, sub_cmd_doc, options_first=options_first))
         except (DocoptExit, DocoptLanguageError), e:
             # TODO: maybe show whole help not just usage
-            usage = printable_usage(sub_cmd_doc) #''.join(get_section('usage', sub_cmd_doc))
+            usage = printable_usage(sub_cmd_doc)
             msg = '%s: invalid call.' % subcommand
             raise InvalidCall(msg, subcommand, usage)
 
