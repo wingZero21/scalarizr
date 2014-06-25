@@ -33,7 +33,7 @@ def get_handlers():
 WIN_SERVICE_NAME = 'chef-client'
 LOG = logging.getLogger(__name__)
 CLIENT_CONF_TPL = '''
-log_level        :info
+log_level        :%(log_level)s
 log_location     STDOUT
 chef_server_url  '%(server_url)s'
 environment      '%(environment)s'
@@ -219,6 +219,7 @@ class ChefHandler(Handler):
                                          self._chef_data['node_name'],
                                          self._chef_data['validator_name'],
                                          self._chef_data['validator_key'],
+                                         self._chef_data['environment'],
                                          self._environ_variables)
                 chef_client.prepare()
 
@@ -292,7 +293,9 @@ class ChefClient(object):
                  node_name=None,
                  validator_name=None,
                  validation_pem=None,
-                 environment=None):
+                 environment=None,
+                 environment_variables=None,
+                 log_level='auto'):
 
         self.chef_server_url = chef_server_url
         self.validation_pem = validation_pem
@@ -301,7 +304,9 @@ class ChefClient(object):
 
         self.node_name = node_name
         self.validator_name = validator_name
-        self.environment = environment or dict()
+        self.environment = environment
+        self.environment_variables = environment_variables or dict()
+        self.log_level = log_level
 
     def prepare(self):
         if os.path.exists(CLIENT_KEY_PATH) and os.path.exists(CLIENT_CONF_PATH):
@@ -326,7 +331,8 @@ class ChefClient(object):
                 os.makedirs(_dir)
             with open(CLIENT_CONF_PATH, 'w+') as fp:
                 fp.write(CLIENT_CONF_TPL % dict(server_url=self.chef_server_url, environment=self.environment,
-                                            validator_name=self.validator_name, node_name=self.node_name))
+                                            validator_name=self.validator_name, node_name=self.node_name,
+                                            log_level=self.log_level))
             os.chmod(CLIENT_CONF_PATH, 0644)
 
             if not os.path.exists(CLIENT_KEY_PATH):
@@ -336,9 +342,9 @@ class ChefClient(object):
                 with open(VALIDATOR_KEY_PATH, 'w+') as fp:
                     fp.write(self.validation_pem)
 
-                log = bus.init_op.logger if bus.init_op else LOG
-                log.info('Registering Chef node %s', self.node_name)
                 try:
+                    log = bus.init_op.logger if bus.init_op else LOG
+                    log.info('Registering Chef node %s', self.node_name)
                     self._run_chef_client(validate=True)
                 finally:
                     os.remove(VALIDATOR_KEY_PATH)
@@ -349,7 +355,7 @@ class ChefClient(object):
             close_fds=not linux.os.windows_family,
             log_level=logging.INFO,
             preexec_fn=not linux.os.windows_family and os.setsid or None,
-            env=self.environment
+            env=self.environment_variables
         )
 
     def get_cmd(self, validate=False):
