@@ -25,6 +25,7 @@ from multiprocessing import pool
 from scalarizr import rpc, linux
 from scalarizr.api import operation as operation_api
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 from scalarizr import util
 from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
@@ -169,13 +170,10 @@ class SystemAPI(object):
         assert hostname
         system2(('hostname', hostname))
         with open(self._HOSTNAME, 'w+') as fp:
-            fp.write(hostname) 
+            fp.write(hostname)
+        ip = __node__['private_ip']
         hosts = dns.HostsFile()
-        if not hosts.resolve('localhost'):
-            hosts.map('127.0.0.1', 'localhost', hostname)
-        else:
-            hosts.alias('localhost', hostname)
-
+        hosts.map(ip, hostname)
 
         '''
         TODO: test and correct this code 
