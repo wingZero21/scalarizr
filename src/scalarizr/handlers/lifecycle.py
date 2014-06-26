@@ -272,8 +272,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         
         # Prepare HostInit
         msg = self.new_message(Messages.HOST_INIT, dict(
-            seconds_since_start=time.time() - __node__['start_time'],
-            seconds_since_boot=time.time() - metadata.boot_time(),
+            seconds_since_start=float('%.2f' % (time.time() - __node__['start_time'], )),
+            seconds_since_boot=float('%.2f' % (time.time() - metadata.boot_time(), )),
             operation_id = bus.init_op.operation_id,
             crypto_key = new_crypto_key,
             snmp_port = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
