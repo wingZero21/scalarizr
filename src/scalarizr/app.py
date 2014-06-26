@@ -626,6 +626,7 @@ class Service(object):
         # Starting scalarizr daemon initialization
         globals()['_pid'] = pid = os.getpid()
         self._logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
+        node.__node__['start_time'] = time.time()
 
         if not 'Windows' == linux.os['family']:
             # Check for another running scalarzir
