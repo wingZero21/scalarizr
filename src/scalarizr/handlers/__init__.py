@@ -16,6 +16,7 @@ import pprint
 import sys
 import traceback
 import uuid
+import codecs
 import distutils.version
 import platform as platform_module
 
@@ -793,8 +794,10 @@ def sync_globals(glob_vars=None):
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
     globals_path = '/etc/profile.d/scalr_globals.sh'
-    with open(globals_path, 'w') as fp:
+    with codecs.open(globals_path, 'w+', encoding='utf-8') as fp:
         for k, v in glob_vars['public'].items():
             v = v.replace('"', '\\"')
-            fp.write('export %s="%s"\n' % (k, v))
+            if isinstance(v, str):
+                v = v.decode('utf-8')
+            fp.write(u'export %s="%s"\n' % (k, v))
     os.chmod(globals_path, 0644)

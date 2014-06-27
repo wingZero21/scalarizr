@@ -109,6 +109,7 @@ class GoogleServiceManager(object):
         current_thread = threading.current_thread()
         with self.lock:
             if not current_thread in self.map:
+
                 # Check other threads
                 for t, s in self.map.items():
                     if not t.is_alive():
@@ -118,13 +119,16 @@ class GoogleServiceManager(object):
                 if self.pool:
                     s = self.pool.pop()
                     self.map[current_thread] = s
+                    LOG.debug('Returning connection from pool')
                     return s
 
+                LOG.debug('Creating new connection')
                 http = self._get_auth()
                 s = build(self.s_name, self.s_ver, http=http)
                 wrapped = BadStatusLineHandler(s)
                 self.map[current_thread] = wrapped
 
+            LOG.debug('Returning existing connection for this thread')
             return self.map[current_thread]
 
 

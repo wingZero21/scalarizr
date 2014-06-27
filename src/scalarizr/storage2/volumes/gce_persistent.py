@@ -19,6 +19,7 @@ from scalarizr.storage2.util import gce as gce_util
 LOG = logging.getLogger(__name__)
 compute_api_version = bus.platform.compute_api_version
 
+STORAGE_TYPE = 'gce_persistent'
 
 def to_current_api_version(link):
     if link:
@@ -70,23 +71,37 @@ class GcePersistentVolume(base.Volume):
 
             self.device = device
         else:
-
+            LOG.debug('Successfully created connection to cloud engine')
             try:
-                # TODO(spike) raise VolumeNotExistsError when link passed disk not exists
                 create = False
                 if not self.link:
                     # Disk does not exist, create it first
                     create_request_body = dict(name=self.name)
                     if self.snap:
-                        self.snap = storage2.snapshot(self.snap)
+                        snap_dict = dict(self.snap)
+                        snap_dict['type'] = STORAGE_TYPE
+                        self.snap = storage2.snapshot(snap_dict)
+                        LOG.debug('Ensuring that snapshot is ready, before creating disk from it')
+                        gce_util.wait_snapshot_ready(self.snap)
                         create_request_body['sourceSnapshot'] = to_current_api_version(self.snap.link)
                     else:
                         create_request_body['sizeGb'] = self.size
 
                     create = True
                 else:
-                    self.link = to_current_api_version(self.link)
                     self._check_attr('zone')
+                    LOG.debug('Checking that disk already exists')
+                    try:
+                        disk_dict = connection.disks().get(disk=self.name, project=project_id,
+                                                                            zone=zone).execute()
+                        self.link = disk_dict['selfLink']
+                    except HttpError, e:
+                        code = int(e.resp['status'])
+                        if code == 404:
+                            raise storage2.VolumeNotExistsError(self.name)
+                        else:
+                            raise
+
                     if self.zone != zone:
                         # Volume is in different zone, snapshot it,
                         # create new volume from this snapshot, then attach
@@ -171,7 +186,8 @@ class GcePersistentVolume(base.Volume):
                     try:
                         garbage.destroy(force=True)
                     except:
-                        pass
+                        e = sys.exc_info()[1]
+                        LOG.debug('Failed to destroy temporary storage object %s: %s', garbage, e)
 
 
     def _attachment_info(self, con):
@@ -282,14 +298,10 @@ class GcePersistentVolume(base.Volume):
             snapshot_info = connection.snapshots().get(project=project_id, snapshot=snap_name,
                                                     fields='id,name,diskSizeGb,selfLink').execute()
             snapshot = GcePersistentSnapshot(id=snapshot_info['id'], name=snapshot_info['name'],
-                                             size=snapshot_info['diskSizeGb'], link=snapshot_info['selfLink'])
+                                             size=snapshot_info['diskSizeGb'], link=snapshot_info['selfLink'],
+                                             type=STORAGE_TYPE)
             if not nowait:
-                while True:
-                    status = snapshot.status()
-                    if status == snapshot.COMPLETED:
-                        break
-                    elif status == snapshot.FAILED:
-                        raise Exception('Snapshot status is "Failed"')
+                gce_util.wait_snapshot_ready(snapshot)
             return snapshot
         except:
             e = sys.exc_info()[1]
@@ -300,6 +312,8 @@ class GcePersistentVolume(base.Volume):
 
 
 class GcePersistentSnapshot(base.Snapshot):
+
+    type = STORAGE_TYPE
 
     def __init__(self, name, **kwds):
         super(GcePersistentSnapshot, self).__init__(name=name, **kwds)
@@ -327,5 +341,5 @@ class GcePersistentSnapshot(base.Snapshot):
         return self._status_map.get(status, self.UNKNOWN)
 
 
-storage2.volume_types['gce_persistent'] = GcePersistentVolume
-storage2.snapshot_types['gce_persistent'] = GcePersistentSnapshot
+storage2.volume_types[STORAGE_TYPE] = GcePersistentVolume
+storage2.snapshot_types[STORAGE_TYPE] = GcePersistentSnapshot
