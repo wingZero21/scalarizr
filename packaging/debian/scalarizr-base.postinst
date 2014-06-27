@@ -530,7 +530,7 @@ if [ -n "$installed_version" ]; then
 		fi
 	fi
 
-	if dpkg --compare-versions "$installed_version" lt '2.7.7'; then
+	if dpkg --compare-versions "$installed_version" lt '2.7.18'; then
 		if [ -f "$priv_cnf_dir/.state" ] && [ $(cat "$priv_cnf_dir/.state") = 'running' ]; then
 			python -m scalarizr.updclient.app --make-status-file  --downgrades-disabled
 		fi

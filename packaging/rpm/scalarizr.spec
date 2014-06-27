@@ -353,7 +353,7 @@ if compare_versions "$installed_version" lt '0.9.r4762-1'; then
 	fi
 fi
 
-if compare_versions "$installed_version" lt '2.7.7'; then
+if compare_versions "$installed_version" lt '2.7.18'; then
 	if [ -f "$priv_cnf_dir/.state" ] && [ $(cat "$priv_cnf_dir/.state") = 'running' ]; then
     	# scalr-upd-client binary here still points to old python module
 		%{__python} -m scalarizr.updclient.app --make-status-file --downgrades-disabled
