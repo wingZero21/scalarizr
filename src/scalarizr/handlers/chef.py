@@ -65,6 +65,20 @@ else:
 
 PID_FILE = '/var/run/chef-client.pid'
 
+def extract_json_attributes(chef_data):
+    json_attributes = json.loads(chef_data.get('json_attributes', "{}"))
+
+    if any(map(lambda x: x in chef_data, ('run_list', 'role'))):
+        if chef_data.get('run_list'):
+            run_list = json.loads(chef_data['run_list'])
+        elif chef_data.get('role'):
+            run_list = ["role[%s]" % chef_data['role']]
+
+        json_attributes['run_list'] = run_list
+
+    return json_attributes
+
+
 class ChefInitScript(initdv2.ParametrizedInitScript):
     _default_init_script = '/etc/init.d/chef-client'
 
@@ -166,14 +180,7 @@ class ChefHandler(Handler):
             if not self._chef_data.get('node_name'):
                 self._chef_data['node_name'] = self.get_node_name()
 
-            self._with_json_attributes = self._chef_data.get('json_attributes', {}) or {}
-            if self._with_json_attributes:
-                self._with_json_attributes = json.loads(self._with_json_attributes)
-
-            if self._chef_data.get('run_list'):
-                self._run_list = json.loads(self._chef_data.get('run_list'))
-            elif self._chef_data.get('role'):
-                self._run_list = ["role[%s]" % self._chef_data['role']]
+            self._with_json_attributes = extract_json_attributes(self._chef_data)
 
             if linux.os.windows_family:
                 # TODO: why not doing the same on linux?
@@ -221,11 +228,12 @@ class ChefHandler(Handler):
                                          self._chef_data['validator_key'],
                                          self._chef_data['environment'],
                                          self._environ_variables)
-                chef_client.prepare()
-
-                self.send_message('HostUpdate', dict(chef=self._chef_data))
-
-                chef_client.run()
+                try:
+                    chef_client.prepare()
+                    self.send_message('HostUpdate', dict(chef=self._chef_data))
+                    chef_client.run()
+                finally:
+                    chef_client.cleanup()
 
                 daemonize = self._chef_data.get('daemonize')
                 if daemonize and int(daemonize):
@@ -295,7 +303,8 @@ class ChefClient(object):
                  validation_pem=None,
                  environment=None,
                  environment_variables=None,
-                 log_level='auto'):
+                 log_level='auto',
+                 run_as='root'):
 
         self.chef_server_url = chef_server_url
         self.validation_pem = validation_pem
@@ -307,6 +316,7 @@ class ChefClient(object):
         self.environment = environment
         self.environment_variables = environment_variables or dict()
         self.log_level = log_level
+        self.run_as = run_as
 
     def prepare(self):
         if os.path.exists(CLIENT_KEY_PATH) and os.path.exists(CLIENT_CONF_PATH):
@@ -358,21 +368,31 @@ class ChefClient(object):
             env=self.environment_variables
         )
 
+
     def get_cmd(self, validate=False):
         cmd = [CHEF_CLIENT_BIN]
+
         if not validate:
             cmd += ['--json-attributes', JSON_ATTRIBUTES_PATH]
+
+        if self.run_as != 'root':
+            cmd = ['sudo', '-u', self.run_as] + cmd
+
         return cmd
+
 
     def run(self):
         LOG.info('Applying Chef run list %s' % self.json_attributes.get('run_list', list()))
-        try:
-            with open(JSON_ATTRIBUTES_PATH, 'w+') as fp:
-                json.dump(self.json_attributes, fp)
-            self._run_chef_client()
-        finally:
-            if os.path.exists(JSON_ATTRIBUTES_PATH):
-                os.remove(JSON_ATTRIBUTES_PATH)
+
+        with open(JSON_ATTRIBUTES_PATH, 'w+') as fp:
+            json.dump(self.json_attributes, fp)
+
+        self._run_chef_client()
+
+
+    def cleanup(self):
+        if os.path.exists(JSON_ATTRIBUTES_PATH):
+            os.remove(JSON_ATTRIBUTES_PATH)
 
 
 class ChefSolo(object):

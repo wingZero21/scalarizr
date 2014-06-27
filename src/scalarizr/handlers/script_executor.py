@@ -23,7 +23,7 @@ from scalarizr import config as szrconfig
 from scalarizr import linux
 from scalarizr.bus import bus
 from scalarizr.handlers import Handler, HandlerError
-from scalarizr.handlers.chef import ChefSolo
+from scalarizr.handlers.chef import ChefSolo, ChefClient, extract_json_attributes
 from scalarizr.messaging import Queues, Messages
 from scalarizr.node import __node__
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
@@ -269,7 +269,9 @@ class ScriptExecutor(Handler):
                 kwds = message_script_params.copy()
 
                 if 'chef' in kwds:
-                    script_class = ChefSoloScript
+                    if 'asynchronous' in kwds:
+                        assert not int(kwds['asynchronous']), 'Chef script could only be executed in synchronous mode'
+                    script_class = ChefSoloScript if 'cookbook_url' in kwds['chef'] else ChefClientScript
                 else:
                     script_class = Script
 
@@ -588,7 +590,61 @@ class Script(object):
                 pass
 
 
-class ChefSoloScript(Script):
+class BaseChefScript(Script):
+
+    def start(self):
+        self.chef.prepare()
+        super(BaseChefScript, self).start()
+
+    def state(self):
+        return {'id': self.id,
+                'name': self.name,
+                'pid': self.pid,
+                'chef': self.chef_params,
+                'start_time': self.start_time,
+                'asynchronous': False,
+                'event_name': self.event_name,
+                'role_name': self.role_name,
+                'exec_timeout': self.exec_timeout,
+                'run_as': self.run_as}
+
+
+    def _get_shebang(self):
+        shebang = "#!%s" % ("cmd" if linux.os.windows_family else "/bin/bash")
+        return shebang + "\n" + " ".join(self.chef.get_cmd())
+
+
+    def wait(self):
+        try:
+            super(BaseChefScript, self).wait()
+        finally:
+            self.chef.cleanup()
+
+
+class ChefClientScript(BaseChefScript):
+
+    def __init__(self, **kwds):
+        self.chef_params = kwds.pop('chef')
+        self.with_json_attributes = extract_json_attributes(self.chef_params)
+
+        self.chef = ChefClient(self.chef_params['server_url'],
+                                      self.with_json_attributes,
+                                      self.chef_params.get('node_name'),
+                                      self.chef_params.get('validator_name'),
+                                      self.chef_params.get('validator_key'),
+                                      self.chef_params.get('environment'),
+                                      kwds.get("environ"))
+
+        self.body = self._get_shebang()
+        super(ChefClientScript, self).__init__(**kwds)
+
+
+    def state(self):
+        state = super(ChefClientScript, self).state()
+        return state
+
+
+class ChefSoloScript(BaseChefScript):
 
     json_attributes = None
     relative_path = None
@@ -596,62 +652,32 @@ class ChefSoloScript(Script):
     run_list = None
     role = None
     chef = None
+    pid = None
 
 
     def __init__(self, **kwds):
-        if kwds.get("asynchronous"):
-            raise Exception('Chef script could only be executed in synchronous mode')
-
         self.name = kwds.get("name") or "chef-solo-script.%s" % time.time()
+        self.chef_params = kwds.pop("chef")
+        self.with_json_attributes = extract_json_attributes(self.chef_params)
 
-        self.chef = kwds.pop("chef")
-        self.with_json_attributes = json.loads(self.chef.get('json_attributes', "{}"))
-
-        if self.chef.get("run_list"):
-            self.with_json_attributes['run_list'] = json.loads(self.chef.get("run_list"))
-        elif self.chef.get("role"):
-            self.with_json_attributes['run_list'] = ["role[%s]" % self.chef.get("role")]
-        else:
-            raise Exception('Neither runlist nor role was specified.')
-
-        self._chef_solo = ChefSolo(self.chef.get("cookbook_url"),
-                                   self.chef.get("cookbook_url_type"),
+        self.chef = ChefSolo(self.chef_params.get("cookbook_url"),
+                                   self.chef_params.get("cookbook_url_type"),
                                    self.with_json_attributes,
-                                   self.chef.get("relative_path"),
+                                   self.chef_params.get("relative_path"),
                                    kwds.get("environ"),
-                                   self.chef.get("ssh_private_key"),
+                                   self.chef_params.get("ssh_private_key"),
                                    run_as=kwds.get("run_as"),
                                    temp_dir=kwds.get("temp_dir"))
 
-        self.chef_temp_dir = self._chef_solo.temp_dir
-        cmd = self._chef_solo.get_cmd()
-        shebang = "#!%s" % ("cmd" if linux.os.windows_family else "/bin/bash")
-        self.body = shebang + "\n" + " ".join(cmd)
+        self.chef_temp_dir = self.chef.temp_dir
+        self.body = self._get_shebang()
         super(ChefSoloScript, self).__init__(**kwds)
 
     def state(self):
-        return {'id': self.id,
-                'name': self.name,
-                'pid': self.pid,
-                'chef': self.chef,
-                'start_time': self.start_time,
-                'asynchronous': False,
-                'event_name': self.event_name,
-                'role_name': self.role_name,
-                'exec_timeout': self.exec_timeout,
-                'temp_dir': self.chef_temp_dir,
-                'run_as': self.run_as}
+        state = super(ChefSoloScript, self).state()
+        state['temp_dir'] = self.chef_temp_dir
+        return state
 
-    def start(self):
-        self._chef_solo.prepare()
-        super(ChefSoloScript, self).start()
-
-
-    def wait(self):
-        try:
-            super(ChefSoloScript, self).wait()
-        finally:
-            self._chef_solo.cleanup()
 
 class LogRotateRunnable(object):
     keep_scripting_logs_time = 86400  # 1 day
