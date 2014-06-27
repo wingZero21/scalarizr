@@ -8,13 +8,11 @@ if which update-python-modules >/dev/null 2>&1; then
 		#if dpkg --compare-versions "$2" lt '0.10.0'; then
 		#	rm -rf /usr/lib/pymodules/python2.*/scalarizr
 		#fi
-		update-python-modules -v --post-install /usr/share/python-support/scalarizr-base.public
+		update-python-modules --post-install /usr/share/python-support/scalarizr-base.public
 	else
 		update-python-modules scalarizr-base
 	fi
 fi
-
-/usr/local/bin/scalarizr -v
 
 # End automatically added section
 
@@ -511,255 +509,6 @@ if [ -z $installed_version ] && [ -f /tmp/szr-obsolete-version ]; then
 fi
 
 if [ -n "$installed_version" ]; then
-	# HotFix: remove crappy files in private.d/ from old packages
-	umount -l "$priv_cnf_dir" 2>&1 || :
-	if dpkg --compare-versions "$installed_version" lt '0.7.14-2'; then
-		if ! grep "$priv_cnf_dir" /proc/mounts; then
-			rm -f $priv_cnf_dir/*
-		fi
-	fi
-	[ -f /mnt/privated.img ] && mount /mnt/privated.img "$priv_cnf_dir" -o loop		
-
-	if dpkg --compare-versions "$installed_version" lt '0.5.7-1'; then
-		[ -f "$priv_cnf_dir/mysql.ini" ] && sed -i 's/behaviour_mysql/mysql/1' "$priv_cnf_dir/mysql.ini"
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.6.0-1'; then
-		[ -f "$pub_cnf_dir/nginx/app-servers.tpl" ] && sed -i 's/${upstream_hosts}//1' "$pub_cnf_dir/nginx/app-servers.tpl"
-	fi
-
-	if dpkg --compare-versions "$installed_version" lt '0.6.10-1'; then
-		sed -i 's/localhost:8013/0.0.0.0:8013/g' "$pub_cnf_dir/config.ini"
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.7.0'; then
-		# Convert mysql storage configuration
-		if [ -f "$priv_cnf_dir/mysql.ini" ]; then
-			[ ! -d "$priv_cnf_dir/storage" ] && mkdir "$priv_cnf_dir/storage"
-
-			grep snapshot_id "$priv_cnf_dir/mysql.ini" | sed 's/snapshot_id\s\+=\s\+\(.*\)/{ "type": "ebs", "id": "\1" }/' > "$priv_cnf_dir/storage/mysql-snap.json"
-			sed -i '/snapshot_id/d' "$priv_cnf_dir/mysql.ini"
-
-			device=$(cat /etc/fstab | grep dbstorage | awk '{ print $1 }') 
-			[ -z $device ] && device="/dev/sdo"
-			volume_id=$(grep volume_id "$priv_cnf_dir/mysql.ini" | sed 's/volume_id\s\+=\s\+\(.*\)/\1/')
-			echo '{ "type": "ebs", "id": "'$volume_id'", "device": "'$device'", "mpoint": "/mnt/dbstorage" }' > "$priv_cnf_dir/storage/mysql.json"
-			sed -i '/volume_id/d' "$priv_cnf_dir/mysql.ini"
-		fi
-	
-		# Add new colums
-		dbfile="$priv_cnf_dir/db.sqlite"
-		if [ -e "$dbfile" ]; then
-			python <<EOF
-import sqlite3
-import os
-conn = sqlite3.Connection('${dbfile}')
-cur = conn.cursor()
-cur.execute('pragma table_info(p2p_message)')
-if not any(filter(lambda row: row[1] == 'in_consumer_id', cur.fetchall())):
-	cur.execute('alter table p2p_message add column in_consumer_id TEXT')
-	cur.execute('update p2p_message set in_consumer_id = "http://0.0.0.0:8013" where is_ingoing = 1')
-	conn.commit()
-if not cur.execute('pragma table_info(storage)').fetchall():
-	cur.execute('CREATE TABLE storage ("volume_id" TEXT, "type" TEXT, "device" TEXT, "state" TEXT)')
-	conn.commit()
-if os.path.exists('${priv_cnf_dir}/storage/mysql.json'):
-	cur.execute('INSERT INTO storage VALUES (?, ?, ?, ?)', ('${volume_id}', 'ebs', '${device}', 'attached'))
-	conn.commit()
-cur.close()
-EOF
-		fi
-
-		# Add new options
-		if ! grep 'report_email' "$pub_cnf_dir/config.ini" > /dev/null; then
-			sed -i 's/\(\[messaging\]\)/report_email = szr-report@scalr.com\n\n\1/' "$pub_cnf_dir/config.ini"
-		fi
-		if ! grep 'ssh_auth_keys' "$pub_cnf_dir/config.ini" > /dev/null; then
-			sed -i 's/\(\[handlers\]\)/\1\nssh_auth_keys = scalarizr.handlers.ssh_auth_keys\n/' "$pub_cnf_dir/config.ini"
-		fi
-		if ! grep 'hostname_as_pubdns' "$pub_cnf_dir/ec2.ini" > /dev/null; then
-			sed -i 's/\(\[handlers\]\)/hostname_as_pubdns = 1\n\n\1/' "$pub_cnf_dir/ec2.ini"
-		fi
-		if ! grep 'upstream_app_role' "$pub_cnf_dir/www.ini" > /dev/null; then
-			sed -i 's/\(\[handlers\]\)/upstream_app_role =\n\n\1/' "$pub_cnf_dir/www.ini"
-		fi
-		if ! grep 'change_master_timeout' "$pub_cnf_dir/mysql.ini" > /dev/null; then
-			sed -i 's/\(\[handlers\]\)/change_master_timeout = 30\n\n\1/' "$pub_cnf_dir/mysql.ini"
-		fi
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.7.3-1'; then
-		if [ -f /etc/mysql/farm-replication.cnf ]; then
-			server_id=$(grep 'server-id' /etc/mysql/farm-replication.cnf)
-			sed -i "s/\(\[mysqld\]\)/\1\n$server_id/1" /etc/mysql/my.cnf
-			sed -i 's/.*farm-replication.cnf//' /etc/mysql/my.cnf
-			rm -f /etc/mysql/farm-replication.cnf			
-		fi
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.7.10-2'; then
-		if [ -f $priv_cnf_dir/mysql.ini ] && [ "1" = "`grep 'replication_master' $priv_cnf_dir/mysql.ini | awk '{print $3}'`" ]; then
-			if ! grep 'server-id' /etc/mysql/my.cnf > /dev/null; then
-				sed -i "s/\(\[mysqld\]\)/\1\nserver-id = 1/1" /etc/mysql/my.cnf
-			fi
-		fi  
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.7.14-2'; then
-		if [ -f /mnt/privated.img ]; then
-			umount $priv_cnf_dir 2>&1 || :
-			mpoint=$(mktemp -d)
-			mount /mnt/privated.img $mpoint -o loop
-			rsync -a $mpoint/ /etc/scalr/private.d/
-			sync 
-			umount $mpoint
-			rm -rf $mpoint
-			rm -f /mnt/privated.img
-		fi
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.7.23-1'; then
-		if grep 'logs_dir_prefix' "$pub_cnf_dir/script_executor.ini" > /dev/null; then
-			sed -i 's/logs_dir_prefix.*//g' "$pub_cnf_dir/script_executor.ini"
-		fi
-		if ! grep 'logs_dir' "$pub_cnf_dir/script_executor.ini" > /dev/null; then
-			cat <<EOF >> "$pub_cnf_dir/script_executor.ini"
-			
-logs_dir=/var/log/scalarizr/scripting
-EOF
-		fi
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.7.29-1'; then
-		if ! grep 'scalarizr.handlers.deploy' "$pub_cnf_dir/config.ini" > /dev/null; then
-			cat <<EOF >> "$pub_cnf_dir/config.ini"
-			
-; Deployments
-; @optional
-deploy = scalarizr.handlers.deploy
-EOF
-		fi
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.7.32-1'; then
-		sed -i 's/\(base_path=\).*/\1\/etc\/scalr\/private.d\/hosts/1' "$pub_cnf_dir/ip_list_builder.ini"
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.7.45-1'; then
-		dbfile="$priv_cnf_dir/db.sqlite"
-		if [ -e "$dbfile" ]; then
-			python <<EOF
-import sqlite3
-import os
-conn = sqlite3.Connection('${dbfile}')
-cur = conn.cursor()
-cur1 = conn.cursor()
-for row in cur.execute('select device from storage where state = ?', ('attached', )):
-	device = row[0]
-	if not os.path.exists(device):
-		cur1.execute('delete from storage where device = ? and state = ?', (device, 'attached'))
-conn.commit()
-EOF
-		fi
-	fi
-	
-	if dpkg --compare-versions "$installed_version" lt '0.7.78-1'; then
-		rm -rf "$priv_cnf_dir/hosts"
-	fi
-
-	if dpkg --compare-versions "$installed_version" lt '0.7.93-1'; then
-		val=$(curl http://169.254.169.254/latest/user-data/ 2>&1 | \
-			python -c "import sys, re; print re.search(r'cloud_storage_path=([^;]+)', sys.stdin.read()).group(1).strip().replace('/', '\\/');")
-		if ! grep 'cloud_storage_path' "$priv_cnf_dir/config.ini" > /dev/null; then
-			sed -i "s/\(\[general\]\)/\1\ncloud_storage_path=$val/1" "$priv_cnf_dir/config.ini"
-		fi
-	fi
-
-
-	if dpkg --compare-versions "$installed_version" lt '0.7.97-1'; then
-		if ! grep 'mysqldump_options' "$pub_cnf_dir/mysql.ini" > /dev/null; then
-			sed -i 's/\(\[handlers\]\)/mysqldump_options = --create-options --routines --add-drop-database --quick --quote-names --flush-privileges\n\n\1/' "$pub_cnf_dir/mysql.ini"
-		fi
-	fi
-
-
-	if dpkg --compare-versions "$installed_version" lt '0.7.143-1'; then
-		rm -f /etc/init.d/ec2-every-startup
-		python -c "
-from scalarizr.util import disttool
-if disttool.version_info() == (8, 4):
-	import os
-	import simplejson as json
-	cnf_path = '$priv_cnf_dir/storage/mysql.json'
-	if os.path.exists(cnf_path):
-		cnf = json.load(open(cnf_path))
-		if not 'mpoint' in cnf:
-			cnf['mpoint'] = '/mnt/dbstorage'
-		fp = open(cnf_path, 'w+')
-		json.dump(cnf, fp)
-		fp.close()
-"
-	fi
-	
-
-	if dpkg --compare-versions "$installed_version" lt '0.7.149-1'; then
-		# Add new colums
-		dbfile="$priv_cnf_dir/db.sqlite"
-		if [ -e "$dbfile" ]; then
-			python <<EOF
-import sqlite3
-import os
-conn = sqlite3.Connection('${dbfile}')
-cur = conn.cursor()
-if not cur.execute('pragma table_info(state)').fetchall():
-	cur.execute('CREATE TABLE state ("name" PRIMARY KEY ON CONFLICT REPLACE, "value" TEXT)')
-	conn.commit()
-cur.close()
-EOF
-		fi
-	fi
-
-	if dpkg --compare-versions "$installed_version" lt '0.7.192-1'; then
-		echo 'deb http://apt-delayed.scalr.net/debian scalr/' >> /etc/apt/sources.list.d/scalr.list
-	fi
-
-	if dpkg --compare-versions "$installed_version" lt '0.7.199-1'; then
-		if [ -e "$priv_cnf_dir/config.ini" ]; then
-			python -c "
-import ConfigParser
-
-name = '$priv_cnf_dir/config.ini'
-
-conf = ConfigParser.ConfigParser()
-conf.read(name)
-conf.set('general', 'env_id', '')
-conf.set('general', 'role_id', '')
-conf.set('general', 'farm_role_id', '')
-
-fp = open(name, 'w+')
-conf.write(fp)
-fp.close()
-"
-		fi
-	fi
-
-	if dpkg --compare-versions "$installed_version" lt '0.7.213-1'; then
-		if grep 'app' "$pub_cnf_dir/config.ini" > /dev/null; then
-			sed -i 's/Include\sprivate.d\/vhosts\/\*\.vhost.conf//1' '/etc/apache2/apache2.conf'
-			sed -i 's/Include\s\/etc\/scalr\/private.d\/private.d\/vhosts\/\*\.vhost.conf//1' '/etc/apache2/apache2.conf'
-		fi
-	fi
-
-	if dpkg --compare-versions "$installed_version" lt '0.7.228-1'; then
-		python - <<-EOF
-			import os
-			verfile = '/etc/scalr/private.d/.scalr-version'
-			if os.path.exists(verfile):
-			    ver = open(verfile).read().replace('\n', '').strip()
-			    open(verfile, 'w').write(ver)
-		EOF
-	fi
-
 	if dpkg --compare-versions "$installed_version" lt '0.9.r3746-1'; then
 		[ ! -f "$pub_cnf_dir/percona.ini" ] && ln -s "$pub_cnf_dir/mysql2.ini" "$pub_cnf_dir/percona.ini"
 	fi
@@ -781,38 +530,47 @@ fp.close()
 		fi
 	fi
 
-	sync
-	umount -l "$priv_cnf_dir" 2>&1 || :	
+	if dpkg --compare-versions "$installed_version" lt '2.7.7'; then
+		if [ -f "$priv_cnf_dir/.state" ] && [ $(cat "$priv_cnf_dir/.state") = 'running' ]; then
+			python -m scalarizr.updclient.app --make-status-file  --downgrades-disabled
+		fi
+	fi
 fi
 
 chown -R root:root /etc/scalr
 chmod 775 /etc/scalr/private.d
 sync
 
+rm -f /usr/local/bin/szradm
+if [ ! -d /usr/local/bin ]; then
+	mkdir -p /usr/local/bin
+	chmod 755 /usr/local/bin
 fi
+ln -s /usr/bin/szradm /usr/local/bin/szradm
 
-
-if dpkg-query --status scalr-ami-scripts >/dev/null 2>&1; then
-	cat <<EOF
-WARNING: 
-  scalr-ami-scripts package is installed on this server. 
-  scalarizr is incompatible with scalr-ami-scripts and you should migrate servers in a proper way. 
-  You can read more here: http://wiki.scalr.net/Tutorials/AMI_Scripts_to_Scalarizr_transition
-
-EOF
 fi
 
 
 NAME="scalarizr"
 INIT_SCRIPT="/etc/init.d/$NAME"
 
+
+# We've reverted back scalarizr autostart because some clients have scalarizr bundled without scalr-upd-client,
+# and Ubuntu 10.04 init doesn't execute new init scripts, that was installed during init
 if [ -x $INIT_SCRIPT ]; then
 	if which insserv > /dev/null && test -e /etc/issue.net && ! grep -q 'Ubuntu' /etc/issue.net; then
-		insserv scalarizr_update
+		insserv -r scalarizr_update || :
+		rm -f /etc/init.d/scalarizr_update
+		insserv -r $NAME
 		insserv $NAME
+		insserv scalr-upd-client
 	else
-		update-rc.d scalarizr_update defaults 98 >/dev/null
+		rm -f /etc/init.d/scalarizr_update
+		update-rc.d scalarizr_update remove || :
+		update-rc.d -f $NAME remove || :
+		#update-rc.d scalarizr stop 99 0 1 6 .
 		update-rc.d $NAME defaults 99 >/dev/null
+		update-rc.d scalr-upd-client defaults 98 >/dev/null
 	fi
 
 
@@ -822,7 +580,7 @@ if [ -x $INIT_SCRIPT ]; then
 		kill -9 $snmp_pid 2>/dev/null
 	fi
 
-	zomby_pids=$(ps aux | grep '/usr/local/bin/scalarizr' | awk '{ print $2 }')
+	zomby_pids=$(ps aux | grep 'bin/scalarizr' | awk '{ print $2 }')
 	if [ "$zomby_pids" ]; then
 		for zomby_pid in $zomby_pids; do
 			kill -9 $zomby_pid 2>/dev/null

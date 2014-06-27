@@ -9,26 +9,31 @@ Pluggable API to get system information similar to SNMP, Facter(puppet), Ohai(ch
 
 
 import os
+import re
 import glob
 import logging
 import platform
 import threading
-import sys
 import time
 import signal
 import binascii
 import weakref
-import subprocess as subps
+import subprocess
 
 from multiprocessing import pool
 
 from scalarizr import rpc, linux
+from scalarizr.api import operation as operation_api
 from scalarizr.bus import bus
+from scalarizr.node import __node__
+from scalarizr import util
 from scalarizr.util import system2, dns, disttool
 from scalarizr.linux import mount
 from scalarizr.util import kill_childs
 from scalarizr.queryenv import ScalingMetric
-from scalarizr.handlers.script_executor import logs_dir
+from scalarizr.api.binding import jsonrpc_http
+from scalarizr.handlers import script_executor
+
 
 LOG = logging.getLogger(__name__)
 
@@ -46,7 +51,7 @@ class _ScalingMetricStrategy(object):
   
         exec_timeout = 3
         close_fds = not linux.os.windows_family
-        proc = subps.Popen(metric.path, stdout=subps.PIPE, stderr=subps.PIPE, close_fds=close_fds)
+        proc = subprocess.Popen(metric.path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=close_fds)
  
         timeout_time = time.time() + exec_timeout
         while time.time() < timeout_time:
@@ -106,6 +111,14 @@ class SystemAPI(object):
     _PATH = ['/usr/bin/', '/usr/local/bin/']
     _CPUINFO = '/proc/cpuinfo'
     _NETSTATS = '/proc/net/dev'
+    _LOG_FILE = '/var/log/scalarizr.log'
+    _DEBUG_LOG_FILE = '/var/log/scalarizr_debug.log'
+    _UPDATE_LOG_FILE = '/var/log/scalarizr_update.log'
+
+
+    def __init__(self):
+        self._op_api = operation_api.OperationAPI()
+
 
     def _readlines(self, path):
         with open(path, "r") as fp:
@@ -133,11 +146,19 @@ class SystemAPI(object):
         script_path = '/usr/local/scalarizr/hooks/auth-shutdown'
         LOG.debug("Executing %s" % script_path)
         if os.access(script_path, os.X_OK):
-            return subps.Popen(script_path, stdout=subps.PIPE,
-                stderr=subps.PIPE, close_fds=True).communicate()[0].strip()
+            return subprocess.Popen(script_path, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, close_fds=True).communicate()[0].strip()
         else:
             raise Exception('File not exists: %s' % script_path)
 
+
+    @rpc.command_method
+    def reboot(self):
+        if os.fork():
+            return
+        util.daemonize()
+        system2(('reboot',))
+        exit(0)
 
     @rpc.command_method
     def set_hostname(self, hostname=None):
@@ -148,6 +169,12 @@ class SystemAPI(object):
         '''
         assert hostname
         system2(('hostname', hostname))
+        with open(self._HOSTNAME, 'w+') as fp:
+            fp.write(hostname)
+        ip = __node__['private_ip']
+        hosts = dns.HostsFile()
+        hosts.map(ip, hostname)
+
         '''
         TODO: test and correct this code 
         # changing permanent hostname
@@ -454,12 +481,25 @@ class SystemAPI(object):
                 assert mpoint in mounts
                 mpoint_stat = os.statvfs(mpoint)
                 res[mpoint] = dict()
-                res[mpoint]['total'] = (mpoint_stat.f_bsize * mpoint_stat.f_blocks) / 1024
-                res[mpoint]['free'] = (mpoint_stat.f_bsize * mpoint_stat.f_bavail) / 1024
+                res[mpoint]['total'] = (mpoint_stat.f_bsize * mpoint_stat.f_blocks) / 1024  # Kb
+                res[mpoint]['free'] = (mpoint_stat.f_bsize * mpoint_stat.f_bavail) / 1024   # Kb
             except:
                 res[mpoint] = None
 
         return res
+
+
+    @rpc.query_method
+    def mounts(self):
+        skip_mpoint_re = re.compile(r'/(sys|proc|dev|selinux)')
+        skip_fstype = ('tmpfs', 'devfs')
+        ret = {}
+        for m in mount.mounts():
+            if not (skip_mpoint_re.search(m.mpoint) or m.fstype in skip_fstype):
+                entry = m._asdict()
+                entry.update(self.statvfs([m.mpoint])[m.mpoint])
+                ret[m.mpoint] = entry
+        return ret
 
 
     @rpc.query_method
@@ -498,38 +538,66 @@ class SystemAPI(object):
             wrk_pool.join()
 
 
+    @rpc.command_method
+    def execute_scripts(self, scripts=None, global_variables=None, event_name=None, 
+            role_name=None, async=False):
+        def do_execute_scripts(op):
+            msg = lambda: None
+            msg.name = event_name
+            msg.role_name = role_name
+            msg.body = {
+                'scripts': scripts or [],
+                'global_variables': global_variables or []
+            }
+            hdlr = script_executor.get_handlers()[0]
+            hdlr(msg)
+
+        return self._op_api.run('system.execute_scripts', do_execute_scripts, async=async)
+
+
     @rpc.query_method
     def get_script_logs(self, exec_script_id, maxsize=max_log_size):
         '''
         :return: out and err logs
         :rtype: dict(stdout: base64encoded, stderr: base64encoded)
         '''
-        stdout_match = glob.glob(os.path.join(logs_dir, '*%s-out.log' % exec_script_id))
-        stderr_match = glob.glob(os.path.join(logs_dir, '*%s-err.log' % exec_script_id))
+        stdout_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-out.log' % exec_script_id))
+        stderr_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-err.log' % exec_script_id))
 
         if not stdout_match:
-            stdout = binascii.b2a_base64(u'log file not found')
+            stdout = binascii.b2a_base64('log file not found')
         else:
             stdout_path = stdout_match[0]
             stdout = binascii.b2a_base64(_get_log(stdout_path))
         if not stderr_match:
-            stderr = binascii.b2a_base64(u'errlog file not found')
+            stderr = binascii.b2a_base64('errlog file not found')
         else:
             stderr_path = stderr_match[0]
             stderr = binascii.b2a_base64(_get_log(stderr_path))
 
         return dict(stdout=stdout, stderr=stderr)
 
+    @rpc.query_method
+    def get_debug_log(self):
+        return binascii.b2a_base64(_get_log(self._DEBUG_LOG_FILE, -1))
+
+    @rpc.query_method
+    def get_update_log(self):
+        return binascii.b2a_base64(_get_log(self._UPDATE_LOG_FILE, -1))     
+
+    @rpc.query_method
+    def get_log(self):
+        return binascii.b2a_base64(_get_log(self._LOG_FILE, -1))   
+
 
 def _get_log(logfile, maxsize=max_log_size):
-    if (os.path.getsize(logfile) > maxsize):
-        return u'Unable to fetch Log file %s: file is larger than %s bytes' % (logfile, maxsize)
+    if maxsize != -1 and (os.path.getsize(logfile) > maxsize):
+        return 'Unable to fetch Log file %s: file is larger than %s bytes' % (logfile, maxsize)
     try:
         with open(logfile, "r") as fp:
-            ret = unicode(fp.read(int(maxsize)), 'utf-8')
-            return ret.encode('utf-8')
+            return fp.read(int(maxsize))
     except IOError:
-        return u'Log file %s is not readable' % logfile
+        return 'Log file %s is not readable' % logfile
 
 
 if linux.os.windows_family:
@@ -537,6 +605,27 @@ if linux.os.windows_family:
     from scalarizr.util import coinitialized
 
     class WindowsSystemAPI(SystemAPI):
+
+        _LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr.log'
+        _DEBUG_LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr_debug.log'
+        _UPDATE_LOG_FILE = r'C:\Program Files\Scalarizr\var\log\scalarizr_update.log'  
+
+        @coinitialized
+        @rpc.command_method
+        def reboot(self):
+            updclient = jsonrpc_http.HttpServiceProxy('http://localhost:8008', 
+                            bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
+            try:
+                dont_do_it = updclient.status()['state'].startswith('in-progress')
+            except:
+                pass
+            else:
+                if dont_do_it:
+                    raise Exception('Reboot not allowed, cause Scalarizr update is in-progress')
+            wmi = client.GetObject('winmgmts:')
+            wos = next(iter(wmi.InstancesOf('Win32_OperatingSystem')))
+            wos.reboot()
+                
 
         @coinitialized
         @rpc.command_method
@@ -548,9 +637,12 @@ if linux.os.windows_family:
         @coinitialized
         @rpc.query_method
         def get_hostname(self):
-            wmi = client.GetObject('winmgmts:')
-            for computer in wmi.InstancesOf('Win32_ComputerSystem'):
-                return computer.Name
+            try:
+                wmi = client.GetObject('winmgmts:')
+                for computer in wmi.InstancesOf('Win32_ComputerSystem'):
+                    return computer.Name
+            except:
+                return ''
 
         @coinitialized
         @rpc.query_method
@@ -665,16 +757,36 @@ if linux.os.windows_family:
             if not isinstance(mpoints, list):
                 raise Exception('Argument "mpoints" should be a list of strings, '
                             'not %s' % type(mpoints))
-
-            ret = dict()
+            ret = {}
             for disk in wmi.InstancesOf('Win32_LogicalDisk'):
                 letter = disk.DeviceId[0].lower()
                 if letter in mpoints:
-                    ret[letter] = dict(
-                        total=int(disk.Size) / 1024,  # Kb
-                        free=int(disk.FreeSpace) / 1024  # Kb
-                    )
+                    ret[letter] = self._format_statvfs(disk)
             return ret
+
+
+        @coinitialized
+        @rpc.query_method
+        def mounts(self):
+            wmi = client.GetObject('winmgmts:') 
+
+            ret = {}
+            for disk in wmi.InstancesOf('Win32_LogicalDisk'):
+                letter = disk.DeviceId[0].lower()
+                entry = {
+                    'device': letter,
+                    'mpoint': letter       
+                }
+                entry.update(self._format_statvfs(disk))
+                ret[letter] = entry
+            return ret
+
+        def _format_statvfs(self, disk):
+            return {
+                'total': int(disk.Size) / 1024,  # Kb
+                'free': int(disk.FreeSpace) / 1024  # Kb        
+            }
+
 
     SystemAPI = WindowsSystemAPI
 

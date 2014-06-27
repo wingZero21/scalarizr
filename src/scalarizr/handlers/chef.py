@@ -16,7 +16,7 @@ import tempfile
 from scalarizr import linux
 from scalarizr.node import __node__
 from scalarizr.bus import bus
-from scalarizr.util import system2, initdv2, PopenError
+from scalarizr.util import system2, initdv2
 from scalarizr.util.software import which
 from scalarizr.handlers import Handler, HandlerError, deploy
 
@@ -76,13 +76,14 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
 
                 cmd = (chef_client_bin, '--daemonize', '--logfile', 
                         '/var/log/chef-client.log', '--pid', PID_FILE)
-                try:
-                    out, err, rcode = system2(cmd, close_fds=True, 
-                                preexec_fn=os.setsid, env=self._env)
-                except PopenError, e:
-                    raise initdv2.InitdError('Failed to start chef: %s' % e)
-
-                if rcode:
+                out, err, rcode = system2(cmd, close_fds=True, 
+                            preexec_fn=os.setsid, env=self._env,
+                            stdout=open(os.devnull, 'w+'), 
+                            stderr=open(os.devnull, 'w+'), 
+                            raise_exc=False)
+                if rcode == 255:
+                    LOG.debug('chef-client daemon already started')
+                elif rcode:
                     msg = (
                         'Chef failed to start daemonized. '
                         'Return code: %s\nOut:%s\nErr:%s'
@@ -233,6 +234,8 @@ class ChefHandler(Handler):
                 finally:
                     os.remove(self._validator_key_path)
 
+                self.send_message('HostUpdate', dict(chef=self._chef_data))
+
                 if self._with_json_attributes:
                     try:
                         log.info('Applying Chef run list %s',
@@ -241,11 +244,11 @@ class ChefHandler(Handler):
                             json.dump(self._with_json_attributes, fp)
 
                         self.run_chef_client(with_json_attributes=True)
-                        msg.chef = self._chef_data
                     finally:
                         os.remove(self._json_attributes_path)
 
-                if self._chef_data.get('daemonize'):
+                daemonize = self._chef_data.get('daemonize')
+                if daemonize and int(daemonize):
                     log.info('Daemonizing chef-client')
                     self.run_chef_client(daemonize=True)
 
@@ -302,7 +305,8 @@ class ChefHandler(Handler):
                         pass
 
             else:
-                raise HandlerError('Neither chef server not cookbook url were specified')
+                raise HandlerError('Neither chef server nor cookbook url were specified')
+            msg.chef = self._chef_data
         finally:
             self._chef_data = None
 

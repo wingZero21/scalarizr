@@ -6,6 +6,7 @@ Created on Dec 5, 2009
 '''
 
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 
 # Core
 from scalarizr.messaging import MessageConsumer, MessagingError
@@ -20,9 +21,12 @@ import threading
 import logging
 import sys
 import os
+import copy
 import time
 import socket
 import HTMLParser
+from copy import deepcopy
+
 
 class P2pMessageConsumer(MessageConsumer):
     endpoint = None
@@ -52,23 +56,14 @@ class P2pMessageConsumer(MessageConsumer):
         if self.running:
             raise MessagingError('Message consumer is already running')
 
+        r = urlparse(self.endpoint)
         try:
             if self._server is None:
-                r = urlparse(self.endpoint)
-                msg_port = r.port
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                try:
-                    sock.connect(('0.0.0.0', msg_port))
-                    msg_port = 8011
-                    sock.close()
-                except socket.error:
-                    pass
-                STATE['global.msg_port'] = msg_port
-                self._logger.info('Building message consumer server on %s:%s', r.hostname, msg_port)
+                self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
-                self._server = HTTPServer((r.hostname, msg_port), self._get_request_handler_class())
+                self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
         except (BaseException, Exception), e:
-            self._logger.error("Cannot build server on port %s. %s", msg_port, e)
+            self._logger.error("Cannot build server on port %s. %s", r.port, e)
             return
 
         self._logger.debug('Starting message consumer %s', self.endpoint)
@@ -87,6 +82,33 @@ class P2pMessageConsumer(MessageConsumer):
             @cvar consumer: Message consumer instance
             @type consumer: P2pMessageConsumer
             '''
+
+            def _msg_without_sensitive_data(self, message):
+                msg_copy = P2pMessage(message.name, message.meta.copy(), deepcopy(message.body))
+                msg_copy.id = message.id
+
+                if 'platform_access_data' in msg_copy.body:
+                    del msg_copy.body['platform_access_data']
+
+                if 'global_variables' in msg_copy.body:
+                    glob_vars = msg_copy.body['global_variables']
+                    i = 0
+                    for v in list(glob_vars):
+                        if v.get('private'):
+                            del glob_vars[i]
+                            i -= 1
+                        elif 'private' in v:
+                            del glob_vars[i]['private']
+                        i += 1
+
+                if 'chef' in msg_copy.body:
+                    try:
+                        # msg_copy.body['chef'] = msg_copy.body['chef'].copy()
+                        del msg_copy.body['chef']['validator_name']
+                        del msg_copy.body['chef']['validator_key']
+                    except (KeyError, TypeError):
+                        pass
+                return msg_copy
 
             def do_POST(self):
                 logger = logging.getLogger(__name__)
@@ -123,11 +145,7 @@ class P2pMessageConsumer(MessageConsumer):
                     else:
                         message.fromxml(rawmsg)
 
-                    # Create a message copy to log it without platform_access_data and with pretty identation  
-                    msg_copy = P2pMessage(message.name, message.meta.copy(), message.body.copy())
-                    msg_copy.id = message.id
-                    if 'platform_access_data' in msg_copy.body:
-                        del msg_copy.body['platform_access_data']
+                    msg_copy = self._msg_without_sensitive_data(message)
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
 
@@ -156,7 +174,7 @@ class P2pMessageConsumer(MessageConsumer):
 
             def log_message(self, format, *args):
                 logger = logging.getLogger(__name__)
-                logger.debug("%s %s\n", self.address_string(), format%args)
+                logger.debug(format % args)
 
         RequestHandler.consumer = self
         return RequestHandler
@@ -221,7 +239,7 @@ class P2pMessageConsumer(MessageConsumer):
     def wait_subhandler(self, message):
         pl = bus.platform
 
-        saved_access_data = pl._access_data
+        saved_access_data = pl.get_access_data()
         if saved_access_data:
             saved_access_data = dict(saved_access_data)
 

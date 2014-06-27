@@ -9,14 +9,17 @@ import logging
 import threading
 import time
 import uuid
+import httplib
 import urllib2
+import sys
+from copy import deepcopy
 
 from scalarizr import messaging, util
 from scalarizr.bus import bus
 from scalarizr.messaging import p2p
 from scalarizr.util import urltool
 from scalarizr.node import __node__
-import sys
+from scalarizr.messaging.p2p import P2pMessage
 
 
 class P2pMessageProducer(messaging.MessageProducer):
@@ -103,10 +106,19 @@ class P2pMessageProducer(messaging.MessageProducer):
             content_type = 'application/%s' % 'json' if use_json else 'xml'
             headers = {'Content-Type': content_type}
 
-            if message.name not in ('Log', 'OperationDefinition',
-                                                    'OperationProgress', 'OperationResult'):
+            if message.name not in ('Log',
+                                    'OperationDefinition',
+                                    'OperationProgress',
+                                    'OperationResult'):
+                msg_copy = P2pMessage(message.name, message.meta.copy(), deepcopy(message.body))
+                try:
+                    # msg_copy.body['chef'] = msg_copy.body['chef'].copy()
+                    del msg_copy.body['chef']['validator_name']
+                    del msg_copy.body['chef']['validator_key']
+                except (KeyError, TypeError):
+                    pass
                 self._logger.debug("Delivering message '%s' %s. Json: %s, Headers: %s",
-                                   message.name, data, use_json, headers)
+                                   message.name, msg_copy.body, use_json, headers)
 
             for f in self.filters['protocol']:
                 data = f(self, queue, data, headers)
@@ -119,7 +131,6 @@ class P2pMessageProducer(messaging.MessageProducer):
             self._message_delivered(queue, message, success_callback)
 
         except:
-            self._logger.debug('!tmp! caught exception', exc_info=sys.exc_info())
             e = sys.exc_info()[1]
             # Python < 2.6 raise exception on 2xx > 200 http codes except
             if isinstance(e, urllib2.HTTPError):
@@ -130,6 +141,7 @@ class P2pMessageProducer(messaging.MessageProducer):
             self._logger.warning("Message '%s' not delivered (message_id: %s)", message.name, message.id)
             self.fire("send_error", e, queue, message)
 
+            msg = None
             if isinstance(e, urllib2.HTTPError):
                 if e.code == 401:
                     self._logger.warn("Cannot authenticate on message server. %s", e.msg)
@@ -137,12 +149,17 @@ class P2pMessageProducer(messaging.MessageProducer):
                     self._logger.warn("Malformed request. %s", e.msg)
                 else:
                     self._logger.warn("Cannot post message to %s. %s", url, e)
-
             elif isinstance(e, urllib2.URLError):
-                self._logger.warn("Cannot connect to message server on %s. %s", self.endpoint, e)
-
+                msg = ("Scalr messaging endpoint '{0}' is unreachable. "
+                        "Cause: {1}").format(self.endpoint, e)
+            elif isinstance(e, httplib.HTTPException):
+                msg = ("Scalr messaging endpoint '{0}' answered with invalid HTTP response. "
+                        "Cause: {1}").format(self.endpoint, e)
             else:
                 self._logger.warn('Caught exception', exc_info=sys.exc_info())
+
+            if msg:
+                self._logger.warn(msg)
 
             # Call user code
             if fail_callback:

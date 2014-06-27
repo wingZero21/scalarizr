@@ -24,8 +24,15 @@ from scalarizr.queryenv import QueryEnvService
 from scalarizr.api.binding import jsonrpc_http
 
 from scalarizr.linux import pkgmgr
-if not linux.os.windows_family:
+if linux.os.windows:
+    import _winreg as winreg
+else:
     from scalarizr.snmp.agent import SnmpServer
+
+if linux.os.windows:
+    import win32timezone as os_time
+else:
+    from datetime import datetime as os_time
 
 # Utils
 from scalarizr.util import initdv2, log, PeriodicalExecutor
@@ -49,6 +56,13 @@ import select
 import wsgiref.simple_server
 import SocketServer
 
+
+if not linux.os.windows:
+    import ctypes
+    libc = ctypes.CDLL('libc.so.6')
+
+    def res_init():
+        return libc.__res_init()
 
 
 class ScalarizrError(BaseException):
@@ -168,20 +182,28 @@ class ScalarizrInitScript(initdv2.ParametrizedInitScript):
         )
 
 
-class ScalrUpdClientScript(initdv2.ParametrizedInitScript):
+class ScalrUpdClientScript(initdv2.Daemon):
     def __init__(self):
-        initdv2.ParametrizedInitScript.__init__(self, 
-            'scalr-upd-client', 
-            '/etc/init.d/scalr-upd-client',
-            pid_file='/var/run/scalr-upd-client.pid'
-        )
+        name = 'ScalrUpdClient' if linux.os.windows_family else 'scalr-upd-client'
+        super(ScalrUpdClientScript, self).__init__(name)
 
+    if not linux.os.windows:
+        def restart(self):
+            self.stop()
+            pid_file = '/var/run/scalr-upd-client.pid'
+            if os.access(pid_file, os.R_OK):
+                pid = open(pid_file).read().strip()
+                if pid:
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                    except:
+                        pass
+                    os.unlink(pid_file)
+            self.start()
 
 def _init():
     optparser = bus.optparser
     bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
-    
-    #dynimp.setup()
     
     _init_logging()
     logger = logging.getLogger(__name__)    
@@ -330,13 +352,6 @@ def _init_platform():
         logger.debug('Enable RedHat subscription')
         urllib.urlretrieve('http://169.254.169.254/latest/dynamic/instance-identity/document')
 
-    if cnf.state != ScalarizrState.RUNNING and not linux.os.windows_family:
-        try:
-            pkgmgr.updatedb()
-        except:
-            logger.warn('Failed to update package manager database: %s', 
-                    sys.exc_info()[1], exc_info=sys.exc_info())
-
     if httplib2_loaded:
         httplib2.CA_CERTS = os.path.join(os.path.dirname(__file__), 'cacert.pem')
 
@@ -473,11 +488,19 @@ def _cleanup_after_rebundle():
     # Reset private configuration
     priv_path = cnf.private_path()
     for file in os.listdir(priv_path):
-        if file in ('.user-data', '.update'):
+        if file in ('.user-data', '.update', 'keys'):
+             # keys/default maybe already refreshed by UpdateClient
             continue
         path = os.path.join(priv_path, file)
         coreutils.chmod_r(path, 0700)
-        os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+        try:
+            os.remove(path) if (os.path.isfile(path) or os.path.islink(path)) else shutil.rmtree(path)
+        except:
+            if linux.os.windows and sys.exc_info()[0] == WindowsError:         
+                # ScalrUpdClient locks db.sqlite 
+                logger.debug(sys.exc_info()[1])
+            else:
+                raise
     if not linux.os.windows_family:
         system2('sync', shell=True)
 
@@ -603,6 +626,7 @@ class Service(object):
         # Starting scalarizr daemon initialization
         globals()['_pid'] = pid = os.getpid()
         self._logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
+        node.__node__['start_time'] = time.time()
 
         if not 'Windows' == linux.os['family']:
             # Check for another running scalarzir
@@ -693,6 +717,8 @@ class Service(object):
                 _cleanup_after_rebundle()
                 cnf.state = ScalarizrState.BOOTSTRAPPING
         '''
+        if linux.os.windows:
+            self._wait_sysprep_oobe()
 
         # Initialize local database
         _init_db()
@@ -700,16 +726,21 @@ class Service(object):
         STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__))
         STATE['global.version'] = __version__
 
-        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
-            self._logger.info('Scalarizr was updated to %s', __version__)
-
         if cnf.state == ScalarizrState.UNKNOWN:
             cnf.state = ScalarizrState.BOOTSTRAPPING
 
         # At first startup platform user-data should be applied
         if cnf.state == ScalarizrState.BOOTSTRAPPING:
             cnf.fire('apply_user_data', cnf)
-            self._start_update_client()
+            
+        if node.__node__['state'] != 'importing':
+            self._talk_to_updclient()
+        else:
+            try:
+                pkgmgr.updatedb()
+            except:
+                self._logger.warn('Failed to update package manager database: %s', 
+                    sys.exc_info()[1], exc_info=sys.exc_info())
 
         # Check Scalr version
         if not bus.scalr_version:
@@ -734,6 +765,13 @@ class Service(object):
 
         # Initialize scalarizr services
         self._init_services()
+        
+        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
+            self._logger.info('Scalarizr was updated to %s', __version__)
+            node.__node__['messaging'].send(
+                'HostUpdate',
+                body={'scalarizr': {'version': __version__}}
+            )
 
         if cnf.state == ScalarizrState.RUNNING:
             # ReSync user-data
@@ -745,7 +783,7 @@ class Service(object):
                         exc_info=sys.exc_info())
 
         # Install signal handlers
-        if not 'Windows' == linux.os['family']:
+        if not linux.os.windows:
             signal.signal(signal.SIGCHLD, self.onSIGCHILD)
             signal.signal(signal.SIGTERM, self.onSIGTERM)
             signal.signal(signal.SIGHUP, self.onSIGHUP)
@@ -788,6 +826,87 @@ class Service(object):
         self._logger.debug('Mainloop: leave')
 
 
+    def _wait_sysprep_oobe(self):
+        try:
+            self._logger.debug('Checking sysprep completion')
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                 "SYSTEM\\Setup\\Status\\SysprepStatus", 0,
+                                 winreg.KEY_READ) as key:
+                gen_prev_state = gen_state = None
+                while True:
+                    gen_prev_state = gen_state
+                    gen_state = winreg.QueryValueEx(key, "GeneralizationState")[0]
+                    if gen_state == 7:
+                        if gen_prev_state:
+                            # Waiting for shutdown
+                            time.sleep(600)
+                        break
+                    time.sleep(1)
+                    self._logger.debug('Waiting for sysprep completion. '
+                              'GeneralizationState: %d' % gen_state)
+        except WindowsError, ex:
+            if ex.winerror == 2:
+                self._logger.debug('Sysprep data not found in the registry, '
+                          'skipping sysprep completion check.')
+            else:
+                raise ex
+
+
+    def _port_busy(self, port):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.connect(('0.0.0.0', port))
+            sock.close()
+            return True
+        except socket.error:
+            return False
+
+
+    def _select_control_ports(self):
+        defaults = node.__node__['defaults']['base']
+
+        if node.__node__['state'] != 'importing':
+            lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
+            api_port = int(lfrp.get('base', {}).get('api_port', defaults['api_port']) \
+                            or defaults['api_port'])
+            messaging_port = int(lfrp.get('base', {}).get('messaging_port', defaults['messaging_port']) \
+                                    or defaults['messaging_port'])
+
+            if messaging_port == defaults['messaging_port'] and self._port_busy(messaging_port):
+                messaging_port = 8011
+            if api_port == defaults['api_port'] and self._port_busy(api_port):
+                api_port = 8009
+        else:
+            api_port = defaults['api_port']
+            messaging_port = defaults['messaging_port']
+
+        node.__node__['base'].update({
+            'api_port': api_port,
+            'messaging_port': messaging_port
+            })  
+
+        return api_port != defaults['api_port'] or messaging_port != defaults['messaging_port']    
+
+
+    def _try_resolver(self, url):
+        try:
+            urllib2.urlopen(url).read()
+        except urllib2.URLError, e:
+            if isinstance(e.args[0], socket.gaierror):
+                eai = e.args[0]
+                if eai.errno == socket.EAI_NONAME:
+                    with open('/etc/resolv.conf', 'w+') as fp:
+                        fp.write('nameserver 8.8.8.8\n')
+                elif eai.errno == socket.EAI_AGAIN:
+                    os.chmod('/etc/resolv.conf', 0755)
+                else:
+                    raise
+
+                # reload resolver 
+                res_init()
+            else:
+                raise 
+
 
     def _init_services(self):
         logger = logging.getLogger(__name__)
@@ -800,6 +919,9 @@ class Service(object):
         pr = urlparse(queryenv_url)
         bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
         logger.debug("Got scalr url: '%s'" % bus.scalr_url)
+
+        if not linux.os.windows and node.__node__['platform'].name in ('eucalyptus', 'openstack'):
+            self._try_resolver(bus.scalr_url)
 
         # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
         bus.periodical_executor = PeriodicalExecutor()
@@ -820,10 +942,17 @@ class Service(object):
         bus.queryenv_service = queryenv
         bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 
+        ports_non_default = self._select_control_ports()
+
         logger.debug("Initialize messaging")
         factory = MessageServiceFactory()
         try:
             params = dict(ini.items("messaging_" + messaging_adp))
+            if ports_non_default:
+                consumer_url = list(urlparse(params[P2pConfigOptions.CONSUMER_URL]))
+                consumer_url[1] = ':'.join((consumer_url[1].split(':')[0], str(node.__node__['base']['messaging_port'])))
+                params[P2pConfigOptions.CONSUMER_URL] = urlunparse(consumer_url)
+
             params[P2pConfigOptions.SERVER_ID] = server_id
             params[P2pConfigOptions.CRYPTO_KEY_PATH] = cnf.key_path(cnf.DEFAULT_KEY)
 
@@ -836,6 +965,17 @@ class Service(object):
         consumer = msg_service.get_consumer()
         consumer.listeners.append(MessageListener())
 
+        producer = msg_service.get_producer()
+        def msg_meta(queue, message):
+            """
+            Add scalarizr version to meta
+            """
+            message.meta.update({
+                'szr_version': __version__,
+                'timestamp': os_time.utcnow().strftime("%a %d %b %Y %H:%M:%S %z")
+            })
+        producer.on('before_send', msg_meta)
+
         if not linux.os.windows_family:
             logger.debug('Schedule SNMP process')
             self._snmp_scheduled_start_time = time.time()
@@ -843,26 +983,28 @@ class Service(object):
         Storage.maintain_volume_table = True
 
         if not bus.api_server:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            api_port = 8010
-            try:
-                sock.connect(('0.0.0.0', api_port))
-                api_port = 8009
-                sock.close()
-            except socket.error:
-                pass
-            STATE['global.api_port'] = api_port
             api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes),
                                                 cnf.key_path(cnf.DEFAULT_KEY))
             class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
                 pass
             bus.api_server = wsgiref.simple_server.make_server('0.0.0.0',
-                                                api_port, api_app, server_class=ThreadingWSGIServer)
+                                node.__node__['base']['api_port'], 
+                                api_app, 
+                                server_class=ThreadingWSGIServer)
+
+        if ports_non_default:
+            msg = msg_service.new_message('HostUpdate', None, {
+                'base': {
+                    'api_port': node.__node__['base']['api_port'],
+                    'messaging_port': node.__node__['base']['messaging_port']
+                }
+            })
+            msg_service.get_producer().send(Queues.CONTROL, msg)
 
 
     def _check_snmp(self):
         if self._running and linux.os['family'] != 'Windows' \
-                                    and not self._snmp_pid and time.time() >= _snmp_scheduled_start_time:
+                and not self._snmp_pid and time.time() >= _snmp_scheduled_start_time:
             self._start_snmp_server()
 
 
@@ -926,7 +1068,7 @@ class Service(object):
 
         # Start API server
         api_server = bus.api_server
-        self._logger.info('Starting API server on http://0.0.0.0:8010')
+        self._logger.info('Starting API server on http://0.0.0.0:%s', node.__node__['base']['api_port'])
         api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
         api_thread.start()
 
@@ -934,22 +1076,45 @@ class Service(object):
         ex = bus.periodical_executor
         ex.start()
 
-
-    def _start_update_client(self):
-        if linux.os['family'] == 'Windows':
-            try:
-                win32serviceutil.StartService('ScalrUpdClient')
-            except:
-                e = sys.exc_info()[1]
-                self._logger.warn('Could not start scalr update client service: %s' % e)
-
-        else:
-            upd = ScalrUpdClientScript()
-            if not upd.running:
+    def _talk_to_updclient(self):
+        try:
+            upd = jsonrpc_http.HttpServiceProxy('http://127.0.0.1:8008', bus.cnf.key_path(bus.cnf.DEFAULT_KEY))
+            upd_svs = ScalrUpdClientScript()
+            if not upd_svs.running:
+                upd_svs.start()
+            upd_state = [None]
+            def upd_ready():
                 try:
-                    upd.start()
+                    upd_state[0] = upd.status()['state']
+                    return upd_state[0] != 'noop'
                 except:
-                    self._logger.warn("Can't start Scalr Update Client. Error: %s", sys.exc_info()[1])
+                    exc = sys.exc_info()[1]
+                    if 'Server-ID header not presented' in str(exc):
+                        self._logger.info(('UpdateClient serves previous API version. '
+                            'Looks like we are in a process of migration to new update sytem. '
+                            'UpdateClient restart will handle this situation. Restarting'))
+                        upd_svs.restart()
+                    elif type(exc) in (urllib2.HTTPError, socket.error, IOError):
+                        self._logger.debug('Failed to get UpdateClient status: %s', exc)
+                    else:
+                        raise
+
+
+            wait_until(upd_ready, timeout=60, sleep=1)
+            upd_state = upd_state[0]
+            self._logger.info('UpdateClient state: %s', upd_state)
+            if upd_state == 'in-progress/restart':
+                self._logger.info('Scalarizr was restarted by update process')
+            elif upd_state.startswith('in-progress'):
+                self._logger.info('Update is in-progress, exiting')
+                sys.exit()
+            elif upd_state == 'completed/wait-ack':
+                self._logger.info('UpdateClient completed update and should be restarted, restarting')
+                upd_svs.restart()
+        except:
+            if sys.exc_info()[0] == SystemExit:
+                raise
+            self._logger.warn('Failed to talk to UpdateClient: %s', sys.exc_info()[1])
 
 
     def _shutdown(self):
@@ -1149,6 +1314,8 @@ if 'Windows' == linux.os['family']:
 
 
         def SvcShutdown(self):
+            if node.__node__['state'] != 'running':
+                return          
             Flag.set(Flag.REBOOT)
             srv = bus.messaging_service
             message = srv.new_message(Messages.WIN_HOST_DOWN)

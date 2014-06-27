@@ -76,7 +76,7 @@ class GcePersistentVolume(base.Volume):
                 create = False
                 if not self.link:
                     # Disk does not exist, create it first
-                    create_request_body = dict(name=self.name, sizeGb=self.size)
+                    create_request_body = dict(name=self.name)
                     if self.snap:
                         snap_dict = dict(self.snap)
                         snap_dict['type'] = STORAGE_TYPE
@@ -84,6 +84,9 @@ class GcePersistentVolume(base.Volume):
                         LOG.debug('Ensuring that snapshot is ready, before creating disk from it')
                         gce_util.wait_snapshot_ready(self.snap)
                         create_request_body['sourceSnapshot'] = to_current_api_version(self.snap.link)
+                    else:
+                        create_request_body['sizeGb'] = self.size
+
                     create = True
                 else:
                     self._check_attr('zone')
@@ -106,7 +109,6 @@ class GcePersistentVolume(base.Volume):
                         garbage_can.append(temp_snap)
                         new_name = self.name + zone
                         create_request_body = dict(name=new_name,
-                                                   sizeGb=self.size,
                                                    sourceSnapshot=to_current_api_version(temp_snap.link))
                         create = True
 
@@ -130,12 +132,18 @@ class GcePersistentVolume(base.Volume):
                 else:
                     if self.last_attached_to and self.last_attached_to != server_name:
                         LOG.debug("Making sure that disk %s detached from previous attachment place." % self.name)
-                        gce_util.ensure_disk_detached(connection,
-                                                      project_id,
-                                                      zone,
-                                                      self.last_attached_to,
-                                                      self.link)
-
+                        try:
+                            gce_util.ensure_disk_detached(connection,
+                                                          project_id,
+                                                          zone,
+                                                          self.last_attached_to,
+                                                          self.link)
+                        except:
+                            e = sys.exc_info()[1]
+                            if 'resource was not found' in str(e):
+                                raise storage2.VolumeNotExistsError(self.link)
+                            raise
+                        
                     attachment_inf = self._attachment_info(connection)
                     if attachment_inf:
                         disk_devicename = attachment_inf['deviceName']
@@ -144,11 +152,18 @@ class GcePersistentVolume(base.Volume):
 
                 if attach:
                     LOG.debug('Attaching disk %s to current instance' % self.name)
-                    op = connection.instances().attachDisk(instance=server_name, project=project_id,
+                    try:
+                        op = connection.instances().attachDisk(instance=server_name, project=project_id,
                                             zone=zone, body=dict(deviceName=self.name,
                                                                     source=self.link,
                                                                     mode="READ_WRITE",
                                                                     type="PERSISTENT")).execute()
+                    except:
+                        e = sys.exc_info()[1]
+                        if 'resource was not found' in str(e):
+                            raise storage2.VolumeNotExistsError(self.link)
+                        raise
+
                     gce_util.wait_for_operation(connection, project_id, op['name'], zone=zone)
                     disk_devicename = self.name
 
@@ -267,7 +282,7 @@ class GcePersistentVolume(base.Volume):
 
         now_raw = datetime.datetime.utcnow()
         now_str = now_raw.strftime('%d-%b-%Y-%H-%M-%S-%f')
-        snap_name = ('%s-snap-%s' % (self.name, now_str)).lower()
+        snap_name = ('%s-snap-%s' % (self.name, now_str)).lower()[:62]
 
         # We could put it to separate method, like _get_self_resource
 

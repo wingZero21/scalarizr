@@ -1,0 +1,31 @@
+lease {
+  interface "eth0";
+  fixed-address 10.2.1.149;
+  option subnet-mask 255.255.252.0;
+  option dhcp-lease-time 4294967295;
+  option routers 10.2.0.1;
+  option dhcp-message-type 5;
+  option dhcp-server-identifier 10.3.1.45;
+  option domain-name-servers 10.3.0.1;
+  option broadcast-address 10.3.3.255;
+  option host-name "i-882-40530-VM";
+  option domain-name "cs372cloud.internal";
+  rebind 4 1996/09/05 16:29:47;
+  expire 2 2013/09/10 11:18:25;
+}
+lease {
+  interface "eth0";
+  fixed-address 10.2.1.194;
+  option subnet-mask 255.255.252.0;
+  option routers 10.2.0.1;
+  option dhcp-lease-time 4294967295;
+  option dhcp-message-type 5;
+  option domain-name-servers 10.2.0.1;
+  option dhcp-server-identifier 10.2.1.45;
+  option broadcast-address 10.2.3.255;
+  option host-name "i-882-43799-VM";
+  option domain-name "cs372cloud.internal";
+  renew 0 2081/11/02 13:46:10;
+  rebind 0 2132/11/16 22:11:39;
+  expire 5 2149/11/21 17:00:17;
+}

@@ -2,6 +2,7 @@ from __future__ import with_statement
 
 import os
 import urllib2
+import glob
 import sys
 import logging
 
@@ -25,18 +26,15 @@ class CloudStackPlatform(Platform):
 
     def __init__(self):
         Platform.__init__(self)
-
-        # Find the virtual router.
-        eth0leases = util.firstmatched(lambda x: os.path.exists(x),
-                                                                ['/var/lib/dhcp/dhclient.eth0.leases',
-                                                                '/var/lib/dhcp3/dhclient.eth0.leases',
-                                                                '/var/lib/dhclient/dhclient-eth0.leases'],
-                                                                '/var/lib/dhclient/dhclient-eth0.leases')
-        if not os.path.exists(eth0leases):
-            raise PlatformError("Can't find virtual router. file %s not exists" % eth0leases)
+        
+        leases_pattern = '/var/lib/dhc*/dhclient*.leases'
+        try:
+            eth_leases = glob.glob(leases_pattern)[0]
+        except IndexError:
+            raise PlatformError("Can't find virtual router. No file matching pattern: %s", leases_pattern)
 
         router = None
-        for line in open(eth0leases):
+        for line in open(eth_leases):
             if 'dhcp-server-identifier' in line:
                 router = filter(None, line.split(';')[0].split(' '))[2]
         LOG.debug('Meta-data server: %s', router)

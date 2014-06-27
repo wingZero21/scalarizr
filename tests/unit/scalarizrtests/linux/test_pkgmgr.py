@@ -10,13 +10,17 @@ from scalarizr.linux import pkgmgr
 
 import mock
 
-@mock.patch.dict('scalarizr.linux.os', {'family': 'RedHat'})
+@mock.patch.dict('scalarizr.linux.os', {
+    'family': 'RedHat'
+})
 def test_package_mgr():
     mgr = pkgmgr.package_mgr()
     assert isinstance(mgr, pkgmgr.YumPackageMgr)
 
-
-@mock.patch.dict('scalarizr.linux.os', {'family': 'RedHat', 'name': 'CentOS'})
+@mock.patch.dict('scalarizr.linux.os', {
+    'family': 'RedHat', 
+    'name': 'CentOS'
+})
 @mock.patch.object(pkgmgr.RpmPackageMgr, 'info')
 @mock.patch.object(pkgmgr.RpmPackageMgr, 'install')
 @mock.patch('scalarizr.linux.system')
@@ -25,13 +29,14 @@ def test_epel_repository(system, install, info):
     pkgmgr.epel_repository()
     install.assert_called_once_with(pkgmgr.EPEL_RPM_URL)
 
-
-@mock.patch.dict('scalarizr.linux.os', {'family': 'Debian',
-                                                                                'codename1': 'c1',
-                                                                                'codename12': 'c12',
-                                                                                'codename2': 'c2',
-                                                                                'codename22': 'c22',
-                                                                                'arch': 'x86_64'})
+@mock.patch.dict('scalarizr.linux.os', {
+    'family': 'Debian',
+    'codename1': 'c1',
+    'codename12': 'c12',
+    'codename2': 'c2',
+    'codename22': 'c22',
+    'arch': 'x86_64'
+})
 @mock.patch('__builtin__.open')
 @mock.patch('scalarizr.linux.system')
 def test_apt_source(system, open):
@@ -96,6 +101,7 @@ class TestYumPackageMgr(object):
         assert repos, ['aegisco', 'fedora', 'updates']
 
 
+
 class TestAptPackageMgr(object):
     @mock.patch('glob.glob')
     def test_repos(self, g):
@@ -107,6 +113,17 @@ class TestAptPackageMgr(object):
         repos = mgr.repos()
 
         assert repos, ['percona', 'scalr-stable']
+
+
+class TestAptRepository(object):
+    @mock.patch('__builtin__.open')
+    def test_ensure(self, *args):
+        repo_url = 'http://apt.scalr.net/debian scalr/'
+        repo = pkgmgr.AptRepository('latest', repo_url)
+        repo.ensure()
+
+        assert repo.config, repo_url
+
 
 
 #RpmPackageMgr class tests

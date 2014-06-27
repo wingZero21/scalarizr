@@ -112,10 +112,11 @@ def chmod_r(path, mode):
 
 
 def remove(path):
-    if os.path.isfile(path):
-        os.remove(path) 
-    elif os.path.isdir(path):
-        shutil.rmtree(path)
+    if os.path.exists(path):
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else: 
+            os.remove(path) 
 
 
 def clean_dir(path, recursive=True):
@@ -126,6 +127,11 @@ def clean_dir(path, recursive=True):
     for item in content:
         if recursive or (not recursive and os.path.isfile(item)):
             remove(item)
+
+
+def mkdir(path, mode=0777):
+    if not os.path.exists(path):
+        os.makedirs(path, mode)
 
 
 def blkid(device_path, **kwargs):

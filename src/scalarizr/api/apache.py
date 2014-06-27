@@ -15,10 +15,6 @@ import shutil
 import logging
 import urllib2
 
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
 
 from scalarizr import rpc
 from scalarizr import linux
@@ -26,8 +22,8 @@ from telnetlib import Telnet
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.util.initdv2 import InitdError
-from scalarizr.util import system2, initdv2
-from scalarizr.util import wait_until, dynimp, PopenError
+from scalarizr.util import system2, initdv2, software, firstmatched
+from scalarizr.util import wait_until, PopenError
 from scalarizr.linux import coreutils, iptables, pkgmgr
 from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 
@@ -35,6 +31,11 @@ from scalarizr.libs.metaconf import Configuration, NoPathError, ParseError
 LOG = logging.getLogger(__name__)
 
 etc_path = bus.etc_path or "/etc/scalr"
+
+
+def apache_version():
+    return software.apache_software_info().version
+
 
 apache = {
     "vhosts_dir":           os.path.join(etc_path, "private.d/vhosts"),
@@ -45,7 +46,9 @@ apache = {
 if linux.os.debian_family:
     apache.update({
         "httpd.conf":       "/etc/apache2/apache2.conf",
-        "ssl_conf_path":    "/etc/apache2/sites-available/default-ssl",
+        "ssl_conf_path":    firstmatched(os.path.exists, (
+                            "/etc/apache2/sites-available/default-ssl",
+                            "/etc/apache2/sites-available/default-ssl.conf")),
         "default_vhost":    "/etc/apache2/sites-enabled/000-default",
         "ports_conf_deb":   "/etc/apache2/ports.conf",
         "ssl_load_deb":     "/etc/apache2/mods-enabled/ssl.load",
@@ -115,12 +118,21 @@ class ApacheAPI(object):
     service = None
     mod_ssl = None
     current_open_ports = None
+    _is_ssl_enabled = False
+
+    _version = None
 
     def __init__(self):
         self.service = initdv2.lookup("apache")
         self.mod_ssl = DebianBasedModSSL() if linux.os.debian_family else RedHatBasedModSSL()
         self.current_open_ports = []
         self._query_env = bus.queryenv_service
+
+    @property
+    def version(self):
+        if not self._version:
+            self._version = apache_version()
+        return self._version
 
     @rpc.command_method
     def create_vhost(self, hostname, port, template, ssl, ssl_certificate_id=None, reload=True, allow_port=False):
@@ -143,6 +155,11 @@ class ApacheAPI(object):
         v_host = VirtualHost(template)
 
         if ssl:
+
+            if not self._is_ssl_enabled:
+                self.enable_mod_ssl()
+                self._is_ssl_enabled = True
+
             ssl_certificate = SSLCertificate(ssl_certificate_id)
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
@@ -166,7 +183,7 @@ class ApacheAPI(object):
                 os.makedirs(docroot_parent_path, 0755)
                 LOG.info("Created parent directory of document root %s for %s" % (directory, name))
 
-            if not os.path.exists(directory) or not os.listdir(directory):
+            if not os.path.exists(directory):
                 shutil.copytree(os.path.join(bus.share_path, "apache/html"), directory)
                 files = ", ".join(os.listdir(directory))
                 LOG.debug("Copied document root files: %s" % files)
@@ -273,7 +290,10 @@ class ApacheAPI(object):
             ssl_certificate = SSLCertificate(ssl_certificate_id)
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
-            v_host.use_certificate(ssl_certificate)
+            v_host.use_certificate(
+                    ssl_certificate.cert_path, 
+                    ssl_certificate.key_path,
+                    ssl_certificate.chain_path)
 
         path = get_virtual_host_path(hostname or old_hostname, port or old_port)
 
@@ -481,6 +501,14 @@ class ApacheAPI(object):
     def configtest(self):
         self.service.configtest()
 
+    @rpc.command_method
+    def enable_mod_ssl(self):
+        self.mod_ssl.ensure()
+
+    @rpc.command_method
+    def disable_mod_ssl(self):
+        self.mod_ssl.disable()
+
     def init_service(self):
         """
         Configures apache service
@@ -491,10 +519,11 @@ class ApacheAPI(object):
         self.enable_virtual_hosts_directory()
 
         self.fix_default_virtual_host()
+        self.fix_default_ssl_virtual_host()
 
         self.update_log_rotate_config()
 
-        self.mod_ssl.ensure()
+        #self.mod_ssl.ensure()  # [SCALARIZR-1381]
 
         if linux.os.debian_family:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
@@ -519,8 +548,9 @@ class ApacheAPI(object):
         with ApacheConfigManager(__apache__["httpd.conf"]) as apache_config:
             inc_mask = __apache__["vhosts_dir"] + "/*" + __apache__["vhost_extension"]
 
-            if not inc_mask in apache_config.get_list("Include"):
-                apache_config.add("Include", inc_mask)
+            opt_include = "Include" if self.version < (2,4) else "IncludeOptional"
+            if not inc_mask in apache_config.get_list(opt_include):
+                apache_config.add(opt_include, inc_mask)
                 LOG.info("VirtualHosts directory included in %s" % __apache__["httpd.conf"])
 
     def fix_default_virtual_host(self):
@@ -550,9 +580,10 @@ class ApacheAPI(object):
 
     def update_log_rotate_config(self):
         if not os.path.exists(__apache__["logrotate_conf_path"]):
-            with open(__apache__["logrotate_conf_path"], "w") as fp:
-                fp.write(__apache__["logrotate_conf"])
-            LOG.info("LogRorate config updated.")
+            if not os.path.exists("/etc/logrotate.d/httpd"):
+                with open(__apache__["logrotate_conf_path"], "w") as fp:
+                    fp.write(__apache__["logrotate_conf"])
+                LOG.info("LogRorate config updated.")
 
     def reload_virtual_hosts(self):
         """
@@ -621,6 +652,9 @@ class ApacheAPI(object):
         else:
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
 
+    def fix_default_ssl_virtual_host(self):
+        self.mod_ssl.set_default_certificate(SSLCertificate())
+
 
 class BasicApacheConfiguration(object):
 
@@ -672,6 +706,13 @@ class VirtualHost(BasicApacheConfiguration):
         return self._cnf.get(".//SSLCertificateChainFile")
 
     @property
+    def is_ssl_based(self):
+        try:
+            return self.ssl_cert_path and self.ssl_key_path
+        except NoPathError:
+            return False
+
+    @property
     def document_root_paths(self):
         doc_roots = []
         for item in self._cnf.items(".//VirtualHost"):
@@ -708,6 +749,7 @@ class VirtualHost(BasicApacheConfiguration):
                 parent.insert(list(parent).index(before_el), ch)
         else:
             self._cnf.comment(".//SSLCertificateChainFile")
+            self._cnf.comment(".//SSLCACertificateFile")  # [SCALARIZR-1461]
 
     def _get_port(self):
         raw_host = self._cnf.get(".//VirtualHost").split(":")
@@ -764,8 +806,8 @@ class ModRPAF(BasicApacheConfiguration):
         """
         fixing bug in rpaf 0.6-2
         """
-        pm = dynimp.package_mgr()
-        if "0.6-2" == pm.installed("libapache2-mod-rpaf"):
+        mgr = pkgmgr.package_mgr()
+        if "0.6-2" == mgr.info("libapache2-mod-rpaf")['installed']:
             try:
                 self._cnf.set('./IfModule[@value="mod_rpaf.c"]', {"value": "mod_rpaf-2.0.c"})
             except NoPathError:
@@ -953,6 +995,9 @@ class ModSSL(object):
     def ensure(self):
         raise NotImplementedError
 
+    def disable(self):
+        raise NotImplementedError
+
 
 class DebianBasedModSSL(ModSSL):
 
@@ -966,6 +1011,14 @@ class DebianBasedModSSL(ModSSL):
         self._enable_mod_ssl()
         self._enable_default_ssl_virtual_host()
         self._set_name_virtual_host(ssl_port)
+        # Cleaning ssl.conf after rebundle
+        # Replacing unexisting certificate with snakeoil.
+        self.set_default_certificate(SSLCertificate())
+
+    def disable(self):
+        if os.path.exists(__apache__["ssl_load_deb"]):
+            system2((__apache__["a2dismod_path"], "ssl"))
+            LOG.info("mod_ssl enabled.")
 
     def _enable_mod_ssl(self):
         if not os.path.exists(__apache__["ssl_load_deb"]):
@@ -1075,7 +1128,10 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
 
         pid_file = None
         if linux.os.redhat_family:
-            pid_file = "/var/run/httpd/httpd.pid" if linux.os["release"].version[0] == 6 else "/var/run/httpd.pid"
+            if linux.os["name"] == 'Amazon' or linux.os["release"].version[0] == 6:
+                pid_file = "/var/run/httpd/httpd.pid"
+            else:
+                pid_file = "/var/run/httpd.pid"
         elif linux.os.debian_family:
             if os.path.exists("/etc/apache2/envvars"):
                 pid_file = system2("/bin/sh", stdin=". /etc/apache2/envvars; echo -n $APACHE_PID_FILE")[0]

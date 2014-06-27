@@ -20,6 +20,7 @@ import socket
 import traceback
 from threading import local
 import logging
+from copy import deepcopy
 
 
 from scalarizr import util
@@ -88,6 +89,7 @@ class InternalError(ServiceError):
 
 
 class RequestHandler(object):
+
     def __init__(self, services):
         svs = None
         if not services:
@@ -99,6 +101,25 @@ class RequestHandler(object):
             self.services = {None: svs}
         else:
             self.services = services
+
+    def _clear_request_data(self, data):
+        clear_data = deepcopy(data)
+        try:
+            glob_vars = clear_data['params']['global_variables']
+            i = 0
+            for _ in xrange(len(glob_vars)):
+                var = glob_vars[i]
+                is_private = var.get('private', None)
+                if is_private != None:
+                    if int(is_private) == 1:
+                        del glob_vars[i]
+                        i -= 1
+                    elif int(is_private) == 0:
+                        del var['private']
+                i += 1
+        except KeyError:
+            pass
+        return clear_data
 
     def handle_error(self):
         LOG.exception('Caught exception')
@@ -113,7 +134,8 @@ class RequestHandler(object):
             fn = self._find_method(svs, method)
             if fn._jsonrpc == 'command':
                 log_it = True
-                LOG.debug('request: %s', json.dumps(data))
+                data_to_log = self._clear_request_data(data)
+                LOG.debug('request: %s', json.dumps(data_to_log))
             result = self._invoke_method(fn, params)
             # important to test json serializarion before serialize the whole result
             json.dumps(result)
@@ -124,6 +146,8 @@ class RequestHandler(object):
                             'data': e.data}
         except:
             E, e = sys.exc_info()[:2]
+            if E in (SystemExit, KeyboardInterrupt):
+                raise
             code = E.__name__
             if E in (KeyError, IndexError):
                 # file/line/def where exception occurred formatted like exception stacktrace 

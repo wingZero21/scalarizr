@@ -39,6 +39,8 @@ class _Mounts(object):
                 m = filter(None, self._entry_re.split(line))
                 if m:
                     m.extend(itertools.repeat('', 6-len(m)))
+                    if os.path.islink(m[0]):
+                        m[0] = os.path.realpath(m[0])
                     self._entries.append(_MountEntry(*m))
 
     def __getitem__(self, device_or_mpoint):

@@ -10,6 +10,7 @@ Public Scalarizr API
 from __future__ import with_statement
 
 import os
+import posixpath
 import binascii
 import logging
 import sys
@@ -107,6 +108,8 @@ class WsgiApplication(Security):
             start_response('200 OK', headers)
             return result
         except:
+            if sys.exc_info()[0] in (SystemExit, KeyboardInterrupt):
+                raise
             start_response('500 Internal Server Error', [], sys.exc_info())
             LOG.exception('Unhandled exception')
             return ''
@@ -131,25 +134,36 @@ class WsgiApplication(Security):
 
 class HttpServiceProxy(rpc.ServiceProxy, Security):
 
-    def __init__(self, endpoint, crypto_key_path):
+    def __init__(self, endpoint, crypto_key_path, server_id=None, sign_only=False):
         Security.__init__(self, crypto_key_path)
         rpc.ServiceProxy.__init__(self)
         self.endpoint = endpoint
+        self.server_id = server_id
+        self.sign_only = sign_only
 
 
     def exchange(self, jsonrpc_req):
-        jsonrpc_req = self.encrypt_data(jsonrpc_req)
-        sig, date = self.sign(jsonrpc_req, self._read_crypto_key())
-
-        headers = {
+        if self.crypto_key_path:
+            if not self.sign_only:
+                jsonrpc_req = self.encrypt_data(jsonrpc_req)
+            sig, date = self.sign(jsonrpc_req, self._read_crypto_key())
+            headers = {
                 'Date': date,
                 'X-Signature': sig
-        }
+            }
+        else:
+            headers = {}
+        if self.server_id:
+            headers['X-Server-Id'] = self.server_id
+
         namespace = self.local.method[0] if len(self.local.method) > 1 else ''
 
-        http_req = urllib2.Request(os.path.join(self.endpoint, namespace), jsonrpc_req, headers)
+        http_req = urllib2.Request(posixpath.join(self.endpoint, namespace), jsonrpc_req, headers)
         try:
             jsonrpc_resp = urllib2.urlopen(http_req).read()
-            return self.decrypt_data(jsonrpc_resp)
+            if self.crypto_key_path and not self.sign_only:
+                return self.decrypt_data(jsonrpc_resp)
+            else:
+                return jsonrpc_resp
         except urllib2.HTTPError, e:
             raise Exception('%s: %s' % (e.code, e.read()))

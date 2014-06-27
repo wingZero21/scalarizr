@@ -70,8 +70,6 @@ class FormatProvider:
                 raise MetaconfError("etree param must be instance of _ElementInterface or ElementTree. %s passed" % (etree,))
             errors = []
             toplevel = list(etree.find('.'))
-            if not len(toplevel):
-                exit
             for section in toplevel:
                 for writer in self._writers:
                     if writer(fp, section):

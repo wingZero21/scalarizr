@@ -28,13 +28,17 @@ class OpenstackServiceWrapper(object):
     def _make_connection(self, **kwargs):
         raise NotImplementedError()
 
-    def __init__(self, user, password, tenant, auth_url, region_name=None):
+    def __init__(self, user, password, tenant, auth_url, region_name=None, ssl_verify_peer=True):
         self.user = user
         self.password = password
         self.tenant = tenant
         self.auth_url = auth_url
         self.region_name = region_name
         self.auth_plugin = None
+        if isinstance(ssl_verify_peer, basestring):
+            ssl_verify_peer = bool(ssl_verify_peer)
+        self.ssl_verify_peer = ssl_verify_peer
+
         if os.environ.get('OS_AUTH_SYSTEM'):
             try:
                 import novaclient.auth_plugin
@@ -48,7 +52,10 @@ class OpenstackServiceWrapper(object):
         return getattr(self.connection, name)
 
     def reconnect(self):
-        self.connection = self._make_connection()
+        kwds = {}
+        if not self.ssl_verify_peer:
+            kwds['insecure'] = True
+        self.connection = self._make_connection(**kwds)
 
     #TODO: make connection check more properly
     def has_connection(self):
@@ -94,8 +101,7 @@ class OpenstackPlatform(platform.Platform):
     _metadata = {}
     _userdata = None
 
-    _private_ip = None
-    _public_ip = None
+    _ip_addr = None
 
     features = ['volumes', 'snapshots']
 
@@ -106,18 +112,21 @@ class OpenstackPlatform(platform.Platform):
             # http://bugs.centos.org/view.php?id=4814
             os.chmod('/etc/resolv.conf', 0755)
 
-    def get_private_ip(self):
-        if self._private_ip is None:
-            for iface in platform.net_interfaces():
-                if platform.is_private_ip(iface['ipv4']):
-                    self._private_ip = iface['ipv4']
-                    break
-
-        return self._private_ip
-
-
-    def get_public_ip(self):
-        return self.get_private_ip()
+    def _get_ip_addr(self):
+        if not self._ip_addr:
+            ifaces = platform.net_interfaces()
+            try:
+                self._ip_addr = [iface['ipv4'] for iface in ifaces 
+                        if platform.is_private_ip(iface['ipv4'])][0]
+            except IndexError:
+                try:
+                    self._ip_addr = [iface['ipv4'] for iface in ifaces 
+                            if platform.is_public_ip(iface['ipv4'])][0]
+                except IndexError:
+                    pass
+        return self._ip_addr
+    get_public_ip = _get_ip_addr
+    get_private_ip = _get_ip_addr
 
     def _get_property(self, name):
         if not name in self._userdata:
@@ -128,18 +137,17 @@ class OpenstackPlatform(platform.Platform):
         nova = self.new_nova_connection()
         nova.connect()
         servers = nova.servers.list()
-        my_private_ip = self.get_private_ip()
+        my_ip = self.get_private_ip()
         for server in servers:
-            private_ip = 'private' in server.addresses and server.addresses['private'][0]['addr']
-            if not private_ip:
+            ips = []
+            ip_addr = 'private' in server.addresses and server.addresses['private'][0]['addr']
+            if ip_addr:
+                ips.append(ip_addr)
+            else:
                 ips = [address['addr'] 
-                        for network in server.addresses.values()
-                        for address in network
-                        if platform.is_private_ip(address['addr'])]
-                if ips:
-                    private_ip = ips[0]
-
-            if my_private_ip == private_ip:
+                            for network in server.addresses.values()
+                            for address in network]
+            if my_ip in ips:
                 return server.id
 
         raise BaseException("Can't get server_id because we can't get "
@@ -185,15 +193,18 @@ class OpenstackPlatform(platform.Platform):
             raise platform.PlatformError, 'failed to fetch meta-data', sys.exc_info()[2]   
 
     def _fetch_metadata_from_file(self):
+        self._logger.debug('fetching meta-data from files')
         cnf = bus.cnf
         if self._userdata is None:
             for path in ('/etc/.scalr-user-data', cnf.private_path('.user-data')):
                 if os.path.exists(path):
+                    self._logger.debug('using file %s', path)
                     rawmeta = None
                     with open(path, 'r') as fp:
                         rawmeta = fp.read()
                     if not rawmeta:
                         raise platform.PlatformError("Empty user-data")
+                    self._logger.info('Use user-data from %s', path)
                     return self._parse_user_data(rawmeta)
         return self._userdata
 
@@ -217,7 +228,8 @@ class OpenstackPlatform(platform.Platform):
                              password or api_key,
                              self._access_data["tenant_name"],
                              self._access_data["keystone_url"],
-                             self._access_data["cloud_location"])
+                             self._access_data["cloud_location"],
+                             self._access_data.get('ssl_verify_peer', True))
 
     def new_nova_connection(self):
         if not self._access_data:
@@ -228,7 +240,8 @@ class OpenstackPlatform(platform.Platform):
                            password or api_key,
                            self._access_data["tenant_name"],
                            self._access_data["keystone_url"],
-                           self._access_data["cloud_location"])
+                           self._access_data["cloud_location"],
+                           self._access_data.get('ssl_verify_peer', True))
 
     def new_swift_connection(self):
         if not self._access_data:
@@ -244,6 +257,7 @@ class OpenstackPlatform(platform.Platform):
         else:
             kwds['auth_version'] = '2'
             kwds['tenant_name'] = self._access_data["tenant_name"]
+        kwds['insecure'] = not bool(self._access_data.get('ssl_verify_peer', True))
 
         return swiftclient.Connection(keystone_url, 
                     self._access_data["username"],

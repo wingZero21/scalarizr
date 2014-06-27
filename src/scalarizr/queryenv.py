@@ -12,6 +12,7 @@ import urllib
 import urllib2
 import time
 import HTMLParser
+from copy import deepcopy
 
 from scalarizr.util import cryptotool
 from scalarizr.util import urltool
@@ -25,6 +26,9 @@ else:
 class QueryEnvError(Exception):
     pass
 
+class InvalidSignatureError(QueryEnvError):
+    pass
+
 class QueryEnvService(object):
     _logger = None
 
@@ -32,6 +36,9 @@ class QueryEnvService(object):
     api_version = None
     key_path = None
     server_id = None
+
+    def _log_parsed_response(self, response):
+        self._logger.debug("QueryEnv response (parsed): %s", response)
 
     def __init__(self, url, server_id=None, key_path=None, api_version='2012-04-17'):
         self._logger = logging.getLogger(__name__)
@@ -41,7 +48,7 @@ class QueryEnvService(object):
         self.api_version = api_version
         self.htmlparser = HTMLParser.HTMLParser()
 
-    def fetch(self, command, **params):
+    def fetch(self, command, params=None, log_response=True):
         """
         @return object
         """
@@ -51,7 +58,7 @@ class QueryEnvService(object):
         request_body = {}
         request_body["operation"] = command
         request_body["version"] = self.api_version
-        if {} != params :
+        if params:
             for key, value in params.items():
                 request_body[key] = value
 
@@ -60,13 +67,6 @@ class QueryEnvService(object):
         file.close()
 
         signature, timestamp = cryptotool.sign_http_request(request_body, key)
-
-        try:
-            # Work over [Errno -3] Temporary failure in name resolution
-            # http://bugs.centos.org/view.php?id=4814
-            os.chmod('/etc/resolv.conf', 0755)
-        except OSError:
-            self._logger.debug('Cant chmod /etc/resolv.conf: %s', sys.exc_info()[1])
 
         post_data = urllib.urlencode(request_body)
         headers = {
@@ -88,17 +88,43 @@ class QueryEnvService(object):
             	e = sys.exc_info()[1]
                 if isinstance(e, urllib2.HTTPError):
                     resp_body = e.read() if e.fp is not None else ""
-                    self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, resp_body or e.msg, msg_wait)
+                    msg = resp_body or e.msg
+                    if "Signature doesn't match" in msg:
+                        raise InvalidSignatureError(msg)
+                    if "not supported" in msg:
+                        raise
+                    if e.code in (509, 400, 403):
+                        raise QueryEnvError('QueryEnv failed: %s' % msg)
+                    self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, msg, msg_wait)
                 else:
                     self._logger.warn('QueryEnv failed. %s. %s', e, msg_wait)
                 self._logger.warn('Sleep %s seconds before next attempt...', wait_seconds)
                 time.sleep(wait_seconds)
 
+
         resp_body = response.read()
         resp_body = self.htmlparser.unescape(resp_body)
         resp_body = resp_body.encode('utf-8')
 
-        self._logger.debug("QueryEnv response: %s", resp_body)
+        if log_response:
+            log_body = resp_body
+            if command == 'list-global-variables':
+                try:
+                    xml = ET.XML(resp_body)
+                    glob_vars = xml[0]
+                    i = 0
+                    for _ in xrange(len(glob_vars)):
+                        var = glob_vars[i]
+                        if int(var.attrib.get('private', 0)) == 1:
+                            glob_vars.remove(var)
+                            continue
+                        i += 1
+                    log_body = ET.tostring(xml)
+                except (BaseException, Exception), e:
+                    self._logger.debug("Exception occured while parsing list-global-variables response: %s" % e.message)
+                    if isinstance(e, ET.ParseError):
+                        raise
+            self._logger.debug("QueryEnv response: %s", log_body)
         return resp_body
 
 
@@ -135,7 +161,19 @@ class QueryEnvService(object):
         parameters = {}
         if farm_role_id:
             parameters["farm-role-id"] = farm_role_id
-        return {'params':self._request("list-farm-role-params", parameters, self._read_list_farm_role_params_response) or {}}
+        response = self._request("list-farm-role-params",
+                               parameters,
+                               self._read_list_farm_role_params_response,
+                               log_response=False)
+
+        response_log_copy = deepcopy(response)
+        try:
+            del response_log_copy['chef']['validator_name']
+            del response_log_copy['chef']['validator_key']
+        except (KeyError, TypeError):
+            pass
+        self._log_parsed_response(response_log_copy)
+        return {'params': response or {}}
 
 
     def get_server_user_data(self):
@@ -225,22 +263,47 @@ class QueryEnvService(object):
         '''
         Returns dict of scalr-added environment variables
         '''
-        return self._request('list-global-variables', {}, self._read_list_global_variables)
+        glob_vars = self._request('list-global-variables',
+                                  {},
+                                  self._read_list_global_variables,
+                                  log_response=False)
+
+        self._log_parsed_response(glob_vars['public'])
+        return glob_vars
 
 ###############################################################################
 
-    def _request(self, command, params={}, response_reader=None, response_reader_args=None):
-        xml = self.fetch(command, **params)
+    def _request(self,
+                 command,
+                 params={},
+                 response_reader=None,
+                 response_reader_args=None,
+                 log_response=True):
+        xml = self.fetch(command, params, log_response=False)
         response_reader_args = response_reader_args or ()
-        return response_reader(xml, *response_reader_args)
+        try:
+            parsed_response = response_reader(xml, *response_reader_args)
+            if log_response:
+                self._log_parsed_response(parsed_response)
+            return parsed_response
+        except (Exception, BaseException), e:
+            self._logger.debug("QueryEnv response: %s", xml)
+            raise
+
 
     def _read_list_global_variables(self, xml):
         '''
         Returns dict
         '''
         data = xml2dict(ET.XML(xml)) or {}
-        glob_vars = data['variables']['values'] if 'variables' in data and data['variables'] else {}
-        glob_vars = dict((k, v.encode('utf-8') if v else '') for k, v in glob_vars.items())
+        data = data['variables'] if 'variables' in data and data['variables'] else {}
+        glob_vars = {}
+        values = data.get('values', {})
+        glob_vars['public'] = dict((k, v.encode('utf-8') if v else '')
+                                   for k, v in values.items())
+        private_values = data.get('private_values', {})
+        glob_vars['private'] = dict((k, v.encode('utf-8') if v else '')
+                                           for k, v in private_values.items())
         return glob_vars
 
     def _read_get_global_config_response(self, xml):
@@ -412,10 +475,10 @@ class Mountpoint(object):
 
     def __repr__(self):
         return "name = " + str(self.name) \
-+ "; dir = " + str(self.dir) \
-+ "; create_fs = " + str(self.create_fs) \
-+ "; is_array = " + str(self.is_array) \
-+ "; volumes = " + str(self.volumes)
+            + "; dir = " + str(self.dir) \
+            + "; create_fs = " + str(self.create_fs) \
+            + "; is_array = " + str(self.is_array) \
+            + "; volumes = " + str(self.volumes)
 
 class Volume(object):
     volume_id  = None
@@ -430,7 +493,7 @@ class Volume(object):
 
     def __repr__(self):
         return 'volume_id = ' + str(self.volume_id) \
-+ "; device = " + str(self.device)
+            + "; device = " + str(self.device)
 
 class Role(object):
     behaviour = None
@@ -450,9 +513,9 @@ class Role(object):
 
     def __repr__(self):
         return 'behaviour = ' + str(self.behaviour) \
-+ "; name = " + str(self.name) \
-+ "; hosts = " + str(self.hosts) \
-+ "; farm_role_id = " + str(self.farm_role_id) + ";"
+            + "; name = " + str(self.name) \
+            + "; hosts = " + str(self.hosts) \
+            + "; farm_role_id = " + str(self.farm_role_id) + ";"
 
 
 class QueryEnvResult(object):
@@ -590,7 +653,20 @@ def xml2dict(el):
                 key = 'key'
             elif c.attrib.has_key('name'):
                 key = 'name'
-            return {'values':dict((ch.attrib[key], ch.text) for ch in el)}
+
+            private_values = {}
+            values = {}
+            for ch in el:
+                try:
+                    is_private = int(ch.attrib.get('private', 0))
+                except ValueError, TypeError:
+                    is_private = False
+                if is_private:
+                    private_values[ch.attrib[key]] = ch.text
+                else:
+                    values[ch.attrib[key]] = ch.text
+
+            return {'values': values, 'private_values': private_values}
 
         if el.tag == 'user-data':
             ret = {}

@@ -14,11 +14,13 @@ from scalarizr.api import operation
 from scalarizr.api import system as system_api
 from scalarizr import config, storage2
 from scalarizr.node import __node__
+from scalarizr import node 
 from scalarizr.config import ScalarizrState
 from scalarizr.messaging import Messages, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
 from scalarizr.util.flag import Flag
+from scalarizr.util import metadata
 
 # Libs
 from scalarizr.util import cryptotool, software
@@ -28,6 +30,7 @@ from scalarizr.linux import iptables, os as os_dist
 import logging, os, sys, threading
 from scalarizr.config import STATE
 import time
+import re
 
 
 _lifecycle = None
@@ -46,7 +49,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     _cnf = None
     
     _new_crypto_key = None
-
+    boot_id_file = '/proc/sys/kernel/random/boot_id'
+    saved_boot_id_file = os.path.join(node.private_dir, 'boot_id')
 
     def __init__(self):
         super(LifeCycleHandler, self).__init__()
@@ -135,16 +139,17 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
     def on_init(self):
-        bus.on("host_init_response", self.on_host_init_response)
-        self._producer.on("before_send", self.on_before_message_send)
+        bus.on(
+            host_init_response=self.on_host_init_response, 
+            block_device_mounted=self.on_block_device_mounted
+        )
 
         # Add internal messages to scripting skip list
         try:
-            map(scalarizr.handlers.script_executor.skip_events.add, (
-                Messages.INT_SERVER_REBOOT, 
-                Messages.INT_SERVER_HALT, 
-                Messages.HOST_INIT_RESPONSE
-            ))
+            for m in (Messages.INT_SERVER_REBOOT, 
+                      Messages.INT_SERVER_HALT, 
+                      Messages.HOST_INIT_RESPONSE):
+                scalarizr.handlers.script_executor.skip_events.add(m)
         except AttributeError:
             pass
 
@@ -152,23 +157,22 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if os_dist['family'] != 'Windows':
             system2(('mount', '-a'), raise_exc=False)
 
+        # cloud-init scripts may disable root ssh login
+        for path in ('/etc/ec2-init/ec2-config.cfg', '/etc/cloud/cloud.cfg'):
+            if os.path.exists(path):
+                c = None
+                with open(path, 'r') as fp:
+                    c = fp.read()
+                c = re.sub(re.compile(r'^disable_root[^:=]*([:=]).*', re.M), r'disable_root\1 0', c)
+                with open(path, 'w') as fp:
+                    fp.write(c)
+
         # Add firewall rules
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
         self._insert_iptables_rules()
-        if __node__['state'] !=  ScalarizrState.IMPORTING:
-            self._fetch_globals()
-
-    def _fetch_globals(self):
-        queryenv = bus.queryenv_service
-        glob_vars = queryenv.list_global_variables()
-        os.environ.update(glob_vars)
-
-        if 'Windows' == os_dist['family']:
-            pass
-        else:
-            with open('/etc/profile.d/scalr_globals.sh', 'w') as fp:
-                for kv in glob_vars.items():
-                    fp.write('export %s="%s"\n' % kv)
+        #if __node__['state'] !=  ScalarizrState.IMPORTING:
+        if __node__['state'] == 'running':
+            scalarizr.handlers.sync_globals()
 
 
     def _assign_hostname(self):
@@ -187,12 +191,49 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         optparser = bus.optparser
         
-        if Flag.exists(Flag.REBOOT) or Flag.exists(Flag.HALT):
+        if os_dist['family'] != 'Windows':
+            if os.path.exists(self.saved_boot_id_file):
+                saved_boot_id = None
+                current_boot_id = None
+                with open(self.boot_id_file, 'r') as fp:
+                    current_boot_id = fp.read()
+                with open(self.saved_boot_id_file, 'r') as fp:
+                    saved_boot_id = fp.read()
+
+                if saved_boot_id and saved_boot_id != current_boot_id \
+                    and not Flag.exists(Flag.HALT):
+                    Flag.set(Flag.REBOOT)
+
+            with open(self.boot_id_file, 'r') as fp:
+                current_boot_id = fp.read()
+                with open(self.saved_boot_id_file, 'w') as saved_fp:
+                    saved_fp.write(current_boot_id)
+
+        if Flag.exists(Flag.REBOOT):
             self._logger.info("Scalarizr resumed after reboot")
             Flag.clear(Flag.REBOOT)
-            Flag.clear(Flag.HALT)
-            self._check_control_ports() 
+            self._check_control_ports()
             self._start_after_reboot()
+
+        elif Flag.exists(Flag.HALT):
+            self._logger.info("Scalarizr resumed after server stop")
+            Flag.clear(Flag.HALT)
+            self._check_control_ports()
+
+            queryenv = bus.queryenv_service
+            farm_role_params = queryenv.list_farm_role_params(farm_role_id=__node__['farm_role_id'])
+            try:
+                resume_strategy = farm_role_params['params']['base']['resume_strategy']
+            except KeyError:
+                resume_strategy = 'reboot'
+
+            if resume_strategy == 'reboot':
+                self._start_after_reboot()
+
+            elif resume_strategy == 'init':
+                __node__['state'] = ScalarizrState.BOOTSTRAPPING
+                self._logger.info('Scalarizr will re-initialize server due to resume strategy')
+                self._start_init()
 
         elif optparser and optparser.values.import_server:
             self._logger.info('Server will be imported into Scalr')
@@ -231,6 +272,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         
         # Prepare HostInit
         msg = self.new_message(Messages.HOST_INIT, dict(
+            seconds_since_start=float('%.2f' % (time.time() - __node__['start_time'], )),
+            seconds_since_boot=float('%.2f' % (time.time() - metadata.boot_time(), )),
             operation_id = bus.init_op.operation_id,
             crypto_key = new_crypto_key,
             snmp_port = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
@@ -311,7 +354,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
                     + "Cross-scalarizr messaging not initialized")
 
-        self._fetch_globals()
+        # Not necessary, cause we've got fresh GV in HIR
+        # scalarizr.handlers.sync_globals()
         self._assign_hostname()
 
 
@@ -322,12 +366,16 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             t = threading.Thread(name='IntMessageConsumer', target=srv.get_consumer().start)
             t.start()
 
+
     def _check_control_ports(self):
-        if STATE['global.api_port'] != 8010 or STATE['global.msg_port'] != 8013:
-            # API or Messaging on non-default port
+        defaults = __node__['defaults']['base']
+        ports_changed = __node__['base']['api_port'] != defaults['api_port'] \
+                or __node__['base']['messaging_port'] != defaults['messaging_port']
+        if ports_changed:
+            # @deprecated. expires 2014/04
             self.send_message(Messages.UPDATE_CONTROL_PORTS, {
-                'api': STATE['global.api_port'],
-                'messaging': STATE['global.msg_port'],
+                'api': __node__['base']['api_port'],
+                'messaging': __node__['base']['messaging_port'],
                 'snmp': 8014
             })
 
@@ -399,18 +447,6 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if message.local_ip != __node__['private_ip']:
             return
 
-        volumes = message.body.get('volumes', [])
-        volumes = volumes or []
-        
-        for volume in volumes:
-            try:
-                volume = storage2.volume(volume)
-                volume.umount()
-                volume.detach()
-            except:
-                self._logger.warn('Failed to detach volume %s: %s', 
-                        volume.id, sys.exc_info()[1])
-
         if __node__['platform'] == 'cloudstack':
             # Important! 
             # After following code run, server will loose network for some time
@@ -425,7 +461,25 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                     self._logger.warn('Failed to disable static NAT: %s', 
                             str(sys.exc_info()[1]))
 
-        elif __node__['platform'] == 'openstack':
+        suspend = message.body.get('suspend')
+        suspend = suspend and int(suspend) or False
+
+        if suspend:
+            return
+
+        volumes = message.body.get('volumes', [])
+        volumes = volumes or []
+
+        for volume in volumes:
+            try:
+                volume = storage2.volume(volume)
+                volume.umount()
+                volume.detach()
+            except:
+                self._logger.warn('Failed to detach volume %s: %s',
+                        volume.id, sys.exc_info()[1])
+
+        if __node__['platform'] == 'openstack':
             conn = __node__['openstack']['new_nova_connection']
             conn.reconnect()
 
@@ -447,15 +501,12 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         system2([sys.executable, up_script], close_fds=True)
         Flag.set('update')
 
-
-    def on_before_message_send(self, queue, message):
-        """
-        Add scalarizr version to meta
-        """
-        message.meta.update({
-            'szr_version': scalarizr.__version__,
-            'timestamp': time.strftime("%a %d %b %Y %H:%M:%S %Z", time.gmtime())
-        })
+    def on_block_device_mounted(self, volume):
+        self.send_message(Messages.BLOCK_DEVICE_MOUNTED, {
+            'device_name': volume.device,
+            'volume_id': volume.id,
+            'mountpoint': volume.mpoint            
+            })
 
 
 class IntMessagingService(object):

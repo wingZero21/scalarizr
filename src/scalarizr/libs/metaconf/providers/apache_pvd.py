@@ -30,7 +30,7 @@ class ApacheFormatProvider(IniFormatProvider):
     def create_element(self, etree, path, value):
         el = FormatProvider.create_element(self, etree, path, value)
         parent_path = os.path.dirname(path)
-        if parent_path not in  ('.', ''):
+        if parent_path not in ('.', ''):
             parent = etree.find(parent_path)
             # We are sure that parent element exists, because Configuration calls private method '_find' first
             if parent.attrib.has_key('mc_type') and parent.attrib['mc_type'] != 'section':
@@ -107,9 +107,11 @@ class ApacheFormatProvider(IniFormatProvider):
 
                 line += new_line
                 stripped = new_line.strip()
-                if stripped.startswith('</'+tag+'>'):
+                lower = stripped.lower()
+                tag_lower = tag.lower()
+                if lower.startswith('</'+tag_lower+'>'):
                     opened -= 1
-                if stripped.startswith('<'+tag):
+                if lower.startswith('<'+tag_lower):
                     opened += 1
 
             self._sections.append(self._cursect)
@@ -125,7 +127,6 @@ class ApacheFormatProvider(IniFormatProvider):
 
     def write_section(self, fp, node):
         if node.attrib.has_key('mc_type') and node.attrib['mc_type'] == 'section':
-            text = node.text.strip()
             value = ' ' + node.attrib['value'] if node.attrib.has_key('value') else ''
             tag = unquote(node.tag)
             fp.write(self._pad*self._nesting + '<' + tag + value + '>\n')

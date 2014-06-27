@@ -41,15 +41,7 @@ RABBITMQ_SERVER = software.which('rabbitmq-server')
 # RabbitMQ from ubuntu repo puts rabbitmq-plugins
 # binary in non-obvious place
 
-try:
-    RABBITMQ_PLUGINS = software.which('rabbitmq-plugins')
-except LookupError:
-    possible_path = '/usr/lib/rabbitmq/bin/rabbitmq-plugins'
-
-    if os.path.exists(possible_path):
-        RABBITMQ_PLUGINS = possible_path
-    else:
-        raise
+RABBITMQ_PLUGINS = software.which('rabbitmq-plugins', '/usr/lib/rabbitmq/bin/')
 
 RABBITMQ_VERSION = software.rabbitmq_software_info().version
 
@@ -83,7 +75,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
     reload = restart
 
     def start(self):
-        hostname = RABBIT_HOSTNAME_TPL % __rabbitmq__['server_index']
+        hostname = RABBIT_HOSTNAME_TPL % __node__['server_index']
         nodename = NODE_HOSTNAME_TPL % hostname
 
         env = {'RABBITMQ_PID_FILE': '/var/run/rabbitmq/pid',
@@ -92,7 +84,6 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 
         run_detached(RABBITMQ_SERVER, args=['-detached'], env=env)
         initdv2.wait_sock(self.socks[0])
-
 
     def status(self):
         if self._running:
@@ -115,10 +106,8 @@ class RabbitMQ(object):
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
-            cls._instance = super(RabbitMQ, cls).__new__(
-                                                    cls, *args, **kwargs)
+            cls._instance = super(RabbitMQ, cls).__new__(cls, *args, **kwargs)
         return cls._instance
-
 
     def __init__(self):
         self._logger = logging.getLogger(__name__)

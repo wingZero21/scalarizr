@@ -19,6 +19,7 @@ from scalarizr.util import Singleton
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
 
+
 __nginx__ = __node__['nginx']
 
 
@@ -51,7 +52,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                                                 'nginx',
                                                 '/etc/init.d/nginx',
                                                 pid_file=pid_file,
-                                                socks=[initdv2.SockParam(80)])
+                                                socks=[])
 
     def _wait_workers(self):
         conf_dir = os.path.dirname(__nginx__['app_include_path'])
@@ -67,17 +68,25 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
             time.sleep(1)
             out = system2(['ps -C nginx --noheaders'], shell=True)[0]
 
-
     def status(self):
-        status = initdv2.ParametrizedInitScript.status(self)
-        if not status and self.socks:
+        status = initdv2.Status.UNKNOWN
+        if self.socks:
             ip, port = self.socks[0].conn_address
-            telnet = Telnet(ip, port)
+            try:
+                telnet = Telnet(ip, port)
+            except:
+                return status
             telnet.write('HEAD / HTTP/1.0\n\n')
             if 'server: nginx' in telnet.read_all().lower():
                 return initdv2.Status.RUNNING
             return initdv2.Status.UNKNOWN
-        return status
+        else:
+            args = [self.initd_script, 'status']
+            _, _, returncode = system2(args, raise_exc=False)
+            if returncode == 0:
+                return initdv2.Status.RUNNING
+            else:
+                return initdv2.Status.NOT_RUNNING
 
     def configtest(self, path=None):
         args = '%s -t' % self._nginx_binary
@@ -90,19 +99,23 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def stop(self):
         if not self.running:
-            return True
+            return
         ret = initdv2.ParametrizedInitScript.stop(self)
         time.sleep(1)
-        return ret
+        return
 
     def restart(self):
         self.configtest()
         ret = initdv2.ParametrizedInitScript.restart(self)
         time.sleep(1)
-        return ret
+        return
 
     def start(self):
         self.configtest()
+
+        if self.running:
+            return
+
         try:
             args = [self.initd_script] \
                 if isinstance(self.initd_script, basestring) \
@@ -129,6 +142,12 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
             else:
                 raise
 
+    def set_port_to_check(self, port):
+        _logger.debug('setting NginxInitScript port to check to: %s' % port)
+        if port:
+            self.socks = [initdv2.SockParam(port)]
+        else:
+            self.socks = []
 
 def _open_port(port):
     if iptables.enabled():
@@ -165,7 +184,7 @@ class NginxAPI(object):
             app_inc_dir = os.path.dirname(__nginx__['app_include_path'])
         self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
         self._load_app_servers_inc()
-        self._fix_app_servers_inc()
+        self.fix_app_servers_inc()
 
         if not proxies_inc_dir:
             proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
@@ -191,12 +210,14 @@ class NginxAPI(object):
         error_pages_dir = os.path.dirname(__nginx__['app_include_path'])
         self.error_pages_inc = os.path.join(error_pages_dir,
                                             'error-pages.include')
-
-        error_pages_conf = metaconf.Configuration('nginx')
-        _add_static_location(error_pages_conf, '/500.html', '0')
-        _add_static_location(error_pages_conf, '/502.html', '0')
-        _add_static_location(error_pages_conf, '/noapp.html')
-        error_pages_conf.write(self.error_pages_inc)
+        # error-pages.include is overwritten only if it is not exist,
+        # so clients can modify it and be sure their changes are persist
+        if not os.path.exists(self.error_pages_inc):
+            error_pages_conf = metaconf.Configuration('nginx')
+            _add_static_location(error_pages_conf, '/500.html', '0')
+            _add_static_location(error_pages_conf, '/502.html', '0')
+            _add_static_location(error_pages_conf, '/noapp.html')
+            error_pages_conf.write(self.error_pages_inc)
 
     def _save_proxies_inc(self):
         self.proxies_inc.write(self.proxies_inc_path)
@@ -220,7 +241,7 @@ class NginxAPI(object):
             _logger.debug('Creating app-servers.include')
             open(self.app_inc_path, 'w').close()
 
-    def _fix_app_servers_inc(self):
+    def fix_app_servers_inc(self):
         _logger.debug('Fixing app servers include')
         https_inc_xpath = self.app_servers_inc.xpath_of('include',
                                                         '/etc/nginx/https.include')
@@ -252,7 +273,7 @@ class NginxAPI(object):
         self._load_proxies_inc()
 
     def _reload_service(self):
-        if self.service.status() == initdv2.Status.NOT_RUNNING:
+        if self.service.status() != initdv2.Status.RUNNING:
             self.service.start()
         else:
             self.service.reload()
@@ -511,7 +532,7 @@ class NginxAPI(object):
                 key = 'server'
             else:
                 key = template['location']
-            result[key] = {'content': template['content']}
+            result[key] = {'content': template['content'] or ''}
         return result
 
     def _add_backend(self,
@@ -692,7 +713,7 @@ class NginxAPI(object):
         config.add('server/listen', str(port))
         config.add('server/server_name', hostname)
 
-        redirect_regex = '^(.*)$ https://%s:%s$request_uri? permanent' % (hostname, ssl_port)
+        redirect_regex = '^(.*)$ https://$host:%s$request_uri$is_args$args? permanent' % ssl_port
         config.add('server/rewrite', redirect_regex)
 
         return config
@@ -736,6 +757,26 @@ class NginxAPI(object):
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 
 
+    def _add_default_template(self, config):
+        config.add('server/proxy_set_header', 'Host $host')
+        config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
+        config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
+        config.add('server/client_max_body_size', '10m')
+        config.add('server/client_body_buffer_size', '128k')
+        config.add('server/proxy_buffering', 'on')
+        config.add('server/proxy_connect_timeout', '15')
+        config.add('server/proxy_intercept_errors', 'on')
+
+        # default SSL params
+        config.add('server/ssl_session_timeout', '10m')
+        config.add('server/ssl_session_cache', 'shared:SSL:10m')
+        config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
+        config.add('server/ssl_ciphers', 
+                   'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
+        config.add('server/ssl_prefer_server_ciphers', 'on')
+
+        self._add_noapp_handler(config)
+
     def _make_server_conf(self,
                           hostname,
                           locations_and_backends,
@@ -766,23 +807,8 @@ class NginxAPI(object):
             config.insert_conf(template_conf, 'server')
             os.remove(temp_file)
         else:
-            config.add('server/proxy_set_header', 'Host $host')
-            config.add('server/proxy_set_header', 'X-Real-IP $remote_addr')
-            config.add('server/proxy_set_header', 'X-Forwarded-For $proxy_add_x_forwarded_for')
-            config.add('server/client_max_body_size', '10m')
-            config.add('server/client_body_buffer_size', '128k')
-            config.add('server/proxy_buffering', 'on')
-            config.add('server/proxy_connect_timeout', '15')
-            config.add('server/proxy_intercept_errors', 'on')
-
-            # default SSL params
-            config.add('server/ssl_session_timeout', '10m')
-            config.add('server/ssl_session_cache', 'shared:SSL:10m')
-            config.add('server/ssl_protocols', 'SSLv2 SSLv3 TLSv1')
-            config.add('server/ssl_ciphers', 
-                       'ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP')
-            config.add('server/ssl_prefer_server_ciphers', 'on')
-
+            self._add_default_template(config)
+        
         if port:
             config.add('server/listen', str(port))
         try:
@@ -795,10 +821,8 @@ class NginxAPI(object):
         if ssl:
             self._add_ssl_params(config, 'server', ssl_port, ssl_certificate_id, port!=None)
 
-        self._add_noapp_handler(config)
         config.add('server/include', self.error_pages_inc)
         
-
         # Adding locations leading to defined backends
 
         for i, (location, backend_name) in enumerate(locations_and_backends):
@@ -999,6 +1023,9 @@ class NginxAPI(object):
         if reload_service:
             self._reload_service()
 
+        if port:
+            self.service.set_port_to_check(port)
+
     def _remove_backend(self, name):
         """
         Removes backend with given name from app-servers config.
@@ -1029,14 +1056,23 @@ class NginxAPI(object):
                     backend = backend.replace('http://', '')
                     self._remove_backend(backend)
 
-                for port in self.proxies_inc.get_list('%s/listen' % server_xpath):
-                    port = port.split()[0]
+                for addr in self.proxies_inc.get_list('%s/listen' % server_xpath):
+                    port = addr.split()[0]
                     _close_port(port)
 
                 xpaths_to_remove.append(server_xpath)
 
         for xpath in reversed(xpaths_to_remove):
             self.proxies_inc.remove(xpath)
+
+    def _get_any_port(self, config):
+        port = None
+        try:
+            addr = self.proxies_inc.get('server[1]/listen' % server_xpath)
+            port = addr.split()[0]
+        except metaconf.NoPathError:
+            pass
+        return port
 
     @rpc.command_method
     def remove_proxy(self, hostname, reload_service=True):
@@ -1055,6 +1091,8 @@ class NginxAPI(object):
         for backend_name in self.backend_table.keys():
             if hostname == self._backend_nameparts(backend_name)[0]:
                 self.backend_table.pop(backend_name)
+
+        self.service.set_port_to_check(self._get_any_port(self.proxies_inc))
 
         self._save_proxies_inc()
         self._save_app_servers_inc()

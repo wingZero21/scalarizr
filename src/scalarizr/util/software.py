@@ -5,9 +5,9 @@ Created on Sep 10, 2010
 @author: marat
 """
 
-from scalarizr.util import system2
+from scalarizr.util import system2, PopenError
 from scalarizr import linux
-from scalarizr.linux import coreutils, pkgmgr
+from scalarizr.linux import coreutils, pkgmgr, which
 import os, re, zipfile, glob, platform
 
 __all__ = ('all_installed', 'software_info', 'explore', 'which')
@@ -32,20 +32,6 @@ def explore(name, lookup_fn):
 
         raise Exception("'%s' software has been already explored" % name)
     software_list[name] = lookup_fn
-
-
-def which(name, *extra_dirs):
-    '''
-    Search executable in /bin /sbin /usr/bin /usr/sbin /usr/libexec /usr/local/bin /usr/local/sbin
-    @rtype: tuple
-    '''
-    try:
-        places = ['/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/libexec', '/usr/local/bin', '/usr/local/sbin']
-        places.extend(extra_dirs)
-        return [os.path.join(place, name) for place in places if os.path.exists(os.path.join(place, name))][0]
-    except IndexError:
-        return False
-        #raise LookupError("Command '%s' not found" % name)
 
 
 def system_info(verbose=False):
@@ -150,7 +136,7 @@ def mysql_software_info():
 explore('mysql', mysql_software_info)
 
 def nginx_software_info():
-    binary = which('nginx', '/usr/local/nginx/sbin')
+    binary = which('nginx', path_append='/usr/local/nginx/sbin')
     if not binary:
         raise SoftwareError("Can't find executable for Nginx server")
 
@@ -251,21 +237,26 @@ explore('mysql-proxy', mysqlproxy_software_info)
 
 def apache_software_info():
 
-    binary_name = "httpd" if linux.os.redhat_family else "apache2"
+    binary_name = "httpd" if linux.os.redhat_family else "apache2ctl"
     binary = which(binary_name)
     if not binary:
         raise SoftwareError("Can't find executable for apache http server")
 
-    out = system2((binary, '-V'))[0]
-    if not out:
-        raise SoftwareError
+    try:
+        out = system2((binary, '-V'))[0]
+    except PopenError, e:
+        pkg_mgr = pkgmgr.package_mgr()
+        version_string = pkg_mgr.info('apache2')['installed']
+    else:
+        if not out:
+            raise SoftwareError
+        version_string = out.splitlines()[0]
 
-    version_string = out.splitlines()[0]
     res = re.search('[\d\.]+', version_string)
     if res:
         version = res.group(0)
+        return SoftwareInfo('apache', version, version_string)
 
-        return SoftwareInfo('apache', version, out)
     raise SoftwareError
 
 
@@ -385,6 +376,8 @@ explore('cassandra', cassandra_software_info)
 
 
 def rabbitmq_software_info():
+    if linux.os.windows_family:
+        raise SoftwareError()
 
     pkg_mgr = pkgmgr.package_mgr()
     version = pkg_mgr.info('rabbitmq-server')['installed']
@@ -456,7 +449,7 @@ def chef_software_info():
     if not binary:
         raise SoftwareError("Can't find executable for chef client")
 
-    version_string = system2((binary, '-v'))[0].strip()
+    version_string = linux.system((binary, '-v'), shell=bool(linux.os.windows))[0].strip()
     if not version_string:
         raise SoftwareError
 
