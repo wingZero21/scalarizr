@@ -732,7 +732,8 @@ class Service(object):
             
         if node.__node__['state'] != 'importing':
             self._talk_to_updclient()
-        else:
+
+        if node.__node__['state'] != 'running':
             try:
                 pkgmgr.updatedb()
             except:

@@ -163,8 +163,7 @@ class RabbitMQHandler(ServiceCtlHandler):
             rabbit_version = software.rabbitmq_software_info()
             panel_port = 55672 if rabbit_version.version <= (3, 0, 0) else 15672
 
-            panel_url = 'http://%s:%d/mgmt/' % (self.platform.get_public_ip(), panel_port)
-            msg_body = dict(status='ok', cpanel_url=panel_url)
+            msg_body = dict(status='ok', port=panel_port)
         except:
             error = str(sys.exc_info()[1])
             msg_body = dict(status='error', last_error=error)
