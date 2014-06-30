@@ -22,7 +22,7 @@ import time
 import pkg_resources
 import multiprocessing
 
-from scalarizr import linux, queryenv, rpc, config
+from scalarizr import linux, queryenv, rpc, config, __version__
 from scalarizr.api import operation
 from scalarizr.api.binding import jsonrpc_http
 from scalarizr.bus import bus
@@ -780,6 +780,7 @@ class UpdClientAPI(object):
             status['service_status'] = 'running' if self.daemon.running else 'stopped'
         else:
             status['service_status'] = 'unknown'
+        status['service_version'] = __version__
         return status
             
 
