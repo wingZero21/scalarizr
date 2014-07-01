@@ -68,13 +68,10 @@ PID_FILE = '/var/run/chef-client.pid'
 def extract_json_attributes(chef_data):
     json_attributes = json.loads(chef_data.get('json_attributes', "{}"))
 
-    if any(map(lambda x: x in chef_data, ('run_list', 'role'))):
-        if chef_data.get('run_list'):
-            run_list = json.loads(chef_data['run_list'])
-        elif chef_data.get('role'):
-            run_list = ["role[%s]" % chef_data['role']]
-
-        json_attributes['run_list'] = run_list
+    if chef_data.get('run_list'):
+        json_attributes['run_list'] = json.loads(chef_data['run_list'])
+    elif chef_data.get('role'):
+        json_attributes['run_list'] = ["role[%s]" % chef_data['role']]
 
     return json_attributes
 
@@ -309,7 +306,7 @@ class ChefClient(object):
         self.chef_server_url = chef_server_url
         self.validation_pem = validation_pem
 
-        self.json_attributes = json_attributes
+        self.json_attributes = json_attributes or dict()
 
         self.node_name = node_name
         self.validator_name = validator_name
@@ -359,6 +356,9 @@ class ChefClient(object):
                 finally:
                     os.remove(VALIDATOR_KEY_PATH)
 
+        with open(JSON_ATTRIBUTES_PATH, 'w+') as fp:
+            json.dump(self.json_attributes, fp)
+
 
     def _run_chef_client(self, validate=False):
         system2(self.get_cmd(validate=validate),
@@ -383,10 +383,6 @@ class ChefClient(object):
 
     def run(self):
         LOG.info('Applying Chef run list %s' % self.json_attributes.get('run_list', list()))
-
-        with open(JSON_ATTRIBUTES_PATH, 'w+') as fp:
-            json.dump(self.json_attributes, fp)
-
         self._run_chef_client()
 
 

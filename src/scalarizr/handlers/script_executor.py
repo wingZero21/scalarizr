@@ -624,6 +624,7 @@ class BaseChefScript(Script):
 class ChefClientScript(BaseChefScript):
 
     def __init__(self, **kwds):
+        self.name = kwds.get("name") or "chef-client-script.%s.%s" % (kwds.get('event_name', ''), time.time())
         self.chef_params = kwds.pop('chef')
         self.with_json_attributes = extract_json_attributes(self.chef_params)
 
@@ -656,7 +657,7 @@ class ChefSoloScript(BaseChefScript):
 
 
     def __init__(self, **kwds):
-        self.name = kwds.get("name") or "chef-solo-script.%s" % time.time()
+        self.name = kwds.get("name") or "chef-solo-script.%s.%s" % (kwds.get('event_name', ''), time.time())
         self.chef_params = kwds.pop("chef")
         self.with_json_attributes = extract_json_attributes(self.chef_params)
 
