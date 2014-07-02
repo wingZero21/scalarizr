@@ -1,8 +1,35 @@
 #!/bin/bash
 
-is_latest=$(grep -q latest /etc/scalr/updclient.ini && echo -n 'true' || echo -n 'false')
-repo=$($is_latest && echo -n 'latest' || echo -n 'stable')
-platform=$(grep '^platform' /etc/scalr/public.d/config.ini | awk '{print $3}')
+set -x
+
+function get_ini() {
+	grep "^$2" /etc/scalr/$1 | awk '{print $3}'
+}
+
+function get_repo() {
+	local farm_role_id=$(get_ini 'private.d/config.ini' 'farm_role_id')
+	if [ -n $farm_role_id ]; then
+		local xml=$(/usr/local/bin/szradm -q list-farm-role-params farm-role-id=$farm_role_id)
+		local python=$([[ $(python -V 2>&1) == *2.4.* ]] && echo -n 'python26' || echo -n 'python')
+		read -d '' pyxpath <<-EOC
+			import sys;
+			import xml.etree.ElementTree as ET;
+			xml = ET.fromstring(sys.stdin.read());
+			print xml.find(sys.argv[1]).text.strip();
+			EOC
+		echo $xml | $python -c "$pyxpath" '*/update/repository'
+	else
+		get_repo_bad_way	
+	fi
+}
+
+function get_repo_bad_way() {
+	grep -q latest /etc/scalr/updclient.ini && echo -n 'latest' || echo -n 'stable'
+}
+
+repo=$(get_repo)
+is_latest=$([ $repo = 'latest' ] && echo -n 'true' || echo -n 'false')
+platform=$(get_ini 'public.d/config.ini' 'platform')
 
 if which apt-get 1>&2 2>/dev/null; then
 	rm -f /etc/apt/sources.list.d/scalr*
