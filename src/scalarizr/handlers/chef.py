@@ -66,7 +66,7 @@ else:
 PID_FILE = '/var/run/chef-client.pid'
 
 def extract_json_attributes(chef_data):
-    json_attributes = json.loads(chef_data.get('json_attributes', "{}"))
+    json_attributes = json.loads(chef_data.get('json_attributes') or "{}")
 
     if chef_data.get('run_list'):
         json_attributes['run_list'] = json.loads(chef_data['run_list'])

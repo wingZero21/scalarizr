@@ -609,7 +609,7 @@ class BaseChefScript(Script):
                 'run_as': self.run_as}
 
 
-    def _get_shebang(self):
+    def _get_body(self):
         shebang = "#!%s" % ("cmd" if linux.os.windows_family else "/bin/bash")
         return shebang + "\n" + " ".join(self.chef.get_cmd())
 
@@ -636,7 +636,7 @@ class ChefClientScript(BaseChefScript):
                                       self.chef_params.get('environment'),
                                       kwds.get("environ"))
 
-        self.body = self._get_shebang()
+        self.body = self._get_body()
         super(ChefClientScript, self).__init__(**kwds)
 
 
@@ -671,7 +671,7 @@ class ChefSoloScript(BaseChefScript):
                                    temp_dir=kwds.get("temp_dir"))
 
         self.chef_temp_dir = self.chef.temp_dir
-        self.body = self._get_shebang()
+        self.body = self._get_body()
         super(ChefSoloScript, self).__init__(**kwds)
 
     def state(self):
