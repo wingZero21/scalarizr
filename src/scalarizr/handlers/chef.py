@@ -293,8 +293,8 @@ class ChefHandler(Handler):
 class ChefClient(object):
 
     def __init__(self,
-                 chef_server_url,
-                 json_attributes,
+                 chef_server_url=None,
+                 json_attributes=None,
                  node_name=None,
                  validator_name=None,
                  validation_pem=None,
@@ -317,17 +317,18 @@ class ChefClient(object):
 
     def prepare(self):
         if os.path.exists(CLIENT_KEY_PATH) and os.path.exists(CLIENT_CONF_PATH):
-            with open(CLIENT_CONF_PATH) as f:
-                for line in f:
-                    if line.strip().startswith("chef_server_url"):
-                        splitted_line = line.strip().split(None, 1)
-                        if len(splitted_line) != 2:
-                            break
-                        server_url = splitted_line[1].strip("'\"")
-                        if server_url == self.chef_server_url:
-                            break
-                        raise Exception("Can not configure chef to use {0} as server url, because it's"
-                            ' already configured to use {1}'.format(self.chef_server_url, server_url))
+            if self.chef_server_url:
+                with open(CLIENT_CONF_PATH) as f:
+                    for line in f:
+                        if line.strip().startswith("chef_server_url"):
+                            splitted_line = line.strip().split(None, 1)
+                            if len(splitted_line) != 2:
+                                break
+                            server_url = splitted_line[1].strip("'\"")
+                            if server_url == self.chef_server_url:
+                                break
+                            raise Exception("Can not configure chef to use {0} as server url, because it's"
+                                ' already configured to use {1}'.format(self.chef_server_url, server_url))
         else:
             assert self.node_name
             assert self.chef_server_url

@@ -628,13 +628,13 @@ class ChefClientScript(BaseChefScript):
         self.chef_params = kwds.pop('chef')
         self.with_json_attributes = extract_json_attributes(self.chef_params)
 
-        self.chef = ChefClient(self.chef_params['server_url'],
-                                      self.with_json_attributes,
-                                      self.chef_params.get('node_name'),
-                                      self.chef_params.get('validator_name'),
-                                      self.chef_params.get('validator_key'),
-                                      self.chef_params.get('environment'),
-                                      kwds.get("environ"))
+        self.chef = ChefClient(self.chef_params.get('server_url'),
+                               self.with_json_attributes,
+                               self.chef_params.get('node_name'),
+                               self.chef_params.get('validator_name'),
+                               self.chef_params.get('validator_key'),
+                               self.chef_params.get('environment'),
+                               kwds.get("environ"))
 
         self.body = self._get_body()
         super(ChefClientScript, self).__init__(**kwds)
@@ -662,13 +662,13 @@ class ChefSoloScript(BaseChefScript):
         self.with_json_attributes = extract_json_attributes(self.chef_params)
 
         self.chef = ChefSolo(self.chef_params.get("cookbook_url"),
-                                   self.chef_params.get("cookbook_url_type"),
-                                   self.with_json_attributes,
-                                   self.chef_params.get("relative_path"),
-                                   kwds.get("environ"),
-                                   self.chef_params.get("ssh_private_key"),
-                                   run_as=kwds.get("run_as"),
-                                   temp_dir=kwds.get("temp_dir"))
+                             self.chef_params.get("cookbook_url_type"),
+                             self.with_json_attributes,
+                             self.chef_params.get("relative_path"),
+                             kwds.get("environ"),
+                             self.chef_params.get("ssh_private_key"),
+                             run_as=kwds.get("run_as"),
+                             temp_dir=kwds.get("temp_dir"))
 
         self.chef_temp_dir = self.chef.temp_dir
         self.body = self._get_body()
