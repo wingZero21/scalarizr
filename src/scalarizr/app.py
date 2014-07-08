@@ -969,6 +969,9 @@ class Service(object):
                 except exceptions.NotFound as e:
                     logger.error(e)
                 except exceptions.UnsupportedBehavior as e:
+                    if e.args[0] == 'chef':
+                        # We pass it, cause a lot of roles has chef behavior without chef installed on them
+                        continue
                     node.__node__['messaging'].send(
                         'RuntimeError',
                         body={
