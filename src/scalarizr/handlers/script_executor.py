@@ -385,10 +385,10 @@ class Script(object):
                 self.body = '\n'.join(self.body.splitlines()[1:])
 
         if self.interpreter == 'powershell' \
-                and os.path.splitext(self.exec_path)[1] not in ('ps1', 'psm1'):
+                and os.path.splitext(self.exec_path)[1] not in ('.ps1', '.psm1'):
             self.exec_path += '.ps1'
         elif self.interpreter == 'cmd' \
-                and os.path.splitext(self.exec_path)[1] not in ('cmd', 'bat'):
+                and os.path.splitext(self.exec_path)[1] not in ('.cmd', '.bat'):
             self.exec_path += '.bat'
 
         if self.path and not os.access(self.path, os.X_OK):
