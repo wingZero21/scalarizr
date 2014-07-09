@@ -568,8 +568,11 @@ if [ -x $INIT_SCRIPT ]; then
 		rm -f /etc/init.d/scalarizr_update
 		update-rc.d scalarizr_update remove || :
 		update-rc.d -f $NAME remove || :
-		#update-rc.d scalarizr stop 99 0 1 6 .
-		update-rc.d $NAME defaults 99 >/dev/null
+		if test -e /etc/issue.net && grep -q '10.04' /etc/issue.net; then
+			update-rc.d $NAME defaults 99 >/dev/null
+		else
+			update-rc.d scalarizr stop 99 0 1 6 .
+		fi
 		update-rc.d scalr-upd-client defaults 98 >/dev/null
 	fi
 
