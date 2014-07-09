@@ -71,22 +71,17 @@ class RedisAPI(BehaviorAPI):
         assert not (ports is not None and indexes is not None)
         self._reinit_instances()
 
-        if not ports and not indexes:
+        if ports is None and indexes is None:
             return self.redis_instances.instances
 
-        if ports:
+        if ports is not None:
             if not isinstance(ports, list):
                 ports = [ports]
-            indexes = []
-            for port in ports:
-                port = int(port)
-                if port not in self.redis_instances.ports:
-                    raise Exception('Redis is not configured to use given port. Port: %s' % port)
-                indexes.append(self.redis_instances.ports.index(port))
+            return [self.redis_instances.get_instance(str(port)) for port in ports]
+
         if not isinstance(indexes, list):
             indexes = [indexes]
-        indexes = [int(i) for i in indexes]
-        return [self.redis_instances.instances[index] for index in indexes]
+        return [self.redis_instances.instances[int(index)] for index in indexes]
 
     @rpc.command_method
     def start_service(self, ports=None, indexes=None):
