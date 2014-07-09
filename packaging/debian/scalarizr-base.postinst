@@ -538,6 +538,7 @@ if [ -n "$installed_version" ]; then
 fi
 
 chown -R root:root /etc/scalr
+chmod 755 /etc/scalr
 chmod 775 /etc/scalr/private.d
 sync
 
