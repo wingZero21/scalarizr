@@ -54,8 +54,6 @@ class Service(Command):
     # TODO: add usage for mongo:
     # service mongodb (start | stop | status) [(mongos | mongod | 
     #        configsrv | configsrv-2 | configsrv-3 | arbiter)]
-    
-    # status return codes
 
     aliases = ['s']
 
