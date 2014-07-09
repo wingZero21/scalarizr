@@ -80,9 +80,12 @@ class Service(Command):
             print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
-    def _display_service_status(self, service):
+    def _display_service_status(self, service, **kwds):
         api = service_apis[service]()
-        status = api.get_service_status()
+        for key, value in kwds.items():
+            if value == None:
+                kwds.pop(key)
+        status = api.get_service_status(**kwds)
 
         if service == 'redis':
             return self._print_redis_status(status)
@@ -109,10 +112,10 @@ class Service(Command):
                 status_string = 'running'
             print '- port: %s\n  status: %s' % (port, status_string)
 
-        overall_status = set(statuses.items())
+        overall_status = set(statuses.values())
         if len(overall_status) > 1:
             return self.MIXED_RETURN_CODE
-        if overall_status[0] == initdv2.Status.RUNNING:
+        if overall_status.pop() == initdv2.Status.RUNNING:
             return self.RUNNING_RETURN_CODE
         return self.STOPPED_RETURN_CODE
 
@@ -155,7 +158,8 @@ class Service(Command):
             # TODO: finish
 
         if service not in service_apis:
-            raise CommandError('Unknown service/behavior.')
+            print 'Unknown service/behavior.'
+            return self.UNKNOWN_RETURN_CODE
 
         if service not in __node__['behavior']:
             print 'Not installed service/behavior.'
@@ -166,7 +170,7 @@ class Service(Command):
         elif stop:
             return self._stop_service(service, indexes=index, ports=port)
         elif status:
-            return self._display_service_status(service)
+            return self._display_service_status(service, indexes=index, ports=port)
 
 
 commands = [Service]
