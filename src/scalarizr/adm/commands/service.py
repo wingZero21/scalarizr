@@ -157,6 +157,10 @@ class Service(Command):
         if service not in service_apis:
             raise CommandError('Unknown service/behavior.')
 
+        if service not in __node__['behavior']:
+            print 'Not installed service/behavior.'
+            return self.UNKNOWN_RETURN_CODE
+
         if start:
             return self._start_service(service, indexes=index, ports=port)
         elif stop:
