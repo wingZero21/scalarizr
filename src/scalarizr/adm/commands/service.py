@@ -62,6 +62,7 @@ class Service(Command):
             if value == None:
                 kwds.pop(key)
         try:
+            print 'Starting %s' % service
             api.start_service(**kwds)
         except (BaseException, Exception), e:
             print 'Service start failed.\n%s' % e
@@ -73,6 +74,7 @@ class Service(Command):
             if value == None:
                 kwds.pop(key)
         try:
+            print 'Stopping %s' % service
             api.stop_service(**kwds)
         except (BaseException, Exception), e:
             print 'Service stop failed.\n%s' % e
