@@ -33,6 +33,13 @@ service_apis = {
 }
 
 
+class ReturnCode:
+    RUNNING = 0
+    STOPPED = 3
+    UNKNOWN = 4
+    MIXED = 150
+
+
 class Service(Command):
     """
     Scalarizr service control.
@@ -49,10 +56,6 @@ class Service(Command):
     #        configsrv | configsrv-2 | configsrv-3 | arbiter)]
     
     # status return codes
-    RUNNING_RETURN_CODE = 0
-    STOPPED_RETURN_CODE = 3
-    UNKNOWN_RETURN_CODE = 4
-    MIXED_RETURN_CODE = 150
 
     aliases = ['s']
 
@@ -91,20 +94,20 @@ class Service(Command):
             return self._print_redis_status(status)
 
         status_string = ' is stopped'
-        code = self.STOPPED_RETURN_CODE
+        code = ReturnCode.STOPPED
         if status == initdv2.Status.RUNNING:
             status_string = ' is running'
-            code = self.RUNNING_RETURN_CODE
+            code = ReturnCode.RUNNING
         elif status == initdv2.Status.UNKNOWN:
             status_string = ' has unknown status'
-            code = self.UNKNOWN_RETURN_CODE
+            code = ReturnCode.UNKNOWN
         print service + status_string
         return code
 
     def _print_redis_status(self, statuses):
         if not statuses:
             print 'No redis configuration found.'
-            return self.STOPPED_RETURN_CODE
+            return ReturnCode.STOPPED
 
         for port, status in statuses.items():
             status_string = 'stopped'
@@ -114,10 +117,10 @@ class Service(Command):
 
         overall_status = set(statuses.values())
         if len(overall_status) > 1:
-            return self.MIXED_RETURN_CODE
+            return ReturnCode.MIXED
         if overall_status.pop() == initdv2.Status.RUNNING:
-            return self.RUNNING_RETURN_CODE
-        return self.STOPPED_RETURN_CODE
+            return ReturnCode.RUNNING
+        return ReturnCode.STOPPED
 
     def __call__(self, 
                  start=False,
@@ -159,11 +162,11 @@ class Service(Command):
 
         if service not in service_apis:
             print 'Unknown service/behavior.'
-            return self.UNKNOWN_RETURN_CODE
+            return ReturnCode.UNKNOWN
 
         if service not in __node__['behavior']:
             print 'Not installed service/behavior.'
-            return self.UNKNOWN_RETURN_CODE
+            return ReturnCode.UNKNOWN
 
         if start:
             return self._start_service(service, indexes=index, ports=port)
