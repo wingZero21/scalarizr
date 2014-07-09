@@ -13,9 +13,9 @@ def make_table(data_rows, header=None):
     """Returns PrettyTable object applicable to print"""
 
     def normalize_multiline(x):
-            if sys.version_info[0:2] < (2, 7) and type(x) == str:
-                return x.replace('\n', '')
-            return x
+        if sys.version_info[0:2] < (2, 7) and type(x) == str:
+            return x.replace('\n', '')
+        return x
 
     if not data_rows:
         data_rows = [[]]
@@ -37,7 +37,10 @@ def make_table(data_rows, header=None):
 
 def encode(obj, encoding='ascii'):
     if isinstance(obj, basestring):
-        return obj.encode(encoding)
+        try:
+            return obj.encode(encoding)
+        except UnicodeEncodeError:
+            return obj
     elif isinstance(obj, list):
         return [encode(item) for item in obj]
     elif isinstance(obj, dict):
