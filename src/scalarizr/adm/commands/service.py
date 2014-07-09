@@ -38,15 +38,22 @@ class Service(Command):
     Scalarizr service control.
 
     Usage:
-        service (start | stop | status) redis [(<index> | --port=<port>)]
-        service (start | stop | status) <service>
+        service redis (start | stop | status) [(<index> | --port=<port>)]
+        service <service> (start | stop | status)
 
     Options:
       -p <port>, --port=<port>         
     """
     # TODO: add usage for mongo:
-    # service (start | stop | status) mongodb [(mongos | mongod | 
+    # service mongodb (start | stop | status) [(mongos | mongod | 
     #        configsrv | configsrv-2 | configsrv-3 | arbiter)]
+    
+    # status return codes
+    RUNNING_RETURN_CODE = 0
+    STOPPED_RETURN_CODE = 3
+    UNKNOWN_RETURN_CODE = 4
+    MIXED_RETURN_CODE = 150
+
     aliases = ['s']
 
     def _start_service(self, service, **kwds):
@@ -79,26 +86,33 @@ class Service(Command):
             return self._print_redis_status(status)
 
         status_string = ' is stopped'
-        code = 3
+        code = self.STOPPED_RETURN_CODE
         if status == initdv2.Status.RUNNING:
             status_string = ' is running'
-            code = 0
+            code = self.RUNNING_RETURN_CODE
         elif status == initdv2.Status.UNKNOWN:
             status_string = ' has unknown status'
-            code = 4
+            code = self.UNKNOWN_RETURN_CODE
         print service + status_string
         return code
 
     def _print_redis_status(self, statuses):
         if not statuses:
             print 'No redis configuration found.'
-            return 0
+            return self.STOPPED_RETURN_CODE
+
         for port, status in statuses.items():
             status_string = 'stopped'
             if status == initdv2.Status.RUNNING:
                 status_string = 'running'
             print '- port: %s\n  status: %s' % (port, status_string)
-        return 0
+
+        overall_status = set(statuses.items())
+        if len(overall_status) > 1:
+            return self.MIXED_RETURN_CODE
+        if overall_status[0] == initdv2.Status.RUNNING:
+            return self.RUNNING_RETURN_CODE
+        return self.STOPPED_RETURN_CODE
 
     def __call__(self, 
                  start=False,

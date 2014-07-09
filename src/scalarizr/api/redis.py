@@ -124,15 +124,16 @@ class RedisAPI(BehaviorAPI):
             inst.service.restart()
 
     @rpc.command_method
-    def get_service_status(self):
+    def get_service_status(self, ports=None, indexes=None):
         """Returns dict of processes ports as keys and their statuses as values"""
+        assert not (ports is not None and indexes is not None)
         statuses = {}
-        self._reinit_instances()
-        for redis_inst in self.redis_instances.instances:
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
             status = initdv2.Status.NOT_RUNNING
-            if redis_inst.service.running:
+            if inst.service.running:
                 status = initdv2.Status.RUNNING
-            statuses[redis_inst.port] = status
+            statuses[inst.port] = status
         return statuses
 
     @rpc.command_method
