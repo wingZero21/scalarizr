@@ -35,13 +35,18 @@ service_apis = {
 
 class Service(Command):
     """
+    Scalarizr service control.
+
     Usage:
         service (start | stop | status) redis [(<index> | --port=<port>)]
-        service (start | stop | status) mongodb [(mongos | mongod | 
-            configsrv | configsrv-2 | configsrv-3 | arbiter)]
         service (start | stop | status) <service>
-    """
 
+    Options:
+      -p <port>, --port=<port>         
+    """
+    # TODO: add usage for mongo:
+    # service (start | stop | status) mongodb [(mongos | mongod | 
+    #        configsrv | configsrv-2 | configsrv-3 | arbiter)]
     aliases = ['s']
 
     def _start_service(self, service, **kwds):
