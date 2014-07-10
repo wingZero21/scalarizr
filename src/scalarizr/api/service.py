@@ -49,7 +49,7 @@ class ServiceAPI(object):
         :type behavior: str.
         """
         if behavior not in services:
-            raise AssertionError('Behaviour %s is not registred in ServiceAPI')
+            raise AssertionError('Behaviour %s is not registred in ServiceAPI (%s)' % (behavior, str(services.keys())))
 
         provider = services[behavior]
         manifest = provider.get_manifest(behavior)
@@ -64,7 +64,7 @@ class ServiceAPI(object):
         Sets configuration preset.
         """
         if behavior not in services:
-            raise AssertionError('Behaviour %s is not registred in ServiceAPI')
+            raise AssertionError('Behaviour %s is not registred in ServiceAPI (%s)' % (behavior, str(services.keys())))
 
         provider = services[behavior]
         manifest = provider.get_manifest(behavior)

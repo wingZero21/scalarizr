@@ -246,6 +246,7 @@ class MysqlHandler(DBMSRHandler):
 
         self.preset_provider = mysql_svc.MySQLPresetProvider()
         preset_service.services[__mysql__['behavior']] = self.preset_provider
+        LOG.debug("List of services ready to accept configuration presets: %s" % str(preset_service.services.keys()))
 
         bus.on(init=self.on_init, reload=self.on_reload)
         bus.define_events(
