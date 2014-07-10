@@ -33,14 +33,27 @@ service_apis = {
 }
 
 
+class ReturnCode:
+    RUNNING = 0
+    STOPPED = 3
+    UNKNOWN = 4
+    MIXED = 150
+
+
 class Service(Command):
     """
+    Scalarizr service control.
+
     Usage:
-        service (start | stop | status) redis [(<index> | --port=<port>)]
-        service (start | stop | status) mongodb [(mongos | mongod | 
-            configsrv | configsrv-2 | configsrv-3 | arbiter)]
-        service (start | stop | status) <service>
+        service redis (start | stop | status) [(<index> | --port=<port>)]
+        service <service> (start | stop | status)
+
+    Options:
+      -p <port>, --port=<port>         
     """
+    # TODO: add usage for mongo:
+    # service mongodb (start | stop | status) [(mongos | mongod | 
+    #        configsrv | configsrv-2 | configsrv-3 | arbiter)]
 
     aliases = ['s']
 
@@ -50,6 +63,7 @@ class Service(Command):
             if value == None:
                 kwds.pop(key)
         try:
+            print 'Starting %s' % service
             api.start_service(**kwds)
         except (BaseException, Exception), e:
             print 'Service start failed.\n%s' % e
@@ -61,39 +75,50 @@ class Service(Command):
             if value == None:
                 kwds.pop(key)
         try:
+            print 'Stopping %s' % service
             api.stop_service(**kwds)
         except (BaseException, Exception), e:
             print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
-    def _display_service_status(self, service):
+    def _display_service_status(self, service, **kwds):
         api = service_apis[service]()
-        status = api.get_service_status()
+        for key, value in kwds.items():
+            if value == None:
+                kwds.pop(key)
+        status = api.get_service_status(**kwds)
 
         if service == 'redis':
             return self._print_redis_status(status)
 
         status_string = ' is stopped'
-        code = 3
+        code = ReturnCode.STOPPED
         if status == initdv2.Status.RUNNING:
             status_string = ' is running'
-            code = 0
+            code = ReturnCode.RUNNING
         elif status == initdv2.Status.UNKNOWN:
             status_string = ' has unknown status'
-            code = 4
+            code = ReturnCode.UNKNOWN
         print service + status_string
         return code
 
     def _print_redis_status(self, statuses):
         if not statuses:
             print 'No redis configuration found.'
-            return 0
+            return ReturnCode.STOPPED
+
         for port, status in statuses.items():
             status_string = 'stopped'
             if status == initdv2.Status.RUNNING:
                 status_string = 'running'
             print '- port: %s\n  status: %s' % (port, status_string)
-        return 0
+
+        overall_status = set(statuses.values())
+        if len(overall_status) > 1:
+            return ReturnCode.MIXED
+        if overall_status.pop() == initdv2.Status.RUNNING:
+            return ReturnCode.RUNNING
+        return ReturnCode.STOPPED
 
     def __call__(self, 
                  start=False,
@@ -134,14 +159,19 @@ class Service(Command):
             # TODO: finish
 
         if service not in service_apis:
-            raise CommandError('Unknown service/behavior.')
+            print 'Unknown service/behavior.'
+            return ReturnCode.UNKNOWN
+
+        if service not in __node__['behavior']:
+            print 'Not installed service/behavior.'
+            return ReturnCode.UNKNOWN
 
         if start:
             return self._start_service(service, indexes=index, ports=port)
         elif stop:
             return self._stop_service(service, indexes=index, ports=port)
         elif status:
-            return self._display_service_status(service)
+            return self._display_service_status(service, indexes=index, ports=port)
 
 
 commands = [Service]

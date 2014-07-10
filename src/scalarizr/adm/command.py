@@ -115,7 +115,7 @@ class Command(object):
         """
         doc = self.__doc__
         if not '--help' in doc:
-            help_usage_string = get_command_name(self) + ' --help\n'
+            help_usage_string = get_command_name(self) + ' -h | --help\n'
             doc = extended_doc(self.__doc__, help_usage_string)
 
         doc = dedent(doc + self._command_help())
@@ -162,10 +162,15 @@ class Command(object):
         try:
             kwds.update(parse_command_line(args, sub_cmd_doc, options_first=options_first))
         except (DocoptExit, DocoptLanguageError), e:
-            # TODO: maybe show whole help not just usage
+            # TODO: think about showing whole help not just usage
             usage = printable_usage(sub_cmd_doc)
             msg = '%s: invalid call.' % subcommand
             raise InvalidCall(msg, subcommand, usage)
+
+        # Alias for --help is processed in this way because it is hard to inject it into
+        # the command doc
+        if 'h' in kwds:
+            kwds['help'] = kwds.pop('h')
 
         if 'help' in kwds and not accepts_help:
             print sub_cmd_doc

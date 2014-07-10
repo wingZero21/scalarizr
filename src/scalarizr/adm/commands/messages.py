@@ -121,9 +121,9 @@ class MessageDetails(Command):
                             'body': msg.body})
 
             if json:
-                print json_module.dumps(mdict, indent=4, sort_keys=True)
+                print json_module.dumps(mdict, indent=4, sort_keys=True, ensure_ascii=False)
             else:
-                print yaml.dump(mdict, default_flow_style=False)
+                print yaml.dump(mdict, default_flow_style=False, allow_unicode=True)
         else:
             raise CommandError('Message not found')
 
