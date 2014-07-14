@@ -22,7 +22,7 @@ services = {
     "percona": mysql.MySQLPresetProvider,
     "mariadb": mysql.MySQLPresetProvider,
     "postgresql": postgresql.PgSQLPresetProvider,
-    "redis": redis.redis.RedisPresetProvider
+    "redis": redis.RedisPresetProvider
             }
 
 
