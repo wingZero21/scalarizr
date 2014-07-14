@@ -33,6 +33,7 @@ from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs import metaconf
 from scalarizr.linux.rsync import rsync
 from scalarizr.linux import pkgmgr
+from scalarizr.util import Singleton
 
 
 LOG = logging.getLogger(__name__)
@@ -889,6 +890,8 @@ def get_semanage():
 
 
 class MySQLPresetProvider(PresetProvider):
+
+    __metaclass__ = Singleton
 
     def __init__(self):
         service = initdv2.lookup(SERVICE_NAME)

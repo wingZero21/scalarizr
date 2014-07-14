@@ -74,7 +74,6 @@ class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 
     def __init__(self):
         self.preset_provider = MemcachedPresetProvider()
-        preset_service.services[BEHAVIOUR] = self.preset_provider
         FarmSecurityMixin.__init__(self)
         self.init_farm_security([11211])
         ServiceCtlHandler.__init__(self, BEHAVIOUR, memcached_api.MemcachedInitScript())

@@ -133,7 +133,6 @@ class NginxHandler(ServiceCtlHandler):
         self.api = NginxAPI()
         self.api.init_service()
         self._terminating_servers = []
-        preset_service.services[BEHAVIOUR] = self.preset_provider
 
         bus.define_events("nginx_upstream_reload")
         bus.on(init=self.on_init, reload=self.on_reload)

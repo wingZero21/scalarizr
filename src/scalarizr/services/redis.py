@@ -857,6 +857,7 @@ class RedisCLI(object):
 
 class RedisPresetProvider(PresetProvider):
 
+    __metaclass__ = Singleton
 
     def __init__(self):
         pass

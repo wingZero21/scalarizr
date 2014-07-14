@@ -17,7 +17,7 @@ from M2Crypto import RSA
 
 from scalarizr.util import firstmatched, wait_until
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.util import initdv2, system2, PopenError, software
+from scalarizr.util import initdv2, system2, PopenError, software, Singleton
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services import BaseService, BaseConfig, lazy, PresetProvider, backup
 from scalarizr.node import __node__, private_dir
@@ -1120,7 +1120,11 @@ def make_symlinks(source_dir, dst_dir, username='postgres'):
 
 class PgSQLPresetProvider(PresetProvider):
 
-    def __init__(self, config_object):
+    __metaclass__ = Singleton
+
+    def __init__(self):
+        self.postgresql = PostgreSql()
+        config_object = self.postgresql.postgresql_conf
         service = initdv2.lookup(SERVICE_NAME)
         config_mapping = {'postgresql.conf':config_object}
         PresetProvider.__init__(self, service, config_mapping)

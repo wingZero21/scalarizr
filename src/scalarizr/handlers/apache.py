@@ -16,8 +16,6 @@ from scalarizr import linux
 from scalarizr.linux import coreutils
 from scalarizr.handlers import Handler
 from scalarizr.messaging import Messages
-from scalarizr.util import initdv2
-from scalarizr.api import service as preset_service
 from scalarizr.services import PresetProvider, BaseConfig
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
 
@@ -47,11 +45,7 @@ class ApacheHandler(Handler):
 
         self._queryenv = bus.queryenv_service
         self.api = apache_api.ApacheAPI()
-
         self.preset_provider = ApachePresetProvider()
-        preset_service.services[BEHAVIOUR] = self.preset_provider
-
-
 
         bus.on(init=self.on_init)
         bus.define_events("apache_rpaf_reload")
