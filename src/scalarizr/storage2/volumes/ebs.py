@@ -150,6 +150,7 @@ class EbsMixin(object):
             LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
                                 obj_id, sys.exc_info()[1])
 
+
     def _create_tags_async(self, obj_id, tags):
         if not tags:
             return
@@ -365,7 +366,7 @@ class EbsVolume(base.Volume, EbsMixin):
 
     def _destroy(self, force, **kwds):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-status':'pending-delete'}, self._conn)
+        self.apply_tags({'scalr-status': 'pending-delete'})
         self._conn.delete_volume(self.id)
 
 
@@ -504,6 +505,14 @@ class EbsVolume(base.Volume, EbsMixin):
             LOG.debug('Snapshot %s completed', snapshot.id)
 
 
+    def apply_tags(self, tags, async=True):
+        if self.id:
+            if async:
+                self._create_tags_async(self.id, tags)
+            else:
+                self._create_tags(self.id, tags)
+
+
 class EbsSnapshot(EbsMixin, base.Snapshot):
 
     #error_messages = base.Snapshot.error_messages.copy()
@@ -528,7 +537,7 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 
     def _destroy(self):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-status':'pending-delete'}, self._conn)
+        self._create_tags(self.id, {'scalr-status': 'pending-delete'}, self._conn)
         self._conn.delete_snapshot(self.id)
 
 

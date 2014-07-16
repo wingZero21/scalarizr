@@ -211,6 +211,8 @@ class Volume(Base):
 
         new_vol = None
         try:
+            LOG.info("Marking volume archived")
+            self.apply_tags({"scalr-status": "archived"})
             LOG.info('Detaching volume %s', self.id)
             self.detach()
             new_vol = self.clone()
@@ -248,6 +250,8 @@ class Volume(Base):
                         LOG.error('Enlarged volume destruction failed: %s' % destr_err)
 
                 self.ensure(mount=bool(was_mounted))
+                LOG.info("Marking volume active")
+                self.apply_tags({"scalr-status": "active"})
             except:
                 e = sys.exc_info()[1]
                 err_val = str(err_val) + '\nFailed to restore old volume: %s' % e
@@ -323,6 +327,9 @@ class Volume(Base):
         pass
 
     def _clone(self, config):
+        pass
+
+    def apply_tags(self, tags, async=True):
         pass
 
 
