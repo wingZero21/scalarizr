@@ -17,7 +17,8 @@ from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.linux.coreutils import chown_r
-from scalarizr.util import system2, disttool, software, cryptotool, initdv2
+from scalarizr import linux
+from scalarizr.util import system2, software, cryptotool, initdv2
 from scalarizr.linux import iptables
 from scalarizr.handlers import build_tags
 from scalarizr.api import service as preset_service
@@ -57,7 +58,7 @@ __postgresql__.update({
 
 
 def get_handlers():
-    return PostgreSqlHander(),
+    return [PostgreSqlHander()] if postgresql_api.PostgreSQLAPI.software_supported else []
 
 
 SSH_KEYGEN_SELINUX_MODULE = """
@@ -145,7 +146,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
         if __node__['state'] == ScalarizrState.BOOTSTRAPPING:
             
-            if disttool.is_redhat_based():      
+            if linux.os.redhat_family:      
                     
                 checkmodule_path = software.which('checkmodule')
                 semodule_package_path = software.which('semodule_package')
@@ -201,9 +202,7 @@ class PostgreSqlHander(ServiceCtlHandler):
     def on_reload(self):
         self._queryenv = bus.queryenv_service
         self._platform = bus.platform
-        self.postgresql = PostgreSql()
-        self.preset_provider = PgSQLPresetProvider(self.postgresql.postgresql_conf)
-        preset_service.services[BEHAVIOUR] = self.preset_provider
+        self.preset_provider = PgSQLPresetProvider()
 
     
     def on_HostInit(self, message):

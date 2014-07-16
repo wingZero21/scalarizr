@@ -15,6 +15,7 @@ import tempfile
 import subprocess
 
 from scalarizr import linux
+from scalarizr.api import chef as chef_api
 from scalarizr.node import __node__
 from scalarizr.bus import bus
 from scalarizr.util import system2, initdv2, deploy
@@ -27,8 +28,10 @@ if linux.os.windows_family:
 
 
 def get_handlers():
-    return (ChefHandler(), )
-
+    if linux.os.windows_family or chef_api.ChefAPI.software_supported:
+        return [ChefHandler()]
+    else:
+        return []
 
 WIN_SERVICE_NAME = 'chef-client'
 LOG = logging.getLogger(__name__)
@@ -135,7 +138,6 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
         self._start_stop_reload("start")
 
 initdv2.explore('chef', ChefInitScript)
-
 
 class ChefHandler(Handler):
     def __init__(self):

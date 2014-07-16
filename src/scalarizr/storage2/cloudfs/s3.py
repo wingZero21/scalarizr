@@ -130,7 +130,7 @@ class S3FileSystem(CloudFileSystem):
         return self._bucket
 
     def _get_connection(self):
-        return __node__['ec2']['connect_s3']()
+        return __node__['ec2'].connect_s3()
 
     def _bucket_location(self):
         region = __node__['ec2']['region']

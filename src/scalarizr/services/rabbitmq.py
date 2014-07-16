@@ -43,7 +43,10 @@ RABBITMQ_SERVER = software.which('rabbitmq-server')
 
 RABBITMQ_PLUGINS = software.which('rabbitmq-plugins', '/usr/lib/rabbitmq/bin/')
 
-RABBITMQ_VERSION = software.rabbitmq_software_info().version
+try:
+    RABBITMQ_VERSION = software.rabbitmq_software_info().version
+except:
+    RABBITMQ_VERSION = (0, 0, 0)
 
 
 class RabbitMQInitScript(initdv2.ParametrizedInitScript):
@@ -248,5 +251,7 @@ class RabbitMQ(object):
         nodes_raw = out.split('running_nodes')[0].split('\n', 1)[1]
         return re.findall("rabbit@([^']+)", nodes_raw)
 
-
-rabbitmq = RabbitMQ()
+if RABBITMQ_VERSION > (0, 0, 0):
+    rabbitmq = RabbitMQ()
+else:
+    rabbitmq = None

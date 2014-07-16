@@ -6,6 +6,7 @@ Created on Mar 2, 2010
 '''
 
 import os
+import re
 import sys
 import logging
 
@@ -62,6 +63,17 @@ class Ec2LifeCycleHandler(Handler):
                 pub_hostname = self._platform.get_public_hostname()
                 self._logger.debug('Setting hostname to %s' % pub_hostname)
                 system2("hostname " + pub_hostname, shell=True)
+
+        if linux.os.ubuntu:
+            # Ubuntu cloud-init scripts may disable root ssh login
+            for path in ('/etc/ec2-init/ec2-config.cfg', '/etc/cloud/cloud.cfg'):
+                if os.path.exists(path):
+                    c = None
+                    with open(path, 'r') as fp:
+                        c = fp.read()
+                    c = re.sub(re.compile(r'^disable_root[^:=]*([:=]).*', re.M), r'disable_root\1 0', c)
+                    with open(path, 'w') as fp:
+                        fp.write(c)
 
         if not linux.os.windows_family:
             # Add server ssh public key to authorized_keys

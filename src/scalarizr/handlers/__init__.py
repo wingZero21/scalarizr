@@ -1,11 +1,11 @@
 from __future__ import with_statement
 
-from scalarizr import config, linux
+from scalarizr import config, util, linux, api, exceptions
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool, software, system2, PopenError
+from scalarizr.util import initdv2, software, system2, PopenError
 from scalarizr.linux import iptables, pkgmgr
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 
@@ -16,7 +16,9 @@ import pprint
 import sys
 import traceback
 import uuid
+import codecs
 import distutils.version
+import platform as platform_module
 
 LOG = logging.getLogger(__name__)
 
@@ -26,9 +28,7 @@ class Handler(object):
     _logger = logging.getLogger(__name__)
 
     def __init__(self):
-        if self._service_name and self._service_name not in self.get_ready_behaviours():
-            msg = 'Cannot load handler %s. Missing software.' % self._service_name
-            raise HandlerError(msg)
+        pass
 
     def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
         srv = srv or bus.messaging_service
@@ -105,61 +105,25 @@ class Handler(object):
 
 
     def get_ready_behaviours(self):
-        handlers = list()
-        info = software.system_info(verbose=True)
-        if 'software' in info:
-            Version = distutils.version.LooseVersion
-            for entry in info['software']:
-                if not ('name' in entry and 'version' in entry):
+        possible_behaviors = config.BuiltinBehaviours.values()
+        ready_behaviors = list()
+        if linux.os['family'] != 'Windows':
+            installed_packages = pkgmgr.package_mgr().list()
+            for behavior in possible_behaviors:
+                if behavior == 'base' or behavior not in api.api_routes.keys():
                     continue
-                name = entry['name']
-
-                version = Version(entry['version'])
-
-                str_ver = entry['string_version'] if 'string_version' in entry else ''
-                if name == 'nginx':
-                    handlers.append(config.BuiltinBehaviours.WWW)
-                elif name == 'chef':
-                    handlers.append(config.BuiltinBehaviours.CHEF)
-                elif name == 'memcached':
-                    handlers.append(config.BuiltinBehaviours.MEMCACHED)
-
-                elif name == 'postgresql' and Version('9.0') <= version < Version('9.4'):
-                    handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-                elif name == 'redis' and Version('2.2') <= version < Version('2.9'):
-                    handlers.append(config.BuiltinBehaviours.REDIS)
-                elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.2'):
-                    handlers.append(config.BuiltinBehaviours.RABBITMQ)
-                elif name == 'mongodb' and Version('2.0') <= version < Version('2.5'):
-                    handlers.append(config.BuiltinBehaviours.MONGODB)
-                elif name == 'apache' and Version('2.0') <= version < Version('2.5'):  # experimental for ubuntu1304
-                    handlers.append(config.BuiltinBehaviours.APP)
-                elif name == 'haproxy' and Version('1.3') < version < Version('1.5'):
-                    handlers.append(config.BuiltinBehaviours.HAPROXY)
-                elif name == 'tomcat':
-                    handlers.append(config.BuiltinBehaviours.TOMCAT)
-                elif name == 'mysql' and Version('5.0') <= version < Version('5.7'):
-                    handlers.append(config.BuiltinBehaviours.MYSQL)
-                    if 'Maria' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.MARIADB)
-                    elif 'Percona' in str_ver:  # Percona < 5.5.36
-                        handlers.append(config.BuiltinBehaviours.PERCONA)
-                    else:
-                        mysqld = software.which("mysqld")
-                        try:
-                            out = system2((mysqld, "--help"), raise_exc=False)[0]
-                            if "percona" in out.lower():  # Percona 5.5.36
-                                handlers.append(config.BuiltinBehaviours.PERCONA)
-                            else:  # Mysql 5.5.x
-                                handlers.append(config.BuiltinBehaviours.MYSQL2)
-                        except PopenError:
-                            # ubuntu1004, 5.1.x only, percona is not available
-                            pass
-        return handlers
+                try:
+                    api_cls = util.import_class(api.api_routes[behavior])
+                    api_cls.check_software(installed_packages)
+                    ready_behaviors.append(behavior)
+                except (exceptions.NotFound, exceptions.UnsupportedBehavior, ImportError):
+                    continue
+        return ready_behaviors
 
 
 class HandlerError(BaseException):
     pass
+
 
 class MessageListener:
     _accept_kwargs = {}
@@ -174,8 +138,8 @@ class MessageListener:
         self._accept_kwargs = dict(
                 behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
                 platform = platform.name,
-                os = disttool.uname(),
-                dist = disttool.linux_dist()
+                os = platform_module.uname(),
+                dist = platform_module.dist()
         )
         LOG.debug("Keywords for each Handler::accept\n%s", pprint.pformat(self._accept_kwargs))
 
@@ -830,8 +794,10 @@ def sync_globals(glob_vars=None):
         queryenv = bus.queryenv_service
         glob_vars = queryenv.list_global_variables()
     globals_path = '/etc/profile.d/scalr_globals.sh'
-    with open(globals_path, 'w') as fp:
+    with codecs.open(globals_path, 'w+', encoding='utf-8') as fp:
         for k, v in glob_vars['public'].items():
             v = v.replace('"', '\\"')
-            fp.write('export %s="%s"\n' % (k, v))
+            if isinstance(v, str):
+                v = v.decode('utf-8')
+            fp.write(u'export %s="%s"\n' % (k, v))
     os.chmod(globals_path, 0644)

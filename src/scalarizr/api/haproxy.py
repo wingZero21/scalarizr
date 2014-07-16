@@ -6,15 +6,19 @@ Created on Nov 25, 2011
 '''
 
 from pprint import pformat
+import logging
 
 from scalarizr import exceptions
 from scalarizr.libs import validate
 from scalarizr.services import haproxy
-from scalarizr.linux import iptables
+from scalarizr.linux import iptables, pkgmgr
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.handlers import get_role_servers
+from scalarizr.util import Singleton
+from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 
-import logging
 LOG = logging.getLogger(__name__)
 HEALTHCHECK_DEFAULTS = {
     'timeout': {'check': '3s'},
@@ -42,10 +46,17 @@ _rule_backend = validate.rule(re=r'^role:\d+$')
 _rule_hc_target = validate.rule(re='^[tcp|http]+:\d+$')
 
 
-class HAProxyAPI(object):
+class HAProxyAPI(BehaviorAPI):
     """
-    Placeholder
+    Basic API for configuring HAProxy settings and controlling service status.
+
+    Namespace::
+
+        haproxy
     """
+    __metaclass__ = Singleton
+
+    behavior = 'haproxy'
 
     def __init__(self, path=None):
         self.path_cfg = path
@@ -60,6 +71,71 @@ class HAProxyAPI(object):
         else:
             raise TypeError("server must be a dict or a string")
 
+    @rpc.command_method
+    def start_service(self):
+        """
+        Starts HAProxy service.
+
+        Example::
+
+            api.haproxy.start_service()
+        """
+        self.svc.start()
+
+    @rpc.command_method
+    def stop_service(self):
+        """
+        Stops HAProxy service.
+
+        Example::
+
+            api.haproxy.stop_service()
+        """
+        self.svc.stop()
+
+    @rpc.command_method
+    def reload_service(self):
+        """
+        Reloads HAProxy configuration.
+
+        Example::
+
+            api.haproxy.reload_service()
+        """
+        self.svc.reload()
+
+    @rpc.command_method
+    def restart_service(self):
+        """
+        Restarts HAProxy service.
+
+        Example::
+
+            api.haproxy.restart_service()
+        """
+        self.svc.restart()
+
+    @rpc.command_method
+    def get_service_status(self):
+        """
+        Checks Chef service status.
+
+        RUNNING = 0
+        DEAD_PID_FILE_EXISTS = 1
+        DEAD_VAR_LOCK_EXISTS = 2
+        NOT_RUNNING = 3
+        UNKNOWN = 4
+
+        :return: Status num.
+        :rtype: int
+
+
+        Example::
+
+            >>> api.haproxy.get_service_status()
+            0
+        """
+        return self.svc.status()
 
     def make_proxy(self, port, backend_port=None, backends=None,
                 check_timeout=None, maxconn=None, **default_server_params):
@@ -216,7 +292,19 @@ class HAProxyAPI(object):
 
     @rpc.command_method
     def add_server(self, server=None, backend=None):
-        '''Add server with ipaddr in backend section'''
+        """
+        Adds server with ipaddr to backend section.
+
+        :param server: Server configuration.
+        :type server: dict
+
+        :param server: Backend name.
+        :type backend: str
+
+        Example::
+
+            TBD.
+        """
         self.cfg.reload()
 
         if backend:
@@ -248,7 +336,20 @@ class HAProxyAPI(object):
 
     @rpc.command_method
     def remove_server(self, server, backend=None):
-        '''Remove server from backend section with ipaddr'''
+        """
+        Removes server with ipaddr from backend section.
+
+        :param server: Server configuration.
+        :type server: dict
+
+        :param server: Backend name.
+        :type backend: str
+
+        Example::
+
+            TBD.
+        """
+
         if backend: 
             backend = backend.strip()
 
@@ -315,7 +416,9 @@ class HAProxyAPI(object):
     @validate.param('backend', optional=_rule_backend)
     def create_listener(self, port=None, protocol=None, server_port=None,
                                     server_protocol=None, backend=None):
-        ''' '''
+        """
+        APIDOC TBD.
+        """
         LOG.debug('create_listener: %s, %s, %s, %s, %s, %s', self, port, protocol, server_port, server_protocol, backend)
         if protocol:
             protocol = protocol.lower()
@@ -386,7 +489,9 @@ class HAProxyAPI(object):
     @validate.param('interval', 'timeout', re=r'(^\d+[smhd]$)|^\d')
     def configure_healthcheck(self, target=None, interval=None, timeout=None,
                                                     unhealthy_threshold=None, healthy_threshold=None):
-        ''' '''
+        """
+        APIDOC TBD.
+        """
         try:
             if interval == 'None': interval=None
             int(interval)
@@ -432,6 +537,9 @@ class HAProxyAPI(object):
     @rpc.query_method
     @validate.param('ipaddr', type='ipv4', optional=True)
     def get_servers_health(self, ipaddr=None):
+        """
+        APIDOC TBD.
+        """
         try:
             if self.cfg.defaults['stats'][''] == 'enable' and \
                             self.cfg.globals['stats']['socket'] == '/var/run/haproxy-stats.sock':
@@ -451,7 +559,9 @@ class HAProxyAPI(object):
     @validate.param('port', type=int)
     @validate.param('protocol', required=_rule_protocol)
     def delete_listener(self, port=None, protocol=None):
-        ''' Delete listen section(s) by port (and)or protocol '''
+        """
+        Removes listen section(s) by port (and)or protocol.
+        """
 
         ln = haproxy.naming('listen', protocol, port)
         if not self.cfg.sections(ln):
@@ -492,7 +602,9 @@ class HAProxyAPI(object):
     @rpc.command_method
     @validate.param('target', required=_rule_hc_target)
     def reset_healthcheck(self, target):
-        '''Return to defaults for `tartget` backend sections'''
+        """
+        Return to defaults for `tartget` backend sections
+        """
         target = target.strip()
         bnds = haproxy.naming('backend', backend=target)
         if not self.cfg.sections(bnds):
@@ -511,16 +623,22 @@ class HAProxyAPI(object):
 
     @rpc.query_method
     def list_listeners(self):
-        '''
-        @return: Listeners list
-        @rtype: [{
-                <port>,
-                <protocol>,
-                <server_port>,
-                <server_protocol>,
-                <backend>,
-                <servers>: [<ipaddr>, ...]
-        }, ...]'''
+        """
+        :returns: Listeners list
+        :rtype: list
+
+        Method returns object of the following structure::
+
+            [{
+                    <port>,
+                    <protocol>,
+                    <server_port>,
+                    <server_protocol>,
+                    <backend>,
+                    <servers>: [<ipaddr>, ...]
+            }, ...]
+
+        """
         self.cfg.reload()
         res = []
         for ln in self.cfg.sections(haproxy.naming('listen')):
@@ -541,10 +659,12 @@ class HAProxyAPI(object):
 
     @rpc.query_method
     def list_servers(self, backend=None):
-        '''
-        List all servers, or servers from particular backend
-        @rtype: [<ipaddr>, ...]
-        '''
+        """
+        Lists all servers or servers from particular backend.
+
+        :returns: List of IP addresses.
+        :rtype: [<ipaddr>, ...]
+        """
         if backend:
             backend = backend.strip()
         list_section = self.cfg.sections(haproxy.naming('backend', backend=backend))
@@ -556,3 +676,12 @@ class HAProxyAPI(object):
                 #res.append(self.cfg.backends[bnd]['server'][srv_name]['host'])
         res = list(set(res))
         return res
+
+    @classmethod
+    def do_check_software(cls, installed_packages=None):
+        pkgmgr.check_dependency(['haproxy'], installed_packages)
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        raise exceptions.UnsupportedBehavior(cls.behavior, e)
+

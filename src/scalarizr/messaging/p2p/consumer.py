@@ -91,7 +91,7 @@ class P2pMessageConsumer(MessageConsumer):
                     del msg_copy.body['platform_access_data']
 
                 if 'global_variables' in msg_copy.body:
-                    glob_vars = msg_copy.body['global_variables']
+                    glob_vars = msg_copy.body.get('global_variables', []) or []
                     i = 0
                     for v in list(glob_vars):
                         if v.get('private'):
@@ -103,7 +103,6 @@ class P2pMessageConsumer(MessageConsumer):
 
                 if 'chef' in msg_copy.body:
                     try:
-                        # msg_copy.body['chef'] = msg_copy.body['chef'].copy()
                         del msg_copy.body['chef']['validator_name']
                         del msg_copy.body['chef']['validator_key']
                     except (KeyError, TypeError):

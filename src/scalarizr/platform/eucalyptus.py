@@ -4,9 +4,14 @@ Created on Aug 13, 2010
 
 @author: marat
 '''
+from scalarizr import node
 from scalarizr.bus import bus
+from scalarizr import platform
 from scalarizr.platform import PlatformError
 from scalarizr.platform.ec2 import Ec2Platform
+from scalarizr.platform.ec2 import Ec2ConnectionProxy, S3ConnectionProxy
+from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
+from scalarizr.util import NullPool
 
 import logging, os
 from urlparse import urlparse
@@ -28,6 +33,51 @@ OPT_EC2_URL = 'ec2_url'
 OPT_CLOUD_CERT = 'cloud_cert'
 OPT_CLOUD_CERT_PATH = 'cloud_cert_path'
 
+
+def _create_ec2_connection():
+    platform = node.__node__['platform']
+    if not hasattr(platform, '_ec2_conn_params'):
+        url = platform._cnf.rawini.get(platform.name, OPT_EC2_URL)
+        if not url:
+            raise NoCredentialsError('EC2(Eucalyptus) url is empty')
+        u = urlparse(url)
+        platform._ec2_conn_params = dict(
+            is_secure = u.scheme == 'https',
+            port = u.port,
+            path = '/'+u.path,
+            region = RegionInfo(name='euca', endpoint=u.hostname)
+        )
+    try:
+        key_id, key = platform.get_access_keys()
+        conn = boto.connect_ec2(key_id, key, **platform._ec2_conn_params)
+    except (NoCredentialsError, PlatformError, boto.exception.NoAuthHandlerFound):
+        raise NoCredentialsError(sys.exc_info()[1])
+    return conn
+
+
+def _create_s3_connection():
+    platform = node.__node__['platform']
+    self._logger.debug('Creating eucalyptus s3 connection')
+    if not hasattr(platform, '_s3_conn_params'):
+        url = platform._cnf.rawini.get(platform.name, OPT_S3_URL)
+        if not url:
+            raise NoCredentialsError('S3(Walrus) url is empty')
+        u = urlparse(url)
+        platform._s3_conn_params = dict(
+                is_secure = u.scheme == 'https',
+                port = u.port,
+                path = '/'+u.path,
+                host = u.hostname,
+                calling_format = OrdinaryCallingFormat()
+        )
+    try:
+        key_id, key = platform.get_access_keys()
+        conn = boto.connect_s3(key_id, key, **platform._s3_conn_params)
+    except (NoCredentialsError, PlatformError, boto.exception.NoAuthHandlerFound):
+        raise NoCredentialsError(sys.exc_info()[1])
+    return conn
+
+
 class EucaPlatform(Ec2Platform):
     name = 'eucalyptus'
 
@@ -41,6 +91,9 @@ class EucaPlatform(Ec2Platform):
         cnf.explore_key(CLOUD_CERT, 'Eucalyptus cloud certificate', private=False)
         # TODO: ec2_url, s3_url doesn't appears in user-data, we should remove listener?
         #cnf.on('apply_user_data', self.on_cnf_apply_user_data)
+
+        self._ec2_conn_pool = NullPool(_create_ec2_connection)
+        self._s3_conn_pool = NullPool(_create_s3_connection)
 
 
     def on_cnf_apply_user_data(self, cnf):
@@ -97,7 +150,6 @@ class EucaPlatform(Ec2Platform):
                     raise
         return ret
 
-
     def get_ec2_cert(self):
         if not self._ec2_cert:
             cnf = bus.cnf
@@ -152,3 +204,4 @@ class EucaPlatform(Ec2Platform):
             )
 
         return boto.connect_s3(*self.get_access_keys(), **self._s3_conn_params)
+

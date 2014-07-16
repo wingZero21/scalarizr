@@ -6,11 +6,9 @@ Created on Jan 11, 2013
 
 from __future__ import with_statement
 
-from scalarizr.util import disttool
-
 
 class Tar:
-    EXECUTABLE = "/usr/sfw/bin/gtar" if disttool.is_sun() else "tar"
+    EXECUTABLE = "tar"
 
     _executable = None
     _options = None

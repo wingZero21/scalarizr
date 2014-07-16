@@ -14,6 +14,7 @@ from scalarizr import node
 from scalarizr import storage2
 from scalarizr import util
 from scalarizr.storage2.volumes import base
+from scalarizr.platform import NoCredentialsError
 from scalarizr.linux import coreutils
 from scalarizr import linux
 
@@ -49,17 +50,31 @@ class CinderVolume(base.Volume):
 
     _global_timeout = 3600
 
+    def _new_cinder_connection(self):
+        try:
+            return __openstack__.connect_cinder()
+        except NoCredentialsError:
+            return False
+
+    def _new_nova_connection(self):
+        try:
+            return __openstack__.connect_nova()
+        except NoCredentialsError:
+            return False
+
     def _check_cinder_connection(self):
-        if not self._cinder:
-            self._cinder = __openstack__['new_cinder_connection']
-        assert self._cinder.has_connection(), \
-            self.error_messages['no_connection']
+        try:
+            self._cinder = __openstack__.connect_cinder()
+        except NoCredentialsError:
+            pass
+        assert self._cinder, self.error_messages['no_connection']
 
     def _check_nova_connection(self):
-        if not self._nova:
-            self._nova = __openstack__['new_nova_connection']
-        assert self._nova.has_connection(), \
-            self.error_messages['no_connection']
+        try:
+            self._nova = __openstack__.connect_nova()
+        except NoCredentialsError:
+            pass
+        assert self._nova, self.error_messages['no_connection']
 
     def __init__(self,
                  size=None,
@@ -81,8 +96,7 @@ class CinderVolume(base.Volume):
         self.error_messages.update({
             'no_connection': 'Cinder connection should be available '
             'to perform this operation'})
-        self._cinder = __openstack__['new_cinder_connection']
-        self._nova = __openstack__['new_nova_connection']
+        self._cinder = self._nova = None
         # http://www.linux-kvm.org/page/Hotadd_pci_devices
         for mod in ('acpiphp', 'pci_hotplug'):
             try:
@@ -109,8 +123,8 @@ class CinderVolume(base.Volume):
         return srv_id
 
     def _ensure(self):
-        assert (self._cinder and self._cinder.has_connection()) or self.id, \
-            self.error_messages['no_id_or_conn']
+        self._cinder = self._new_cinder_connection()
+        assert self._cinder or self.id, self.error_messages['no_id_or_conn']
 
         if self._cinder:
             volume = None
@@ -234,7 +248,12 @@ class CinderVolume(base.Volume):
             for _ in xrange(5):
                 LOG.debug('Attaching Cinder volume %s', volume_id)
                 taken_before = base.taken_devices()
-                attachment = self._nova.volumes.create_server_volume(server_id, volume_id, None)
+                try:
+                    attachment = self._nova.volumes.create_server_volume(server_id, volume_id, None)
+                except TypeError, e:
+                    if "'NoneType' object has no attribute '__getitem__'" not in str(e):
+                        # Very often (2/5 times) we got this error on RaxNG, because of incorrect API response
+                        raise
 
                 #waiting for attaching transitional state
                 LOG.debug('Checking that Cinder volume %s is attached', volume_id)
@@ -394,21 +413,15 @@ class CinderSnapshot(base.Snapshot):
         'error': base.Snapshot.FAILED
     }
 
-    def _check_cinder_connection(self):
-        assert self._cinder and self._cinder.has_connection(), \
-            self.error_messages['no_connection']
-
     def __init__(self, **kwds):
         base.Snapshot.__init__(self, **kwds)
-        self._cinder = __openstack__['new_cinder_connection']
+        self._cinder = __openstack__.connect_cinder()
 
     def _status(self):
-        self._check_cinder_connection()
         snapshot = self._cinder.volume_snapshots.get(self.id)
         return self._status_map[snapshot.status]
 
     def _destroy(self):
-        self._check_cinder_connection()
         self._cinder.volume_snapshots.delete(self.id)
 
 

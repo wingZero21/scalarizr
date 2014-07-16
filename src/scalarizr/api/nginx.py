@@ -3,11 +3,13 @@ from __future__ import with_statement
 import os
 import shutil
 import logging
-from telnetlib import Telnet
 import time
+import cStringIO
+from telnetlib import Telnet
 from hashlib import sha1
 
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.bus import bus
 from scalarizr.libs import metaconf
 import scalarizr.libs.metaconf.providers
@@ -16,8 +18,14 @@ from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
 from scalarizr.util import Singleton
+from scalarizr import linux
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
+from scalarizr.linux import pkgmgr
+from scalarizr import exceptions
+from scalarizr.api import operation
+from scalarizr.config import BuiltinBehaviours
+from scalarizr.api import BehaviorAPI
 
 
 __nginx__ = __node__['nginx']
@@ -102,13 +110,11 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
             return
         ret = initdv2.ParametrizedInitScript.stop(self)
         time.sleep(1)
-        return
 
     def restart(self):
         self.configtest()
         ret = initdv2.ParametrizedInitScript.restart(self)
         time.sleep(1)
-        return
 
     def start(self):
         self.configtest()
@@ -170,29 +176,132 @@ def _bool_from_scalr_str(bool_str):
     return int(bool_str) == 1
 
 
-class NginxAPI(object):
+def _replace_string_in_file(file_path, s, new_s):
+    raw = None
+    with open(file_path, 'r') as fp:
+        raw = fp.read()
+        raw = raw.replace(s, new_s)
+    with open(file_path, 'w') as fp:
+        fp.write(raw)
+
+
+def get_all_app_roles():
+    _queryenv = bus.queryenv_service
+    return _queryenv.list_roles(behaviour=BuiltinBehaviours.APP)
+
+
+def _fix_ssl_keypaths(vhost_template):
+    bad_keydir = '/etc/aws/keys/ssl/'
+    good_keydir = os.path.join(bus.etc_path, "private.d/keys/")
+    return vhost_template.replace(bad_keydir, good_keydir)
+
+    
+def _dump_config(obj):
+    output = cStringIO.StringIO()
+    obj.write_fp(output, close = False)
+    return output.getvalue()
+
+
+def get_role_servers(role_id=None, role_name=None):
+    """ Method is used to get role servers from scalr """
+    if type(role_id) is int:
+        role_id = str(role_id)
+
+    server_location = __node__['cloud_location']
+    _queryenv = bus.queryenv_service
+    roles = _queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
+    servers = []
+    for role in roles:
+        ips = [h.internal_ip if server_location == h.cloud_location else
+               h.external_ip
+               for h in role.hosts]
+        servers.extend(ips)
+
+    return servers
+
+
+def update_ssl_certificate(ssl_certificate_id, cert, key, cacert):
+    """
+    Updates ssl certificate. Returns paths to updated or created .key and
+    .crt files
+    """
+    if not cert or not key:
+        return (None, None)
+
+    _logger.debug('Updating ssl certificate with id: %s' % ssl_certificate_id)
+
+    if cacert:
+        cert = cert + '\n' + cacert
+    if ssl_certificate_id:
+        ssl_certificate_id = '_' + str(ssl_certificate_id)
+    else:
+        ssl_certificate_id = ''
+
+    keys_dir_path = os.path.join(bus.etc_path, "private.d/keys")
+    if not os.path.exists(keys_dir_path):
+        os.mkdir(keys_dir_path)
+
+    cert_path = os.path.join(keys_dir_path, 'https%s.crt' % ssl_certificate_id)
+    with open(cert_path, 'w') as fp:
+        fp.write(cert)
+
+    key_path = os.path.join(keys_dir_path, 'https%s.key' % ssl_certificate_id)
+    with open(key_path, 'w') as fp:
+        fp.write(key)
+
+    return (cert_path, key_path)
+
+
+def _fetch_ssl_certificate(ssl_certificate_id):
+    """
+    Gets ssl certificate and key from Scalr, writes them to files and
+    returns paths to files.
+    """
+    _queryenv = bus.queryenv_service
+    cert, key, cacert = _queryenv.get_ssl_certificate(ssl_certificate_id)
+    return update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
+
+
+class NginxAPI(BehaviorAPI):
 
     __metaclass__ = Singleton
 
+    behavior = 'www'
+
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
+        """
+        Basic API for configuring and managing Nginx service.
+
+        Namespace::
+
+            nginx
+        """
         _logger.debug('Initializing nginx API.')
         self.service = NginxInitScript()
+        self._op_api = operation.OperationAPI()
         self.error_pages_inc = None
         self.backend_table = {}
+        self.app_inc_path = None
+        self.proxies_inc_dir = proxies_inc_dir
+        self.proxies_inc_path = None
 
-        if not app_inc_dir:
+        if not app_inc_dir and __nginx__ and __nginx__['app_include_path']:
             app_inc_dir = os.path.dirname(__nginx__['app_include_path'])
-        self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
+        if app_inc_dir:
+            self.app_inc_path = os.path.join(app_inc_dir, 'app-servers.include')
+
+        if not proxies_inc_dir and __nginx__ and __nginx__['app_include_path']:
+            self.proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
+        if self.proxies_inc_dir:
+            self.proxies_inc_path = os.path.join(self.proxies_inc_dir, 'proxies.include')
+
+    def init_service(self):
+        _logger.debug('Initializing nginx API.')
         self._load_app_servers_inc()
         self.fix_app_servers_inc()
-
-        if not proxies_inc_dir:
-            proxies_inc_dir = os.path.dirname(__nginx__['app_include_path'])
-        self.proxies_inc_dir = proxies_inc_dir
-        self.proxies_inc_path = os.path.join(proxies_inc_dir, 'proxies.include')
         self._load_proxies_inc()
-
         self._make_error_pages_include()
+        self._queryenv = bus.queryenv_service
 
     def _make_error_pages_include(self):
 
@@ -210,12 +319,14 @@ class NginxAPI(object):
         error_pages_dir = os.path.dirname(__nginx__['app_include_path'])
         self.error_pages_inc = os.path.join(error_pages_dir,
                                             'error-pages.include')
-
-        error_pages_conf = metaconf.Configuration('nginx')
-        _add_static_location(error_pages_conf, '/500.html', '0')
-        _add_static_location(error_pages_conf, '/502.html', '0')
-        _add_static_location(error_pages_conf, '/noapp.html')
-        error_pages_conf.write(self.error_pages_inc)
+        # error-pages.include is overwritten only if it is not exist,
+        # so clients can modify it and be sure their changes are persist
+        if not os.path.exists(self.error_pages_inc):
+            error_pages_conf = metaconf.Configuration('nginx')
+            _add_static_location(error_pages_conf, '/500.html', '0')
+            _add_static_location(error_pages_conf, '/502.html', '0')
+            _add_static_location(error_pages_conf, '/noapp.html')
+            error_pages_conf.write(self.error_pages_inc)
 
     def _save_proxies_inc(self):
         self.proxies_inc.write(self.proxies_inc_path)
@@ -278,22 +389,92 @@ class NginxAPI(object):
 
     @rpc.command_method
     def start_service(self):
+        """
+        Starts Nginx service.
+
+        Example::
+
+            api.nginx.start_service()
+        """
         self.service.start()
 
     @rpc.command_method
     def stop_service(self):
+        """
+        Stops Nginx service.
+
+        :param reason: Message to appear in log before service is stopped.
+        :type reason: str
+
+        Example::
+
+            api.nginx.stop_service("Configuring Nginx service.")
+        """
         self.service.stop()
 
     @rpc.command_method
     def reload_service(self):
+        """
+        Reloads Nginx service.
+
+        :param reason: Message to appear in log before service is reloaded.
+        :type reason: str
+
+        Example::
+
+            api.nginx.reload("Applying proxy settings.")
+        """
         self.service.reload()
 
     @rpc.command_method
     def restart_service(self):
+        """
+        Restarts Nginx service.
+
+        :param reason: Message to appear in log before service is restarted.
+        :type reason: str
+
+        Example::
+
+            api.nginx.stop_service("Applying new service configuration preset.")
+        """
         self.service.restart()
 
     @rpc.command_method
+    def configtest(self, reason=None):
+        """
+        Performs Nginx configtest.
+
+        Example::
+
+            api.nginx.configtest()
+        """
+        self.service.configtest()
+
+    @rpc.command_method
+    def get_service_status(self):
+        return self.service.status()
+
+    @rpc.command_method
     def recreate_proxying(self, proxy_list, reload_service=True):
+        """
+        Recreates Nginx proxying configuration.
+
+        :param proxy_list: List of parameters for each proxy. Parameters are
+            kwds-dict that passed to self.add_proxy()
+        :type proxy_list: list
+
+        :param reload_service: If True reloads nginx service after recreation.
+        :type reload_service: bool
+        
+        Example:
+
+        Recreating proxying with single proxy configuration::
+
+            api.nginx.recreate_proxying([{'name': 'test.com',
+                                          'backends': [{'host': '12.234.45.67', 'port': '80'}],
+                                          'port': '80'}])
+        """
         if not proxy_list:
             proxy_list = []
 
@@ -313,44 +494,215 @@ class NginxAPI(object):
             msg = "Can't add proxy %s: %s" % (proxy_parms['name'], e)
             raise Exception(msg)
 
-    def _replace_string_in_file(self, file_path, s, new_s):
-        raw = None
-        with open(file_path, 'r') as fp:
-            raw = fp.read()
-            raw = raw.replace(s, new_s)
-        with open(file_path, 'w') as fp:
-            fp.write(raw)
+    def _main_config_contains_server(self):
+        config_dir = os.path.dirname(self.app_inc_path)
+        nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
 
-    @rpc.service_method
-    def reconfigure(self, proxy_list):
-        # TODO: much like recreate_proxying() but with specs described in
-        # https://scalr-labs.atlassian.net/browse/SCALARIZR-481?focusedCommentId=17428&page=com.atlassian.jira.plugin.system.issuetabpanels:comment-tabpanel#comment-17428
-        # saving backend configuration table
+        config = None
+        result = False
+        try:
+            config = metaconf.Configuration('nginx')
+            config.read(nginx_conf_path)
+        except (Exception, BaseException), e:
+            raise Exception('Cannot read/parse nginx main configuration file: %s' % str(e))
+
+        try:
+            result = config.get('http/server') != None
+        except:
+            pass
+
+        return result
+
+    def make_default_proxy(self, roles):
+        # actually list_virtual_hosts() returns only 1 virtual host if it's
+        # ssl virtual host. If there are no ssl vhosts in farm, it returns
+        # empty list
+        ssl_vhosts = self._queryenv.list_virtual_hosts()
+        _logger.info('Making default proxy with roles: %s' % roles)
+        servers = []
+        for role in roles:
+            servers_ips = []
+            if type(role) is str:
+                servers_ips = get_role_servers(role) or \
+                    get_role_servers(role_name=role)
+            else:
+                cl = __node__['cloud_location']
+                servers_ips = [h.internal_ip if cl == h.cloud_location else
+                               h.external_ip
+                               for h in role.hosts]
+            servers.extend({'host': srv} for srv in servers_ips)
+
+        if not servers:
+            _logger.debug('No app roles in farm, making mock backend')
+            servers = [{'host': '127.0.0.1',
+                        'port': '80'}]
+
+        _logger.debug('Clearing backend table')
+        self.backend_table = {}
+        
+        _logger.debug('backend table is %s' % self.backend_table)
+        write_proxies = not self._main_config_contains_server()
+        self.add_proxy('backend',
+                        backends=servers,
+                        ssl=False,
+                        backend_ip_hash=True,
+                        hash_backend_name=False,
+                        reload_service=False,
+                        write_proxies=write_proxies)
+
+        with open(self.proxies_inc_path, 'w') as fp:
+            cert, key, cacert = self._queryenv.get_https_certificate()
+            _logger.debug('updating certificates')
+            update_ssl_certificate('', cert, key, cacert)
+
+            if ssl_vhosts and cert and key:
+                _logger.info('Writing SSL server configuration to proxies.conf. SSL on')
+                raw_conf = _fix_ssl_keypaths(ssl_vhosts[0].raw)
+                fp.write(raw_conf)
+            else:
+                _logger.info('Clearing SSL server configuration. SSL off')
+                fp.write('')
+
+        self._reload_service()
+
+        # Uncomment if you want to ssl proxy to be generated and not be taken from template
+        # if ssl_vhosts:
+        #     _logger.debug('adding default ssl nginx server')
+        #     write_proxies = not self._https_config_exists()
+        #     self.make_proxy('backend.ssl',
+        #                         backends=servers,
+        #                         port=None,
+        #                         ssl=True,
+        #                         backend_ip_hash=True,
+        #                         hash_backend_name=False,
+        #                         write_proxies=write_proxies)
+        # else:
+        #     self.remove_proxy('backend.ssl')
+        _logger.debug('After making proxy backend table is %s' % self.backend_table)
+        _logger.debug('Default proxy is made')
+
+    def _recreate_compat_mode(self):
+        _logger.debug('Compatibility mode proxying recreation')
+        roles_for_proxy = []
+        if __nginx__['upstream_app_role']:
+            roles_for_proxy = [__nginx__['upstream_app_role']]
+        else:
+            roles_for_proxy = get_all_app_roles()
+
+        self.fix_app_servers_inc()
+        self.make_default_proxy(roles_for_proxy)
+
+        https_inc_path = os.path.join(os.path.dirname(self.app_inc_path),
+                                      'https.include')
+        nginx_dir = os.path.dirname(https_inc_path)
+        for file_path in os.listdir(nginx_dir):
+            if file_path.startswith('https.include'):
+                _logger.debug('Removing %s' % file_path)
+                os.remove(file_path)
+
+    def _update_main_config(self, remove_server_section=True, reload_service=True):
+        config_dir = os.path.dirname(self.app_inc_path)
+        nginx_conf_path = os.path.join(config_dir, 'nginx.conf')
+
+        config = None
+        try:
+            config = metaconf.Configuration('nginx')
+            config.read(nginx_conf_path)
+        except (Exception, BaseException), e:
+            raise Exception('Cannot read/parse nginx main configuration file: %s' % str(e))
+
+        _logger.debug('Update main configuration file')
+        dump = _dump_config(config)
+
+        gzip_vary = config.get_list('http/gzip_vary')
+        if not gzip_vary:
+            config.add('http/gzip_vary', 'on')
+        gzip_proxied = config.get_list('http/gzip_proxied')
+        if not gzip_proxied:
+            config.add('http/gzip_proxied', 'any')
+        gzip_types = config.get_list('http/gzip_types')
+        if not gzip_types:
+            types = 'text/plain text/css application/json application/x-javascript' \
+                'text/xml application/xml application/xml+rss text/javascript'
+            config.add('http/gzip_types', types)
+
+        include_list = config.get_list('http/include')
+        if not self.app_inc_path in include_list:
+            _logger.debug('adding app-servers.include path to main config')
+            config.add('http/include', self.app_inc_path)
+        if not self.proxies_inc_path in include_list:
+            _logger.debug('adding proxies.include path to main config')
+            config.add('http/include', self.proxies_inc_path)
+        else:
+            _logger.debug('config contains proxies.include: %s \n%s' %
+                               (self.proxies_inc_path, include_list))
+
+        # First remove then rewrite or leave it removed
+        _logger.debug('removing http/server section')
+        try:
+            config.remove('http/server')
+        except (ValueError, IndexError):
+            _logger.debug('no http/server section')
+        
+        if not remove_server_section:
+            _logger.debug('Rewriting http/server section')
+            config.read(os.path.join(bus.share_path, "nginx/server.tpl"))
+
+        if linux.os.debian_family:
+        # Comment /etc/nginx/sites-enabled/*
+            try:
+                i = config.get_list('http/include').index('/etc/nginx/sites-enabled/*')
+                config.comment('http/include[%d]' % (i+1))
+                _logger.debug('comment site-enabled include')
+            except (ValueError, IndexError):
+                _logger.debug('site-enabled include already commented')
+        elif linux.os.redhat_family:
+            def_host_path = '/etc/nginx/conf.d/default.conf'
+            if os.path.exists(def_host_path):
+                default_host = metaconf.Configuration('nginx')
+                default_host.read(def_host_path)
+                default_host.comment('server')
+                default_host.write(def_host_path)
+
+        if dump == _dump_config(config):
+            _logger.debug("Main nginx config wasn`t changed")
+        else:
+            # Write new nginx.conf
+            shutil.copy(nginx_conf_path, nginx_conf_path + '.bak')
+            config.write(nginx_conf_path)
+            if reload_service:
+                self._reload_service()
+
+    def do_reconfigure(self, op, proxies):
         backend_table_bak = self.backend_table.copy()
+        main_conf_path = self.proxies_inc_dir + '/nginx.conf'
         try:
             self.app_inc_path = self.app_inc_path + '.new'
             self.proxies_inc_path = self.proxies_inc_path + '.new'
-            self.recreate_proxying(proxy_list, reload_service=False)
 
-            main_conf_path = self.proxies_inc_dir + '/nginx.conf'
-            self._replace_string_in_file(main_conf_path,
-                                         'proxies.include',
-                                         'proxies.include.new')
-            self._replace_string_in_file(main_conf_path,
-                                         'app-servers.include',
-                                         'app-servers.include.new')
-
+            _replace_string_in_file(main_conf_path,
+                                    'proxies.include',
+                                    'proxies.include.new')
+            _replace_string_in_file(main_conf_path,
+                                    'app-servers.include',
+                                    'app-servers.include.new')
+            self._update_main_config(remove_server_section=proxies!=None, reload_service=False)
+            if proxies:
+                self.recreate_proxying(proxies, reload_service=False)
+            else:
+                self._recreate_compat_mode()
             self.service.configtest()
+
         except:
             os.remove(self.app_inc_path)
             os.remove(self.proxies_inc_path)
             self.backend_table = backend_table_bak
-            self._replace_string_in_file(main_conf_path,
-                                         'proxies.include.new',
-                                         'proxies.include')
-            self._replace_string_in_file(main_conf_path,
-                                         'app-servers.include.new',
-                                         'app-servers.include')
+            _replace_string_in_file(main_conf_path,
+                                    'proxies.include.new',
+                                    'proxies.include')
+            _replace_string_in_file(main_conf_path,
+                                    'app-servers.include.new',
+                                    'app-servers.include')
             self.app_inc_path = self.app_inc_path[:-4]
             self.proxies_inc_path = self.proxies_inc_path[:-4]
             raise
@@ -361,77 +713,30 @@ class NginxAPI(object):
             shutil.copyfile(self.proxies_inc_path, self.proxies_inc_path[:-4])
             os.remove(self.app_inc_path)
             os.remove(self.proxies_inc_path)
-            self._replace_string_in_file(main_conf_path,
-                                         'proxies.include.new',
-                                         'proxies.include')
-            self._replace_string_in_file(main_conf_path,
-                                         'app-servers.include.new',
-                                         'app-servers.include')
+            _replace_string_in_file(main_conf_path,
+                                    'proxies.include.new',
+                                    'proxies.include')
+            _replace_string_in_file(main_conf_path,
+                                    'app-servers.include.new',
+                                    'app-servers.include')
             self._reload_service()
             self.app_inc_path = self.app_inc_path[:-4]
             self.proxies_inc_path = self.proxies_inc_path[:-4]
-        
 
-    def get_role_servers(self, role_id=None, role_name=None):
-        """ Method is used to get role servers from scalr """
-        if type(role_id) is int:
-            role_id = str(role_id)
+    @rpc.service_method
+    def reconfigure(self, proxies, async=True):
+        self._op_api.run('api.nginx.reconfigure',
+                         func=self.do_reconfigure,
+                         func_kwds={'proxies': proxies},
+                         async=async,
+                         exclusive=True)
 
-        server_location = __node__['cloud_location']
-        queryenv = bus.queryenv_service
-        roles = queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
-        servers = []
-        for role in roles:
-            ips = [h.internal_ip if server_location == h.cloud_location else
-                   h.external_ip
-                   for h in role.hosts]
-            servers.extend(ips)
 
-        return servers
 
-    def update_ssl_certificate(self, ssl_certificate_id, cert, key, cacert):
-        """
-        Updates ssl certificate. Returns paths to updated or created .key and
-        .crt files
-        """
-        if not cert or not key:
-            return (None, None)
-
-        _logger.debug('Updating ssl certificate with id: %s' % ssl_certificate_id)
-
-        if cacert:
-            cert = cert + '\n' + cacert
-        if ssl_certificate_id:
-            ssl_certificate_id = '_' + str(ssl_certificate_id)
-        else:
-            ssl_certificate_id = ''
-
-        keys_dir_path = os.path.join(bus.etc_path, "private.d/keys")
-        if not os.path.exists(keys_dir_path):
-            os.mkdir(keys_dir_path)
-
-        cert_path = os.path.join(keys_dir_path, 'https%s.crt' % ssl_certificate_id)
-        with open(cert_path, 'w') as fp:
-            fp.write(cert)
-
-        key_path = os.path.join(keys_dir_path, 'https%s.key' % ssl_certificate_id)
-        with open(key_path, 'w') as fp:
-            fp.write(key)
-
-        return (cert_path, key_path)
-
-    def _fetch_ssl_certificate(self, ssl_certificate_id):
-        """
-        Gets ssl certificate and key from Scalr, writes them to files and
-        returns paths to files.
-        """
-        queryenv = bus.queryenv_service
-        cert, key, cacert = queryenv.get_ssl_certificate(ssl_certificate_id)
-        return self.update_ssl_certificate(ssl_certificate_id, cert, key, cacert)
 
     def _normalize_destinations(self, destinations):
         """
-        Parses list of destinations. They are dictionaries. Dictionary example:
+        Parses list of destinations. Dictionary example:
 
         .. code-block:: python
             {
@@ -473,7 +778,7 @@ class NginxAPI(object):
             dest['servers'] = []
             if 'farm_role_id' in dest:
                 dest['id'] = str(dest['farm_role_id'])
-                dest['servers'].extend(self.get_role_servers(dest['id']))
+                dest['servers'].extend(get_role_servers(dest['id']))
             if 'host' in dest:
                 dest['servers'].append(dest['host'])
 
@@ -750,7 +1055,7 @@ class NginxAPI(object):
 
         if old_style_ssl:
             config.add('%s/ssl' % server_xpath, 'on')
-        ssl_cert_path, ssl_cert_key_path = self._fetch_ssl_certificate(ssl_certificate_id)
+        ssl_cert_path, ssl_cert_key_path = _fetch_ssl_certificate(ssl_certificate_id)
         config.add('%s/ssl_certificate' % server_xpath, ssl_cert_path)
         config.add('%s/ssl_certificate_key' % server_xpath, ssl_cert_key_path)
 
@@ -1066,7 +1371,7 @@ class NginxAPI(object):
     def _get_any_port(self, config):
         port = None
         try:
-            addr = self.proxies_inc.get('server[1]/listen' % server_xpath)
+            addr = self.proxies_inc.get('server[1]/listen')
             port = addr.split()[0]
         except metaconf.NoPathError:
             pass
@@ -1076,6 +1381,22 @@ class NginxAPI(object):
     def remove_proxy(self, hostname, reload_service=True):
         """
         Removes proxy with given hostname. Removes created server and its backends.
+
+        :param hostname: nginx proxy server name.
+        :type hostname: str
+
+        :param reload_service: If True reloads nginx service after proxy removal.
+        :type reload_service: bool
+
+        Examples:
+
+        Remove proxy with name `test.com`::
+
+            api.nginx.remove_proxy('test.com')
+
+        Remove proxy with name `test.com` without service reload::
+
+            api.nginx.remove_proxy('test.com', reload_service=True)
         """
         reload_service = _bool_from_scalr_str(reload_service)
 
@@ -1102,8 +1423,21 @@ class NginxAPI(object):
         """
         RPC method for adding or updating proxy configuration.
         Removes proxy with given hostname if exists and recreates it with given
-        parameters. If some exception occures, changes are reverted.
+        parameters. If some exception occures changes are reverted.
+
+        :param hostname: nginx proxy server name.
+        :type hostname: str
+
         See add_proxy() for detailed kwds description.
+
+        Example:
+
+        Make proxy with name `test.com`::
+
+            api.nginx.make_proxy('test.com', 
+                                 backends=[{'host': '123.321.111.1'}],
+                                 port='8080',
+                                 backend_port='80')
         """
         _logger.debug('making proxy: %s' % hostname)
         try:
@@ -1174,6 +1508,33 @@ class NginxAPI(object):
         """
         Adds server to backend with given name pattern.
         Parameter server can be dict or string (ip addr)
+
+        :param backend: backend's name to which server will be added.
+        :type backend: str
+
+        :param server: server configuration. Can be just IP of the server or
+            dict of parameters (such as 'down', 'backup' or 'port')
+        :type server: dict or str
+
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing server addition.
+        :type update_conf: bool
+
+        :param reload_service: if True reloads nginx service after server addition.
+        :type reload_service: bool
+
+        :param update_backend_table: if True updates self.backend_table after server addition.
+        :type update_backend_table: bool
+
+        Examples:
+
+        Adding server without parameters to backend `backend`::
+
+            api.nginx.add_server('backend', '123.321.111.19')
+
+        Adding server with non-standard port to backend `test`::
+
+            api.nginx.add_server('test', {'host': '11.22.33.44', 'port': '8089'})
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1220,6 +1581,28 @@ class NginxAPI(object):
         """
         Removes server from backend with given name pattern.
         Parameter server can be dict or string (ip addr)
+
+        :param backend: backend's name from which server will be removed.
+        :type backend: str
+
+        :param server: server IP.
+        :type server: str
+
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing server removal.
+        :type update_conf: bool
+
+        :param reload_service: if True reloads nginx service after server removal.
+        :type reload_service: bool
+
+        :param update_backend_table: if True updates self.backend_table after server removal.
+        :type update_backend_table: bool
+
+        Example:
+
+        Removing server from backend `backend`::
+
+            api.nginx.remove_server('backend', '123.321.111.19')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1256,14 +1639,36 @@ class NginxAPI(object):
             self._reload_service()
 
     @rpc.command_method
-    def add_server_to_role(self, 
-                           server,
-                           role_id,
-                           update_conf=True, 
-                           reload_service=True):
+    def add_server_to_role(self, server, role_id, update_conf=True, reload_service=True):
         """
         Adds server to each backend that uses given role. If role isn't used in
         any backend, does nothing
+
+        :param server: server configuration. Can be just IP of the server or
+            dict of parameters (such as 'down', 'backup' or 'port')
+        :type server: dict or str
+
+        :param role_id: Id of the role in which new server is up.
+        :type role_id: str
+
+        :param update_conf: if True updates app_servers_inc object from file
+            before performing server addition.
+        :type update_conf: bool
+
+        :param reload_service: if True reloads nginx service after server addition.
+        :type reload_service: bool
+
+        Examples:
+
+        Adding server without parameters to backends that are contain role `1234`::
+
+            api.nginx.add_server_to_role('123.321.111.19', '1234')
+
+        Adding server with non-standard port to backends that are contain
+                role `4321`::
+
+            api.nginx.add_server_to_role({'host': '11.22.33.44', 'port': '8089'},
+                                             '4321')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1309,6 +1714,25 @@ class NginxAPI(object):
         """
         Removes server from each backend that uses given role. If role isn't
         used in any backend, does nothing
+
+        :param server: server IP
+        :type server: str
+
+        :param role_id: Id of the role in which server is down.
+        :type role_id: str
+
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing server removal.
+        :type update_conf: bool
+
+        :param reload_service: if True reloads nginx service after server removal.
+        :type reload_service: bool
+
+        Example:
+
+        Removing server from backends that are contain role `1234`::
+
+            api.nginx.remove_server_from_role('123.321.111.19', '1234')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1348,6 +1772,22 @@ class NginxAPI(object):
         """
         Method is used to remove stand-alone servers, that aren't belong
         to any role. If role isn't used in any backend, does nothing
+
+        :param server: Server IP.
+        :type server: str
+
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing server removal.
+        :type update_conf: bool
+
+        :param reload_service: if True reloads nginx service after server removal.
+        :type reload_service: bool
+
+        Example:
+
+        Removing server from all backends::
+
+            api.nginx.remove_server_from_all_backends('123.321.111.19')
         """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
@@ -1379,6 +1819,32 @@ class NginxAPI(object):
                    ssl_certificate_id=None,
                    update_conf=True,
                    reload_service=True):
+        """
+        Enables SSL support on Nginx server.
+
+        :param hostname: nginx proxy server name.
+        :type hostname: str
+
+        :param ssl_port: Port number.
+        :type ssl_port: str
+
+        :param ssl_certificate_id: Id of ssl certificate.
+        :type ssl_certificate_id: str
+
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing ssl enabling.
+        :type update_conf: bool
+
+        :param reload_service: if True reloads nginx service after ssl enabling.
+        :type reload_service: bool
+
+
+        Example:
+
+        Enable ssl on server with name `test.com`::
+
+            api.nginx.enable_ssl('test.com', '443', '12345')
+        """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
 
@@ -1427,6 +1893,25 @@ class NginxAPI(object):
 
     @rpc.command_method
     def disable_ssl(self, hostname, update_conf=True, reload_service=True):
+        """
+        Disables SSL support on Nginx server.
+
+        :param hostname: nginx proxy server name.
+        :type hostname: str
+
+        :param update_conf: if True updates app_servers_inc object from file 
+            before performing ssl disabling.
+        :type update_conf: bool
+
+        :param reload_service: if True reloads nginx service after ssl disabling.
+        :type reload_service: bool
+
+        Example:
+
+        Disable ssl on server with name `test.com`::
+
+            api.nginx.disable_ssl('test.com')
+        """
         update_conf = _bool_from_scalr_str(update_conf)
         reload_service = _bool_from_scalr_str(reload_service)
 
@@ -1459,3 +1944,12 @@ class NginxAPI(object):
                 self._save_proxies_inc()
             if reload_service:
                 self._reload_service()
+
+    @classmethod
+    def do_check_software(cls, installed_packages=None):
+        pkgmgr.check_dependency(['nginx'], installed_packages)
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        raise exceptions.UnsupportedBehavior(cls.behavior, e)
+

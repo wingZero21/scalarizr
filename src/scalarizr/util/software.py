@@ -486,3 +486,4 @@ def postgresql_software_info():
         raise SoftwareError
 
 explore('postgresql', postgresql_software_info)
+

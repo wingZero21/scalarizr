@@ -5,11 +5,12 @@ Created on Mar 11, 2010
 '''
 
 import logging
+import platform
 
 import scalarizr
 from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError, build_tags
-from scalarizr.util import system2, disttool, cryptotool,\
+from scalarizr.util import system2, cryptotool,\
         wait_until, firstmatched
 from scalarizr import linux
 from scalarizr.linux import mount
@@ -220,11 +221,11 @@ class RebundleStratery:
         for name in ("etc/motd", "etc/motd.tail"):
             motd_filename = os.path.join(image_mpoint, name)
             if os.path.exists(motd_filename):
-                dist = disttool.linux_dist()
+                dist = platform.dist()
                 motd = rebundle_hdlr.MOTD % dict(
                         dist_name = dist[0],
                         dist_version = dist[1],
-                        bits = 64 if disttool.uname()[4] == "x86_64" else 32,
+                        bits = 64 if platform.uname()[4] == "x86_64" else 32,
                         role_name = role_name,
                         bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
                 )
@@ -273,7 +274,7 @@ class RebundleStratery:
         # Ubuntu 10.04 mountall workaround
         # @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
         # @see http://alestic.com/2010/09/ec2-bug-mountall
-        if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if linux.os.ubuntu and linux.os['version'] >= (10, 4):
             for entry in fstab:
                 if entry.device in pl.instance_store_devices:
                     options = entry.options
@@ -331,7 +332,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
         self._platform = bus.platform
 
     def _get_arch(self):
-        arch = disttool.uname()[4]
+        arch = platform.uname()[4]
         if re.search("^i\d86$", arch):
             arch = "i386"
         return arch
@@ -385,7 +386,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             # piped via several processes. The tee is used to allow a
             # digest of the file to be calculated without having to re-read
             # it from disk.
-            openssl = "/usr/sfw/bin/openssl" if disttool.is_sun() else "openssl"
+            openssl = "openssl"
             tar = Tar()
             tar.create().dereference().sparse()
             tar.add(os.path.basename(image_file), os.path.dirname(image_file))
@@ -449,7 +450,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             # Create bundle manifest
             bdm = list((name, device) for name, device in self._platform.block_devs_mapping()
                             if not name.startswith('ephemeral'))
-            bdm += EPH_STORAGE_MAPPING[disttool.arch()].items()
+            bdm += EPH_STORAGE_MAPPING[linux.os['arch']].items()
 
             manifest = AmiManifest(
                     name=name,
@@ -638,7 +639,7 @@ class RebundleEbsStrategy(RebundleStratery):
         bdmap = BlockDeviceMapping(self._ec2_conn)
 
         # Add ephemeral devices
-        for eph, device in EPH_STORAGE_MAPPING[disttool.arch()].items():
+        for eph, device in EPH_STORAGE_MAPPING[linux.os['arch']].items():
             bdt = EBSBlockDeviceType(self._ec2_conn)
             bdt.ephemeral_name = eph
             bdmap[device] = bdt
@@ -651,7 +652,7 @@ class RebundleEbsStrategy(RebundleStratery):
             bdmap[instance.root_device_name] = root_device_type
 
         LOG.info('Registering image')
-        ami_id = self._ec2_conn.register_image(self._image_name, architecture=disttool.arch(),
+        ami_id = self._ec2_conn.register_image(self._image_name, architecture=linux.os['arch'],
                         kernel_id=self._platform.get_kernel_id(), ramdisk_id=self._platform.get_ramdisk_id(),
                         root_device_name=instance.root_device_name, block_device_map=bdmap)
 
@@ -1263,7 +1264,7 @@ class Ec2RebundleWindowsHandler(Handler):
                 ec2_conf.write(ec2config_cnf_path)
 
             os_info = {}
-            uname = disttool.uname()
+            uname = platform.uname()
             os_info['version'] = uname[2]
             os_info['string_version'] = ' '.join(uname).strip()
 

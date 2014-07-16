@@ -20,6 +20,7 @@ from scalarizr.messaging import Messages, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
 from scalarizr.util.flag import Flag
+from scalarizr.util import metadata
 
 # Libs
 from scalarizr.util import cryptotool, software
@@ -271,6 +272,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         
         # Prepare HostInit
         msg = self.new_message(Messages.HOST_INIT, dict(
+            seconds_since_start=float('%.2f' % (time.time() - __node__['start_time'], )),
+            seconds_since_boot=float('%.2f' % (time.time() - metadata.boot_time(), )),
             operation_id = bus.init_op.operation_id,
             crypto_key = new_crypto_key,
             snmp_port = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
@@ -298,7 +301,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             # only mysql2 should be returned to Scalr
             try:
                 behs.remove('mysql')
-            except IndexError:
+            except (IndexError, ValueError):
                 pass
         msg.body['behaviour'] = behs
         bus.fire("before_hello", msg)
@@ -448,7 +451,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             # Important! 
             # After following code run, server will loose network for some time
             # Fixes: SMNG-293
-            conn = __node__['cloudstack']['new_conn']
+            conn = __node__['cloudstack'].connect_cloudstack()
             vm = conn.listVirtualMachines(id=__node__['cloudstack']['instance_id'])[0]
             result = conn.listPublicIpAddresses(ipAddress=vm.publicip)
             if result:
@@ -477,9 +480,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                         volume.id, sys.exc_info()[1])
 
         if __node__['platform'] == 'openstack':
-            conn = __node__['openstack']['new_nova_connection']
-            conn.reconnect()
-
+            conn = __node__['openstack'].connect_nova()
             sid = __node__['openstack']['server_id']
             for vol in conn.volumes.get_server_volumes(sid):
                 try:

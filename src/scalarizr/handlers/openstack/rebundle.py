@@ -58,8 +58,7 @@ class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
 
     def rebundle(self):
         image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
-        nova = __node__['openstack']['new_nova_connection']
-        nova.connect()
+        nova = __node__['openstack'].connect_nova()
 
         server_id = __node__['openstack']['server_id']
         system2("sync", shell=True)

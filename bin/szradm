@@ -2,9 +2,9 @@
 
 import sys
 try:
-	from scalarizr.util.szradm import main
+	from scalarizr.adm.szradm import main
 except ImportError, e:
 	print >> sys.stderr, "error: %s\n\nPlease make sure that scalarizr is properly installed" % (e)
 	sys.exit(1)
 
-main()
+main(sys.argv)

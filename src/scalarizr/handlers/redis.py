@@ -54,7 +54,7 @@ initdv2.explore(SERVICE_NAME, redis.RedisInitScript)
 
 
 def get_handlers():
-    return (RedisHandler(), )
+    return [RedisHandler()] if redis_api.RedisAPI.software_supported else []
 
 
 class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
@@ -127,7 +127,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
     def __init__(self):
         self._redis_api = redis_api.RedisAPI()
         self.preset_provider = redis.RedisPresetProvider()
-        preset_service.services[BEHAVIOUR] = self.preset_provider
 
         from_port = __redis__['ports_range'][0]
         to_port = __redis__['ports_range'][-1]

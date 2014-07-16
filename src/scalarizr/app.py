@@ -9,7 +9,7 @@ except ImportError:
 
 # Core
 from scalarizr import __version__
-from scalarizr import config, rpc, linux
+from scalarizr import config, rpc, linux, api
 from scalarizr import node
 from scalarizr.linux import coreutils
 
@@ -35,8 +35,9 @@ else:
     from datetime import datetime as os_time
 
 # Utils
+from scalarizr import util
 from scalarizr.util import initdv2, log, PeriodicalExecutor
-from scalarizr.util import SqliteLocalObject, daemonize, system2, disttool, firstmatched, format_size
+from scalarizr.util import SqliteLocalObject, daemonize, system2, firstmatched, format_size
 from scalarizr.util import wait_until, sqlite_server
 from scalarizr.util.flag import Flag
 
@@ -56,6 +57,7 @@ import select
 import wsgiref.simple_server
 import SocketServer
 
+from scalarizr import exceptions
 
 if not linux.os.windows:
     import ctypes
@@ -155,22 +157,6 @@ Next time when SNMP process should be forked
 '''
 
 _logging_configured = False
-
-
-_api_routes = {
-    'haproxy': 'scalarizr.api.haproxy.HAProxyAPI',
-    'sysinfo': 'scalarizr.api.system.SystemAPI',
-    'system': 'scalarizr.api.system.SystemAPI',
-    'storage': 'scalarizr.api.storage.StorageAPI',
-    'service': 'scalarizr.api.service.ServiceAPI',
-    'redis': 'scalarizr.api.redis.RedisAPI',
-    'apache': 'scalarizr.api.apache.ApacheAPI',
-    'nginx': 'scalarizr.api.apache.NginxAPI',
-    'mysql': 'scalarizr.api.mysql.MySQLAPI',
-    'postgresql': 'scalarizr.api.postgresql.PostgreSQLAPI',
-    'rabbitmq': 'scalarizr.api.rabbitmq.RabbitMQAPI',
-    'operation': 'scalarizr.api.operation.OperationAPI'
-}
 
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
@@ -286,21 +272,31 @@ def _init_db(file=None):
     cnf = bus.cnf
 
     # Check that database exists (after rebundle for example)    
-    db_file = file or cnf.private_path(DB_NAME)
-    if not os.path.exists(db_file) or not os.stat(db_file).st_size:
-        logger.debug("Database doesn't exist, creating new one from script")
-        _create_db(file)
+    try:
+        db_file = file or cnf.private_path(DB_NAME)
+        if not os.path.exists(db_file) or not os.stat(db_file).st_size:
+            logger.debug("Database doesn't exist, creating new one from script")
+            _create_db(file)
 
-    # XXX(marat) Added here cause postinst script sometimes failed and we get
-    # OperationalError: table p2pmessage has no column named format
-    conn = _db_connect()
-    cur = conn.cursor()
-    cur.execute('pragma table_info(p2p_message)')
-    if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
-        cur.execute("alter table p2p_message add column format TEXT default 'xml'")
-        conn.commit()
-    cur.close()
-    conn.close()
+        # XXX(marat) Added here cause postinst script sometimes failed and we get
+        # OperationalError: table p2pmessage has no column named format
+        conn = _db_connect()
+        cur = conn.cursor()
+        cur.execute('pragma table_info(p2p_message)')
+        if not any(filter(lambda row: row[1] == 'format', cur.fetchall())):
+            cur.execute("alter table p2p_message add column format TEXT default 'xml'")
+            conn.commit()
+        cur.close()
+        conn.close()
+    except sqlite.OperationalError, e:
+        if 'database schema has changed' not in str(e):
+            # This caused by UpdateClient paralled startup.
+            #  
+            # By initial plan, Scalarizr should be started by UpdateClient, 
+            # but old Ubuntu 10.04 roles don't have UpdateClient. 
+            # Whereas it's installed during migration, but scalr-upd-client init script added to rc2.d 
+            # in run time never executed and migration to latest Scalarizr fails.
+            raise
 
         
     # Configure database connection pool
@@ -626,6 +622,7 @@ class Service(object):
         # Starting scalarizr daemon initialization
         globals()['_pid'] = pid = os.getpid()
         self._logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
+        node.__node__['start_time'] = time.time()
 
         if not 'Windows' == linux.os['family']:
             # Check for another running scalarzir
@@ -662,6 +659,7 @@ class Service(object):
             values = CmdLineIni.to_kvals(optparser.values.cnf)
             if not values.get('server_id'):
                 values['server_id'] = str(uuid.uuid4())
+            self._logger.info('Configuring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
         # Load INI files configuration
@@ -734,8 +732,7 @@ class Service(object):
             
         if node.__node__['state'] != 'importing':
             self._talk_to_updclient()
-
-        if node.__node__['state'] != 'running':
+        else:
             try:
                 pkgmgr.updatedb()
             except:
@@ -961,6 +958,29 @@ class Service(object):
         except (BaseException, Exception):
             raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
 
+        if linux.os['family'] != 'Windows':
+            installed_packages = pkgmgr.package_mgr().list()
+            for behavior in node.__node__['behavior']:
+                if behavior == 'base' or behavior not in api.api_routes.keys():
+                    continue
+                try:
+                    api_cls = util.import_class(api.api_routes[behavior])
+                    api_cls.check_software(installed_packages)
+                except exceptions.NotFound as e:
+                    logger.error(e)
+                except exceptions.UnsupportedBehavior as e:
+                    if e.args[0] == 'chef':
+                        # We pass it, cause a lot of roles has chef behavior without chef installed on them
+                        continue
+                    node.__node__['messaging'].send(
+                        'RuntimeError',
+                        body={
+                            'code': 'UnsupportedBehavior',
+                            'message': str(e)
+                        }
+                    )
+                    raise sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]
+
         logger.debug('Initialize message handlers')
         consumer = msg_service.get_consumer()
         consumer.listeners.append(MessageListener())
@@ -983,7 +1003,16 @@ class Service(object):
         Storage.maintain_volume_table = True
 
         if not bus.api_server:
-            api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(_api_routes),
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            api_port = 8010
+            try:
+                sock.connect(('0.0.0.0', api_port))
+                api_port = 8009
+                sock.close()
+            except socket.error:
+                pass
+            STATE['global.api_port'] = api_port
+            api_app = jsonrpc_http.WsgiApplication(rpc.RequestHandler(api.api_routes),
                                                 cnf.key_path(cnf.DEFAULT_KEY))
             class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
                 pass

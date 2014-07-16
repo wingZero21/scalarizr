@@ -38,7 +38,7 @@ cfg = dict(
             'console_scripts': [
                 'scalr-upd-client = scalarizr.updclient.app:main',
                 'scalarizr = scalarizr.app:main',
-                'szradm = scalarizr.util.szradm:main'
+                'szradm = scalarizr.adm.app:main'
             ]
         }
 )

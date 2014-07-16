@@ -14,9 +14,6 @@ class GlacierFilesystem(CloudFileSystem):
         '''
         Returns Boto.Glacier.Layer1 object
         '''
-        #comment for test
-        #return __node__['ec2']['connect_glacier']()
-
         #delete this two lines after test
         from boto.glacier.layer1 import Layer1
         return Layer1()

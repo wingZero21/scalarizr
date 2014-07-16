@@ -2,7 +2,7 @@
 #
 # scalarizr - this script starts and stops the scalarizr daemon
 #
-# chkconfig:   2345 85 15
+# chkconfig:   2345 - 15
 # description:  Scalarizr is a part of Scalr project
 # processname: scalarizr
 # config:      /etc/scalr/config.ini
