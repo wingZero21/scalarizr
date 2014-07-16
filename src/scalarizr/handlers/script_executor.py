@@ -248,62 +248,68 @@ class ScriptExecutor(Handler):
         scripts = []
         scripts_qty = 0
 
-        if 'scripts' in message.body:
-            if not message.body['scripts']:
-                self._logger.debug('Empty scripts list. Breaking')
+        try:
+            if 'scripts' in message.body:
+                if not message.body['scripts']:
+                    self._logger.debug('Empty scripts list. Breaking')
+                    return
+
+                environ = os.environ.copy()
+
+                global_variables = message.body.get('global_variables') or []
+                global_variables = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables)
+                if linux.os.windows_family:
+                    global_variables = dict((k.encode('ascii'), v.encode('ascii')) for k, v in global_variables.items())
+                environ.update(global_variables)
+
+                LOG.debug('Fetching scripts from incoming message')
+                event_id = message.body.get('event_id')
+                event_server_id = message.body.get('server_id')
+
+                def _create_script(message_script_params):
+                    kwds = message_script_params.copy()
+                    if 'timeout' in kwds:
+                        kwds['exec_timeout'] = kwds.pop('timeout')
+                    if 'asynchronous' in kwds:
+                        kwds['asynchronous'] = int(kwds['asynchronous'])
+                    kwds['role_name'] = role_name
+                    kwds['event_server_id'] = event_server_id
+                    kwds['event_id'] = event_id
+                    kwds['event_name'] = event_name
+                    kwds['environ'] = environ
+                    try:
+                        return Script(**kwds)
+                    except (BaseException, Exception), e:
+                        self.send_message(
+                            Messages.EXEC_SCRIPT_RESULT, {
+                                'stdout': '',
+                                'stderr': e.message,
+                                'return_code': 1,
+                                'time_elapsed': 0,
+                                'event_name': kwds['event_name'],
+                                'event_id': kwds['event_id'],
+                                'event_server_id': kwds['event_server_id'],
+                                'execution_id': kwds['execution_id'],
+                                'script_name': kwds.get('name'),
+                                'script_path': kwds.get('path'),
+                                'run_as': kwds.get('run_as')
+                            },
+                            queue=Queues.LOG)
+                        raise
+
+                scripts_qty = len(message.body['scripts'])
+                scripts = (_create_script(item) for item in message.body['scripts'])
+            else:
+                LOG.debug("No scripts embed into message '%s'", message.name)
                 return
 
-            environ = os.environ.copy()
-
-            global_variables = message.body.get('global_variables') or []
-            global_variables = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables)
-            if linux.os.windows_family:
-                global_variables = dict((k.encode('ascii'), v.encode('ascii')) for k, v in global_variables.items())
-            environ.update(global_variables)
-
-            LOG.debug('Fetching scripts from incoming message')
-            event_id = message.body.get('event_id')
-            event_server_id = message.body.get('server_id')
-
-            def _create_script(message_script_params):
-                kwds = message_script_params.copy()
-                if 'timeout' in kwds:
-                    kwds['exec_timeout'] = kwds.pop('timeout')
-                if 'asynchronous' in kwds:
-                    kwds['asynchronous'] = int(kwds['asynchronous'])
-                kwds['role_name'] = role_name
-                kwds['event_server_id'] = event_server_id
-                kwds['event_id'] = event_id
-                kwds['event_name'] = event_name
-                kwds['environ'] = environ
-                try:
-                    return Script(**kwds)
-                except (BaseException, Exception), e:
-                    self.send_message(
-                        Messages.EXEC_SCRIPT_RESULT, {
-                            'stdout': '',
-                            'stderr': e.message,
-                            'return_code': 1,
-                            'time_elapsed': 0,
-                            'event_name': kwds['event_name'],
-                            'event_id': kwds['event_id'],
-                            'event_server_id': kwds['event_server_id'],
-                            'execution_id': kwds['execution_id'],
-                            'script_name': kwds.get('name'),
-                            'script_path': kwds.get('path'),
-                            'run_as': kwds.get('run_as')
-                        },
-                        queue=Queues.LOG)
-                    raise
-
-            scripts_qty = len(message.body['scripts'])
-            scripts = (_create_script(item) for item in message.body['scripts'])
-        else:
-            LOG.debug("No scripts embed into message '%s'", message.name)
-            return
-
-        LOG.debug('Fetched %d scripts', scripts_qty)
-        self.execute_scripts(scripts, event_name, scripts_qty)
+            LOG.debug('Fetched %d scripts', scripts_qty)
+            self.execute_scripts(scripts, event_name, scripts_qty)
+        except:
+            if event_name == 'BeforeHostUp':
+                raise
+            else:
+                LOG.warn('Scripts execution failed', exc_info=sys.exc_info())
 
 
 class Script(object):
