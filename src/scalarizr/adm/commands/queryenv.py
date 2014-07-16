@@ -214,13 +214,11 @@ class Queryenv(Command):
                 k, v = pair.split('=')
                 kwds[k] = v
 
+        kwds_mapping = {}
         if method == 'list-roles':
-            out = self._run_queryenv_method(
-                method,
-                kwds,
-                {'with_initializing': 'with_init'})
-        else:
-            out = self._run_queryenv_method(method, kwds)
+            kwds_mapping = {'with_initializing': 'with_init'}
+
+        out = self._run_queryenv_method(method, kwds, kwds_mapping)
         self._display_out(method, out)
 
 

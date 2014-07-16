@@ -16,6 +16,7 @@ from scalarizr.api.rabbitmq import RabbitMQAPI
 from scalarizr.api.redis import RedisAPI
 from scalarizr.api.tomcat import TomcatAPI
 
+
 service_apis = {
     'apache': ApacheAPI,
     'chef': ChefAPI,
@@ -30,6 +31,13 @@ service_apis = {
     'rabbitmq': RabbitMQAPI,
     'redis': RedisAPI,
     'tomcat': TomcatAPI,
+}
+
+
+service_to_behavior = {
+    'nginx': 'www',
+    'mysql': 'mysql2',
+    'apache': 'app'
 }
 
 
@@ -162,7 +170,8 @@ class Service(Command):
             print 'Unknown service/behavior.'
             return ReturnCode.UNKNOWN
 
-        if service not in __node__['behavior']:
+        if service not in __node__['behavior'] and \
+            service_to_behavior.get(service) not in __node__['behavior']:
             print 'Not installed service/behavior.'
             return ReturnCode.UNKNOWN
 
