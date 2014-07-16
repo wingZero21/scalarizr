@@ -3,6 +3,7 @@ import sys
 from scalarizr.bus import bus
 from scalarizr.adm.command import Command
 from scalarizr.adm.command import CommandError
+from scalarizr.adm.command import TAB_SIZE
 from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.api.apache import ApacheAPI
@@ -53,8 +54,8 @@ class Service(Command):
     Scalarizr service control.
 
     Usage:
-        service redis (start | stop | status) [(<index> | --port=<port>)]
-        service <service> (start | stop | status)
+      service redis (start | stop | status) [(<index> | --port=<port>)]
+      service <service> (start | stop | status)
 
     Options:
       -p <port>, --port=<port>         
@@ -64,6 +65,11 @@ class Service(Command):
     #        configsrv | configsrv-2 | configsrv-3 | arbiter)]
 
     aliases = ['s']
+
+    def help(self):
+        doc = super(Service, self).help()
+        services = [(' '*TAB_SIZE) + s for s in service_apis.keys()]
+        return doc + '\nSupported services:\n' + '\n'.join(services)
 
     def _start_service(self, service, **kwds):
         api = service_apis[service]()
