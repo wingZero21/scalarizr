@@ -4,6 +4,11 @@ import os
 import itertools
 import sys
 from xml.dom import minidom
+try:
+    import json as json_module
+except ImportError:
+    import simplejson as json_module
+import yaml
 
 from scalarizr.util import system2
 from scalarizr.adm.command import Command
@@ -145,6 +150,8 @@ class Queryenv(Command):
         elif format == 'yaml':
             out_dict = xml2dict(ET.XML(out))
             print yaml.dump(out_dict, default_flow_style=False, allow_unicode=True)
+        else:
+            raise CommandError('Unknown output format.\nAvailable formats: xml, json, yaml')
 
     def _display_out(self, method, out, format='xml'):
         """
@@ -163,7 +170,12 @@ class Queryenv(Command):
                     break
 
         if display_method:
-            display_method(out)
+            display_kwds = {}
+            argspec = inspect.getargspec(display_method)
+            argnames = argspec.args
+            if 'format' in argnames:
+                display_kwds['format'] = format
+            display_method(out, **display_kwds)
         elif isinstance(out, list) and isinstance(out[0], list) and method != 'fetch':
             print make_table(out)
         else:
@@ -229,7 +241,7 @@ class Queryenv(Command):
         if method == 'list-roles':
             kwds_mapping = {'with_initializing': 'with_init'}
 
-        if not shortcut:
+        if not shortcut and method != 'fetch':
             kwds['command'] = method
             method = 'fetch'
 
