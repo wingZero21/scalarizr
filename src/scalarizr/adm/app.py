@@ -152,7 +152,7 @@ class Szradm(command_module.Command):
 
             # queryenv shortcuts
             if QueryenvCmd.supports_method(command):
-                return self.run_subcommand('queryenv', [command] + args)
+                return self.run_subcommand('queryenv', [command] + args, {'shortcut': True})
 
             # Standard command execution style
             return self.run_subcommand(command, args)

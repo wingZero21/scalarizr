@@ -13,6 +13,7 @@ from scalarizr.adm.command import CommandError
 from scalarizr.adm.util import make_table
 from scalarizr.adm.util import new_queryenv
 from scalarizr.node import __node__
+from scalarizr.queryenv import xml2dict
 
 if sys.version_info[0:2] >= (2, 7):
     from xml.etree import ElementTree as ET
@@ -34,7 +35,7 @@ class Queryenv(Command):
       queryenv list-ebs-mountpoints
       queryenv list-roles [--behaviour=<bhvr>] [--role-name=<rolename>] [--with-initializing]
       queryenv list-virtual-hosts [--name=<name>] [--https]
-      queryenv <method> [<args>...]
+      queryenv <method> [--format=(xml|json|yaml)] [<args>...]
     
     Options:
       -b, --behaviour=<bhvr>      Role behaviour.
@@ -135,10 +136,17 @@ class Queryenv(Command):
         table_data = out['public'].items()
         print make_table(table_data, headers)
 
-    def _display_fetch(self, out):
-        print minidom.parseString(out).toprettyxml(encoding='utf-8')
+    def _display_fetch(self, out, format='xml'):
+        if format == 'xml':
+            print minidom.parseString(out).toprettyxml(encoding='utf-8')
+        elif format == 'json':
+            out_dict = xml2dict(ET.XML(out))
+            print json_module.dumps(out_dict, indent=4, sort_keys=True, ensure_ascii=False)
+        elif format == 'yaml':
+            out_dict = xml2dict(ET.XML(out))
+            print yaml.dump(out_dict, default_flow_style=False, allow_unicode=True)
 
-    def _display_out(self, method, out):
+    def _display_out(self, method, out, format='xml'):
         """
         General display method. Searches for certain display method and calls it
         with `out` or prints out in table form or raw. Custom display methods
@@ -188,9 +196,12 @@ class Queryenv(Command):
 
         return m(**filtered_kwds)
 
-    def __call__(self, method=None, args=None, **kwds):
+    def __call__(self, method=None, format=None, args=None, shortcut=False, **kwds):
         if not args:
             args = []
+
+        if not format:
+            format = "xml"
 
         # we need to find method in kwds because parser places it there
         # param method is presented only when default parsing rule is applied
@@ -218,8 +229,13 @@ class Queryenv(Command):
         if method == 'list-roles':
             kwds_mapping = {'with_initializing': 'with_init'}
 
+        if not shortcut:
+            kwds['command'] = method
+            method = 'fetch'
+
         out = self._run_queryenv_method(method, kwds, kwds_mapping)
-        self._display_out(method, out)
+
+        self._display_out(method, out, format)
 
 
 commands = [Queryenv]
