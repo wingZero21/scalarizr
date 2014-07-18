@@ -11,7 +11,7 @@ import time
 import logging
 from scalarizr import config
 from scalarizr.bus import bus
-from scalarizr import rpc
+from scalarizr import rpc, storage2
 from scalarizr import linux
 from scalarizr.linux import iptables
 from scalarizr.api import operation
@@ -94,14 +94,14 @@ class RedisAPI(BehaviorAPI):
             inst.service.start()
 
     @rpc.command_method
-    def stop_service(self, ports=None, indexes=None):
+    def stop_service(self, ports=None, indexes=None, reason=None):
         """
         ports and indexes parameters can be int or list of ints.
         """
         assert not (ports is not None and indexes is not None)
         instances = self._get_redis_instances(ports, indexes)
         for inst in instances:
-            inst.service.stop()
+            inst.service.stop(reason)
 
     @rpc.command_method
     def reload_service(self, ports=None, indexes=None):
@@ -504,3 +504,58 @@ class RedisAPI(BehaviorAPI):
             raise exceptions.UnsupportedBehavior(cls.behavior, msg)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
+
+
+    @rpc.command_method
+    def grow_volume(self, volume, growth, async=False):
+        """
+        Stops Redis service, Extends volume capacity and starts Redis service again.
+        Depending on volume type growth parameter can be size in GB or number of disks (e.g. for RAID volumes)
+
+        :type volume: dict
+        :param volume: Volume configuration object
+
+        :type growth: dict
+        :param growth: size in GB for regular disks or number of volumes for RAID configuration.
+
+        Growth keys:
+
+            - size (Type: int, Availability: ebs, csvol, cinder, gce_persistent) -- A new size for persistent volume.
+            - iops (Type: int, Availability: ebs) -- A new IOPS value for EBS volume.
+            - volume_type (Type: string, Availability: ebs) -- A new volume type for EBS volume. Values: "standard" | "io1".
+            - disks (Type: Growth, Availability: raid) -- A growth dict for underlying RAID volumes.
+            - disks_count (Type: int, Availability: raid) - number of disks.
+
+        :type async: bool
+        :param async: Execute method in a separate thread and report status
+                        with Operation/Steps mechanism.
+
+        Example:
+
+        Grow EBS volume to 50Gb::
+
+            new_vol = api.redis.grow_volume(
+                volume={
+                    'id': 'vol-e13aa63ef',
+                },
+                growth={
+                    'size': 50
+                }
+            )
+        """
+
+        assert isinstance(volume, dict), "volume configuration is invalid, 'dict' type expected"
+        assert volume.get('id'), "volume.id can't be blank"
+
+        def do_grow(op):
+            vol = storage2.volume(volume)
+            ports = self.busy_ports
+            self.stop_service(ports=ports, reason='Growing data volume')
+            try:
+                growed_vol = vol.grow(**growth)
+                redis_service.__redis__['volume'] = dict(growed_vol)
+                return dict(growed_vol)
+            finally:
+                self.start_service(ports)
+
+        return self._op_api.run('redis.grow-volume', do_grow, exclusive=True, async=async)

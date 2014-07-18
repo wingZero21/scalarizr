@@ -695,8 +695,6 @@ class MysqlHandler(DBMSRHandler):
             self.mysql.service.start()
 
 
-
-
     def on_DbMsr_NewMasterUp(self, message):
         try:
             assert message.body.has_key("db_type")
