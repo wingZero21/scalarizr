@@ -69,6 +69,9 @@ else:
 PID_FILE = '/var/run/chef-client.pid'
 
 def extract_json_attributes(chef_data):
+    """
+    Extract json attributes dictionary from scalr formatted structure
+    """
     json_attributes = json.loads(chef_data.get('json_attributes') or "{}")
 
     if chef_data.get('run_list'):
@@ -359,8 +362,9 @@ class ChefClient(object):
                 finally:
                     os.remove(VALIDATOR_KEY_PATH)
 
-        with open(JSON_ATTRIBUTES_PATH, 'w+') as fp:
-            json.dump(self.json_attributes, fp)
+        if self.json_attributes:
+            with open(JSON_ATTRIBUTES_PATH, 'w+') as fp:
+                json.dump(self.json_attributes, fp)
 
 
     def _run_chef_client(self, validate=False):
@@ -375,7 +379,7 @@ class ChefClient(object):
     def get_cmd(self, validate=False):
         cmd = [CHEF_CLIENT_BIN]
 
-        if not validate:
+        if not validate and self.json_attributes:
             cmd += ['--json-attributes', JSON_ATTRIBUTES_PATH]
 
         if self.run_as != 'root':
