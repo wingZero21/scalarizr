@@ -202,6 +202,7 @@ class PostgreSqlHander(ServiceCtlHandler):
     def on_reload(self):
         self._queryenv = bus.queryenv_service
         self._platform = bus.platform
+        self.postgresql = PostgreSql()
         self.preset_provider = PgSQLPresetProvider()
 
     
