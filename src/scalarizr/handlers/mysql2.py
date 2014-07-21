@@ -874,7 +874,7 @@ class MysqlHandler(DBMSRHandler):
             options['read_only'] = True
         if mysql2_svc.innodb_enabled():
             options['innodb_flush_log_at_trx_commit'] = '1'
-            if __node__['platform_name'] == 'ec2' \
+            if __node__['platform'].name == 'ec2' \
                     and __node__['platform'].get_instance_type() == 't1.micro':
                 options['innodb_buffer_pool_size'] = '16M'  # Default 128M is too much
             if not self.mysql.my_cnf.get('mysqld/innodb_log_file_size'):
