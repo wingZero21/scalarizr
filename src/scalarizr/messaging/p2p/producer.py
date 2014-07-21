@@ -11,13 +11,15 @@ import time
 import uuid
 import httplib
 import urllib2
+import sys
+from copy import deepcopy
 
 from scalarizr import messaging, util
 from scalarizr.bus import bus
 from scalarizr.messaging import p2p
 from scalarizr.util import urltool
 from scalarizr.node import __node__
-import sys
+from scalarizr.messaging.p2p import P2pMessage
 
 
 class P2pMessageProducer(messaging.MessageProducer):
@@ -104,10 +106,18 @@ class P2pMessageProducer(messaging.MessageProducer):
             content_type = 'application/%s' % 'json' if use_json else 'xml'
             headers = {'Content-Type': content_type}
 
-            if message.name not in ('Log', 'OperationDefinition',
-                                                    'OperationProgress', 'OperationResult'):
+            if message.name not in ('Log',
+                                    'OperationDefinition',
+                                    'OperationProgress',
+                                    'OperationResult'):
+                msg_copy = P2pMessage(message.name, message.meta.copy(), deepcopy(message.body))
+                try:
+                    del msg_copy.body['chef']['validator_name']
+                    del msg_copy.body['chef']['validator_key']
+                except (KeyError, TypeError):
+                    pass
                 self._logger.debug("Delivering message '%s' %s. Json: %s, Headers: %s",
-                                   message.name, data, use_json, headers)
+                                   message.name, msg_copy.body, use_json, headers)
 
             for f in self.filters['protocol']:
                 data = f(self, queue, data, headers)

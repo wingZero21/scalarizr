@@ -1,6 +1,5 @@
 import sys
 import os
-import glob
 import time
 import string
 import logging
@@ -13,6 +12,7 @@ import boto.exception
 from scalarizr import linux
 from scalarizr import storage2
 from scalarizr import util
+from scalarizr.platform import NoCredentialsError
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
@@ -42,11 +42,22 @@ def device2name(device):
 
 
 def get_free_name():
-    # Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-    s = 7 if linux.os['release'] and linux.os.redhat_family else 5
+    if linux.os.ubuntu and linux.os['release'] >= (14, 4):
+        # ubuntu 14.04 returns Attachment point /dev/sdf is already in used
+        s = 6
+    elif linux.os['release'] and linux.os.redhat_family:
+        # rhel 6 returns "Null body" when attach to /dev/sdf
+        s = 7
+    else:
+        s = 5
     available = set(string.ascii_lowercase[s:16])        
 
-    conn = __node__['ec2']['connect_ec2']()
+    conn = __node__['ec2'].connect_ec2()
+    # Ubuntu 14.04 failed to attach volumes on device names mentioned in block device mapping, 
+    # even if this instance type doesn't support them and OS has not such devices
+    ephemerals = set(device[-1] for device in __node__['platform'].get_block_device_mapping().values())
+    available = available - ephemerals
+
     filters = {
         'attachment.instance-id': __node__['ec2']['instance_id']
     }
@@ -104,11 +115,10 @@ class EbsMixin(object):
 
     def _connect_ec2(self):
         try:
-            return __node__['ec2']['connect_ec2']()
-        except:
-            if sys.exc_type.__name__ not \
-                    in ('AttributeError', 'NoAuthHandlerFound', 'PlatformError'):
-                raise
+            return __node__['ec2'].connect_ec2()
+        except NoCredentialsError:
+            return False
+
 
     def _avail_zone(self):
         return __node__['ec2']['avail_zone']
@@ -388,12 +398,23 @@ class EbsVolume(base.Volume, EbsMixin):
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
         LOG.debug('Creating snapshot of EBS volume %s', volume)
         coreutils.sync()
-        snapshot = self._conn.create_snapshot(volume, description)
-        LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
-        if tags:
-            self._create_tags_async(snapshot.id, tags)
-        if not nowait:
-            self._wait_snapshot(snapshot)
+
+        # conn.create_snapshot leaks snapshots when RequestLimitExceeded occured 
+        params = {'VolumeId': volume}
+        if description:
+            params['Description'] = description[0:255]
+        snapshot = self._conn.get_object('CreateSnapshot', params, 
+                    boto.ec2.snapshot.Snapshot, verb='POST')
+
+        try:
+            LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
+            if tags:
+                self._create_tags_async(snapshot.id, tags)
+            if not nowait:
+                self._wait_snapshot(snapshot)
+        except boto.exception.BotoServerError, e:
+            if e.code != 'RequestLimitExceeded':
+                raise
         return snapshot
 
 
@@ -416,7 +437,6 @@ class EbsVolume(base.Volume, EbsMixin):
                     error_text=msg
             )
             LOG.debug('EBS volume %s attached', volume_id)
-
 
             if not linux.os.windows:
                 util.wait_until(lambda: base.taken_devices() > taken_before,

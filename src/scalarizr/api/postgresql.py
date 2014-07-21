@@ -18,6 +18,7 @@ from scalarizr.util import PopenError, system2
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.services import postgresql as postgresql_svc
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.services import backup
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.handlers import DbMsrMessages, HandlerError
@@ -25,6 +26,10 @@ from scalarizr.api import operation
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services.postgresql import PSQL, PG_DUMP, SU_EXEC
 from scalarizr.storage2.cloudfs import LargeTransfer
+from scalarizr.util import Singleton
+from scalarizr.linux import pkgmgr
+from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 
 
 LOG = logging.getLogger(__name__)
@@ -37,7 +42,17 @@ OPT_REPLICATION_MASTER = postgresql_svc.OPT_REPLICATION_MASTER
 __postgresql__ = postgresql_svc.__postgresql__
 
 
-class PostgreSQLAPI(object):
+class PostgreSQLAPI(BehaviorAPI):
+    """
+    Basic API for managing PostgreSQL 9.x service.
+
+    Namespace::
+
+        postgresql
+    """
+    __metaclass__ = Singleton
+
+    behavior = 'postgresql'
 
     replication_status_query = '''SELECT
     CASE WHEN pg_last_xlog_receive_location() = pg_last_xlog_replay_location()
@@ -49,10 +64,82 @@ class PostgreSQLAPI(object):
     def __init__(self):
         self._op_api = operation.OperationAPI()
         self.postgresql = postgresql_svc.PostgreSql()  #?
+        self.service = postgresql_svc.PgSQLInitScript()
+
+    @rpc.command_method
+    def start_service(self):
+        """
+        Starts PostgreSQL service.
+
+        Example::
+
+            api.postgresql.start_service()
+        """
+        self.service.start()
+
+    @rpc.command_method
+    def stop_service(self):
+        """
+        Stops PostgreSQL service.
+
+        Example::
+
+            api.postgresql.stop_service()
+        """
+        self.service.stop()
+
+    @rpc.command_method
+    def reload_service(self):
+        """
+        Reloads PostgreSQL configuration.
+
+        Example::
+
+            api.postgresql.reload_service()
+        """
+        self.service.reload()
+
+    @rpc.command_method
+    def restart_service(self):
+        """
+        Restarts PostgreSQL service.
+
+        Example::
+
+            api.postgresql.restart_service()
+        """
+        self.service.restart()
+
+    @rpc.command_method
+    def get_service_status(self):
+        """
+        Checks PostgreSQL service status.
+
+        RUNNING = 0
+        DEAD_PID_FILE_EXISTS = 1
+        DEAD_VAR_LOCK_EXISTS = 2
+        NOT_RUNNING = 3
+        UNKNOWN = 4
+
+        :return: Status num.
+        :rtype: int
+
+
+        Example::
+
+            >>> api.postgresql.get_service_status()
+            0
+        """
+        return self.service.status()
 
     @rpc.command_method
     def reset_password(self, new_password=None):
-        """ Reset password for PostgreSQL user 'scalr_master'. Return new password """
+        """
+        Resets password for PostgreSQL user 'scalr_master'.
+
+        :returns: New password
+        :rtype: str
+        """
         if not new_password:
             new_password = pwgen(10)
         pg = postgresql_svc.PostgreSql()
@@ -98,6 +185,27 @@ class PostgreSQLAPI(object):
 
     @rpc.query_method
     def replication_status(self):
+        """
+        Checks current replication status.
+
+        :return: Postgresql replication status.
+        :rtype: dict
+
+        Examples::
+
+            On master:
+
+            {'master': {'status': 'up'}}
+
+            On broken slave:
+
+            {'slave': {'status': 'down','error': <errmsg>}}
+
+            On normal slave:
+
+            {'slave': {'status': 'up', 'xlog_delay': <xlog_delay>}}
+
+        """
         psql = postgresql_svc.PSQL()
         try:
             query_out = psql.execute(self.replication_status_query)
@@ -121,6 +229,9 @@ class PostgreSQLAPI(object):
 
     @rpc.command_method
     def create_databundle(self, async=True):
+        """
+        Creates a new data bundle of /mnt/pgstrage.
+        """
 
         def do_databundle(op):
             try:
@@ -167,6 +278,12 @@ class PostgreSQLAPI(object):
 
     @rpc.command_method
     def create_backup(self, async=True):
+        """
+        Creates a new backup of every available database and uploads gzipped data to the cloud storage.
+
+        .. Warning::
+            System database 'template0' is not included in backup.
+        """
 
         def do_backup(op):
             tmpdir = backup_path = None
@@ -256,4 +373,83 @@ class PostgreSQLAPI(object):
                                 func_kwds={},
                                 async=async,
                                 exclusive=True)
+
                             
+    @classmethod
+    def do_check_software(cls, installed_packages=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '12':
+                required_list = [
+                    ['postgresql-9.1', 'postgresql-client-9.1'],
+                    ['postgresql-9.2', 'postgresql-client-9.2'],
+                    ['postgresql-9.3', 'postgresql-client-9.3'],
+                    ['postgresql>=9.1,<9.4', 'postgresql-client>=9.1,<9.4'],
+                ]
+            elif os_vers >= '10':
+                required_list = [
+                    ['postgresql-9.0', 'postgresql-client-9.0'],
+                    ['postgresql-9.1', 'postgresql-client-9.1'],
+                    ['postgresql-9.2', 'postgresql-client-9.2'],
+                    ['postgresql-9.3', 'postgresql-client-9.3'],
+                    ['postgresql>=9.0,<9.4', 'postgresql-client>=9.0,<9.4'],
+                ]
+        elif os_name == 'debian':
+                required_list = [
+                    ['postgresql-9.2', 'postgresql-client-9.2'],
+                    ['postgresql-9.3', 'postgresql-client-9.3'],
+                    ['postgresql>=9.2,<9.4', 'postgresql-client>=9.2,<9.4'],
+                ]
+        elif linux.os.redhat_family:
+            if os_vers >= '6':
+                required_list = [
+                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
+                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                    ['postgresql93', 'postgresql93-server', 'postgresql93-devel'],
+                    [
+                        'postgresql>=9.1,<9.4',
+                        'postgresql-server>=9.1,<9.4',
+                        'postgresql-devel>=9.1,<9.4'
+                    ]
+                ]
+            elif os_vers >= '5':
+                required_list = [
+                    ['postgresql90', 'postgresql90-server', 'postgresql90-devel'],
+                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
+                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                    ['postgresql93', 'postgresql93-server', 'postgresql93-devel'],
+                    [
+                        'postgresql>=9.0,<9.4',
+                        'postgresql-server>=9.0,<9.4',
+                        'postgresql-devel>=9.0,<9.4'
+                    ]
+                ]
+        elif linux.os.oracle_family:
+            required_list = [
+                ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                [
+                    'postgresql>=9.2,<9.3',
+                    'postgresql-server>=9.2,<9.3',
+                    'postgresql-devel>=9.2,<9.3'
+                ]
+            ]
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, (
+                "Unsupported operating system '{os}'").format(os=linux.os['name'])
+            )
+        pkgmgr.check_any_dependency(required_list, installed_packages)
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        if isinstance(e, pkgmgr.VersionMismatchError):
+            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
+            msg = (
+                '{pkg}-{ver} is not supported on {os}. Supported:\n'
+                '\tUbuntu 10.04, CentOS 5: >=9.0,<9.4\n'
+                '\tUbuntu 12.04, Debian, CentOS 6, RedHat, Amazon: >=9.1,<9.4\n'
+                '\tOracle: >=9.2,<9.3').format(
+                        pkg=pkg, ver=ver, os=linux.os['name'])
+            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, e)

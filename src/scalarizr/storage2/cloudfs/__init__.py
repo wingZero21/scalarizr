@@ -496,18 +496,22 @@ class LargeTransfer(bases.Task):
             try:
                 pkgmgr.installed("pigz")
             except LinuxError, e:
-                if "No matching Packages to list" in e.err:
-                    try:
-                        pkgmgr.epel_repository()
-                        pkgmgr.installed("pigz")
-                    except:
-                        LOG.debug("PIGZ install with epel failed, using gzip."\
-                                          " Caught %s", repr(sys.exc_info()[1]))
+                try:
+                    if "No matching Packages to list" in e.err:
+                        try:
+                            pkgmgr.epel_repository()
+                            pkgmgr.installed("pigz")
+                        except:
+                            LOG.debug("PIGZ install with epel failed, using gzip."\
+                                              " Caught %s", repr(sys.exc_info()[1]))
+                        else:
+                            return self.pigz_bin
                     else:
-                        return self.pigz_bin
-                else:
-                    LOG.debug("PIGZ install failed, using gzip. Caught %s",
-                                      repr(sys.exc_info()[1]))
+                        LOG.debug("PIGZ install failed, using gzip. Caught %s",
+                                          repr(sys.exc_info()[1]))
+                except:
+                    LOG.debug('PIGZ install failed, using gzip. Caught: %s', 
+                                        repr(sys.exc_info()[1]))
             except:
                 LOG.debug("PIGZ install failed, using gzip. Caught %s",
                                   repr(sys.exc_info()[1]))

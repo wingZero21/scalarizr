@@ -1,4 +1,3 @@
-from __future__ import with_statement
 '''
 Created on Jul 23, 2010
 
@@ -6,25 +5,25 @@ Created on Jul 23, 2010
 @author: Dmytro Korsakov
 '''
 
-from __future__ import with_statement
-
 # Core
 from scalarizr.bus import bus
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import PresetProvider, BaseConfig
 from scalarizr.api import service as preset_service
-from scalarizr.handlers import ServiceCtlHandler, HandlerError, FarmSecurityMixin
+from scalarizr.api import memcached as memcached_api
+from scalarizr.handlers import ServiceCtlHandler, FarmSecurityMixin
 from scalarizr.messaging import Messages
+from scalarizr import linux
 
 # Libs
-from scalarizr.util import disttool, initdv2
+from scalarizr.util import initdv2
 
 
 # Stdlibs
-import logging, re, os
+import logging, re
 
 
-if disttool._is_debian_based:
+if linux.os.debian_family:
     mcd_conf_path = '/etc/memcached.conf'
     expression = re.compile('^\s*-m\s*\d*$', re.M)
     mem_re = re.compile('^-m\s+(?P<memory>\d+)\s*$', re.M)
@@ -60,26 +59,11 @@ def get_cache_size():
             return '400'
 
 
-class MemcachedInitScript(initdv2.ParametrizedInitScript):
-    def __init__(self):
-
-        pid_file = None
-        if disttool.is_redhat_based():
-            pid_file = "/var/run/memcached/memcached.pid"
-        elif disttool.is_debian_based():
-            pid_file = "/var/run/memcached.pid"
-
-        initd_script = '/etc/init.d/memcached'
-        if not os.path.exists(initd_script):
-            raise HandlerError("Cannot find Memcached init script at %s. Make sure that memcached is installed" % initd_script)
-
-        initdv2.ParametrizedInitScript.__init__(self, 'memcached', initd_script, pid_file, socks=[initdv2.SockParam(11211)])
-
-initdv2.explore('memcached', MemcachedInitScript)
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MEMCACHED
 
+
 def get_handlers():
-    return [MemcachedHandler()]
+    return [MemcachedHandler()] if memcached_api.MemcachedAPI.software_supported else []
 
 class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 
@@ -90,9 +74,9 @@ class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 
     def __init__(self):
         self.preset_provider = MemcachedPresetProvider()
-        preset_service.services[BEHAVIOUR] = self.preset_provider
-        FarmSecurityMixin.__init__(self, [11211])
-        ServiceCtlHandler.__init__(self, BEHAVIOUR, MemcachedInitScript())
+        FarmSecurityMixin.__init__(self)
+        self.init_farm_security([11211])
+        ServiceCtlHandler.__init__(self, BEHAVIOUR, memcached_api.MemcachedInitScript())
         self._logger = logging.getLogger(__name__)
         self._queryenv = bus.queryenv_service
         bus.on("init", self.on_init)
@@ -117,7 +101,7 @@ class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 class MemcachedConf(BaseConfig):
 
     config_type = 'app'
-    config_name = 'apache2.conf' if disttool.is_debian_based() else 'httpd.conf'
+    config_name = 'apache2.conf' if linux.os.debian_family else 'httpd.conf'
 
 
 class MemcachedPresetProvider(PresetProvider):

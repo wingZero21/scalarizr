@@ -5,6 +5,7 @@ import uuid
 import string
 import glob
 
+from scalarizr.bus import bus
 from scalarizr import storage2
 from scalarizr.libs import bases
 from scalarizr.linux import coreutils, mount as mod_mount
@@ -76,16 +77,11 @@ class Volume(Base):
         if not self.id:
             self.id = self._genid('vol-')
         if mount:
-            try:
-                LOG.debug('Mounting: %s', self.id)
-                self.mount()
-            except mod_mount.NoFileSystem:
-                if mkfs:
-                    LOG.debug('Creating %s filesystem: %s', self.fstype, self.id)
-                    self.mkfs()
-                    self.mount()
-                else:
-                    raise
+            if not self.is_fs_created() and mkfs:
+                LOG.debug('Creating %s filesystem: %s', self.fstype, self.id)
+                self.mkfs()                
+            LOG.debug('Mounting: %s', self.id)
+            self.mount()
             if fstab and self.device not in mod_mount.fstab():
                 LOG.debug('Adding to fstab: %s', self.id)
                 mod_mount.fstab().add(self.device, self.mpoint, self.fstype)
@@ -127,6 +123,7 @@ class Volume(Base):
         if not os.path.exists(self.mpoint):
             os.makedirs(self.mpoint)
         mod_mount.mount(self.device, self.mpoint)
+        bus.fire("block_device_mounted", volume=self)
 
 
     def umount(self):

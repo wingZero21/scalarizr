@@ -23,6 +23,13 @@ class OperationNotFoundError(OperationError):
     pass
 
 class OperationAPI(object):
+    """
+    Basic API to control operations.
+
+    Namespace::
+
+        operation
+    """
 
     __metaclass__ = Singleton
 
@@ -37,11 +44,27 @@ class OperationAPI(object):
 
     @rpc.query_method
     def result(self, operation_id=None):
+        """
+        Returns result of an operation by operation ID.
+
+        :param operation_id: Operation ID
+        :type operation_id: str
+        """
         return self.get(operation_id).serialize()
 
     @rpc.command_method
     def cancel(self, operation_id=None):
+        """
+        Cancels operation.
+
+        :param operation_id: Operation ID
+        :type operation_id: str
+        """
         self.get(operation_id).cancel()
+
+    @rpc.query_method
+    def has_in_progress(self):
+        return bool(self.find(status='in-progress'))
 
     def create(self, name, func, **kwds):
         op = Operation(name, func, **kwds)
@@ -112,7 +135,7 @@ class _LogHandler(logging.Handler):
 class Operation(object):
 
     def __init__(self, name, func, func_args=None, func_kwds=None, 
-                cancel_func=None, exclusive=False):
+                cancel_func=None, exclusive=False, notifies=True):
         self.operation_id = str(uuid.uuid4())
         self.name = name
         ops = OperationAPI().find(name, status='in-progress', exclusive=True)
@@ -123,6 +146,7 @@ class Operation(object):
         self.func_args = list(func_args or [])
         self.func_kwds = dict(func_kwds or {})
         self.cancel_func = cancel_func
+        self.notifies = notifies
         self.status = 'new'
         self.result = None
         self.logs = []
@@ -146,7 +170,7 @@ class Operation(object):
     def _in_progress(self):
         self.status = 'in-progress'
         self.started_at = time.time() 
-        try:
+        try: 
             self._completed(self.func(self, *self.func_args, **self.func_kwds))
             if self.canceled:
                 raise Exception('User canceled')
@@ -154,7 +178,8 @@ class Operation(object):
             self._failed()
         finally:
             self.finished_at = time.time()
-            __node__['messaging'].send('OperationResult', body=self.serialize())
+            if self.notifies:
+                __node__['messaging'].send('OperationResult', body=self.serialize())
 
     def run(self):
         self._in_progress()
@@ -187,8 +212,11 @@ class Operation(object):
     def _failed(self, *exc_info):
         self.error = exc_info or sys.exc_info()
         self.status = 'failed' if not self.canceled else 'canceled'
-        self.logger.error('Operation "%s" (id: %s) failed. Reason: %s', 
-                self.name, self.operation_id, self.error[1], exc_info=self.error)
+        if self.canceled:
+            self.logger.warn('Operation "%s" (id: %s) canceled', self.name, self.operation_id)
+        else:
+            self.logger.error('Operation "%s" (id: %s) failed. Reason: %s', 
+                    self.name, self.operation_id, self.error[1], exc_info=self.error)
 
     def _completed(self, result=None):
         self.result = result

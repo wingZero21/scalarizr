@@ -54,7 +54,7 @@ initdv2.explore(SERVICE_NAME, redis.RedisInitScript)
 
 
 def get_handlers():
-    return (RedisHandler(), )
+    return [RedisHandler()] if redis_api.RedisAPI.software_supported else []
 
 
 class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
@@ -127,12 +127,10 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
     def __init__(self):
         self._redis_api = redis_api.RedisAPI()
         self.preset_provider = redis.RedisPresetProvider()
-        preset_service.services[BEHAVIOUR] = self.preset_provider
 
         from_port = __redis__['ports_range'][0]
         to_port = __redis__['ports_range'][-1]
-        handlers.FarmSecurityMixin.__init__(self, ["{0}:{1}".format(from_port, to_port)])
-
+        handlers.FarmSecurityMixin.__init__(self)
         ServiceCtlHandler.__init__(self, SERVICE_NAME, cnf_ctl=RedisCnfController())
 
         bus.on("init", self.on_init)
@@ -168,11 +166,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         self.on_reload()
 
-        if self._cnf.state == ScalarizrState.RUNNING:
-            # Fix to enable access outside farm when use_passwords=True
-            if self.use_passwords:
-                self.security_off()
-
 
     def on_init(self):
 
@@ -181,10 +174,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
+
         if __node__['state'] == 'running':
-            # Fix to enable access outside farm when use_passwords=True
-            # if self.use_passwords:
-            #    self.security_off()
+            self._ensure_security()
 
             vol = storage2.volume(__redis__['volume'])
             vol.ensure(mount=True)
@@ -228,14 +220,32 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         self.default_service = initdv2.lookup(SERVICE_NAME)
 
 
-    def _insert_iptables_rules(self):
-        if iptables.enabled():
-            ports = "{0}:{1}".format(
-                        __redis__['ports_range'][0], 
-                        __redis__['ports_range'][-1])
-            iptables.FIREWALL.ensure([
-                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": ports}
-            ])
+    def _ensure_security(self):
+        ports = "{0}:{1}".format(
+                    __redis__['ports_range'][0], 
+                    __redis__['ports_range'][-1])
+        if self.use_passwords and iptables.enabled():
+            if __node__['state'] == 'running':
+                # TODO: deprecate and remove it in 2015
+                # Fix to enable access outside farm when use_passwords=True
+                try:
+                    iptables.FIREWALL.remove({
+                        "protocol": "tcp", 
+                        "match": "tcp", 
+                        "dport": ports,
+                        "jump": "DROP"
+                    })
+                except:
+                    # silently ignore non existed rule error
+                    pass
+            iptables.FIREWALL.ensure([{
+                "jump": "ACCEPT", 
+                "protocol": "tcp", 
+                "match": "tcp", 
+                "dport": ports
+            }])
+        else:
+            self.init_farm_security([ports]) 
 
 
     def on_host_init_response(self, message):
@@ -311,10 +321,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         passwords = passwords or [self.get_main_password(),]
         self.redis_instances.init_processes(num_processes, ports=ports, passwords=passwords)
 
-        if self.use_passwords:
-            self.security_off()
-        else:
-            self._insert_iptables_rules()
+        self._ensure_security()
 
 
     def on_before_host_up(self, message):

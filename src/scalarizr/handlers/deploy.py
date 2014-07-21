@@ -63,7 +63,10 @@ class DeploymentHandler(Handler):
             
         self._logger.info('Executing %s script', name)
         kwargs = dict(name=name, body=body, exec_timeout=exec_timeout or 3600)
-        self._script_executor.execute_scripts(scripts=(script_executor.Script(**kwargs), ))
+        self._script_executor.execute_scripts(
+                scripts=(script_executor.Script(**kwargs), ), 
+                event_name=name, 
+                scripts_qty=1)
     
     def on_Deploy(self, message, define_operation=True, raise_exc=False):
         msg_body = dicts.encode(message.body, encoding='ascii')        

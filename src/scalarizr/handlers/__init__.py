@@ -1,12 +1,12 @@
 from __future__ import with_statement
 
-from scalarizr import config
+from scalarizr import config, util, linux, api, exceptions
 from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import ScalarizrState, STATE
 from scalarizr.messaging import Queues, Message, Messages
-from scalarizr.util import initdv2, disttool, software
-from scalarizr.linux import iptables
+from scalarizr.util import initdv2, software, system2, PopenError
+from scalarizr.linux import iptables, pkgmgr
 from scalarizr.service import CnfPresetStore, CnfPreset, PresetType
 
 import os
@@ -16,7 +16,9 @@ import pprint
 import sys
 import traceback
 import uuid
+import codecs
 import distutils.version
+import platform as platform_module
 
 LOG = logging.getLogger(__name__)
 
@@ -26,9 +28,7 @@ class Handler(object):
     _logger = logging.getLogger(__name__)
 
     def __init__(self):
-        if self._service_name and self._service_name not in self.get_ready_behaviours():
-            msg = 'Cannot load handler %s. Missing software.' % self._service_name
-            raise HandlerError(msg)
+        pass
 
     def new_message(self, msg_name, msg_body=None, msg_meta=None, broadcast=False, include_pad=False, srv=None):
         srv = srv or bus.messaging_service
@@ -105,53 +105,25 @@ class Handler(object):
 
 
     def get_ready_behaviours(self):
-        handlers = list()
-        info = software.system_info(verbose=True)
-        if 'software' in info:
-            Version = distutils.version.LooseVersion
-            for entry in info['software']:
-                if not ('name' in entry and 'version' in entry):
+        possible_behaviors = config.BuiltinBehaviours.values()
+        ready_behaviors = list()
+        if linux.os['family'] != 'Windows':
+            installed_packages = pkgmgr.package_mgr().list()
+            for behavior in possible_behaviors:
+                if behavior == 'base' or behavior not in api.api_routes.keys():
                     continue
-                name = entry['name']
-
-                version = Version(entry['version'])
-
-                str_ver = entry['string_version'] if 'string_version' in entry else ''
-                if name == 'nginx':
-                    handlers.append(config.BuiltinBehaviours.WWW)
-                elif name == 'chef':
-                    handlers.append(config.BuiltinBehaviours.CHEF)
-                elif name == 'memcached':
-                    handlers.append(config.BuiltinBehaviours.MEMCACHED)
-
-                elif name == 'postgresql' and Version('9.0') <= version < Version('9.3'):
-                    handlers.append(config.BuiltinBehaviours.POSTGRESQL)
-                elif name == 'redis' and Version('2.2') <= version < Version('2.9'):
-                    handlers.append(config.BuiltinBehaviours.REDIS)
-                elif name == 'rabbitmq' and Version('2.6') <= version < Version('3.2'):
-                    handlers.append(config.BuiltinBehaviours.RABBITMQ)
-                elif name == 'mongodb' and Version('2.0') <= version < Version('2.5'):
-                    handlers.append(config.BuiltinBehaviours.MONGODB)
-                elif name == 'apache' and Version('2.0') <= version < Version('2.5'):  # experimental for ubuntu1304
-                    handlers.append(config.BuiltinBehaviours.APP)
-                elif name == 'haproxy' and Version('1.3') < version < Version('1.5'):
-                    handlers.append(config.BuiltinBehaviours.HAPROXY)
-                elif name == 'mysql' and Version('5.0') <= version < Version('5.6'):
-                    handlers.append(config.BuiltinBehaviours.MYSQL)
-                    if 'Percona' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.PERCONA)
-                    elif 'Maria' in str_ver:
-                        handlers.append(config.BuiltinBehaviours.MARIADB)
-                    else:
-                        handlers.append(config.BuiltinBehaviours.MYSQL2)
-                elif name == 'tomcat':
-                    handlers.append(config.BuiltinBehaviours.TOMCAT)
-
-        return handlers
+                try:
+                    api_cls = util.import_class(api.api_routes[behavior])
+                    api_cls.check_software(installed_packages)
+                    ready_behaviors.append(behavior)
+                except (exceptions.NotFound, exceptions.UnsupportedBehavior, ImportError):
+                    continue
+        return ready_behaviors
 
 
 class HandlerError(BaseException):
     pass
+
 
 class MessageListener:
     _accept_kwargs = {}
@@ -162,13 +134,12 @@ class MessageListener:
         cnf = bus.cnf
         platform = bus.platform
 
-
-        LOG.debug("Initializing message listener");
+        LOG.debug("Initializing message listener")
         self._accept_kwargs = dict(
                 behaviour = config.split(cnf.rawini.get(config.SECT_GENERAL, config.OPT_BEHAVIOUR)),
                 platform = platform.name,
-                os = disttool.uname(),
-                dist = disttool.linux_dist()
+                os = platform_module.uname(),
+                dist = platform_module.dist()
         )
         LOG.debug("Keywords for each Handler::accept\n%s", pprint.pformat(self._accept_kwargs))
 
@@ -178,7 +149,7 @@ class MessageListener:
     def get_handlers_chain (self):
         if self._handlers_chain is None:
             hds = []
-            LOG.debug("Collecting message handlers...");
+            LOG.debug("Collecting message handlers...")
 
             cnf = bus.cnf
             for _, module_str in cnf.rawini.items(config.SECT_HANDLERS):
@@ -223,6 +194,18 @@ class MessageListener:
             if message.body.has_key("platform_access_data"):
                 platform_access_data_on_me = True
                 pl.set_access_data(message.platform_access_data)
+
+            if message.body.get('global_variables'):    
+                global_variables = message.body.get('global_variables') or []
+                glob_vars = {}
+                glob_vars['public'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') 
+                                        for kv in global_variables 
+                                        if not kv.get('private'))
+                glob_vars['private'] = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') 
+                                        for kv in global_variables
+                                        if kv.get('private'))
+                sync_globals(glob_vars)
+
             if 'scalr_version' in message.meta:
                 try:
                     ver = tuple(map(int, message.meta['scalr_version'].strip().split('.')))
@@ -628,70 +611,49 @@ class DbMsrMessages:
 
 
 class FarmSecurityMixin(object):
-    def __init__(self, ports, enabled=True):
+    def __init__(self):
+        self.__enabled = False
+
+    def init_farm_security(self, ports):
         self._logger = logging.getLogger(__name__)
         self._ports = ports
-        self._enabled = enabled
         self._iptables = iptables
         if self._iptables.enabled():
-            bus.on('init', self.__on_init)
-        else:
-            LOG.warn("iptables is not enabled. ports %s won't be protected by firewall" %  (ports, ))
-
-    def __on_init(self):
-        bus.on(
+            bus.on(
                 reload=self.__on_reload
-        )
-        self.__on_reload()
-        if self._enabled:
+            )
+            self.__on_reload()
             self.__insert_iptables_rules()
+            self.__enabled = True  
+        else:
+            LOG.warn("iptables is not enabled. ports %s won't be protected by firewall" %  (ports, ))   
+
 
     def __on_reload(self):
         self._queryenv = bus.queryenv_service
         self._platform = bus.platform
 
-    def security_off(self):
-        self._enabled = False
-        for port in self._ports:
-            try:
-                self._iptables.FIREWALL.remove({
-                    "protocol": "tcp", 
-                    "match": "tcp", 
-                    "dport": port,
-                    "jump": "DROP"
-                })
-            except:
-                # silently ignore non existed rule error
-                pass
 
     def on_HostInit(self, message):
-        if not self._enabled:
+        if not self.__enabled:
             return
         # Append new server to allowed list
-        if not self._iptables.enabled():
-            return
-
         rules = []
         for port in self._ports:
             rules += self.__accept_host(message.local_ip, message.remote_ip, port)
-
         self._iptables.FIREWALL.ensure(rules)
 
 
     def on_HostDown(self, message):
-        if not self._enabled:
+        if not self.__enabled:
             return
         # Remove terminated server from allowed list
-        if not self._iptables.enabled():
-            return
-
         rules = []
         for port in self._ports:
             rules += self.__accept_host(message.local_ip, message.remote_ip, port)
         for rule in rules:
             try:
                 self._iptables.FIREWALL.remove(rule)
-                #self._iptables.delete_rule(rule)
             except: #?
                 if 'does a matching rule exist in that chain' in str(sys.exc_info()[1]):
                     # When HostDown comes from a server that didn't send HostInit
@@ -701,7 +663,10 @@ class FarmSecurityMixin(object):
 
 
     def __create_rule(self, source, dport, jump):
-        rule = {"jump": jump, "protocol": "tcp", "match": "tcp", "dport": str(dport)}
+        rule = {"jump": jump, 
+                "protocol": "tcp", 
+                "match": "tcp", 
+                "dport": str(dport)}
         if source:
             rule["source"] = source
         return rule
@@ -739,7 +704,7 @@ class FarmSecurityMixin(object):
             # TODO: this also duplicates the rules, inserted in on_HostInit
             # for the current host
             rules += self.__accept_host(self._platform.get_private_ip(),
-                                                            self._platform.get_public_ip(), port)
+                                    self._platform.get_public_ip(), port)
             for local_ip, public_ip in hosts:
                 rules += self.__accept_host(local_ip, public_ip, port)
 
@@ -820,3 +785,19 @@ def get_role_servers(role_id=None, role_name=None):
         servers.extend(ips)
 
     return servers
+
+
+def sync_globals(glob_vars=None):
+    if linux.os.windows:
+        return
+    if not glob_vars:
+        queryenv = bus.queryenv_service
+        glob_vars = queryenv.list_global_variables()
+    globals_path = '/etc/profile.d/scalr_globals.sh'
+    with codecs.open(globals_path, 'w+', encoding='utf-8') as fp:
+        for k, v in glob_vars['public'].items():
+            v = v.replace('"', '\\"')
+            if isinstance(v, str):
+                v = v.decode('utf-8')
+            fp.write(u'export %s="%s"\n' % (k, v))
+    os.chmod(globals_path, 0644)

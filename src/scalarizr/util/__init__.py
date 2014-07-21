@@ -28,7 +28,24 @@ class UtilError(BaseException):
     pass
 
 
-class LocalObject:
+class NullPool(object):
+
+    def __init__(self, creator):
+        self._creator = creator
+        self._object = None
+
+    def get(self):
+        return self._object or self._creator()
+
+    def dispose_local(self):
+        self._object = None
+
+    def dispose_all(self):
+        self._object = None
+
+
+class LocalPool(object):
+
     def __init__(self, creator, pool_size=50):
         self._logger = logging.getLogger(__name__)
         self._creator = creator         
@@ -67,8 +84,15 @@ class LocalObject:
             self._logger.debug("Removing %s from connection pool", self._all_conns[:l])
             self._all_conns = self._all_conns[l:]
 
+    def dispose_local(self):
+        if hasattr(self._object, 'current'):
+            del self._object.current
 
-class SqliteLocalObject(LocalObject):
+    def dispose_all(self):
+        self._object = threading.local()
+
+
+class SqliteLocalObject(LocalPool):
     def do_create(self):
         return _SqliteConnection(self, self._creator)
 
@@ -220,6 +244,17 @@ class PopenError(BaseException):
     def proc_args(self):
         return self.args[4]
 
+
+def apply_english_env(env):
+    """
+    Forces LANG and/or LANGUAGE to be English.
+    Forces encoding to UTF-8 for subprocesses.
+    """
+    for name in ('LANG', 'LANGUAGE'):
+        if not env.get(name, '').startswith('en'):
+            env[name] = 'en_US.UTF-8'
+
+
 def system2(*popenargs, **kwargs):
     import subprocess, cStringIO
     
@@ -254,18 +289,9 @@ def system2(*popenargs, **kwargs):
         popenargs = list(popenargs)
         popenargs[0] = tuple('%s' % arg for arg in popenargs[0])
         
-
-    if not 'env' in kwargs:
-        kwargs['env'] = os.environ
-        
-    # Set en_US locale or C
-    if not kwargs['env'].get('LANG'):
-        default_locale = locale.getdefaultlocale()
-        if default_locale == ('en_US', 'UTF-8'):
-            kwargs['env']['LANG'] = 'en_US.UTF-8'
-        else:
-            kwargs['env']['LANG'] = 'C'
-    
+    env = kwargs.setdefault('env', dict(os.environ.items()))
+    apply_english_env(env)
+   
     logger.debug('system: %s' % (popenargs[0],))
     p = subprocess.Popen(*popenargs, **kwargs)
     out, err = p.communicate(input=input)
@@ -619,9 +645,9 @@ def import_class(import_str):
     except ImportError:
         pass
     else:
-        loader.load_module('')
+        m = loader.load_module(loader.fullname)
         try:
-            return getattr(sys.modules[mod_str], class_str)
+            return getattr(m, class_str)
         except (ValueError, AttributeError):
             pass
     raise exceptions.NotFound('Class %s cannot be found' % import_str)
@@ -741,6 +767,56 @@ def add_authorized_key(ssh_public_key):
             fp.write(c)
     finally:
         os.chmod(authorized_keys_path, 0400)
+
+
+class Server(object):
+    def __init__(self):
+        self.running = False
+        self.stop_event = threading.Event()
+    
+    def serve_forever(self):
+        self.start()
+        self.stop_event.clear()
+        try:
+            # do polling here to enable signal handling
+            while not self.stop_event.isSet():
+                self.stop_event.wait(0.2)
+        except:
+            self.stop()
+            raise
+    
+    def stop(self):
+        try:
+            if self.running:
+                self.do_stop()
+        finally:
+            self.running = False
+            self.stop_event.set()
+    
+    def start(self):
+        if not self.running:
+            self.do_start()
+        self.running = True
+        
+    def do_start(self):
+        pass
+    
+    def do_stop(self):
+        pass
+
+
+def init_logging(filename, verbose):
+    kwds = {}
+    if hasattr(filename, 'write'):
+        kwds['stream'] = filename
+    else:
+        kwds['filename'] = filename
+    if verbose:
+        kwds['level'] = logging.DEBUG
+    else:
+        kwds['level'] = logging.INFO
+    kwds['format'] = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+    logging.basicConfig(**kwds) 
 
 
 if platform.uname()[0] == 'Windows':

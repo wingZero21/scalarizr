@@ -1,6 +1,3 @@
-from __future__ import with_statement
-from scalarizr.linux import LinuxError
-
 '''
 Created on Aug 28, 2012
 
@@ -13,75 +10,331 @@ import re
 import os
 import string
 import time
-import urllib
+import urllib2
+import subprocess
+import shutil
+import tempfile
+import distutils.version
 
-from scalarizr import linux
+from scalarizr import linux, util
 from scalarizr.linux import coreutils
 from urlparse import urlparse
 
+from pkg_resources import parse_requirements
+
 LOG = logging.getLogger(__name__)
 
+
+class Repository(object):
+    filename_tpl = None
+    config_tpl = '{url}'
+
+    def __init__(self, name, url):
+        kwds = {
+            'name': name,
+            'url': url,
+            'arch': linux.os['arch']
+        }
+        self.name = name
+        self.url = url.format(**kwds)
+        self.filename = self.filename_tpl.format(**kwds)
+        self.config = self.config_tpl.format(**kwds)
+
+    def ensure(self):
+        assert self.filename and self.config
+        LOG.info('Creating repository configuration in: %s', self.filename)
+        with open(self.filename, 'w+') as fp:
+            fp.write(self.config)
+
+    def update_config_file(self, linefn):
+        tmpname = '%s.tmp' % self.filename
+        dst = open(tmpname, 'w')
+        try:
+            for line in open(self.filename, 'r'):
+                dst.write(linefn(line))
+            dst.close()
+        except:
+            os.remove(tmpname)
+        else:
+            shutil.move(tmpname, self.filename)
+        
+    def _comment(self, line):
+        return '#' + line
+    
+    def _uncomment(self, line):
+        return line[1:] if line.startswith('#') else line
+    
+    def disable(self):
+        if self.enabled():
+            self.update_config_file(self._comment)
+    
+    def enable(self):
+        if not self.enabled():
+            self.update_config_file(self._uncomment)
+
+    def enabled(self):
+        return not all(line.startswith('#') for line in open(self.filename))
+
+
 class PackageMgr(object):
+    backup_dir = '/var/cache/scalr/pkgmgr'
+    backup_count = 5
 
-    def install(self, name, version=None, updatedb=False, **kwds):
-        ''' Installs a `version` of package `name` '''
-        raise NotImplementedError()
-
-    def remove(self, name, purge=False):
-        ''' Removes package with given name. '''
-        raise NotImplementedError()
 
     def info(self, name):
         '''
         Returns info about package
         Example:
                 {'installed': '2.6.7-ubuntu1',
-                'candidate': '2.6.7-ubuntu5'}
+                'candidate': '2.6.7-ubuntu5',
+                'backup_id': '20140129171501-2.6.7-ubuntu1'}
         installed is None, if package not installed
         candidate is None, if latest version of package is installed
+        backup_id is None, if no backup was created with a package installation
+        '''
+        installed, candidate = self._installed_and_candidate(name)
+        backup_dir = self._find_backup_dir(name, installed) if installed else None
+        return {
+            'installed': installed,
+            'candidate': candidate if candidate and installed != candidate else None,
+            'backup_id': os.path.basename(backup_dir) if backup_dir else None
+        }
+
+
+    def install(self, name, version=None, updatedb=False, backup=False, **kwds):
+        '''
+        Installs a `version` of package `name`
+        '''
+        name_version = self._format_name_version(name, version)
+        if updatedb:
+            self.updatedb()
+
+        if backup:
+            download_dir = tempfile.mkdtemp()
+            try:
+                self._install_download_only(name_version, download_dir, **kwds)
+                self._install_package(name_version, **kwds)
+
+                # create backup
+                files = (os.path.join(download_dir, name) 
+                        for name in os.listdir(download_dir))
+                if not version:
+                    version = self._installed_and_candidate(name)[0]
+                self._create_backup(name, version, files)
+            finally:
+                shutil.rmtree(download_dir)
+        else:
+            self._install_package(name_version, **kwds)
+
+
+    def remove(self, name, purge=False):
+        ''' Removes package with given name. '''
+        raise NotImplementedError()
+
+
+    def list(self):
+        '''
+        Returns dict of installed packages
+        :returns: dict
+        Example:
+            {
+                'python': '2.6.7-ubuntu1',
+            }
         '''
         raise NotImplementedError()
 
-    def updatedb(self):
+
+    def updatedb(self, **kwds):
         ''' Updates package manager internal database '''
         raise NotImplementedError()
+
 
     def repos(self):
         ''' List enabled repositories '''
         raise NotImplementedError()
 
 
-class AptPackageMgr(PackageMgr):
-    def apt_get_command(self, command, **kwds):
-        kwds.update(env={'DEBIAN_FRONTEND': 'noninteractive',
-                        'DEBIAN_PRIORITY': 'critical',
-                        'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
-                        raise_exc=False
-        )
-        for _ in range(18):  # timeout approx 3 minutes
-            out, err, code = linux.system(('/usr/bin/apt-get',
-                                            '-q', '-y', '--force-yes',
-                                            '-o Dpkg::Options::=--force-confold') + \
-                                            tuple(filter(None, command.split())), **kwds)
-            if code:
-                if 'is another process using it?' in err \
-                    or 'Could not get lock' in err:
-                    LOG.debug('Could not get dpkg lock (perhaps, another process is using it.)')
-                    time.sleep(10)
-                    continue
-                else:
-                    raise LinuxError('Apt-get command failed. Out: %s \nErrors: %s' % (out, err))
+    def version_cmp(self, name_1, name_2):
+        ''' Compares 2 package versions '''
+        raise NotImplementedError()
 
+
+    def installed(self, name, version=None, updatedb=False, **kwds):
+        '''
+        Ensure that package installed
+        '''
+        if updatedb:
+            self.updatedb()
+
+        installed = self.info(name)['installed']
+        if not installed:
+            LOG.info('Installing %s=%s', name, version)
+            self.install(name, version, **kwds)
+
+
+    def latest(self, name, updatedb=True, **kwds):
+        '''
+        Ensure that latest version of package installed
+        '''
+        if updatedb:
+            self.updatedb()
+
+        info_dict = self.info(name)
+        candidate = info_dict['candidate']
+        installed = info_dict['installed']
+
+        if candidate or not installed:
+            LOG.info('Installing %s=%s', name, candidate)
+            self.install(name, candidate, **kwds)
+
+
+    def removed(self, name, purge=False):
+        '''
+        Ensure that package removed (purged)
+        '''
+        installed = self.info(name)['installed']
+        if purge or installed:
+            if installed:
+                LOG.info('Uninstalling %s=%s', name, installed)
             else:
-                return out, err, code
-
-        raise Exception('Apt-get command failed: dpkg is being used by another process')
-
-    def apt_cache_command(self, command, **kwds):
-        return linux.system(('/usr/bin/apt-cache',) + tuple(filter(None, command.split())), **kwds)
+                LOG.info('Uninstalling %s', name)
+            self.remove(name, purge)
 
 
-    def apt_policy(self, name):
+    def _format_name_version(self, name, version):
+        raise NotImplementedError()
+
+
+    def _installed_and_candidate(self, name):
+        raise NotImplementedError()
+
+
+    def _install_package(self, name_version, **kwds):
+        raise NotImplementedError()
+
+
+    def _install_download_only(self, name_version, download_dir, **kwds):
+        raise NotImplementedError()
+
+
+    def _create_backup(self, name, version, package_files):
+        # Keep only latest self.backup_count backups
+        backup_dir = os.path.join(self.backup_dir, name)
+        if os.path.exists(backup_dir):
+            names_to_delete = list(reversed(sorted(os.listdir(backup_dir))))[self.backup_count:]
+            for name in names_to_delete:
+                path = os.path.join(backup_dir, name)
+                shutil.rmtree(path)
+
+        # Create new backup dir and copy files
+        backup_id = '{0}-{1}'.format(version, time.strftime('%Y%m%d%H%S')) 
+        backup_dir = os.path.join(backup_dir, backup_id)
+        if not os.path.exists(backup_dir):
+            os.makedirs(backup_dir, 0755)
+        for filename in package_files:
+            shutil.copy(filename, backup_dir)
+
+        return backup_id
+
+
+    def _find_backup_dir(self, name, version):
+        backup_dir = os.path.join(self.backup_dir, name, version + '-*')
+        try:
+            return glob.glob(backup_dir)[0]
+        except IndexError:
+            return None
+
+
+    def restore_backup(self, name, backup_id):
+        raise NotImplementedError()
+
+
+class AptPackageMgr(PackageMgr):
+    def updatedb(self, **kwds):
+        try:
+            coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
+        except OSError:
+            pass
+        path = '/var/lib/apt/lists'
+        for name in os.listdir(path):
+            filename = os.path.join(path, name)
+            if name != 'lock' and os.path.isfile(filename):
+                os.remove(filename)
+        cmd = ''
+        if kwds.get('apt_repository'):
+            cmd += ('--no-list-cleanup '
+                    '-o Dir::Etc::sourcelist=sources.list.d/{0}.list '
+                    '-o Dir::Etc::sourceparts=- '
+                    ).format(kwds['apt_repository'])
+        cmd += 'update'
+        self.apt_get_command(cmd)
+
+
+    def repos(self):
+        files = glob.glob('/etc/apt/sources.list.d/*.list')
+        names = [os.path.basename(os.path.splitext(f)[0]) for f in files]
+        return names
+
+
+    def list(self):
+        '''
+        Returns dict of installed packages
+        :returns: dict
+        Example:
+            {
+                'python':'2.6.7-ubuntu1',
+            }
+        '''
+        out, err, code = linux.system(
+                ("dpkg-query", "-W", "-f=${Status}|${Package}|${Version}\n",),
+                raise_exc=True
+                )
+        if err:
+            raise Exception("'dpkg-query -W' command failed. Out: %s \nErrors: %s" % (out, err))
+        pkgs = dict([(line.split('|')[1], line.split('|')[2].split(':')[-1]) \
+                for line in out.split('\n') if line.split('|')[0]=='install ok installed'])
+        return pkgs
+
+
+    def remove(self, name, purge=False):
+        command = 'purge' if purge else 'remove'
+        self.apt_get_command('%s %s' % (command, name), raise_exc=True)
+
+
+    def restore_backup(self, name, backup_id):
+        def dpkg_configure(raise_exc=False):
+            cmd = ('dpkg', '--configure', '-a')
+            return linux.system(cmd, raise_exc=raise_exc)     
+
+        error_re = re.compile(r'dpkg: error processing ([^\s]+)')
+        problem_packages = []
+        for line in dpkg_configure()[1].splitlines():
+            m = error_re.match(line)
+            if m:
+                problem_packages.append(m.group(1))
+
+        # delete postinst scripts of problem packages
+        for name in problem_packages:
+            postinst_path = '/var/lib/dpkg/info/{0}.postinst'.format(name)
+            coreutils.remove(postinst_path)
+
+        dpkg_configure(raise_exc=True)
+
+        # forcefully install backuped packages
+        backup_dir = os.path.join(self.backup_dir, name, backup_id)
+        cmd = ['dpkg', '-i', '--force-downgrade'] + os.listdir(backup_dir)
+        linux.system(cmd, cwd=backup_dir, raise_exc=True)
+
+
+    def version_cmp(self, name_1, name_2):
+        if name_1 == name_2:
+            return 0
+        return_code = linux.system(('/usr/bin/dpkg', '--compare-versions', str(name_1), '>', str(name_2)), 
+                    raise_exc=False)[2]
+        return 1 if not return_code else -1
+
+
+    def _installed_and_candidate(self, name):
         installed_re = re.compile(r'^\s{2}Installed: (.+)$')
         candidate_re = re.compile(r'^\s{2}Candidate: (.+)$')
         installed = candidate = None
@@ -101,48 +354,73 @@ class AptPackageMgr(PackageMgr):
 
         return installed, candidate
 
-    def updatedb(self):
-        try:
-            coreutils.clean_dir('/var/lib/apt/lists/partial', recursive=False)
-        except OSError:
-            pass
-        path = '/var/lib/apt/lists'
-        for name in os.listdir(path):
-            filename = os.path.join(path, name)
-            if name != 'lock' and os.path.isfile(filename):
-                os.remove(filename)
-        self.apt_get_command('update')
 
-    def install(self, name, version=None, updatedb=False, **kwds):
+    def _format_name_version(self, name, version):
         if version:
-            name += '=%s' % version
-        if updatedb:
-            self.updatedb()
-        self.apt_get_command('install %s' % name, raise_exc=True)
+            name += '={0}'.format(version)
+        return name
 
-    def remove(self, name, purge=False):
-        command = 'purge' if purge else 'remove'
-        self.apt_get_command('%s %s' % (command, name), raise_exc=True)
 
-    def info(self, name):
-        installed, candidate = self.apt_policy(name)
-        return {'installed': installed,
-                        'candidate': candidate if installed != candidate else None}
+    def _install_download_only(self, name_version, download_dir, **kwds):
+        partial_dir = os.path.join(download_dir, 'partial')
+        if not os.path.exists(partial_dir):
+            os.makedirs(partial_dir)
+        cmd = 'install --download-only -o=Dir::Cache::Archives={0} {1}'.format(
+                download_dir, name_version)
+        self.apt_get_command(cmd, raise_exc=True)
+        # remove all not *.deb 
+        for name in os.listdir(download_dir):
+            if not name.endswith('.deb'):
+                coreutils.remove(os.path.join(download_dir, name))
 
-    def repos(self):
-        files = glob.glob('/etc/apt/sources.list.d/*.list')
-        names = [os.path.basename(os.path.splitext(f)[0]) for f in files]
-        return names
 
+    def _install_package(self, name_version, **kwds):
+        cmd = 'install {0}'.format(name_version)
+        self.apt_get_command(cmd, raise_exc=True) 
+
+
+    def apt_get_command(self, command, **kwds):
+        kwds.update(env={'DEBIAN_FRONTEND': 'noninteractive',
+                        'DEBIAN_PRIORITY': 'critical',
+                        'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
+                        raise_exc=False
+        )
+        for _ in range(18):  # timeout approx 3 minutes
+            out, err, code = linux.system(('/usr/bin/apt-get',
+                                            '-q', '-y', '--force-yes',
+                                            '-o Dpkg::Options::=--force-confold') + \
+                                            tuple(filter(None, command.split())), **kwds)
+            if code:
+                if 'is another process using it?' in err \
+                    or 'Could not get lock' in err:
+                    LOG.debug('Could not get dpkg lock (perhaps, another process is using it.)')
+                    time.sleep(10)
+                    continue
+                else:
+                    raise linux.LinuxError('Apt-get command failed. Out: %s \nErrors: %s' % (out, err))
+
+            else:
+                return out, err, code
+
+        raise Exception('Apt-get command failed: dpkg is being used by another process')
+
+
+    def apt_cache_command(self, command, **kwds):
+        return linux.system(('/usr/bin/apt-cache',) + tuple(filter(None, command.split())), **kwds)
+
+
+class AptRepository(Repository):
+    filename_tpl = '/etc/apt/sources.list.d/{name}.list'
+    config_tpl = 'deb {url}'
 
 
 class RpmVersion(object):
-
     def __init__(self, version):
         self.version = version
         self._re_not_alphanum = re.compile(r'^[^a-zA-Z0-9]+')
         self._re_digits = re.compile(r'^(\d+)')
         self._re_alpha = re.compile(r'^([a-zA-Z]+)')
+
 
     def __iter__(self):
         ver = self.version
@@ -160,6 +438,7 @@ class RpmVersion(object):
             ver = ver[len(token):]
 
         raise StopIteration()
+
 
     def __cmp__(self, other):
         iter2 = iter(other)
@@ -189,28 +468,62 @@ class RpmVersion(object):
 
 
 class YumPackageMgr(PackageMgr):
-
-    def yum_command(self, command, **kwds):
-        # explicit exclude was added after yum tried to install iptables.i686
-        # on x86_64 amzn
-        exclude = ()
-        if linux.os["arch"] == "x86_64":
-            exclude = (
-                "--exclude", "*.i386",
-                "--exclude", "*.i486",
-                "--exclude", "*.i686",
-            )
-        elif linux.os["arch"] == "i386":
-            exclude = ("--exclude", "x86_64")
-
-        return linux.system((('/usr/bin/yum', '-d0', '-y') + tuple(filter(None, command.split())) + exclude), **kwds)
+    def updatedb(self, **kwds):
+        self.yum_command('clean expire-cache')
 
 
-    def rpm_ver_cmp(self, v1, v2):
-        return cmp(RpmVersion(v1), RpmVersion(v2))
+    def remove(self, name, purge=False):
+        self.yum_command('remove '+name, raise_exc=True)
 
 
-    def yum_list(self, name):
+    def repos(self):
+        ret = []
+        repo_re = re.compile(r'Repo-id\s+:\s(.*)')
+        out = linux.system(('/usr/bin/yum', 'repolist', '--verbose'))[0]
+        for line in out.splitlines():
+            m = repo_re.search(line)
+            if m:
+                ret.append(m.group(1))
+        return map(string.lower, ret)
+
+
+    def list(self):
+        '''
+        Returns dict of installed packages
+        :returns: dict
+        Example:
+            {
+                'python':'2.6.7-ubuntu1',
+            }
+        '''
+        out, err, code = linux.system(
+                ('rpm', '-qa', '--queryformat', '%{NAME}|%{VERSION}\n',),
+                raise_exc=True
+                )
+        if err:
+            raise Exception("'rpm -qa' command failed. Out: %s \nErrors: %s" % (out, err))
+        pkgs = dict([_.split('|') for _ in out.split('\n') if _])
+        return pkgs
+
+
+    def restore_backup(self, name, backup_id):
+        backup_dir = os.path.join(self.backup_dir, name, backup_id)
+        msg = 'Failed to restore package {0} from backup {1}'.format(name, backup_id)
+        linux.system(['/usr/bin/rpm', '-i', '--force', '--nodeps'] + os.listdir(backup_dir), 
+                cwd=backup_dir, error_text=msg)
+
+
+    def version_cmp(self, name_1, name_2):
+        return cmp(RpmVersion(name_1), RpmVersion(name_2))
+
+
+    def _format_name_version(self, name, version):
+        if version:
+            name += '-{0}'.format(version)
+        return name
+
+
+    def _installed_and_candidate(self, name):
         out = self.yum_command('list --showduplicates %s' % name)[0].strip()
 
         version_re = re.compile(r'[^\s]+\s+([^\s]+)')
@@ -225,56 +538,67 @@ class YumPackageMgr(PackageMgr):
         if 'Available Packages' in lines:
             versions = [version_re.match(line).group(1) for line in lines[lines.index('Available Packages')+1:]]
         else:
-            versions = []
+            versions = [None]
 
-        return installed, versions
-
-
-    def updatedb(self):
-        self.yum_command('clean expire-cache')
+        return installed, versions[-1]
 
 
-    def install(self, name, version=None, updatedb=False, **kwds):
-        if version:
-            name += '-%s' % version
-        if updatedb:
-            self.updatedb()
-        self.yum_command('install %s' %  name, raise_exc=True)
+    def _install_package(self, name_version, **kwds):
+        cmd = 'install {0}'.format(name_version)
+        out, err, _ = self.yum_command(cmd, raise_exc=True)
+        if kwds.get('rpm_raise_scriptlet_errors') \
+            and re.search(r'(Non-fatal|Error in) (PREIN|PRERM|POSTIN|POSTRM) scriptlet', err):
+            raise Exception(out)
+
+
+    def _install_download_only(self, name_version, download_dir, version=None, **kwds):
+        cmd = 'install --downloadonly --downloaddir={0} {1}'.format(download_dir, name_version)
+        code = self.yum_command(cmd, debug_level=1, raise_exc=False)[2]
+        if not os.listdir(download_dir):
+            msg = 'yum {0} downloaded nothing and exited with code: {1}'.format(cmd, code)
+            raise Exception(msg)  
+
 
     def localinstall(self, name):
         def do_localinstall(filename):
-             self.yum_command('localinstall --nogpgcheck %s' % filename, raise_exc=True)
+            self.yum_command('localinstall --nogpgcheck %s' % filename, raise_exc=True)
 
         if name.startswith('http://'):
             filename = os.path.join('/tmp', os.path.basename(name))
-            urllib.urlretrieve(name, filename)
+            urlretrieve(name, filename)
             try:
                 do_localinstall(filename)
             finally:
                 os.remove(filename)
         else:
             do_localinstall(name)
-       
-
-    def remove(self, name, purge=False):
-        self.yum_command('remove '+name, raise_exc=True)
 
 
-    def info(self, name):
-        installed, candidates = self.yum_list(name)
-        return {'installed': installed,
-                'candidate': candidates[-1] if candidates else None}
+    def yum_command(self, command, debug_level=0, **kwds):
+        # explicit exclude was added after yum tried to install iptables.i686
+        # on x86_64 amzn
+        exclude = ()
+        if linux.os["arch"] == "x86_64":
+            exclude = (
+                "--exclude", "*.i386",
+                "--exclude", "*.i486",
+                "--exclude", "*.i686",
+            )
+        elif linux.os["arch"] == "i386":
+            exclude = ("--exclude", "x86_64")
 
-    def repos(self):
-        ret = []
-        repo_re = re.compile(r'Repo-id\s+:\s(.*)')
-        out = linux.system(('/usr/bin/yum', 'repolist', '--verbose'))[0]
-        for line in out.splitlines():
-            m = repo_re.search(line)
-            if m:
-                ret.append(m.group(1))
-        return map(string.lower, ret)
+        return linux.system((('/usr/bin/yum', '-d{0}'.format(debug_level), '-y') + tuple(filter(None, command.split())) + exclude), **kwds)
 
+
+class YumRepository(Repository):
+    filename_tpl = '/etc/yum.repos.d/{name}.repo'
+    config_tpl = (
+        '[{name}]\n'
+        'name={name}\n'
+        'baseurl={url}\n'
+        'enabled=1\n'
+        'gpgcheck=0\n'
+    )
 
 
 class RpmPackageMgr(PackageMgr):
@@ -282,12 +606,15 @@ class RpmPackageMgr(PackageMgr):
     def rpm_command(self, command, **kwds):
         return linux.system(['/usr/bin/rpm', ] + filter(None, command.split()), **kwds)
 
+
     def install(self, name, version=None, updatedb=False, **kwds):
         ''' Installs a package from file or url with `name' '''
         self.rpm_command('-Uvh '+name, raise_exc=True, **kwds)
 
+
     def remove(self, name, purge=False):
         self.rpm_command('-e '+name, raise_exc=True)
+
 
     def _version_from_name(self, name):
         ''' Returns version of package that contains in its name
@@ -302,6 +629,7 @@ class RpmPackageMgr(PackageMgr):
         version = re.findall(r'-[0-9][^-]*\..*', name)[0][1:]
         return version
 
+
     def info(self, name):
         name = urlparse(name).path.split('/')[-1]
         name = name.replace('.rpm', '')
@@ -311,16 +639,145 @@ class RpmPackageMgr(PackageMgr):
         installed_version = self._version_from_name(out)
 
         return {'installed': installed_version if installed else None,
-                'candidate': None}
+                'candidate': None,
+                'backup_id': None}
 
-    def updatedb(self):
+
+    def updatedb(self, **kwds):
         pass
 
 
+if linux.os.windows_family:
+    import posixpath
+
+
+    class WinPackageMgr(object):
+        SOURCES_DIR = os.path.join(util.reg_value('InstallDir'), 'etc')
+
+
+        def __init__(self):
+            self.index = None
+   
+
+        def install(self, name, version=None, updatedb=False, **kwds):
+            ''' Installs a `version` of package `name` '''
+            if not self.index or updatedb:
+                self.updatedb()
+            packageurl = self.index[name]  # simplification. candidate is always the one.
+
+            tmp_dir = tempfile.mkdtemp()
+            try:
+                packagefile = os.path.join(tmp_dir, os.path.basename(packageurl))
+                LOG.info('Downloading %s', packageurl)
+                urlretrieve(packageurl, packagefile)
+
+                LOG.info('Executing installer')
+                p = subprocess.Popen('start "Installer" /wait "%s" /S' % packagefile, shell=True)
+                out, err = p.communicate()
+                LOG.debug('out: %s', out)
+                LOG.debug('err: %s', err)
+                if p.returncode:
+                    msg = 'Installation failed. <out>: %s, <err>: %s' % (out, err)
+                    raise Exception(msg)
+                LOG.info('Done')
+            finally:
+                shutil.rmtree(tmp_dir)
+    
+
+        def installed_version(self, name):
+            ''' Return installed package version '''
+            return '{0}-{1}'.format(util.reg_value('DisplayVersion'), util.reg_value('DisplayRelease'))
+
+        
+        def _join_packages_str(self, sep, name, version, *args):
+            packages = [(name, version)]
+            if args:
+                for i in xrange(0, len(args), 2):
+                    packages.append(args[i:i+2])
+            format = '%s' + sep +'%s'
+            return ' '.join(format % p for p in packages)       
+        
+
+        def updatedb(self, **kwds):
+            tmp_dir = tempfile.mkdtemp()
+
+            self.index = {}
+            try:        
+                LOG.debug('Scan package sources dir')
+                for sourcesfile in glob.glob(os.path.join(self.SOURCES_DIR, '*.winrepo')):
+                    LOG.debug('Process sources file %s', sourcesfile)
+                    urls = open(sourcesfile).read().splitlines()
+                    urls = map(string.strip, urls)
+                    urls = filter(lambda u: u and not u.startswith('#'), urls)
+                    for url in urls:
+                        if not re.search(r'{0}/?'.format(linux.os['arch']), url):
+                            url = posixpath.join(url, linux.os['arch'])
+                        dst = os.path.join(tmp_dir, url.replace('/', '_'))
+                        src = posixpath.join(url, 'index')
+                        LOG.debug('Fetching index file %s', src)
+                        urlretrieve(src, dst)
+
+                        with open(dst) as fp:
+                            for line in fp:
+                                colums = map(string.strip, line.split(' '))
+                                colums = filter(None, colums)
+                                package = colums[0]
+                                packagefile = colums[1]
+                                self.index[package] = posixpath.join(url, packagefile)
+            finally:
+                shutil.rmtree(tmp_dir)
+
+
+        def info(self, name):
+            if not self.index:
+                self.updatedb()
+
+            try:
+                installed = self.installed_version(name)
+            except:
+                installed = None
+            try:
+                candidate = os.path.basename(self.index[name])
+                candidate = candidate.split('_', 1)[1].rsplit('.', 2)[0]
+            except KeyError:
+                candidate = None
+            if installed and installed == candidate:
+                candidate = None
+
+            LOG.debug('Package %s info. installed: %s, candidate: %s', name, installed, candidate)
+            return {
+                'installed': installed,
+                'candidate': candidate
+            }
+
+
+        def version_cmp(self, name_1, name_2):
+            return cmp(distutils.version.LooseVersion(name_1), 
+                distutils.version.LooseVersion(name_2))
+
+
+    class WinRepository(Repository):
+        filename_tpl = os.path.join(WinPackageMgr.SOURCES_DIR, '{name}.winrepo')
+        config_tpl = '{url}'
+
+
 def package_mgr():
-    if linux.os['family'] in ('RedHat', 'Oracle'):
+    if linux.os['family'] == 'Windows':
+        return WinPackageMgr()
+    elif linux.os['family'] in ('RedHat', 'Oracle'):
         return YumPackageMgr()
     return AptPackageMgr()
+
+
+def repository(*args, **kwds):
+    cls = None
+    if linux.os['family'] == 'Windows':
+        cls = WinRepository
+    elif linux.os['family'] in ('RedHat', 'Oracle'):
+        cls = YumRepository
+    else:
+        cls = AptRepository
+    return cls(*args, **kwds)
 
 
 EPEL_RPM_URL = 'http://download.fedoraproject.org/pub/epel/6/i386/epel-release-6-7.noarch.rpm'
@@ -355,7 +812,7 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
 
     def _vars(s):
         vars_ = re.findall('\$\{.+?\}', s)
-        return map((lambda(name): name[2:-1]), vars_) #2 is len of '${'
+        return map((lambda name: name[2:-1]), vars_) #2 is len of '${'
 
     def _substitude(s):
         for var in _vars(s):
@@ -373,49 +830,96 @@ def apt_source(name, sources, gpg_keyserver=None, gpg_keyid=None):
                                       '--recv', gpg_keyid),
                                      raise_exc=False)
 
+def urlretrieve(url, dst):
+    resp = urllib2.urlopen(url)
+    with open(dst, 'w+') as fp:
+        while True:
+            buf = resp.read(4096)
+            if not buf:
+                break
+            fp.write(buf)
+
+# Deprecated functions
 
 def updatedb():
-    '''
-    Sync packages databases
-    '''
-    mgr = package_mgr()
-    mgr.updatedb()
-
+    return package_mgr().updatedb()
 
 def installed(name, version=None, updatedb=False):
-    '''
-    Ensure that package installed
-    '''
-    mgr = package_mgr()
-    if updatedb:
-        mgr.updatedb()
-
-    installed = mgr.info(name)['installed']
-    if not installed:
-        mgr.install(name, version)
-
+    return package_mgr().installed(name, version, updatedb)
 
 def latest(name, updatedb=True):
-    '''
-    Ensure that latest version of package installed
-    '''
-    mgr = package_mgr()
-    if updatedb:
-        mgr.updatedb()
-
-    info_dict = mgr.info(name)
-    candidate = info_dict['candidate']
-    installed = info_dict['installed']
-
-    if candidate or not installed:
-        mgr.install(name, candidate)
-
+    return package_mgr().latest(name, updatedb)
 
 def removed(name, purge=False):
+    return package_mgr().removed(name, purge)
+
+
+class DependencyError(Exception):
+    pass
+
+
+class NotInstalledError(DependencyError):
+    pass
+
+
+class ConflictError(DependencyError):
+    pass
+
+
+class VersionMismatchError(DependencyError):
+    pass
+
+
+def check_dependency(required, installed_packages=None, conflicted_packages=None):
     '''
-    Ensure that package removed (purged)
+    :param required: list
+        The syntax of a requirement specifier can be defined in EBNF as follows:
+            requirement  ::= project_name versionspec? extras?
+            versionspec  ::= comparison version (',' comparison version)*
+            comparison   ::= '<' | '<=' | '!=' | '==' | '>=' | '>'
+            extras       ::= '[' extralist? ']'
+            extralist    ::= identifier (',' identifier)*
+            project_name ::= identifier
+            identifier   ::= [-A-Za-z0-9_]+
+            version      ::= [-A-Za-z0-9_.]+
+        Some examples of valid requirement specifiers:
+            ['FooProject >= 1.2']
+            ['FooProject >= 1.2', 'BarProject <= 1.2']
+            ['PickyThing<1.6,>1.9,!=1.9.6,<2.0a0,==2.4c1']
+            ['SomethingWhoseVersionIDontCareAbout']
+    :param installed_packages: dict
+        Example:
+            {
+                'python':'2.6.7-ubuntu1',
+            }
+    :param conflicted_packages: list
+        Same as required
     '''
-    mgr = package_mgr()
-    installed = mgr.info(name)['installed']
-    if purge or installed:
-        mgr.remove(name, purge)
+    installed_packages = installed_packages or package_mgr().list()
+    conflicted_packages = conflicted_packages or list()
+    for conflict in parse_requirements(conflicted_packages):
+        name = conflict.project_name
+        if name in installed_packages:
+            vers = installed_packages[name]
+            if vers in conflict:
+                raise ConflictError(name, vers)
+    for requirement in parse_requirements(required):
+        name = requirement.project_name
+        required_vers = ','.join([''.join(_) for _ in requirement.specs])
+        if name not in installed_packages:
+            raise NotInstalledError(name, required_vers)
+        vers = installed_packages[name]
+        if vers not in requirement:
+            raise VersionMismatchError(name, vers, required_vers)
+
+
+def check_any_dependency(required_list, installed_packages=None, conflicted_packages=None):
+    for required in required_list:
+        try:
+            check_dependency(required, installed_packages, conflicted_packages)
+            break
+        except:
+            continue
+    else:
+        raise
+

@@ -11,7 +11,6 @@ import time
 from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError
 from scalarizr.handlers import rebundle as rebundle_hdlr
-from scalarizr.util import disttool
 from scalarizr.platform.cloudstack import voltool
 import shutil
 

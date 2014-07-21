@@ -23,8 +23,7 @@ except ImportError:
 
 from scalarizr.util import system2, firstmatched, PopenError
 from scalarizr.util.software import which
-from scalarizr.util import dynimp
-from scalarizr.linux import coreutils
+from scalarizr.linux import coreutils, pkgmgr
 from scalarizr.storage import StorageError
 
 
@@ -35,9 +34,7 @@ class Lvm2Error(PopenError):
     pass
 
 if not os.path.exists('/sbin/pvs'):
-    mgr = dynimp.package_mgr()
-    if not mgr.installed('lvm2'):
-        mgr.install('lvm2', mgr.candidates('lvm2')[-1])
+    pkgmgr.installed('lvm2')
 
 
 try:

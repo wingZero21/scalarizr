@@ -1,10 +1,8 @@
-from __future__ import with_statement
 '''
 Created on Sep 7, 2011
 
 @author: Spike
 '''
-from __future__ import with_statement
 
 import os
 import re
@@ -22,6 +20,7 @@ from scalarizr.util import initdv2, software, dns, cryptotool
 from scalarizr.node import __node__
 from scalarizr.linux import iptables
 import scalarizr.services.rabbitmq as rabbitmq_svc
+import scalarizr.api.rabbitmq as rabbitmq_api
 
 
 
@@ -37,6 +36,8 @@ RABBITMQ_MGMT_PLUGIN_NAME = 'rabbitmq_management'
 RABBITMQ_MGMT_AGENT_PLUGIN_NAME = 'rabbitmq_management_agent'
 RABBITMQ_ENV_CFG_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
 
+RABBITMQ_CLUSTERING_PORT = 25672
+
 
 
 
@@ -50,7 +51,7 @@ class RabbitMQMessages:
 
 
 def get_handlers():
-    return (RabbitMQHandler(), )
+    return [RabbitMQHandler()] if rabbitmq_api.RabbitMQAPI.software_supported else []
 
 
 class RabbitMQHandler(ServiceCtlHandler):
@@ -90,7 +91,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         self._insert_iptables_rules()
 
         if 'running' == __node__['state']:
-            self._set_nodename_in_env()
+            self._prepare_env_config()
             rabbitmq_vol = __rabbitmq__['volume']
 
             if not __rabbitmq__['volume'].mounted_to():
@@ -121,7 +122,8 @@ class RabbitMQHandler(ServiceCtlHandler):
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '5672'},
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '15672'},
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '55672'},
-                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'}
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'},
+                {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(RABBITMQ_CLUSTERING_PORT)}
             ])
 
 
@@ -158,8 +160,10 @@ class RabbitMQHandler(ServiceCtlHandler):
             finally:
                 self.service.start()
 
-            panel_url = 'http://%s:55672/mgmt/' % self.platform.get_public_ip()
-            msg_body = dict(status='ok', cpanel_url=panel_url)
+            rabbit_version = software.rabbitmq_software_info()
+            panel_port = 55672 if rabbit_version.version <= (3, 0, 0) else 15672
+
+            msg_body = dict(status='ok', port=panel_port)
         except:
             error = str(sys.exc_info()[1])
             msg_body = dict(status='error', last_error=error)
@@ -234,22 +238,13 @@ class RabbitMQHandler(ServiceCtlHandler):
             self.service.stop()
 
 
-    def _set_nodename_in_env(self):
+    def _prepare_env_config(self):
         node_name = rabbitmq_svc.NODE_HOSTNAME_TPL % __rabbitmq__['hostname']
         os.environ.update(dict(RABBITMQ_NODENAME=node_name))
-
-        env_cfg = ''
-        if os.path.exists(RABBITMQ_ENV_CFG_PATH):
-            with open(RABBITMQ_ENV_CFG_PATH) as f:
-                env_cfg = f.read()
-
-        if 'RABBITMQ_NODENAME' in env_cfg:
-            env_cfg = re.sub(re.compile('^(RABBITMQ_NODENAME=(?!%s).*)$' % node_name, re.M), '#\g<0>', env_cfg)
-        if not re.search(re.compile('^RABBITMQ_NODENAME=%s' % node_name, re.M), env_cfg):
-            env_cfg += '\nRABBITMQ_NODENAME=%s' % node_name
-
         with open(RABBITMQ_ENV_CFG_PATH, 'w') as f:
-            f.write(env_cfg)
+            f.write('RABBITMQ_NODENAME=%s\n' % node_name)
+            f.write('RABBITMQ_SERVER_ERL_ARGS="-kernel inet_dist_listen_min {0}'
+                    ' -kernel inet_dist_listen_max {0}"\n'.format(RABBITMQ_CLUSTERING_PORT))
 
 
     def on_host_init_response(self, message):
@@ -264,6 +259,8 @@ class RabbitMQHandler(ServiceCtlHandler):
         if not rabbitmq_data['password']:
             rabbitmq_data['password'] = cryptotool.pwgen(10)
 
+        self.service.stop()
+
         self.cleanup_hosts_file('/')
 
         if os.path.exists(RABBITMQ_ENV_CFG_PATH):
@@ -277,12 +274,10 @@ class RabbitMQHandler(ServiceCtlHandler):
 
         self._logger.info('Performing initial cluster reset')
 
-        self.service.stop()
-
         hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % int(message.server_index)
         __rabbitmq__['hostname'] = hostname
         dns.ScalrHosts.set('127.0.0.1', hostname)
-        self._set_nodename_in_env()
+        self._prepare_env_config()
 
         self.service.start()
         self.rabbitmq.stop_app()
@@ -397,9 +392,10 @@ class RabbitMQHandler(ServiceCtlHandler):
 
     def _get_cluster_nodes(self):
         nodes = []
-        for role in self.queryenv.list_roles(behaviour = BEHAVIOUR):
-            for host in role.hosts:
-                ip = host.internal_ip
-                hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % host.index
-                nodes.append((hostname, ip))
+        role = self.queryenv.list_roles(farm_role_id=__node__['farm_role_id'])[0]
+        for host in role.hosts:
+            ip = host.internal_ip
+            hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % host.index
+            nodes.append((hostname, ip))
         return nodes
+

@@ -5,6 +5,7 @@ Created on Oct 13, 2011
 '''
 
 import os
+import sys
 import logging
 
 from scalarizr.bus import bus
@@ -15,6 +16,7 @@ from scalarizr.node import __node__
 from scalarizr.messaging import Messages
 from scalarizr.util import wait_until
 from scalarizr.linux import mount
+from scalarizr.handlers import build_tags
 
 
 LOG = logging.getLogger(__name__)
@@ -72,7 +74,11 @@ class BlockDeviceHandler(handlers.Handler):
             volumes = volumes or []  # Cast to list
             for vol in volumes:
                 vol = storage2.volume(vol)
-                vol.ensure(mount=bool(vol.mpoint))
+                try:
+                    vol.ensure(mount=bool(vol.mpoint))
+                except:
+                    # It may be because of missing cloud credentials, we shouldn't stop initialization
+                    LOG.warn("Can't ensure volume {0}. Error: {1}".format(dict(vol), sys.exc_info()[1]))
 
     def on_before_host_init(self, *args, **kwargs):
         if linux.os.windows_family:
@@ -112,6 +118,7 @@ class BlockDeviceHandler(handlers.Handler):
             template = vol.pop('template', None)
             from_template_if_missing = vol.pop('from_template_if_missing', False)
             vol = storage2.volume(**vol)
+            vol.tags.update(build_tags())
             self._log_ensure_volume(vol)
             try:
                 vol.ensure(mount=bool(vol.mpoint), mkfs=True)
@@ -224,19 +231,15 @@ class BlockDeviceHandler(handlers.Handler):
                 name=qe_volume.device,
                 mpoint=mpoint
             )
-
+            LOG.info("Plugging volume with tags: %s" % str(vol.tags))
             if mpoint:
                 logger = bus.init_op.logger if bus.init_op else LOG
                 logger.info('Ensure %s: take %s, mount to %s', self._vol_type, vol.id, vol.mpoint)
 
                 vol.ensure(mount=True, mkfs=True, fstab=True)
-                bus.fire("block_device_mounted", 
-                        volume_id=vol.id, device=vol.device)
-                self.send_message(Messages.BLOCK_DEVICE_MOUNTED, 
-                    {"device_name": vol.device, 
-                    "volume_id": vol.id, 
-                    "mountpoint": vol.mpoint}
-                )                
+
+            vol._create_tags_async(qe_volume.volume_id, build_tags())  # [SCALARIZR-1012]
+
         except:
             LOG.exception("Can't attach volume")
 

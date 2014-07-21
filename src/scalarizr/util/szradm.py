@@ -40,6 +40,10 @@ try:
 except:
     print('Error: prettytable modul not found!')
 
+if sys.version_info[0:2] >= (2, 7):
+    from xml.etree import ElementTree as ET
+else:
+    from scalarizr.externals.etree import ElementTree as ET
 
 from yaml import dump
 from yaml.representer import Representer
@@ -291,7 +295,7 @@ class GetHttpsCertificateCommand(Command):
         (cert, pkey, cacert)=result
         yield [cert, pkey, cacert]
 
-
+# DEPRECATED
 class ListRoleParamsCommand(Command):
     name = "list-role-params"
     method = "list_role_params"
@@ -333,7 +337,7 @@ class ListVirtualhostsCommand(Command):
         for d in result:
             yield [d.hostname, d.https, d.type, d.raw]
 
-
+# DEPRECATED
 class ListScriptsCommand(Command):
     name = "list-scripts"
     method = "list_scripts"
@@ -683,8 +687,8 @@ def main():
                 sys.exit()
 
             qe = new_queryenv()
-            xml = qe.fetch(*args, params=kv)
-            print minidom.parseString(xml).toprettyxml(encoding='utf-8')
+            out = qe.fetch(*args, params=kv)
+            print minidom.parseString(out).toprettyxml(encoding='utf-8')
 
         if options.msgsnd:
 

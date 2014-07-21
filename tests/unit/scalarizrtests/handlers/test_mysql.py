@@ -7,14 +7,15 @@ Created on 17.06.2010
 import unittest
 import os
 import signal, pexpect, re
+import time, shutil, hashlib, pwd
+from subprocess import Popen, PIPE, STDOUT
+
 from scalarizr.util import init_tests, ping_service
 from scalarizr.bus import bus
 from scalarizr.handlers import mysql
-from scalarizr.util import system, initd, disttool, cryptotool, configtool
+from scalarizr.util import system, initd, cryptotool, configtool
 from scalarizr.platform.ec2 import Ec2Platform
-from subprocess import Popen, PIPE, STDOUT
-import time, shutil, hashlib, pwd
-
+from scalarizr import linux
 
 class _Volume:
     def __init__(self):
@@ -153,7 +154,7 @@ class Test(unittest.TestCase):
                                                          mysql.OPT_REPL_PASSWORD : repl_pass,
                                                          mysql.OPT_STAT_PASSWORD : stat_pass})
         message = _Message()
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             daemon = "/usr/libexec/mysqld"
         else:
             daemon = "/usr/sbin/mysqld"
@@ -246,7 +247,7 @@ def mysql_password(str):
     return "*" + pass2.upper()
 
 def extract_datadir_and_log():
-    if disttool.is_redhat_based():
+    if linux.os.redhat_family:
         my_cnf_file = "/etc/my.cnf"
     else:
         my_cnf_file = "/etc/mysql/my.cnf"

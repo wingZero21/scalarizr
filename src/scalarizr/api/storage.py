@@ -6,9 +6,26 @@ Created on Nov 25, 2011
 
 from scalarizr import rpc, storage2
 from scalarizr.api import operation
+from scalarizr.util import Singleton
 
 
 class StorageAPI(object):
+    """
+    A set of API methods for basic storage management.
+
+    Namespace::
+
+        storage
+
+    StorageAPI methods make use of "volume configuration" dict object, which contains the following:
+
+        - type (Type: string) -- disk type. Required parameter.
+        - id (Type: string) -- disk ID.
+        - mpoint (Type: string) -- Mount point.
+        - fstype (Type: string) Default: "ext3"
+    """
+
+    __metaclass__ = Singleton
 
     error_messages = {
             'empty': "'%s' can't be blank",
@@ -20,13 +37,17 @@ class StorageAPI(object):
 
     @rpc.command_method
     def create(self, volume=None, mkfs=False, mount=False, fstab=False, async=False):
-        '''
+        """
+        Creates a volume from given volume configuration if such volume does not exists.
+        Then attaches it to the instance
+        and (optionally) creates filesystem and mounts it.
+
         :type volume: dict
         :param volume: Volume configuration object
 
         :type mkfs: bool
-        :param mkfs: Whether create filesystem on volume device.
-                Error will be raised if existed filesystem detected.
+        :param mkfs: When true method will create filesystem on mounted volume device.
+                IF volume already has filesystem no mkfs performed and result volume's "fstype" property updated with existed fstype value
 
         :type mount: bool
         :param mount: Whether mount volume device.
@@ -40,7 +61,7 @@ class StorageAPI(object):
                         with Operation/Steps mechanism
 
         :rtype: dict|string
-        '''
+        """
         self._check_invalid(volume, 'volume', dict)
 
         def do_create(op):
@@ -52,7 +73,9 @@ class StorageAPI(object):
 
     @rpc.command_method
     def snapshot(self, volume=None, description=None, tags=None, async=False):
-        '''
+        """
+        Creates a snapshot of a volume.
+
         :type volume: dict
         :param volume: Volume configuration object
 
@@ -61,12 +84,12 @@ class StorageAPI(object):
 
         :type tags: dict
         :param tags: Key-value tagging. Only 'ebs' and 'gce_persistent'
-                volume types support it
+                volume types support it.
 
         :type async: bool
-        :param async: Execute method in separate thread and report status
-                        with Operation/Steps mechanism
-        '''
+        :param async: When True, the method is being executed in a separate thread
+                and reports status with Operation/Steps mechanism.
+        """
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
         if description:
@@ -85,7 +108,9 @@ class StorageAPI(object):
 
     @rpc.command_method
     def detach(self, volume=None, force=False, async=False, **kwds):
-        '''
+        """
+        Detaches a volume from an instance.
+
         :type volume: dict
         :param volume: Volume configuration object
 
@@ -97,7 +122,7 @@ class StorageAPI(object):
         :type async: bool
         :param async: Execute method in separate thread and report status
                         with Operation/Steps mechanism
-        '''
+        """
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
 
@@ -112,7 +137,9 @@ class StorageAPI(object):
 
     @rpc.command_method
     def destroy(self, volume, force=False, async=False, **kwds):
-        '''
+        """
+        Destroys a volume.
+
         :type volume: dict
         :param volume: Volume configuration object
 
@@ -124,7 +151,7 @@ class StorageAPI(object):
         :type async: bool
         :param async: Execute method in separate thread and report status
                         with Operation/Steps mechanism
-        '''
+        """
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
 
@@ -139,6 +166,41 @@ class StorageAPI(object):
 
     @rpc.command_method
     def grow(self, volume, growth, async=False):
+        """
+        Extends volume capacity.
+        Depending on volume type it can be size in GB or number of disks (e.g. for RAID volumes)
+
+        :type volume: dict
+        :param volume: Volume configuration object
+
+        :type growth: dict
+        :param growth: size in GB for regular disks or number of volumes for RAID configuration.
+
+        Growth keys:
+
+            - size (Type: int, Availability: ebs, csvol, cinder, gce_persistent) -- A new size for persistent volume.
+            - iops (Type: int, Availability: ebs) -- A new IOPS value for EBS volume.
+            - volume_type (Type: string, Availability: ebs) -- A new volume type for EBS volume. Values: "standard" | "io1".
+            - disks (Type: Growth, Availability: raid) -- A growth dict for underlying RAID volumes.
+            - disks_count (Type: int, Availability: raid) - number of disks.
+
+        :type async: bool
+        :param async: Execute method in a separate thread and report status
+                        with Operation/Steps mechanism.
+
+        Example:
+
+        Grow EBS volume to 50Gb::
+
+            new_vol = api.storage.grow(
+                volume={
+                    'id': 'vol-e13aa63ef',
+                },
+                growth={
+                    'size': 50
+                }
+            )
+        """
         self._check_invalid(volume, 'volume', dict)
         self._check_empty(volume.get('id'), 'volume.id')
 
@@ -152,6 +214,22 @@ class StorageAPI(object):
 
     @rpc.command_method
     def replace_raid_disk(self, volume, index, disk, async=False):
+        """
+        Replace one of the RAID disks (can be retrieved with "status" method) with other.
+        Replaced disk will be destroyed.
+
+        :type volume: dict
+        :param volume: A volume configuration to replace.
+
+        :type index: int
+        :param index: A disk index to replace.
+
+        :type disk: Volume
+        :param disk: A replacement disk configuration
+
+        :type async: bool
+        :param async: Execute method in a separate thread and report status with Operation/Steps mechanism.
+        """
         self._check_invalid(volume, 'volume', dict)
         self._check_invalid(volume, 'index', int)
         self._check_empty(volume.get('id'), 'volume.id')

@@ -13,7 +13,7 @@ from scalarizr.messaging import MessagingError
 from scalarizr.util import cryptotool
 
 # Stdlibs
-import logging, binascii
+import logging, binascii, sys
 
 
 class P2pMessageSecurity(object):
@@ -37,7 +37,10 @@ class P2pMessageSecurity(object):
             return xml.strip(''.join(chr(i) for i in range(0, 31)))
 
         except:
-            raise MessagingError('Cannot decrypt message. raw message: %s', message)
+            self._logger.debug('Decryption error', exc_info=sys.exc_info())
+            self._logger.debug('Crypto key: %s', crypto_key)
+            self._logger.debug('Raw message: %s', message)
+            raise MessagingError('Cannot decrypt message')
 
     def out_protocol_filter(self, producer, queue, message, headers):
         try:
