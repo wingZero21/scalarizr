@@ -57,7 +57,7 @@ LOG = logging.getLogger(__name__)
 MYSQLD = which('mysqld')
 MYSQL_CLI = which('mysql')
 MYSQLDUMP = which('mysqldump')
-MYCNF = '/etc/my.cnf' if linux.os.redhat_family() else '/etc/mysql/my.cnf'
+MYCNF = '/etc/my.cnf' if linux.os.redhat_family else '/etc/mysql/my.cnf'
 
 change_master_timeout = 30
 

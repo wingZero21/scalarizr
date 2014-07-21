@@ -684,7 +684,7 @@ class Service(object):
                     # toughts that he's an old server and continue rebundling
                     time.sleep(30)
 
-                locs = ('/etc/.scalr-user-data', cnf.private_path('.user-data'))
+                locs = ['/etc/.scalr-user-data', cnf.private_path('.user-data')]
                 wait_until(lambda: any(map(lambda x: os.path.exists(x), locs)),
                         timeout=60, error_text="user-data file not found in the following locations: %s" % locs)
             

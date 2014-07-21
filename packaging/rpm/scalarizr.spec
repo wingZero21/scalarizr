@@ -380,6 +380,13 @@ rm -f percona.ini  # Measly config in several builds
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini
 popd
 
+rm -f /usr/local/bin/szradm
+if [ ! -d /usr/local/bin ]; then
+	mkdir -p /usr/local/bin
+	chmod 755 /usr/local/bin
+fi
+ln -s /usr/bin/szradm /usr/local/bin/szradm
+
 
 %posttrans
 set -x
