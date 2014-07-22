@@ -54,8 +54,8 @@ class Service(Command):
     Scalarizr service control.
 
     Usage:
-      service redis (start | stop | status) [(<index> | --port=<port>)]
-      service <service> (start | stop | status)
+      service redis [--format=(xml|json|yaml)] (start | stop | status) [(<index> | --port=<port>)]
+      service <service> [--format=(xml|json|yaml)] (start | stop | status)
 
     Options:
       -p <port>, --port=<port>         
@@ -95,7 +95,7 @@ class Service(Command):
             print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
-    def _display_service_status(self, service, **kwds):
+    def _display_service_status(self, service, print_format='xml', **kwds):
         api = service_apis[service]()
         for key, value in kwds.items():
             if value == None:
@@ -104,7 +104,7 @@ class Service(Command):
 
         if service == 'redis':
             return self._print_redis_status(status)
-
+        # TODO: make xml, json or yaml and dump it to out
         status_string = ' is stopped'
         code = ReturnCode.STOPPED
         if status == initdv2.Status.RUNNING:
@@ -135,23 +135,24 @@ class Service(Command):
         return ReturnCode.STOPPED
 
     def __call__(self, 
-                 start=False,
-                 stop=False,
-                 status=False,
-                 service=None,
+        service=None,
+        start=False,
+        stop=False,
+        status=False,
+        format='xml',
 
-                 redis=False,
-                 index=None,
-                 port=None,
+        redis=False,
+        index=None,
+        port=None,
 
-                 mongodb=False,
-                 mongos=False,
-                 mongod=False,
-                 configsrv=False,
-                 configsrv_2=False,
-                 configsrv_3=False,
-                 arbiter=False,
-                 ):
+        mongodb=False,
+        mongos=False,
+        mongod=False,
+        configsrv=False,
+        configsrv_2=False,
+        configsrv_3=False,
+        arbiter=False,
+        ):
         if redis:
             service = 'redis'
             if index:
@@ -186,7 +187,10 @@ class Service(Command):
         elif stop:
             return self._stop_service(service, indexes=index, ports=port)
         elif status:
-            return self._display_service_status(service, indexes=index, ports=port)
+            return self._display_service_status(service,
+                indexes=index,
+                ports=port,
+                print_format=format)
 
 
 commands = [Service]

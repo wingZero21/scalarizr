@@ -40,13 +40,19 @@ class QueryEnvService(object):
     def _log_parsed_response(self, response):
         self._logger.debug("QueryEnv response (parsed): %s", response)
 
-    def __init__(self, url, server_id=None, key_path=None, api_version='2012-04-17'):
+    def __init__(self,
+        url,
+        server_id=None,
+        key_path=None,
+        api_version='2012-04-17',
+        autoretry=True):
         self._logger = logging.getLogger(__name__)
         self.url = url if url[-1] != "/" else url[0:-1]
         self.server_id = server_id
         self.key_path = key_path
         self.api_version = api_version
         self.htmlparser = HTMLParser.HTMLParser()
+        self.autoretry = autoretry
 
     def fetch(self, command, params=None, log_response=True):
         """
@@ -94,6 +100,8 @@ class QueryEnvService(object):
                     if "not supported" in msg:
                         raise
                     if e.code in (509, 400, 403):
+                        raise QueryEnvError('QueryEnv failed: %s' % msg)
+                    if not self.autoretry:
                         raise QueryEnvError('QueryEnv failed: %s' % msg)
                     self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, msg, msg_wait)
                 else:

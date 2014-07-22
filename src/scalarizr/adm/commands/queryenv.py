@@ -35,11 +35,11 @@ class Queryenv(Command):
     Launches queryenv methods.
 
     Usage:
-      queryenv get-https-certificate
-      queryenv get-latest-version
-      queryenv list-ebs-mountpoints
-      queryenv list-roles [--behaviour=<bhvr>] [--role-name=<rolename>] [--with-initializing]
-      queryenv list-virtual-hosts [--name=<name>] [--https]
+      queryenv get-https-certificate [--format=(xml|json|yaml)]
+      queryenv get-latest-version [--format=(xml|json|yaml)]
+      queryenv list-ebs-mountpoints [--format=(xml|json|yaml)]
+      queryenv list-roles [--format=(xml|json|yaml)] [--behaviour=<bhvr>] [--role-name=<rolename>] [--with-initializing]
+      queryenv list-virtual-hosts [--format=(xml|json|yaml)] [--name=<name>] [--https]
       queryenv <method> [--format=(xml|json|yaml)] [<args>...]
     
     Options:

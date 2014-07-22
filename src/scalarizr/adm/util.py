@@ -56,5 +56,5 @@ def new_queryenv():
                       os.path.join(scalr_base_dir, __node__['crypto_key_path']))
     queryenv = QueryEnvService(*queryenv_creds)
     api_version = queryenv.get_latest_version()
-    queryenv = QueryEnvService(*queryenv_creds, api_version=api_version) 
+    queryenv = QueryEnvService(*queryenv_creds, api_version=api_version, autoretry=False) 
     return queryenv
