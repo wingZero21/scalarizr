@@ -35,19 +35,10 @@ class Queryenv(Command):
     Launches queryenv methods.
 
     Usage:
-      queryenv get-https-certificate [--format=(xml|json|yaml)]
-      queryenv get-latest-version [--format=(xml|json|yaml)]
-      queryenv list-ebs-mountpoints [--format=(xml|json|yaml)]
-      queryenv list-roles [--format=(xml|json|yaml)] [--behaviour=<bhvr>] [--role-name=<rolename>] [--with-initializing]
-      queryenv list-virtual-hosts [--format=(xml|json|yaml)] [--name=<name>] [--https]
       queryenv <method> [--format=(xml|json|yaml)] [<args>...]
     
     Options:
-      -b, --behaviour=<bhvr>      Role behaviour.
-      -r, --role-name=<rolename>  Role name.
-      -i, --with-initializing     Show initializing servers
-      -n, --name=<name>        Show virtual host by name
-      -s, --https              Show virtual hosts by https
+      -f <format>, --format=<format>  Output format
     """
 
     aliases = ['q']
@@ -56,10 +47,10 @@ class Queryenv(Command):
     def __init__(self):
         super(Queryenv, self).__init__()
 
-    def help(self):
-        doc = super(Queryenv, self).help()
-        methods = [(' '*TAB_SIZE) + m for m in self.get_supported_methods()]
-        return doc + '\nSupported methods:\n' + '\n'.join(methods)
+    # def help(self):
+    #     doc = super(Queryenv, self).help()
+    #     methods = [(' '*TAB_SIZE) + m for m in self.get_supported_methods()]
+    #     return doc + '\nSupported methods:\n' + '\n'.join(methods)
 
     @classmethod
     def get_method_name(cls, alias):
@@ -81,12 +72,22 @@ class Queryenv(Command):
         """
         return cls.get_method_name(method_or_alias) is not None
 
+
     @classmethod
     def get_supported_methods(cls):
-        usage_section = printable_usage(cls.__doc__)
-        usages = re.findall(r'queryenv .+?\s', usage_section)
-        methods = [s.split()[1] for s in usages if '<method>' not in s]
-        return methods
+        """ 
+        Returns list of methods that are supported for old-style calling with
+        szradm <queryenv_method> [args...]
+        """
+        # usage_section = printable_usage(cls.__doc__)
+        # usages = re.findall(r'queryenv .+?\s', usage_section)
+        # methods = [s.split()[1] for s in usages if '<method>' not in s]
+        # return methods
+        return ['get-https-certificate',
+            'get-latest-version',
+            'list-ebs-mountpoints',
+            'list-roles',
+            'list-virtual-hosts']
 
     @classmethod
     def queryenv(cls):

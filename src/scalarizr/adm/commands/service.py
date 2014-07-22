@@ -64,7 +64,8 @@ class Service(Command):
       service <service> [--format=(xml|json|yaml)] (start | stop | status)
 
     Options:
-      -p <port>, --port=<port>         
+      -p <port>, --port=<port>
+      -f <format>, --format=<format>
     """
     # TODO: add usage for mongo:
     # service mongodb (start | stop | status) [(mongos | mongod | 
