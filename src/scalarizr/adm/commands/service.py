@@ -1,4 +1,10 @@
 import sys
+from xml.dom import minidom
+try:
+    import json as json_module
+except ImportError:
+    import simplejson as json_module
+import yaml
 
 from scalarizr.bus import bus
 from scalarizr.adm.command import Command
@@ -95,6 +101,40 @@ class Service(Command):
             print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
+    def _dict_to_xml(self, d, name):
+        doc = minidom.Document()
+        container = doc.createElement(name)
+        doc.appendChild(container)
+        for k, v in d.items():
+            el = doc.createElement(str(k))
+            text = doc.createTextNode(str(v))
+            el.appendChild(text)
+            container.appendChild(el)
+        return doc
+
+    def _dict_list_to_xml(self, list_of_dicts, list_name, element_name):
+        doc = minidom.Document()
+        container = doc.createElement(list_name)
+        doc.appendChild(container)
+        for element in list_of_dicts:
+            child_doc = self._dict_to_xml(element, element_name)
+            container.appendChild(child_doc.childNodes[0])
+        return doc
+
+    def _format_status(self, status_struct, format='xml'):
+        if format == 'xml':
+            if isinstance(status_struct, dict):
+                doc = self._dict_to_xml(status_struct, 'status')
+            else:
+                doc = self._dict_list_to_xml(status_struct, 'statuses', 'status')
+            return doc.toprettyxml(encoding='utf-8')
+        elif format == 'json':
+            return json_module.dumps(status_struct, indent=4, sort_keys=True, ensure_ascii=False)
+        elif format == 'yaml':
+            return yaml.dump(status_struct, default_flow_style=False, allow_unicode=True)
+        else:
+            raise CommandError('Unknown output format.\nAvailable formats: xml, json, yaml')
+
     def _display_service_status(self, service, print_format='xml', **kwds):
         api = service_apis[service]()
         for key, value in kwds.items():
@@ -105,29 +145,36 @@ class Service(Command):
         if service == 'redis':
             return self._print_redis_status(status)
         # TODO: make xml, json or yaml and dump it to out
-        status_string = ' is stopped'
+        status_string = 'stopped'
         code = ReturnCode.STOPPED
         if status == initdv2.Status.RUNNING:
-            status_string = ' is running'
+            status_string = 'running'
             code = ReturnCode.RUNNING
         elif status == initdv2.Status.UNKNOWN:
-            status_string = ' has unknown status'
+            status_string = 'unknown'
             code = ReturnCode.UNKNOWN
-        print service + status_string
+        # print service + status_string
+
+        status_dict = {'code': code, 'string': status_string}
+        print self._format_status(status_dict, format)
+
         return code
 
-    def _print_redis_status(self, statuses):
+    def _print_redis_status(self, statuses, format='xml'):
         if not statuses:
             print 'No redis configuration found.'
             return ReturnCode.STOPPED
 
+        statuses_list = []
         for port, status in statuses.items():
             status_string = 'stopped'
             if status == initdv2.Status.RUNNING:
                 status_string = 'running'
-            print '- port: %s\n  status: %s' % (port, status_string)
+            status_dict = {'port': port, 'code': status, 'string': status_string}
+            # print '- port: %s\n  status: %s' % (port, status_string)
+        print self._format_status(statuses_list)
 
-        overall_status = set(statuses.values())
+        overall_status = set(statuses.values(), format)
         if len(overall_status) > 1:
             return ReturnCode.MIXED
         if overall_status.pop() == initdv2.Status.RUNNING:
