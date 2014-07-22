@@ -205,7 +205,11 @@ class Queryenv(Command):
             arg_name = kwds_mapping.get(k, k)
             if argspec.keywords or arg_name in argnames:
                 filtered_kwds[arg_name] = v
+                if method == 'fetch':
+                    del kwds[k]
 
+        if method == 'fetch':
+            filtered_kwds['params'] = kwds
         return m(**filtered_kwds)
 
     def __call__(self, method=None, format=None, args=None, shortcut=False, **kwds):

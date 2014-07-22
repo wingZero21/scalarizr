@@ -9,7 +9,8 @@ function get_ini() {
 function get_repo() {
 	local farm_role_id=$(get_ini 'private.d/config.ini' 'farm_role_id')
 	if [ -n $farm_role_id ]; then
-		local xml=$(/usr/local/bin/szradm -q list-farm-role-params farm-role-id=$farm_role_id)
+		szradm_exec=$(which szradm || echo -n '/usr/local/bin/szradm')
+		local xml=$($szradm_exec -q list-farm-role-params farm-role-id=$farm_role_id)
 		local python=$([[ $(python -V 2>&1) == *2.4.* ]] && echo -n 'python26' || echo -n 'python')
 		read -d '' pyxpath <<-EOC
 			import sys;
