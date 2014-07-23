@@ -3,6 +3,7 @@ import re
 import os
 import itertools
 import sys
+from urllib2 import HTTPError
 from xml.dom import minidom
 try:
     import json as json_module
@@ -39,7 +40,7 @@ class Queryenv(Command):
       queryenv <method> [--format=(xml|json|yaml)] [<args>...]
     
     Options:
-      -f <format>, --format=<format>  Output format
+      -f <format>, --format=<format>  Output format: xml (default), json or yaml.
     """
 
     aliases = ['q']
@@ -115,12 +116,12 @@ class Queryenv(Command):
 
     def _display_list_roles(self, out):
         headers = ['behaviour',
-                   'name',
-                   'farm-role-id',
-                   'index',
-                   'internal-ip',
-                   'external-ip',
-                   'replication-master']
+           'name',
+           'farm-role-id',
+           'index',
+           'internal-ip',
+           'external-ip',
+           'replication-master']
         table_data = []
         for d in out:
             behaviour = ', '.join(d.behaviour)
@@ -215,8 +216,12 @@ class Queryenv(Command):
             filtered_kwds['params'] = kwds
         try:
             return m(**filtered_kwds)
-        except QueryEnvError, e:
-            raise CommandError(e.msg)
+        except (QueryEnvError, HTTPError) e:
+            if isinstance(e, HTTPError) and method == 'fetch':
+                message = '%s method is not supported' % kwds['command']
+            else:
+                message = e.message
+            raise CommandError(message)
 
     def __call__(self, method=None, format=None, args=None, shortcut=False, **kwds):
         """

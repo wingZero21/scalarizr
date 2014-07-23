@@ -95,7 +95,7 @@ class Szradm(command_module.Command):
       -s, --https                  Show virtual hosts by https
     """
 
-    version = (0, 2)
+    version = (0, 3)
 
     def help(self):
         """
@@ -166,7 +166,12 @@ class Szradm(command_module.Command):
                     'role_name': role_name,
                     'with_initializing': with_initializing,
                     'https': https}
-                return self.run_subcommand('queryenv', [command] + args, kwds)
+                try:
+                    return self.run_subcommand('queryenv', [command] + args, kwds)
+                except command_module.InvalidCall, e:
+                    call_str = 'szradm %s %s' % (command, ' '.join(args))
+                    message = '\n'.join((call_str, 'Invalid call', self.help()))
+                    raise command_module.InvalidCall(message)
 
             # Standard command execution style
             return self.run_subcommand(command, args)
