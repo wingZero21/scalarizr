@@ -501,9 +501,9 @@ class PostgreSQLAPI(BehaviorAPI):
             vol = storage2.volume(volume)
             self.stop_service(reason='Growing data volume')
             try:
-                growed_vol = vol.grow(**growth)
-                postgresql_svc.__postgresql__['volume'] = dict(growed_vol)
-                return dict(growed_vol)
+                grown_vol = vol.grow(**growth)
+                postgresql_svc.__postgresql__['volume'] = dict(grown_vol)
+                return dict(grown_vol)
             finally:
                 self.start_service()
 

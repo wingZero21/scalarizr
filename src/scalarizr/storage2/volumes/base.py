@@ -250,7 +250,7 @@ class Volume(Base):
                         LOG.error('Enlarged volume destruction failed: %s' % destr_err)
 
                 self.ensure(mount=bool(was_mounted))
-                LOG.info("Marking volume active")
+                LOG.info("Volume %s has been grown. Marking volume active." % new_vol.id)
                 self.apply_tags({"scalr-status": "active"})
             except:
                 e = sys.exc_info()[1]

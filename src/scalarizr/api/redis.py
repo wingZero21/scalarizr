@@ -547,15 +547,20 @@ class RedisAPI(BehaviorAPI):
         assert isinstance(volume, dict), "volume configuration is invalid, 'dict' type expected"
         assert volume.get('id'), "volume.id can't be blank"
 
+        LOG.info("Attempting to grow volume '%s'. New size: %s" % (volume.get('id'), growth))
+
         def do_grow(op):
             vol = storage2.volume(volume)
             ports = self.busy_ports
+            LOG.debug("Stopping Redis processes on ports %s before growing data volume." % str(ports))
             self.stop_service(ports=ports, reason='Growing data volume')
+            LOG.debug("All redis processes stopped. Attempting to grow data volume.")
             try:
                 growed_vol = vol.grow(**growth)
                 redis_service.__redis__['volume'] = dict(growed_vol)
                 return dict(growed_vol)
             finally:
                 self.start_service(ports)
+                LOG.info("Grow process: Redis service has been started on ports %s." % str(ports))
 
         return self._op_api.run('redis.grow-volume', do_grow, exclusive=True, async=async)
