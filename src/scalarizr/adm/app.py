@@ -89,6 +89,10 @@ class Szradm(command_module.Command):
                                    QueryEnv parameters should be passed in <key>=<value> form.
       --fire-event=<event_name>    Fires custom event on Scalr.
                                    Parameters should be passed in a <key>=<value> form.
+      -b, --behaviour=<bhvr>       Role behaviour.
+      -r, --role-name=<rolename>   Role name.
+      -i, --with-initializing      Show initializing servers
+      -s, --https                  Show virtual hosts by https
     """
 
     version = (0, 2)
@@ -105,20 +109,24 @@ class Szradm(command_module.Command):
         self.subcommands = self.find_commands(commands_dir)
 
     def __call__(self, 
-                 command=None,
-                 version=False,
-                 help=False,
-                 queryenv=False,
-                 msgsnd=False,
-                 qa_report=False,
-                 repair=False,
-                 name=None,
-                 msgfile=None,
-                 queue=None,
-                 api_version=None,
-                 fire_event=None,
-                 endpoint=None,
-                 args=[]):
+        command=None,
+        version=False,
+        help=False,
+        queryenv=False,
+        msgsnd=False,
+        qa_report=False,
+        repair=False,
+        name=None,
+        msgfile=None,
+        queue=None,
+        api_version=None,
+        fire_event=None,
+        endpoint=None,
+        behaviour=None,
+        role_name=None,
+        with_initializing=None,
+        https=None,
+        args=[]):
 
         if version:
             print 'Szradm version: %s.%s' % self.version
@@ -139,9 +147,9 @@ class Szradm(command_module.Command):
 
             if msgsnd:
                 kwds = {'name': name,
-                        'msgfile': msgfile,
-                        'endpoint': endpoint,
-                        'queue': queue}
+                    'msgfile': msgfile,
+                    'endpoint': endpoint,
+                    'queue': queue}
                 return self.run_subcommand('msgsnd', [command] + args, kwds)
 
             if fire_event:
@@ -150,9 +158,15 @@ class Szradm(command_module.Command):
             if not command:
                 return self(help=True)
 
-            # queryenv shortcuts
-            if QueryenvCmd.supports_method(command):
-                return self.run_subcommand('queryenv', [command] + args, {'shortcut': True})
+            # queryenv shortcuts for table-form output
+            if QueryenvCmd.supports_oldstyle_method(command):
+                kwds = {'shortcut': True,
+                    'name': name,
+                    'behaviour': behaviour,
+                    'role_name': role_name,
+                    'with_initializing': with_initializing,
+                    'https': https}
+                return self.run_subcommand('queryenv', [command] + args, kwds)
 
             # Standard command execution style
             return self.run_subcommand(command, args)

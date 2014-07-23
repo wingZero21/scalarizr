@@ -58,7 +58,7 @@ class Queryenv(Command):
         Returns method name if alias to supported method exists,
         None otherwise.
         """
-        if alias in cls.get_supported_methods():
+        if alias in cls.get_supported_oldstyle_methods():
             return alias
         for method, aliases in cls.method_aliases.items():
             if alias in aliases:
@@ -66,18 +66,19 @@ class Queryenv(Command):
         return None
 
     @classmethod
-    def supports_method(cls, method_or_alias):
+    def supports_oldstyle_method(cls, method_or_alias):
         """
         Returns True if method is supported or is alias of supported method
+        with table output.
         """
         return cls.get_method_name(method_or_alias) is not None
 
 
     @classmethod
-    def get_supported_methods(cls):
+    def get_supported_oldstyle_methods(cls):
         """ 
         Returns list of methods that are supported for old-style calling with
-        szradm <queryenv_method> [args...]
+        szradm <queryenv_method> [args...] with table output
         """
         # usage_section = printable_usage(cls.__doc__)
         # usages = re.findall(r'queryenv .+?\s', usage_section)
@@ -214,6 +215,10 @@ class Queryenv(Command):
         return m(**filtered_kwds)
 
     def __call__(self, method=None, format=None, args=None, shortcut=False, **kwds):
+        """
+        All work is made by fetch method, other methods display methods and
+        support remains only for backward compatibility.
+        """
         if not args:
             args = []
 
