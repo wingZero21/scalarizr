@@ -201,12 +201,11 @@ class OpenstackPlatform(platform.Platform):
         return self._userdata[name]
 
     def get_server_id(self):
-        try:
+        if node.__node__['farm_role_id']:
             global_variables = bus.queryenv_service.list_global_variables()
             return global_variables['public']['SCALR_CLOUD_SERVER_ID']
-        except:
+        else:
             nova = self.get_nova_conn()
-            nova.connect()
             servers = nova.servers.list()
             my_ip = self.get_private_ip()
             for server in servers:
