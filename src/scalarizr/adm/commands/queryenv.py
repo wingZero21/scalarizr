@@ -19,6 +19,7 @@ from scalarizr.adm.util import make_table
 from scalarizr.adm.util import new_queryenv
 from scalarizr.node import __node__
 from scalarizr.queryenv import xml2dict
+from scalarizr.queryenv import QueryEnvError
 
 if sys.version_info[0:2] >= (2, 7):
     from xml.etree import ElementTree as ET
@@ -212,7 +213,10 @@ class Queryenv(Command):
 
         if method == 'fetch':
             filtered_kwds['params'] = kwds
-        return m(**filtered_kwds)
+        try:
+            return m(**filtered_kwds)
+        except QueryEnvError, e:
+            raise CommandError(e.msg)
 
     def __call__(self, method=None, format=None, args=None, shortcut=False, **kwds):
         """

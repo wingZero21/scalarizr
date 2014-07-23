@@ -99,9 +99,7 @@ class QueryEnvService(object):
                         raise InvalidSignatureError(msg)
                     if "not supported" in msg:
                         raise
-                    if e.code in (509, 400, 403):
-                        raise QueryEnvError('QueryEnv failed: %s' % msg)
-                    if not self.autoretry:
+                    if e.code in (509, 400, 403) or not self.autoretry:
                         raise QueryEnvError('QueryEnv failed: %s' % msg)
                     self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, msg, msg_wait)
                 else:
