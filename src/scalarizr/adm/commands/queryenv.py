@@ -216,9 +216,9 @@ class Queryenv(Command):
             filtered_kwds['params'] = kwds
         try:
             return m(**filtered_kwds)
-        except (QueryEnvError, HTTPError) e:
+        except (QueryEnvError, HTTPError), e:
             if isinstance(e, HTTPError) and method == 'fetch':
-                message = '%s method is not supported' % kwds['command']
+                message = '%s method is not supported' % filtered_kwds['command']
             else:
                 message = e.message
             raise CommandError(message)

@@ -178,13 +178,13 @@ class Szradm(command_module.Command):
 
         except (command_module.UnknownCommand, command_module.InvalidCall), e:
             call_str = 'szradm %s %s' % (command, ' '.join(args))
-            message = '\n'.join((call_str, e.message, e.usage))
+            message = '\n'.join((call_str, str(e), e.usage))
             raise e.__class__(message)
 
         except command_module.CommandError, e:
             # except-section for user-defined exceptions, semantic errors, etc.
             call_str = 'szradm %s %s' % (command, ' '.join(args))
-            message = '\n'.join((call_str, e.message))
+            message = '\n'.join((call_str, str(e)))
             raise command_module.CommandError(message)
 
     def find_commands(self, directory=None):

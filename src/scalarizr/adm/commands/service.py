@@ -146,17 +146,17 @@ class Service(Command):
         if service == 'redis':
             return self._print_redis_status(status, print_format)
         # TODO: make xml, json or yaml and dump it to out
-        status_string = 'stopped'
+        status_message = '%s service is stopped' % service
         code = ReturnCode.STOPPED
         if status == initdv2.Status.RUNNING:
-            status_string = 'running'
+            status_message = '%s service is running' % service
             code = ReturnCode.RUNNING
         elif status == initdv2.Status.UNKNOWN:
-            status_string = 'unknown'
+            status_message = '%s service has unknown status' % service
             code = ReturnCode.UNKNOWN
-        # print service + status_string
+        # print service + status_message
 
-        status_dict = {'code': code, 'string': status_string}
+        status_dict = {'code': code, 'message': status_message}
         print self._format_status(status_dict, print_format)
 
         return code
@@ -167,13 +167,13 @@ class Service(Command):
             return ReturnCode.STOPPED
 
         statuses_list = []
-        for port, status in statuses.items():
-            status_string = 'stopped'
+        for i, (port, status) in enumerate(statuses.items()):
+            status_message = 'Redis process on port %s is stopped' % port
             if status == initdv2.Status.RUNNING:
-                status_string = 'running'
-            status_dict = {'port': port, 'code': status, 'string': status_string}
+                status_message = 'Process is running'
+            status_dict = {'port': port, 'code': status, 'message': status_message}
             statuses_list.append(status_dict)
-            # print '- port: %s\n  status: %s' % (port, status_string)
+            # print '- port: %s\n  status: %s' % (port, status_message)
         print self._format_status(statuses_list, print_format)
 
         overall_status = set(statuses.values())
