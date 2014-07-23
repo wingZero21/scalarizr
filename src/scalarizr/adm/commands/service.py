@@ -144,7 +144,7 @@ class Service(Command):
         status = api.get_service_status(**kwds)
 
         if service == 'redis':
-            return self._print_redis_status(status)
+            return self._print_redis_status(status, print_format)
         # TODO: make xml, json or yaml and dump it to out
         status_string = 'stopped'
         code = ReturnCode.STOPPED
@@ -157,11 +157,11 @@ class Service(Command):
         # print service + status_string
 
         status_dict = {'code': code, 'string': status_string}
-        print self._format_status(status_dict, format)
+        print self._format_status(status_dict, print_format)
 
         return code
 
-    def _print_redis_status(self, statuses, format='xml'):
+    def _print_redis_status(self, statuses, print_format='xml'):
         if not statuses:
             print 'No redis configuration found.'
             return ReturnCode.STOPPED
@@ -172,10 +172,11 @@ class Service(Command):
             if status == initdv2.Status.RUNNING:
                 status_string = 'running'
             status_dict = {'port': port, 'code': status, 'string': status_string}
+            statuses_list.append(status_dict)
             # print '- port: %s\n  status: %s' % (port, status_string)
-        print self._format_status(statuses_list)
+        print self._format_status(statuses_list, print_format)
 
-        overall_status = set(statuses.values(), format)
+        overall_status = set(statuses.values())
         if len(overall_status) > 1:
             return ReturnCode.MIXED
         if overall_status.pop() == initdv2.Status.RUNNING:
