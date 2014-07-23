@@ -938,18 +938,19 @@ class MysqlHandler(DBMSRHandler):
         for key, value in options.items():
             self.mysql.my_cnf.set('mysqld/' + key, value)
 
-        if not storage_valid:
-            if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
-                self.mysql.service.start()
-                debian_cnf = metaconf.Configuration('mysql')
-                debian_cnf.read(__mysql__['debian.cnf'])
-                sql = ("GRANT ALL PRIVILEGES ON *.* "
-                        "TO 'debian-sys-maint'@'localhost' "
-                        "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
-                linux.system(['mysql', '-u', 'root', '-e', sql])
-                self.mysql.service.stop()
+        # if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
+        #     LOG.info('Ensuring debian-sys-maint user')
+        #     self.mysql.service.start()
+        #     debian_cnf = metaconf.Configuration('mysql')
+        #     debian_cnf.read(__mysql__['debian.cnf'])
+        #     sql = ("GRANT ALL PRIVILEGES ON *.* "
+        #             "TO 'debian-sys-maint'@'localhost' "
+        #             "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
+        #     linux.system(['mysql', '-u', 'root', '-e', sql])
+        #     self.mysql.service.stop()
 
-            coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+        coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+
         if 'restore' in __mysql__ and \
                         __mysql__['restore'].type == 'xtrabackup':
             # XXX: when restoring data bundle on ephemeral storage, data dir should by empty
@@ -984,6 +985,11 @@ class MysqlHandler(DBMSRHandler):
         log.info('Create Scalr users')
         # Check and create mysql system users
         self.create_users(**user_creds)
+        if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
+            # Ensure debian-sys-maint 
+            debian_cnf = metaconf.Configuration('mysql')
+            debian_cnf.read(__mysql__['debian.cnf'])
+            self.root_client.fetchall("SET PASSWORD FOR 'debian-sys-maint'@'localhost' = PASSWORD({0!r})".format(debian_cnf.get('client/password')))
 
         log.info('Create data bundle')
         if 'backup' in __mysql__:
