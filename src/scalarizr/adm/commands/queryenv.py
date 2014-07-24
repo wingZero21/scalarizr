@@ -37,7 +37,7 @@ class Queryenv(Command):
     Launches queryenv methods.
 
     Usage:
-      queryenv <method> [--format=(xml|json|yaml)] [<args>...]
+      queryenv [--format=(xml|json|yaml)] <method> [<args>...]
     
     Options:
       -f <format>, --format=<format>  Output format: xml (default), json or yaml.

@@ -60,8 +60,10 @@ class Service(Command):
     Scalarizr service control.
 
     Usage:
-      service redis [--format=(xml|json|yaml)] (start | stop | status) [(<index> | --port=<port>)]
-      service <service> [--format=(xml|json|yaml)] (start | stop | status)
+      service redis (start | stop) [(<index> | --port=<port>)]
+      service redis [--format=(xml|json|yaml)] status [(<index> | --port=<port>)]
+      service <service> (start | stop)
+      service <service> [--format=(xml|json|yaml)] status
 
     Options:
       -p <port>, --port=<port>
