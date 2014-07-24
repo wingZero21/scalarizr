@@ -170,7 +170,7 @@ class Service(Command):
         for i, (port, status) in enumerate(statuses.items()):
             status_message = 'Redis process on port %s is stopped' % port
             if status == initdv2.Status.RUNNING:
-                status_message = 'Process is running'
+                status_message = 'Redis process on port %s is running' % port
             status_dict = {'port': port, 'code': status, 'message': status_message}
             statuses_list.append(status_dict)
             # print '- port: %s\n  status: %s' % (port, status_message)
