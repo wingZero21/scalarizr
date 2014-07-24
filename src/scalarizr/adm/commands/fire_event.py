@@ -29,7 +29,7 @@ class FireEvent(Command):
         message_name = 'FireEvent'
         body = {'event_name': name, 'params': params}
         if name == 'InitFailed':
-            del body['event_name']
+            body = params
             message_name = name
         msg = msg_service.new_message(message_name, body=body)
         print 'Sending %s' % name
