@@ -26,8 +26,12 @@ class FireEvent(Command):
                 k, v = pair.split('=')
                 params[k] = v
 
-        msg = msg_service.new_message('FireEvent', body={'event_name': name,
-                                                         'params': params})
+        message_name = 'FireEvent'
+        body = {'event_name': name, 'params': params}
+        if name == 'InitFailed':
+            del body['event_name']
+            message_name = name
+        msg = msg_service.new_message(message_name, body=body)
         print 'Sending %s' % name
         producer.send('control', msg)
 
