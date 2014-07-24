@@ -51,6 +51,11 @@ OPT_REPLICATION_MASTER = "replication_master"
 LOG = logging.getLogger(__name__)
 __postgresql__ = __node__[SERVICE_NAME]
 
+if 'Amazon' == linux.os['name'] and software.postgresql_software_info().version[:2] == (9,2):
+    pg_pathname_pattern = '/var/lib/pgsql9/'
+else:
+    pg_pathname_pattern = '/var/lib/p*sql/9.*/'
+
 
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
     socket_file = None
@@ -617,14 +622,10 @@ class PSQL(object):
                     
     
 class ClusterDir(object):
-    #TODO: Rethink ClusterDir and ConfigDir
     try:
-        if 'Amazon' == linux.os['name'] and software.postgresql_software_info().version[:2] == (9,2):
-            base_path = '/var/lib/pgsql9/'
-        else:
-            base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
+        base_path = glob.glob(pg_pathname_pattern)[0]
         default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
-    except IndexError, software.SoftwareError:
+    except IndexError:
         base_path = None
         default_path = None
     
@@ -704,10 +705,8 @@ class ConfigDir(object):
         if not path:
             if linux.os.debian_family:
                 path = '/etc/postgresql/%s/main' % version
-            elif 'Amazon' == linux.os['name'] and "9.2" == version:
-                path = '/var/lib/pgsql9/data'
             else:
-                path = os.path.join(glob.glob('/var/lib/p*sql/9.*/')[0], 'data')
+                path = os.path.join(glob.glob(pg_pathname_pattern)[0],'data')
         return cls(path, version)
         
     
