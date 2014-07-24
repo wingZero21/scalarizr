@@ -133,6 +133,7 @@ Section "MainSection" SEC01
     RMDir /r $INSTDIR\scripts
     RMDir /r $INSTDIR\share
     Delete $INSTDIR\scalarizr.bat
+    Delete $INSTDIR\szradm.bat
   ${EndIf}
   
   SetOverwrite on
