@@ -220,7 +220,7 @@ class Queryenv(Command):
             if isinstance(e, HTTPError) and method == 'fetch':
                 message = '%s method is not supported' % filtered_kwds['command']
             else:
-                message = e.message
+                message = str(e)
             raise CommandError(message)
 
     def __call__(self, method=None, format=None, args=None, shortcut=False, **kwds):
