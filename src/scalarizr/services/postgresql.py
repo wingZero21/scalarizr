@@ -624,7 +624,7 @@ class ClusterDir(object):
         else:
             base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
         default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
-    except IndexError, software.SoftwareError:
+    except (IndexError, software.SoftwareError):
         base_path = None
         default_path = None
     
