@@ -31,7 +31,6 @@ import sys
 import os
 import imp
 import time
-import resource
 import inspect
 from textwrap import dedent
 
