@@ -878,6 +878,8 @@ class MysqlHandler(DBMSRHandler):
                     and __node__['platform'].get_instance_type() == 't1.micro':
                 options['innodb_buffer_pool_size'] = '16M'  # Default 128M is too much
             if not self.mysql.my_cnf.get('mysqld/innodb_log_file_size'):
+                # Percona Xtrabackup 2.2.x default value for innodb_log_file_size is 50331648
+                # this leads to ib_logfile size mismatch error on MySQL/Percona < 5.6.8
                 if software.mysql_software_info().version >= (5, 6, 8):
                     val = '50331648'
                 else:
@@ -926,16 +928,16 @@ class MysqlHandler(DBMSRHandler):
 
         self._change_my_cnf()
 
-        # if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
-        #     LOG.info('Ensuring debian-sys-maint user')
-        #     self.mysql.service.start()
-        #     debian_cnf = metaconf.Configuration('mysql')
-        #     debian_cnf.read(__mysql__['debian.cnf'])
-        #     sql = ("GRANT ALL PRIVILEGES ON *.* "
-        #             "TO 'debian-sys-maint'@'localhost' "
-        #             "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
-        #     linux.system(['mysql', '-u', 'root', '-e', sql])
-        #     self.mysql.service.stop()
+        if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
+            LOG.info('Ensuring debian-sys-maint user')
+            self.mysql.service.start()
+            debian_cnf = metaconf.Configuration('mysql')
+            debian_cnf.read(__mysql__['debian.cnf'])
+            sql = ("GRANT ALL PRIVILEGES ON *.* "
+                    "TO 'debian-sys-maint'@'localhost' "
+                    "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
+            linux.system(['mysql', '-u', 'root', '-e', sql])
+            self.mysql.service.stop()
 
         coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
 
@@ -973,11 +975,6 @@ class MysqlHandler(DBMSRHandler):
         log.info('Create Scalr users')
         # Check and create mysql system users
         self.create_users(**user_creds)
-        if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
-            # Ensure debian-sys-maint 
-            debian_cnf = metaconf.Configuration('mysql')
-            debian_cnf.read(__mysql__['debian.cnf'])
-            self.root_client.fetchall("SET PASSWORD FOR 'debian-sys-maint'@'localhost' = PASSWORD({0!r})".format(debian_cnf.get('client/password')))
 
         log.info('Create data bundle')
         if 'backup' in __mysql__:
