@@ -616,7 +616,9 @@ class Script(object):
 
 
 class BaseChefScript(Script):
-
+    chef = None
+    chef_params = None
+    
     def start(self):
         self.chef.prepare()
         super(BaseChefScript, self).start()

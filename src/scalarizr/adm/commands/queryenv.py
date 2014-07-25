@@ -3,7 +3,13 @@ import re
 import os
 import itertools
 import sys
+from urllib2 import HTTPError
 from xml.dom import minidom
+try:
+    import json as json_module
+except ImportError:
+    import simplejson as json_module
+import yaml
 
 from scalarizr.util import system2
 from scalarizr.adm.command import Command
@@ -13,6 +19,8 @@ from scalarizr.adm.command import CommandError
 from scalarizr.adm.util import make_table
 from scalarizr.adm.util import new_queryenv
 from scalarizr.node import __node__
+from scalarizr.queryenv import xml2dict
+from scalarizr.queryenv import QueryEnvError
 
 if sys.version_info[0:2] >= (2, 7):
     from xml.etree import ElementTree as ET
@@ -29,19 +37,10 @@ class Queryenv(Command):
     Launches queryenv methods.
 
     Usage:
-      queryenv get-https-certificate
-      queryenv get-latest-version
-      queryenv list-ebs-mountpoints
-      queryenv list-roles [--behaviour=<bhvr>] [--role-name=<rolename>] [--with-initializing]
-      queryenv list-virtual-hosts [--name=<name>] [--https]
-      queryenv <method> [<args>...]
+      queryenv [--format=(xml|json|yaml)] <method> [<args>...]
     
     Options:
-      -b, --behaviour=<bhvr>      Role behaviour.
-      -r, --role-name=<rolename>  Role name.
-      -i, --with-initializing     Show initializing servers
-      -n, --name=<name>        Show virtual host by name
-      -s, --https              Show virtual hosts by https
+      -f <format>, --format=<format>  Output format: xml (default), json or yaml.
     """
 
     aliases = ['q']
@@ -50,10 +49,10 @@ class Queryenv(Command):
     def __init__(self):
         super(Queryenv, self).__init__()
 
-    def help(self):
-        doc = super(Queryenv, self).help()
-        methods = [(' '*TAB_SIZE) + m for m in self.get_supported_methods()]
-        return doc + '\nSupported methods:\n' + '\n'.join(methods)
+    # def help(self):
+    #     doc = super(Queryenv, self).help()
+    #     methods = [(' '*TAB_SIZE) + m for m in self.get_supported_methods()]
+    #     return doc + '\nSupported methods:\n' + '\n'.join(methods)
 
     @classmethod
     def get_method_name(cls, alias):
@@ -61,7 +60,7 @@ class Queryenv(Command):
         Returns method name if alias to supported method exists,
         None otherwise.
         """
-        if alias in cls.get_supported_methods():
+        if alias in cls.get_supported_oldstyle_methods():
             return alias
         for method, aliases in cls.method_aliases.items():
             if alias in aliases:
@@ -69,18 +68,29 @@ class Queryenv(Command):
         return None
 
     @classmethod
-    def supports_method(cls, method_or_alias):
+    def supports_oldstyle_method(cls, method_or_alias):
         """
         Returns True if method is supported or is alias of supported method
+        with table output.
         """
         return cls.get_method_name(method_or_alias) is not None
 
+
     @classmethod
-    def get_supported_methods(cls):
-        usage_section = printable_usage(cls.__doc__)
-        usages = re.findall(r'queryenv .+?\s', usage_section)
-        methods = [s.split()[1] for s in usages if '<method>' not in s]
-        return methods
+    def get_supported_oldstyle_methods(cls):
+        """ 
+        Returns list of methods that are supported for old-style calling with
+        szradm <queryenv_method> [args...] with table output
+        """
+        # usage_section = printable_usage(cls.__doc__)
+        # usages = re.findall(r'queryenv .+?\s', usage_section)
+        # methods = [s.split()[1] for s in usages if '<method>' not in s]
+        # return methods
+        return ['get-https-certificate',
+            'get-latest-version',
+            'list-ebs-mountpoints',
+            'list-roles',
+            'list-virtual-hosts']
 
     @classmethod
     def queryenv(cls):
@@ -106,12 +116,12 @@ class Queryenv(Command):
 
     def _display_list_roles(self, out):
         headers = ['behaviour',
-                   'name',
-                   'farm-role-id',
-                   'index',
-                   'internal-ip',
-                   'external-ip',
-                   'replication-master']
+           'name',
+           'farm-role-id',
+           'index',
+           'internal-ip',
+           'external-ip',
+           'replication-master']
         table_data = []
         for d in out:
             behaviour = ', '.join(d.behaviour)
@@ -135,10 +145,19 @@ class Queryenv(Command):
         table_data = out['public'].items()
         print make_table(table_data, headers)
 
-    def _display_fetch(self, out):
-        print minidom.parseString(out).toprettyxml(encoding='utf-8')
+    def _display_fetch(self, out, format='xml'):
+        if format == 'xml':
+            print minidom.parseString(out).toprettyxml(encoding='utf-8')
+        elif format == 'json':
+            out_dict = xml2dict(ET.XML(out))
+            print json_module.dumps(out_dict, indent=4, sort_keys=True, ensure_ascii=False)
+        elif format == 'yaml':
+            out_dict = xml2dict(ET.XML(out))
+            print yaml.dump(out_dict, default_flow_style=False, allow_unicode=True)
+        else:
+            raise CommandError('Unknown output format.\nAvailable formats: xml, json, yaml')
 
-    def _display_out(self, method, out):
+    def _display_out(self, method, out, format='xml'):
         """
         General display method. Searches for certain display method and calls it
         with `out` or prints out in table form or raw. Custom display methods
@@ -155,7 +174,12 @@ class Queryenv(Command):
                     break
 
         if display_method:
-            display_method(out)
+            display_kwds = {}
+            argspec = inspect.getargspec(display_method)
+            argnames = argspec.args
+            if 'format' in argnames:
+                display_kwds['format'] = format
+            display_method(out, **display_kwds)
         elif isinstance(out, list) and isinstance(out[0], list) and method != 'fetch':
             print make_table(out)
         else:
@@ -185,12 +209,30 @@ class Queryenv(Command):
             arg_name = kwds_mapping.get(k, k)
             if argspec.keywords or arg_name in argnames:
                 filtered_kwds[arg_name] = v
+                if method == 'fetch':
+                    del kwds[k]
 
-        return m(**filtered_kwds)
+        if method == 'fetch':
+            filtered_kwds['params'] = kwds
+        try:
+            return m(**filtered_kwds)
+        except (QueryEnvError, HTTPError), e:
+            if isinstance(e, HTTPError) and method == 'fetch':
+                message = '%s method is not supported' % filtered_kwds['command']
+            else:
+                message = str(e)
+            raise CommandError(message)
 
-    def __call__(self, method=None, args=None, **kwds):
+    def __call__(self, method=None, format=None, args=None, shortcut=False, **kwds):
+        """
+        All work is made by fetch method, other methods display methods and
+        support remains only for backward compatibility.
+        """
         if not args:
             args = []
+
+        if not format:
+            format = "xml"
 
         # we need to find method in kwds because parser places it there
         # param method is presented only when default parsing rule is applied
@@ -214,14 +256,17 @@ class Queryenv(Command):
                 k, v = pair.split('=')
                 kwds[k] = v
 
+        kwds_mapping = {}
         if method == 'list-roles':
-            out = self._run_queryenv_method(
-                method,
-                kwds,
-                {'with_initializing': 'with_init'})
-        else:
-            out = self._run_queryenv_method(method, kwds)
-        self._display_out(method, out)
+            kwds_mapping = {'with_initializing': 'with_init'}
+
+        if not shortcut and method != 'fetch':
+            kwds['command'] = method
+            method = 'fetch'
+
+        out = self._run_queryenv_method(method, kwds, kwds_mapping)
+
+        self._display_out(method, out, format)
 
 
 commands = [Queryenv]

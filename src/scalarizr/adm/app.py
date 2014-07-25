@@ -31,17 +31,20 @@ import sys
 import os
 import imp
 import time
-import resource
 import inspect
 from textwrap import dedent
 
+from scalarizr import linux
 from scalarizr.adm import command as command_module
-from scalarizr.app import init_script
-from scalarizr.app import _init_platform
 from scalarizr.adm.commands.queryenv import Queryenv as QueryenvCmd
+from scalarizr.app import _init_platform
+from scalarizr.app import init_script
 
 
 __dir__ = os.path.dirname(__file__)
+
+
+windows_supported_modules = ('fire_event', 'messages', 'msgsend', 'queryenv')
 
 
 def find_modules(directory):
@@ -58,7 +61,8 @@ def find_modules(directory):
     this_module = os.path.basename(__file__).replace('.py', '')
 
     for name in module_names:
-        if name in ('__init__', this_module):
+        if name in ('__init__', this_module) or \
+            (linux.os.windows_family and name not in windows_supported_modules):
             continue
         try:
             module_info = imp.find_module(name, [directory])
@@ -89,9 +93,13 @@ class Szradm(command_module.Command):
                                    QueryEnv parameters should be passed in <key>=<value> form.
       --fire-event=<event_name>    Fires custom event on Scalr.
                                    Parameters should be passed in a <key>=<value> form.
+      -b, --behaviour=<bhvr>       Role behaviour.
+      -r, --role-name=<rolename>   Role name.
+      -i, --with-initializing      Show initializing servers
+      -s, --https                  Show virtual hosts by https
     """
 
-    version = (0, 2)
+    version = (0, 3)
 
     def help(self):
         """
@@ -105,20 +113,24 @@ class Szradm(command_module.Command):
         self.subcommands = self.find_commands(commands_dir)
 
     def __call__(self, 
-                 command=None,
-                 version=False,
-                 help=False,
-                 queryenv=False,
-                 msgsnd=False,
-                 qa_report=False,
-                 repair=False,
-                 name=None,
-                 msgfile=None,
-                 queue=None,
-                 api_version=None,
-                 fire_event=None,
-                 endpoint=None,
-                 args=[]):
+        command=None,
+        version=False,
+        help=False,
+        queryenv=False,
+        msgsnd=False,
+        qa_report=False,
+        repair=False,
+        name=None,
+        msgfile=None,
+        queue=None,
+        api_version=None,
+        fire_event=None,
+        endpoint=None,
+        behaviour=None,
+        role_name=None,
+        with_initializing=None,
+        https=None,
+        args=[]):
 
         if version:
             print 'Szradm version: %s.%s' % self.version
@@ -139,9 +151,9 @@ class Szradm(command_module.Command):
 
             if msgsnd:
                 kwds = {'name': name,
-                        'msgfile': msgfile,
-                        'endpoint': endpoint,
-                        'queue': queue}
+                    'msgfile': msgfile,
+                    'endpoint': endpoint,
+                    'queue': queue}
                 return self.run_subcommand('msgsnd', [command] + args, kwds)
 
             if fire_event:
@@ -150,23 +162,30 @@ class Szradm(command_module.Command):
             if not command:
                 return self(help=True)
 
-            # queryenv shortcuts
-            if QueryenvCmd.supports_method(command):
-                return self.run_subcommand('queryenv', [command] + args)
+            # queryenv shortcuts for table-form output
+            if QueryenvCmd.supports_oldstyle_method(command):
+                kwds = {'shortcut': True,
+                    'name': name,
+                    'behaviour': behaviour,
+                    'role_name': role_name,
+                    'with_initializing': with_initializing,
+                    'https': https}
+                try:
+                    return self.run_subcommand('queryenv', [command] + args, kwds)
+                except command_module.InvalidCall, e:
+                    message = '\n'.join(('Invalid call', self.help()))
+                    raise command_module.InvalidCall(message)
 
             # Standard command execution style
             return self.run_subcommand(command, args)
 
         except (command_module.UnknownCommand, command_module.InvalidCall), e:
-            call_str = 'szradm %s %s' % (command, ' '.join(args))
-            message = '\n'.join((call_str, e.message, e.usage))
+            message = '\n'.join((str(e), e.usage))
             raise e.__class__(message)
 
         except command_module.CommandError, e:
             # except-section for user-defined exceptions, semantic errors, etc.
-            call_str = 'szradm %s %s' % (command, ' '.join(args))
-            message = '\n'.join((call_str, e.message))
-            raise command_module.CommandError(message)
+            raise command_module.CommandError(str(e))
 
     def find_commands(self, directory=None):
         """

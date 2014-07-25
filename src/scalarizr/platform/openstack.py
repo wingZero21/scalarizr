@@ -201,8 +201,26 @@ class OpenstackPlatform(platform.Platform):
         return self._userdata[name]
 
     def get_server_id(self):
-        global_variables = bus.queryenv_service.list_global_variables()
-        return global_variables['public']['SCALR_CLOUD_SERVER_ID']
+        if node.__node__['farm_role_id']:
+            global_variables = bus.queryenv_service.list_global_variables()
+            return global_variables['public']['SCALR_CLOUD_SERVER_ID']
+        else:
+            nova = self.get_nova_conn()
+            servers = nova.servers.list()
+            my_ip = self.get_private_ip()
+            for server in servers:
+                ips = []
+                ip_addr = 'private' in server.addresses and server.addresses['private'][0]['addr']
+                if ip_addr:
+                    ips.append(ip_addr)
+                else:
+                    ips = [address['addr'] 
+                                for network in server.addresses.values()
+                                for address in network]
+                if my_ip in ips:
+                    return server.id
+            raise BaseException("Can't get server_id because we can't get "
+                                "server private ip")
 
     def get_avail_zone(self):
         return self._get_property('availability_zone')

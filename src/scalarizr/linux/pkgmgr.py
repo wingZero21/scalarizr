@@ -168,7 +168,7 @@ class PackageMgr(object):
 
         installed = self.info(name)['installed']
         if not installed:
-            LOG.info('Installing %s=%s', name, version)
+            LOG.info('Installing %s=%s', name, version or 'latest')
             self.install(name, version, **kwds)
 
 
