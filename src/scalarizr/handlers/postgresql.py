@@ -323,6 +323,12 @@ class PostgreSqlHander(ServiceCtlHandler):
             # New format
             postgresql_data['compat_prior_backup_restore'] = False
             postgresql_data['volume'] = storage2.volume(postgresql_data['volume'])
+
+            #test
+            LOG.info('Data volume size: %s' % postgresql_data['volume']['size'])
+            postgresql_data["growth"] = int(postgresql_data['volume']['size']) + 2
+            LOG.info("Growth for the test: %s" % postgresql_data["growth"])
+
             LOG.debug("message.pg['volume']: %s", postgresql_data['volume'])
             if 'backup' in postgresql_data:
                 postgresql_data['backup'] = backup.backup(postgresql_data['backup'])
