@@ -28,9 +28,10 @@ def make_table(data_rows, header=None):
             row = []
         row = [normalize_multiline(x) for x in row]
         row_length = len(row)
-        if row_length != max_row_length:
-            row = (row + [None]*max_row_length)[:max_row_length]
-        table.add_row(row)
+        if row_length > 0:
+            if row_length != max_row_length:
+                row = (row + [None]*max_row_length)[:max_row_length]
+            table.add_row(row)
 
     return table
 
@@ -55,5 +56,5 @@ def new_queryenv():
                       os.path.join(scalr_base_dir, __node__['crypto_key_path']))
     queryenv = QueryEnvService(*queryenv_creds)
     api_version = queryenv.get_latest_version()
-    queryenv = QueryEnvService(*queryenv_creds, api_version=api_version) 
+    queryenv = QueryEnvService(*queryenv_creds, api_version=api_version, autoretry=False) 
     return queryenv
