@@ -325,6 +325,8 @@ class MysqlHandler(DBMSRHandler):
         # Apply MySQL data from HIR
         md = getattr(message, __mysql__['behavior']).copy()
 
+        self.hir_volume_growth = md.pop('volume_config', None)
+
         if 'preset' in md:
             self.initial_preset = md['preset']
             del md['preset']
@@ -877,7 +879,13 @@ class MysqlHandler(DBMSRHandler):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __mysql__['volume'].snap = __mysql__['volume'].snapshot()
 
-            __mysql__['volume'].ensure(mount=True, mkfs=True)
+            if self.hir_volume_growth and hasattr(__mysql__['volume'], 'id'):
+                #Growing maser storage if HIR message contained "growth" data
+                LOG.info("Attempting to grow data volume according to new parameters: %s" % str(self.hir_volume_growth))
+                grown_volume = __mysql__['volume'].grow(self.hir_volume_growth)
+                __mysql__['volume'] = dict(grown_volume)
+            else:
+                __mysql__['volume'].ensure(mount=True, mkfs=True)
             LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
 
         coreutils.clean_dir(__mysql__['defaults']['datadir'])

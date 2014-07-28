@@ -211,32 +211,14 @@ class Volume(Base):
 
         new_vol = None
         try:
-            LOG.info("Marking volume archived")
+            LOG.info("Marking current volume archived")
             self.apply_tags({"scalr-status": "archived"})
             LOG.info('Detaching volume %s', self.id)
             self.detach()
             new_vol = self.clone()
             self._grow(new_vol, **growth)
             if resize_fs:
-                fs_created = new_vol.detect_fstype()
-
-                if self.fstype:
-                    LOG.info('Resizing filesystem')
-                    fs = storage2.filesystem(fstype=self.fstype)
-                    umount_on_resize = fs.features.get('umount_on_resize')
-
-                    if fs_created:
-                        if umount_on_resize:
-                            if new_vol.mounted_to():
-                                new_vol.umount()
-                            fs.resize(new_vol.device)
-                            if was_mounted:
-                                new_vol.mount()
-                        else:
-                            new_vol.mount()
-                            fs.resize(new_vol.device)
-                            if not was_mounted:
-                                new_vol.umount()
+                self.resize_filesystem(new_vol, was_mounted)
 
         except:
             err_type, err_val, trace = sys.exc_info()
@@ -250,7 +232,7 @@ class Volume(Base):
                         LOG.error('Enlarged volume destruction failed: %s' % destr_err)
 
                 self.ensure(mount=bool(was_mounted))
-                LOG.info("Volume %s has been grown. Marking volume active." % new_vol.id)
+                LOG.info("Marking old volume active again.")
                 self.apply_tags({"scalr-status": "active"})
             except:
                 e = sys.exc_info()[1]
@@ -258,6 +240,8 @@ class Volume(Base):
 
             err_val = 'Volume growth failed: %s' % err_val
             raise storage2.StorageError, err_val, trace
+        else:
+            LOG.info("The process of growing the storage volume completed.")
 
         return new_vol
 
@@ -274,6 +258,27 @@ class Volume(Base):
         """
         pass
 
+
+    def resize_filesystem(self, volume, was_mounted=False):
+        fs_created = volume.detect_fstype()
+
+        if self.fstype and fs_created:
+            LOG.info('Resizing filesystem')
+
+            fs = storage2.filesystem(fstype=self.fstype)
+            umount_on_resize = fs.features.get('umount_on_resize')
+
+            if umount_on_resize:
+                if volume.mounted_to():
+                    volume.umount()
+                fs.resize(volume.device)
+                if was_mounted:
+                    volume.mount()
+            else:
+                volume.mount()
+                fs.resize(volume.device)
+                if not was_mounted:
+                    volume.umount()
 
 
     def _check(self, fstype=True, device=True, **kwds):
