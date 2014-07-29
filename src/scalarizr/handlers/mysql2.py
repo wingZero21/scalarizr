@@ -326,13 +326,6 @@ class MysqlHandler(DBMSRHandler):
         # Apply MySQL data from HIR
         md = getattr(message, __mysql__['behavior']).copy()
 
-        #test
-        LOG.info('Data volume size: %s' % md['volume'].size)
-        md["volume_growth"] = int(md['volume'].size) + 2
-        LOG.info("Growth for the test: %s" % md["volume_growth"])
-
-        self._hir_volume_growth = md.pop('volume_growth', None)
-
         if 'preset' in md:
             self.initial_preset = md['preset']
             del md['preset']
@@ -381,6 +374,14 @@ class MysqlHandler(DBMSRHandler):
                 md['backup'] = backup.backup(
                                 type='snap_mysql',
                                 volume=md['volume'])
+
+
+        #test
+        LOG.info('Data volume size: %s' % md['volume'].size)
+        md["volume_growth"] = int(md['volume'].size) + 2
+        LOG.info("Growth for the test: %s" % md["volume_growth"])
+
+        self._hir_volume_growth = md.pop('volume_growth', None)
 
         __mysql__.update(md)
 
