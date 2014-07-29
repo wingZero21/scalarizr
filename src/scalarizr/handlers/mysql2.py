@@ -890,6 +890,7 @@ class MysqlHandler(DBMSRHandler):
                 #Growing maser storage if HIR message contained "growth" data
                 LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
                 grown_volume = __mysql__['volume'].grow(**self._hir_volume_growth)
+                grown_volume.mount()
                 __mysql__['volume'] = dict(grown_volume)
             else:
                 __mysql__['volume'].ensure(mount=True, mkfs=True)
