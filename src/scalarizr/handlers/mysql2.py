@@ -264,6 +264,7 @@ class MysqlHandler(DBMSRHandler):
         self._op_api = operation_api.OperationAPI()
         self._backup_id = None
         self._data_bundle_id = None
+        self._hir_volume_growth = None
         self.on_reload()
 
 
@@ -325,7 +326,12 @@ class MysqlHandler(DBMSRHandler):
         # Apply MySQL data from HIR
         md = getattr(message, __mysql__['behavior']).copy()
 
-        self.hir_volume_growth = md.pop('volume_config', None)
+        #test
+        LOG.info('Data volume size: %s' % md['volume'].size)
+        md["volume_growth"] = int(md['volume'].size) + 2
+        LOG.info("Growth for the test: %s" % md["volume_growth"])
+
+        self._hir_volume_growth = md.pop('volume_growth', None)
 
         if 'preset' in md:
             self.initial_preset = md['preset']
@@ -879,10 +885,10 @@ class MysqlHandler(DBMSRHandler):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __mysql__['volume'].snap = __mysql__['volume'].snapshot()
 
-            if self.hir_volume_growth and hasattr(__mysql__['volume'], 'id'):
+            if self._hir_volume_growth and hasattr(__mysql__['volume'], 'id'):
                 #Growing maser storage if HIR message contained "growth" data
-                LOG.info("Attempting to grow data volume according to new parameters: %s" % str(self.hir_volume_growth))
-                grown_volume = __mysql__['volume'].grow(self.hir_volume_growth)
+                LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
+                grown_volume = __mysql__['volume'].grow(self._hir_volume_growth)
                 __mysql__['volume'] = dict(grown_volume)
             else:
                 __mysql__['volume'].ensure(mount=True, mkfs=True)

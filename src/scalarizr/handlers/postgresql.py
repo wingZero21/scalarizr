@@ -354,8 +354,8 @@ class PostgreSqlHander(ServiceCtlHandler):
 
             #test
             LOG.info('Data volume size: %s' % postgresql_data['volume'].size)
-            postgresql_data["growth"] = int(postgresql_data['volume'].size) + 2
-            LOG.info("Growth for the test: %s" % postgresql_data["growth"])
+            postgresql_data["volume_growth"] = int(postgresql_data['volume'].size) + 2
+            LOG.info("Growth for the test: %s" % postgresql_data["volume_growth"])
 
 
             if postgresql_data['volume'].device and \
