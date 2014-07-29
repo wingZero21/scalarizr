@@ -378,7 +378,7 @@ class MysqlHandler(DBMSRHandler):
 
         #test
         LOG.info('Data volume size: %s' % md['volume'].size)
-        md["volume_growth"] = int(md['volume'].size) + 2
+        md["volume_growth"] = {"size": int(md['volume'].size) + 2}
         LOG.info("Growth for the test: %s" % md["volume_growth"])
 
         self._hir_volume_growth = md.pop('volume_growth', None)
@@ -889,7 +889,7 @@ class MysqlHandler(DBMSRHandler):
             if self._hir_volume_growth and hasattr(__mysql__['volume'], 'id'):
                 #Growing maser storage if HIR message contained "growth" data
                 LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
-                grown_volume = __mysql__['volume'].grow(self._hir_volume_growth)
+                grown_volume = __mysql__['volume'].grow(**self._hir_volume_growth)
                 __mysql__['volume'] = dict(grown_volume)
             else:
                 __mysql__['volume'].ensure(mount=True, mkfs=True)
