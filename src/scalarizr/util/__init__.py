@@ -15,7 +15,6 @@ import pkgutil
 import traceback
 import platform
 import functools
-import imp
 
 
 from scalarizr.bus import bus
