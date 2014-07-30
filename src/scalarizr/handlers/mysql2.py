@@ -1013,6 +1013,10 @@ class MysqlHandler(DBMSRHandler):
                 stat_password=__mysql__['stat_password'],
                 master_password=__mysql__['master_password']
         )
+
+        if self._hir_volume_growth:
+            md['volume_template'] = __mysql__['volume'].clone()
+
         if __mysql__['compat_prior_backup_restore']:
             if 'restore' in __mysql__:
                 md.update(dict(
