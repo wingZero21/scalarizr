@@ -33,6 +33,7 @@ from scalarizr.node import __node__
 from scalarizr.api import service as preset_service
 from scalarizr.api import mysql as mysql_api
 from scalarizr.api import percona as percona_api
+from scalarizr.api import mariadb as mariadb_api
 from scalarizr.api import operation as operation_api
 
 # Libs
@@ -89,6 +90,8 @@ class MysqlMessages:
 def get_handlers():
     if __node__['behavior'] == 'percona':
         return [MysqlHandler()] if percona_api.PerconaAPI.software_supported else []
+    elif __node__['behavior'] == 'mariadb':
+        return [MysqlHandler()] if mariadb_api.MariaDBAPI.software_supported else []
     else:
         return [MysqlHandler()] if mysql_api.MySQLAPI.software_supported else []
 
