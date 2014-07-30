@@ -886,9 +886,10 @@ class MysqlHandler(DBMSRHandler):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __mysql__['volume'].snap = __mysql__['volume'].snapshot()
 
-            if self._hir_volume_growth and hasattr(__mysql__['volume'], 'id'):
+            if self._hir_volume_growth:
                 #Growing maser storage if HIR message contained "growth" data
                 LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
+                LOG.info("Volume has id: %s" % hasattr(__mysql__['volume'], 'id'))
                 grown_volume = __mysql__['volume'].grow(**self._hir_volume_growth)
                 grown_volume.mount()
                 __mysql__['volume'] = dict(grown_volume)
