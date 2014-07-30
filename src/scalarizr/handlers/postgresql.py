@@ -125,8 +125,9 @@ class PostgreSqlHander(ServiceCtlHandler):
             'before_slave_promote_to_master',
             
             'slave_promote_to_master'
-        )   
+        )
 
+        self._hir_volume_growth = None
         self._postgresql_api = postgresql_api.PostgreSQLAPI()
 
         self.on_reload()        
@@ -374,6 +375,14 @@ class PostgreSqlHander(ServiceCtlHandler):
                     type='snap_postgresql',
                     volume=postgresql_data['volume'])
 
+        #test
+        if postgresql_data['volume'].id:
+            LOG.info('Data volume size: %s' % postgresql_data['volume'].size)
+            postgresql_data["volume_growth"] = {"size": int(postgresql_data['volume'].size) + 2}
+            LOG.info("Growth for the test: %s" % postgresql_data["volume_growth"])
+
+        self._hir_volume_growth = postgresql_data.pop('volume_growth', None)
+
         LOG.debug("Update postgresql config with %s", postgresql_data)
         __postgresql__.update(postgresql_data)
         __postgresql__['volume'].mpoint = __postgresql__['storage_dir']
@@ -601,7 +610,14 @@ class PostgreSqlHander(ServiceCtlHandler):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __postgresql__['volume'].snap = __postgresql__['volume'].snapshot()
 
-            __postgresql__['volume'].ensure(mount=True, mkfs=True)
+            if self._hir_volume_growth:
+                #Growing maser storage if HIR message contained "growth" data
+                LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
+                grown_volume = __postgresql__['volume'].grow(**self._hir_volume_growth)
+                grown_volume.mount()
+                __postgresql__['volume'] = grown_volume
+            else:
+                __postgresql__['volume'].ensure(mount=True, mkfs=True)
             LOG.debug('Postgres volume config after ensure: %s', dict(__postgresql__['volume']))
 
         log.info('Initialize Master')
@@ -619,6 +635,9 @@ class PostgreSqlHander(ServiceCtlHandler):
                         OPT_ROOT_SSH_PRIVATE_KEY: self.postgresql.root_user.private_key,
                         OPT_ROOT_SSH_PUBLIC_KEY: self.postgresql.root_user.public_key,
                         OPT_CURRENT_XLOG_LOCATION: None})
+
+        if self._hir_volume_growth:
+            msg_data['volume_template'] = dict(__postgresql__['volume'].clone())
 
         if __postgresql__['compat_prior_backup_restore']:
             if 'restore' in __postgresql__:
