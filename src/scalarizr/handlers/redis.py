@@ -125,6 +125,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def __init__(self):
+        self._hir_volume_growth = None
         self._redis_api = redis_api.RedisAPI()
         self.preset_provider = redis.RedisPresetProvider()
 
@@ -308,6 +309,16 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     type='snap_redis',
                     snapshot=redis_data.pop('snapshot_config'),
                     volume=redis_data['volume'])
+
+
+        #test
+        if redis_data['volume'].id:
+            LOG.info('Data volume size: %s' % redis_data['volume'].size)
+            redis_data["volume_growth"] = {"size": int(redis_data['volume'].size) + 2}
+            LOG.info("Growth for the test: %s" % redis_data["volume_growth"])
+
+        self._hir_volume_growth = redis_data.pop('volume_growth', None)
+
 
         # Update configs
         __redis__.update(redis_data)
@@ -496,8 +507,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __redis__['volume'].snap = __redis__['volume'].snapshot()
 
-            __redis__['volume'].ensure(mount=True, mkfs=True)
-            LOG.debug('Redis volume config after ensure: %s', dict(__redis__['volume']))
+            if self._hir_volume_growth:
+                #Growing maser storage if HIR message contained "growth" data
+                LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
+                grown_volume = __redis__['volume'].grow(**self._hir_volume_growth)
+                grown_volume.mount()
+                __redis__['volume'] = grown_volume
+            else:
+                __redis__['volume'].ensure(mount=True, mkfs=True)
+                LOG.debug('Redis volume config after ensure: %s', dict(__redis__['volume']))
 
         log.info('Initialize Master')
         password = self.get_main_password()
@@ -512,6 +530,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         log.info('Collect HostUp data')
         # Update HostUp message
+
+        if self._hir_volume_growth:
+            msg_data['volume_template'] = dict(__redis__['volume'].clone())
 
         if msg_data:
             message.db_type = BEHAVIOUR
