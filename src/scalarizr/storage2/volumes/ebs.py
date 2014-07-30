@@ -167,12 +167,12 @@ class EbsVolume(base.Volume, EbsMixin):
     _global_timeout = 3600
 
     def __init__(self,
-                            name=None,
-                            avail_zone=None,
-                            size=None,
-                            volume_type='standard',
-                            iops=None,
-                            **kwds):
+        name=None,
+        avail_zone=None,
+        size=None,
+        volume_type='standard',
+        iops=None,
+        **kwds):
         base.Volume.__init__(self, name=name, avail_zone=avail_zone,
                         size=size and int(size) or None,
                         volume_type=volume_type, iops=iops, **kwds)
