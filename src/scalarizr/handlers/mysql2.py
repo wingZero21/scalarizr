@@ -32,6 +32,7 @@ from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
 from scalarizr.api import service as preset_service
 from scalarizr.api import mysql as mysql_api
+from scalarizr.api import percona as percona_api
 from scalarizr.api import operation as operation_api
 
 # Libs
@@ -86,7 +87,10 @@ class MysqlMessages:
 
 
 def get_handlers():
-    return [MysqlHandler()] if mysql_api.MySQLAPI.software_supported else []
+    if __node__['behavior'] == 'percona':
+        return [MysqlHandler()] if percona_api.PerconaAPI.software_supported else []
+    else:
+        return [MysqlHandler()] if mysql_api.MySQLAPI.software_supported else []
 
 
 class DBMSRHandler(ServiceCtlHandler):
