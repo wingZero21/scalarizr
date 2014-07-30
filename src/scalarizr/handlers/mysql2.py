@@ -892,7 +892,7 @@ class MysqlHandler(DBMSRHandler):
                 LOG.info("Volume has id: %s" % hasattr(__mysql__['volume'], 'id'))
                 grown_volume = __mysql__['volume'].grow(**self._hir_volume_growth)
                 grown_volume.mount()
-                __mysql__['volume'] = dict(grown_volume)
+                __mysql__['volume'] = grown_volume
             else:
                 __mysql__['volume'].ensure(mount=True, mkfs=True)
             LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
@@ -1015,7 +1015,7 @@ class MysqlHandler(DBMSRHandler):
         )
 
         if self._hir_volume_growth:
-            md['volume_template'] = __mysql__['volume'].clone()
+            md['volume_template'] = dict(__mysql__['volume'].clone())
 
         if __mysql__['compat_prior_backup_restore']:
             if 'restore' in __mysql__:
