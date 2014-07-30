@@ -288,6 +288,7 @@ class EbsVolume(base.Volume, EbsMixin):
             zone = self._avail_zone()
             snap = name = None
             size = self.size() if callable(self.size) else self.size
+            encrypted = self.encrypted
 
             if self.id:
                 try:
