@@ -359,7 +359,7 @@ class MysqlHandler(DBMSRHandler):
             # Initialized persistent disk have latest data.
             # Next statement prevents restore from snapshot
             if md['volume'].device and \
-                                    md['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+                                    md['volume'].type in ('gce_persistent', 'ebs', 'csvol', 'cinder', 'raid'):
                 md.pop('snapshot_config', None)
 
             if md.get('snapshot_config'):
