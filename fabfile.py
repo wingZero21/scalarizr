@@ -9,7 +9,7 @@ from fabric.decorators import runs_once
 from fabric.context_managers import shell_env
 from fabric.colors import green
 
-
+env['use_ssh_config'] = True
 project = os.environ.get('CI_PROJECT', 'scalarizr')
 build_dir = os.environ['PWD']
 home_dir = os.environ.get('CI_HOME_DIR', '/var/lib/ci')
@@ -124,7 +124,11 @@ def git_export():
     '''
     print_green('in git export')
     print_green('current dir is %s ' % local('echo pwd'))
-    archive = '{0}-{1}.tar.gz'.format(project, env.host_string)  # add host str, for safe concurrent execution
+    try:
+        host_str = env.host_string.split('@')[1]
+    except IndexError:
+        host_str = env.host_string
+    archive = '{0}-{1}.tar.gz'.format(project, host_str)  # add host str, for safe concurrent execution
     local("git archive --format=tar HEAD | gzip >{0}".format(archive))
     if not os.path.exists(archive):
         f = open(arhive, 'w+')
@@ -173,7 +177,7 @@ def build_omnibus():
         }
         with shell_env(**env):
             run("bin/omnibus clean %s --log-level=warn" % project)
-            run("bin/omnibus build project %s --log-level=warn" % project)
+            run("bin/omnibus build %s --log-level=warn" % project)
 
     with open(omnibus_md5sum_file, 'w+') as fp:
         fp.write(omnibus_md5sum())
