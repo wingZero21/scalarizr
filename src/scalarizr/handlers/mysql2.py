@@ -879,6 +879,7 @@ class MysqlHandler(DBMSRHandler):
         log.info('Create storage')
         if 'restore' in __mysql__ and \
                         __mysql__['restore'].type == 'snap_mysql':
+            LOG.debug("Starting restore process")
             __mysql__['restore'].run()
         else:
             if __node__['platform'].name == 'idcf':
