@@ -360,7 +360,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
 
             if postgresql_data['volume'].device and \
-                            postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+                            postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid', 'gce_persistent'):
                 LOG.debug("Master n'th start detected. Removing snapshot config from message")
                 postgresql_data.pop(OPT_SNAPSHOT_CNF, None)
 
