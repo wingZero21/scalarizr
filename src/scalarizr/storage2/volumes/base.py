@@ -218,7 +218,25 @@ class Volume(Base):
             new_vol = self.clone()
             self._grow(new_vol, **growth)
             if resize_fs:
-                self.resize_filesystem(new_vol, was_mounted)
+                fs_created = new_vol.detect_fstype()
+
+                if self.fstype:
+                    LOG.info('Resizing filesystem')
+                    fs = storage2.filesystem(fstype=self.fstype)
+                    umount_on_resize = fs.features.get('umount_on_resize')
+
+                    if fs_created:
+                        if umount_on_resize:
+                            if new_vol.mounted_to():
+                                new_vol.umount()
+                            fs.resize(new_vol.device)
+                            if was_mounted:
+                                new_vol.mount()
+                        else:
+                            new_vol.mount()
+                            fs.resize(new_vol.device)
+                            if not was_mounted:
+                                new_vol.umount()
 
         except:
             err_type, err_val, trace = sys.exc_info()
@@ -257,28 +275,6 @@ class Volume(Base):
         :rtype: Volume
         """
         pass
-
-
-    def resize_filesystem(self, volume, was_mounted=False):
-        fs_created = volume.detect_fstype()
-
-        if self.fstype and fs_created:
-            LOG.info('Resizing filesystem')
-
-            fs = storage2.filesystem(fstype=self.fstype)
-            umount_on_resize = fs.features.get('umount_on_resize')
-
-            if umount_on_resize:
-                if volume.mounted_to():
-                    volume.umount()
-                fs.resize(volume.device)
-                if was_mounted:
-                    volume.mount()
-            else:
-                volume.mount()
-                fs.resize(volume.device)
-                if not was_mounted:
-                    volume.umount()
 
 
     def _check(self, fstype=True, device=True, **kwds):
