@@ -132,7 +132,7 @@ class EBSImageMaker(object):
     def __init__(self, image_name, root_disk, delegate, destination='/mnt/scalr_image'):
         self.image_name = image_name
         self.root_disk = root_disk
-        self.image_size = int(self.root_disk.size/1024)
+        self.image_size = self.root_disk.size
         self.environ = delegate.environ
         self.credentials = delegate.credentials
         self.ami_bin_dir = delegate.ami_bin_dir
@@ -151,7 +151,7 @@ class EBSImageMaker(object):
         if avail_space <= self.image_size:
             os.mkdir('/mnt/temp-vol')
             LOG.debug('Making temp volume')
-            self.temp_vol = self.make_volume(self.image_size/1000,
+            self.temp_vol = self.make_volume({'size': self.image_size},
                 '/mnt/temp-vol',
                 mount=True)
             self.destination = '/mnt/temp-vol'
@@ -167,7 +167,7 @@ class EBSImageMaker(object):
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
             '--arch', linux.os['arch'],
-            '--size', str(self.image_size),
+            '--size', str(self.image_size*1024),
             '--destination', self.destination,
             '--exclude', self.destination,
             '--prefix', self.image_name,
@@ -180,12 +180,11 @@ class EBSImageMaker(object):
             stderr=subprocess.STDOUT)[0]
         LOG.debug('Image prepare command out: %s' % out)
 
-    def make_volume(self, size, mpoint, mount=False):
-        ebs_config = {'type': 'ebs',
-            'size': size}
-        ebs_config['size'] = size
+    def make_volume(self, config, mpoint, mount=False):
+        config['type'] = 'ebs'
+
         LOG.debug('Creating ebs volume')
-        volume = create_volume(ebs_config, fstype='ext4')
+        volume = create_volume(config, fstype='ext4')
         volume.mpoint = mpoint
         volume.ensure(mount=True, mkfs=True)
         if not mount:
@@ -278,8 +277,10 @@ class EBSImageMaker(object):
         volume = None
         try:
             self.prepare_image()
-            size = self.image_size / 1000
-            volume = self.make_volume(size, '/mnt/img-mnt')
+            volume_config = {'volume_type': self.root_disk.volume_type,
+                'size': self.root_disk.size,
+                'iops': self.root_disk.iops}
+            volume = self.make_volume(volume_config, '/mnt/img-mnt')
             snapshot_id = self.make_snapshot(volume)
             image_id = self.register_image(snapshot_id, volume.device)
             return image_id
@@ -395,17 +396,24 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
         return instance.root_device_type
 
-    def _get_root_disk(self):
+    def _get_root_disk(self, root_device_type):
         # list of all mounted devices 
-        devices = coreutils.df()
-
-        # root device partition like `df(device='/dev/sda2', ..., mpoint='/')
-        root_disk = None
-        for device in devices:
-            if device.mpoint == '/':
-                return device
-        
-        raise ImageAPIError("Can't find root device")
+        if root_device_type = 'ebs':
+            vol_filters = {'attachment.instance-id': pl.get_instance_id()}
+            attached_vols = ec2_conn.get_all_volumes(filters=vol_filters)
+            root_vol = None
+            for vol in attached_vols:
+                if instance.root_device_name == vol.attach_data.device:
+                    return vol
+            raise ImageAPIError("Failed to find root volume")
+        else:
+            devices = coreutils.df()
+            # root device partition like `df(device='/dev/sda2', ..., mpoint='/')
+            root_disk = None
+            for device in devices:
+                if device.mpoint == '/':
+                    return device
+            raise ImageAPIError("Can't find root device")
 
     def _setup_environment(self):
         platform = __node__['platform']
@@ -443,7 +451,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 
         root_device_type = self._get_root_device_type()          
-        root_disk = self._get_root_disk()
+        root_disk = self._get_root_disk(root_device_type)
         self._setup_environment()
         LOG.debug('device type: %s' % root_device_type)
         if root_device_type == 'ebs':
