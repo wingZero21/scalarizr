@@ -3,7 +3,6 @@ name       "scalarizr"
 maintainer "Scalr Inc"
 homepage   "http://scalr.com"
 
-replaces        "scalarizr"
 install_path    "/opt/scalarizr"
 
 if ENV['OMNIBUS_BUILD_VERSION']
@@ -18,11 +17,11 @@ dependency "preparation"
 
 
 dependency "scalarizr"
-extra_package_file("--deb-changelog '#{Omnibus::Config.project_root}/changelog'")
 
 
 # version manifest file
 dependency "version-manifest"
+extra_package_file("--deb-changelog '#{Omnibus::Config.project_root}/changelog'")
 
 exclude "\.git*"
 exclude "bundler\/git"
