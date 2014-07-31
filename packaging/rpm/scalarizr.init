@@ -2,10 +2,10 @@
 #
 # scalarizr - this script starts and stops the scalarizr daemon
 #
-# chkconfig:   2345 85 15
+# chkconfig:   2345 - 15
 # description:  Scalarizr is a part of Scalr project
 # processname: scalarizr
-# config:      /etc/scalarizr/config.ini
+# config:      /etc/scalr/config.ini
 # config:      /etc/sysconfig/scalarizr
 # pidfile:     /var/run/scalarizr.pid
 
@@ -96,11 +96,12 @@ killproc() {
 # Check that networking is up.
 [ "$NETWORKING" = "no" ] && exit 0
 
-scalarizr="/usr/local/bin/scalarizr"
+scalarizr="/usr/bin/scalarizr"
 prog=$(basename $scalarizr)
 
 SCALARIZR_CONF_DIR="/etc/scalr"
 SCALARIZR_CONF_FILE="$SCALARIZR_CONF_DIR/public.d/config.ini"
+PYTHON='/usr/bin/python2.6'
 
 [ -f /etc/sysconfig/scalarizr ] && . /etc/sysconfig/scalarizr
 
@@ -122,16 +123,16 @@ start() {
 stop() {
     echo -n $"Stopping $prog: "
 	if [ $run_level == "0" ]; then
-		$scripts_path/halt stop
+		$PYTHON $scripts_path/halt stop
 	elif [ $run_level == "6" ]; then
-		$scripts_path/reboot stop
+		$PYTHON $scripts_path/reboot stop
 	fi    
     killproc -d 3 $prog
     retval=$?
     echo
     [ $retval -eq 0 ] && rm -f $lockfile
 
-	__zomby_pids=$(ps aux | grep '/usr/local/bin/scalarizr' | awk '{ print $2 }')
+	__zomby_pids=$(ps aux | grep 'bin/scalarizr' | awk '{ print $2 }')
 	if [ "$__zomby_pids" ]; then
 		for __zomby_pid in $__zomby_pids; do
 			kill -9 $__zomby_pid || :
@@ -146,11 +147,6 @@ restart() {
     start
 }
 
-reload() {
-    echo -n $"Reloading $prog: "
-    killproc $scalarizr -HUP
-    echo
-}
 
 rh_status() {
     status $prog
@@ -177,10 +173,6 @@ case "$1" in
         rh_status_q || exit 7
         upgrade
         ;;
-    reload)
-        rh_status_q || exit 7
-        $1
-        ;;
     status|status_q)
         rh_$1
         ;;
@@ -189,6 +181,6 @@ case "$1" in
         restart
 	    ;;
     *)
-        echo $"Usage: $0 {start|stop|reload|status|force-reload|restart}"
+        echo $"Usage: $0 {start|stop|status|force-reload|restart}"
         exit 2
 esac

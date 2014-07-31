@@ -13,7 +13,7 @@ HostLine=namedtuple('host', ['ipaddr', 'hostname', 'aliases'])
 class Items(list):
 
     def __getitem__(self, index):
-        if isinstance(index, str):
+        if isinstance(index, (str, unicode)):
             for item in self:
                 if isinstance(item, dict) and item['hostname'] == index:
                     return item

@@ -8,15 +8,15 @@ import os
 import sys
 import time
 import json
-import signal
 import shutil
 import logging
 import tempfile
 
 from scalarizr import linux
+from scalarizr.api import chef as chef_api
 from scalarizr.node import __node__
 from scalarizr.bus import bus
-from scalarizr.util import system2, initdv2, PopenError
+from scalarizr.util import system2, initdv2
 from scalarizr.util.software import which
 from scalarizr.handlers import Handler, HandlerError, deploy
 
@@ -42,69 +42,10 @@ file_cache_path "{0}"
 '''
 
 def get_handlers():
-    return (ChefHandler(), )
-
-
-PID_FILE = '/var/run/chef-client.pid'
-
-class ChefInitScript(initdv2.ParametrizedInitScript):
-    _default_init_script = '/etc/init.d/chef-client'
-
-    def __init__(self):
-        self._env = None
-        super(ChefInitScript, self).__init__('chef', None, PID_FILE)
-
-
-    def start(self, env=None):
-        self._env = env or os.environ
-        super(ChefInitScript, self).start()
-
-
-    # Uses only pid file, no init script involved
-    def _start_stop_reload(self, action):
-        chef_client_bin = which('chef-client')
-        if action == "start":
-            if not self.running:
-                # Stop default chef-client init script
-                if os.path.exists(self._default_init_script):
-                    system2(
-                        (self._default_init_script, "stop"), 
-                        close_fds=True, 
-                        preexec_fn=os.setsid, 
-                        raise_exc=False
-                    )
-
-                cmd = (chef_client_bin, '--daemonize', '--logfile', 
-                        '/var/log/chef-client.log', '--pid', PID_FILE)
-                try:
-                    out, err, rcode = system2(cmd, close_fds=True, 
-                                preexec_fn=os.setsid, env=self._env)
-                except PopenError, e:
-                    raise initdv2.InitdError('Failed to start chef: %s' % e)
-
-                if rcode:
-                    msg = (
-                        'Chef failed to start daemonized. '
-                        'Return code: %s\nOut:%s\nErr:%s'
-                        )
-                    raise initdv2.InitdError(msg % (rcode, out, err))
-
-        elif action == "stop":
-            if self.running:
-                with open(self.pid_file) as f:
-                    pid = int(f.read().strip())
-                try:
-                    os.getpgid(pid)
-                except OSError:
-                    os.remove(self.pid_file)
-                else:
-                    os.kill(pid, signal.SIGTERM)
-
-    def restart(self):
-        self._start_stop_reload("stop")
-        self._start_stop_reload("start")
-
-initdv2.explore('chef', ChefInitScript)
+    if linux.os.windows_family or chef_api.ChefAPI.software_supported:
+        return [ChefHandler()]
+    else:
+        return []
 
 
 class ChefHandler(Handler):
@@ -246,7 +187,8 @@ class ChefHandler(Handler):
                     finally:
                         os.remove(self._json_attributes_path)
 
-                if self._chef_data.get('daemonize'):
+                daemonize = self._chef_data.get('daemonize')
+                if daemonize and int(daemonize):
                     log.info('Daemonizing chef-client')
                     self.run_chef_client(daemonize=True)
 

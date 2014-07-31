@@ -14,10 +14,13 @@ import platform
 import sys
 import struct
 import array
+import threading
 import ConfigParser
 
+from scalarizr import node
 from scalarizr.bus import bus
 from scalarizr import linux
+from scalarizr.util import LocalPool, NullPool
 if linux.os.windows_family:
     import win32com.client
 else:
@@ -27,8 +30,6 @@ else:
 class PlatformError(BaseException):
     pass
 
-class NoAccessDataError(Exception):
-    pass
 
 class UserDataOptions:
     FARM_ID = "farmid"
@@ -46,6 +47,42 @@ class UserDataOptions:
     REGION = 'region'
     MESSAGE_FORMAT = 'message_format'
     OWNER_EMAIL = 'owner_email'
+
+
+class ConnectionError(Exception):
+    pass
+
+
+class NoCredentialsError(ConnectionError):
+    pass
+
+
+class InvalidCredentialsError(ConnectionError):
+    pass
+
+
+class ConnectionProxy(object):
+
+    _logger = logging.getLogger(__name__)
+
+    def __init__(self, obj, conn_pool):
+        self.obj = obj
+        self.conn_pool = conn_pool
+
+    def __getattribute__(self, name):
+        if re.search('^__.*__$', name):
+            return getattr(object.__getattribute__(self, 'obj'), name)
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            return ConnectionProxy(
+                getattr(object.__getattribute__(self, 'obj'), name),
+                self.conn_pool
+            )
+
+    def __call__(self, *args, **kwds):
+        return self.obj(*args, **kwds)
+
 
 class PlatformFactory(object):
     _platforms = {}
@@ -66,7 +103,6 @@ class PlatformFeatures:
 class Platform():
     name = None
     _arch = None
-    _access_data = None
     _userdata = None
     _logger = logging.getLogger(__name__)
     features = []
@@ -74,7 +110,7 @@ class Platform():
 
     def __init__(self):
         self.scalrfs = self._scalrfs(self)
-        self._access_data = {} 
+        node.__node__['access_data'] = {}
 
     def get_private_ip(self):
         return self.get_public_ip()
@@ -99,19 +135,19 @@ class Platform():
             return self._userdata
 
     def set_access_data(self, access_data):
-        self._access_data = access_data
+        node.__node__['access_data'] = access_data
 
     def get_access_data(self, prop=None):
         if prop:
             try:
-                return self._access_data[prop]
+                return node.__node__['access_data'][prop]
             except (TypeError, KeyError):
                 raise PlatformError("Platform access data property '%s' doesn't exists" % (prop,))
         else:
-            return self._access_data
+            return node.__node__['access_data']
 
     def clear_access_data(self):
-        self._access_data = {}
+        node.__node__['access_data'] = {}
 
     def get_architecture(self):
         """
@@ -149,7 +185,7 @@ class Platform():
 
     def _raise_no_access_data(self):
         msg = 'There are no credentials from cloud services: %s' % self.name
-        raise NoAccessDataError(msg)
+        raise NoCredentialsError(msg)
 
 
     class _scalrfs(object):

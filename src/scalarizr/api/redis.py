@@ -12,9 +12,11 @@ import logging
 from scalarizr import config
 from scalarizr.bus import bus
 from scalarizr import rpc
+from scalarizr import linux
 from scalarizr.linux import iptables
 from scalarizr.api import operation
 from scalarizr.util import system2, PopenError
+from scalarizr.util import initdv2
 from scalarizr.services import redis as redis_service
 from scalarizr.services import backup
 from scalarizr.handlers import transfer_result_to_backup_result, DbMsrMessages
@@ -22,6 +24,10 @@ from scalarizr.services.redis import __redis__
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr import node
+from scalarizr.util import Singleton
+from scalarizr.linux import pkgmgr
+from scalarizr import exceptions
+from scalarizr.api import BehaviorAPI
 
 
 BEHAVIOUR = config.BuiltinBehaviours.REDIS
@@ -31,7 +37,17 @@ STORAGE_PATH = '/mnt/redisstorage'
 LOG = logging.getLogger(__name__)
 
 
-class RedisAPI(object):
+class RedisAPI(BehaviorAPI):
+    """
+    Basic API for managing Redis 2.x service.
+
+    Namespace::
+
+        redis
+    """
+    __metaclass__ = Singleton
+
+    behavior = 'redis'
 
     _cnf = None
     _queryenv = None
@@ -44,8 +60,87 @@ class RedisAPI(object):
         self._role_name = ini.get(config.SECT_GENERAL, config.OPT_ROLE_NAME)
         self.redis_instances = redis_service.RedisInstances()
 
+    def _reinit_instances(self):
+        proc = self.get_all_processes()
+        ports, passwords = proc['ports'], proc['passwords']
+
+        self.redis_instances.instances = []
+        self.redis_instances.init_processes(len(ports), ports, passwords)
+
+    def _get_redis_instances(self, ports=None, indexes=None):
+        assert not (ports is not None and indexes is not None)
+        self._reinit_instances()
+
+        if ports is None and indexes is None:
+            return self.redis_instances.instances
+
+        if ports is not None:
+            if not isinstance(ports, list):
+                ports = [ports]
+            return [self.redis_instances.get_instance(str(port)) for port in ports]
+
+        if not isinstance(indexes, list):
+            indexes = [indexes]
+        return [self.redis_instances.instances[int(index)] for index in indexes]
+
+    @rpc.command_method
+    def start_service(self, ports=None, indexes=None):
+        """
+        ports and indexes parameters can be int or list of ints.
+        """
+        assert not (ports is not None and indexes is not None)
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
+            inst.service.start()
+
+    @rpc.command_method
+    def stop_service(self, ports=None, indexes=None):
+        """
+        ports and indexes parameters can be int or list of ints.
+        """
+        assert not (ports is not None and indexes is not None)
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
+            inst.service.stop()
+
+    @rpc.command_method
+    def reload_service(self, ports=None, indexes=None):
+        """
+        ports and indexes parameters can be int or list of ints.
+        """
+        assert not (ports is not None and indexes is not None)
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
+            inst.service.reload()
+
+    @rpc.command_method
+    def restart_service(self, ports=None, indexes=None):
+        """
+        ports and indexes parameters can be int or list of ints.
+        """
+        assert not (ports is not None and indexes is not None)
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
+            inst.service.restart()
+
+    @rpc.command_method
+    def get_service_status(self, ports=None, indexes=None):
+        """Returns dict of processes ports as keys and their statuses as values"""
+        assert not (ports is not None and indexes is not None)
+        statuses = {}
+        instances = self._get_redis_instances(ports, indexes)
+        for inst in instances:
+            status = initdv2.Status.NOT_RUNNING
+            if inst.service.running:
+                status = initdv2.Status.RUNNING
+            statuses[inst.port] = status
+        return statuses
+
     @rpc.command_method
     def launch_processes(self, num=None, ports=None, passwords=None, async=False):
+        """
+        Launches multiple redis processes
+        """
         if ports and passwords and len(ports) != len(passwords):
             raise AssertionError('Number of ports must be equal to number of passwords')
         if num and ports and num != len(ports):
@@ -71,12 +166,18 @@ class RedisAPI(object):
 
     @rpc.command_method
     def shutdown_processes(self, ports, remove_data=False, async=False):
+        """
+        Stops multiple redis processes.
+        """
         def do_shutdown_processes(op):
             return self._shutdown(ports, remove_data)
         return self._op_api.run('Shutdown Redis processes', do_shutdown_processes, async=async)
 
     @rpc.query_method
     def list_processes(self):
+        """
+        Returns information about all running redis processes.
+        """
         return self.get_running_processes()
 
     def _launch(self, ports=None, passwords=None, op=None):
@@ -147,32 +248,51 @@ class RedisAPI(object):
     def available_ports(self):
         return redis_service.get_available_ports()
 
-    def get_running_processes(self):
-        processes = {}
-        ports = []
-        passwords = []
-        for port in self.busy_ports:
-            conf_path = redis_service.get_redis_conf_path(port)
+    def _get_conf(self, port):
+        conf_path = redis_service.get_redis_conf_path(port)
 
-            if port == redis_service.__redis__['defaults']['port']:
-                args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
-                out = system2(args, silent=True)[0].split('\n')
-                default_path = __redis__['defaults']['redis.conf']
-                try:
-                    p = [x for x in out if x and __redis__['redis-server'] in x and default_path in x]
-                except PopenError:
-                    p = []
-                if p:
-                    conf_path = __redis__['defaults']['redis.conf']
+        if port == redis_service.__redis__['defaults']['port']:
+            args = ('ps', '-G', 'redis', '-o', 'command', '--no-headers')
+            out = system2(args, silent=True)[0].split('\n')
+            default_path = __redis__['defaults']['redis.conf']
+            try:
+                p = [x for x in out if x and __redis__['redis-server'] in x and default_path in x]
+            except PopenError:
+                p = []
+            if p:
+                conf_path = __redis__['defaults']['redis.conf']
 
-            LOG.debug('Got config path %s for port %s', conf_path, port)
-            redis_conf = redis_service.RedisConf(conf_path)
+        LOG.debug('Got config path %s for port %s', conf_path, port)
+        redis_conf = redis_service.RedisConf(conf_path)
+        return redis_conf
+
+    def _get_processes(self, ports):
+        processes = {'ports': [], 'passwords': []}
+        for port in ports:
+            redis_conf = self._get_conf(port)
             password = redis_conf.requirepass
-            processes[port] = password
-            ports.append(port)
-            passwords.append(password)
-            LOG.debug('Redis config %s has password %s', conf_path, password)
-        return dict(ports=ports, passwords=passwords)
+            processes['ports'].append(port)
+            processes['passwords'].append(password)
+            LOG.debug('Redis config %s has password %s', redis_conf, password)
+        return processes
+
+    def _get_redis_ports(self):
+        conf_paths = os.listdir(os.path.dirname(__redis__['defaults']['redis.conf']))
+        ports = [conf.split('.')[1] for conf in conf_paths]
+        return filter(lambda x: x.isdigit(), ports)
+
+    def get_running_processes(self):
+        return self._get_processes(self.busy_ports)
+
+    def get_stopped_processes(self):
+        running_ports = self.busy_ports
+        all_ports = self._get_redis_ports()
+        stopped_ports = [port for port in all_ports if port not in running_ports]
+        return self._get_processes(stopped_ports)
+
+    def get_all_processes(self):
+        all_ports = self._get_redis_ports()
+        return self._get_processes(all_ports)
 
     @property
     def persistence_type(self):
@@ -216,6 +336,12 @@ class RedisAPI(object):
 
     @rpc.query_method
     def replication_status(self):
+        """
+        Checks current replication status.
+
+        :return: Redis replication status.
+        :rtype: dict
+        """
         ri = redis_service.RedisInstances()
 
         if __redis__["replication_master"]:
@@ -238,6 +364,9 @@ class RedisAPI(object):
 
     @rpc.command_method
     def create_databundle(self, async=True):
+        """
+        Creates a new data bundle of /mnt/redis-storage.
+        """
 
         def do_databundle(op):
             try:
@@ -283,7 +412,10 @@ class RedisAPI(object):
 
     @rpc.command_method
     def create_backup(self, async=True):
-
+        """
+        Creates a new backup of db files of all currently running redis processes
+        and uploads gzipped data to the cloud storage.
+        """
         def do_backup(op):
             try:
                 self.redis_instances.save_all()
@@ -316,3 +448,59 @@ class RedisAPI(object):
                                 func_kwds={},
                                 async=async,
                                 exclusive=True)  #?
+
+    @classmethod
+    def do_check_software(cls, installed_packages=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '14':
+                pkgmgr.check_dependency(['redis-server>=2.6,<2.9'], installed_packages)
+            elif os_vers >= '12':
+                pkgmgr.check_dependency(['redis-server>=2.2,<2.9'], installed_packages)
+            elif os_vers >= '10':
+                pkgmgr.check_dependency(['redis-server>=2.2,<2.3'], installed_packages)
+        elif os_name == 'debian':
+            if os_vers >= '7':
+                pkgmgr.check_dependency(['redis-server>=2.6,<2.9'], installed_packages)
+            elif os_vers >= '6':
+                pkgmgr.check_dependency(['redis-server>=2.6,<2.7'], installed_packages)
+        elif linux.os.oracle_family:
+            if os_vers >= '5':
+                pkgmgr.check_dependency(['redis>=2.6,<2.7'], installed_packages, ['centalt-release'])
+        elif os_name == 'centos':
+            if os_vers >= '6':
+                pkgmgr.check_dependency(['redis>=2.4,<2.9'], installed_packages, ['centalt-release'])
+            elif os_vers >= '5':
+                pkgmgr.check_dependency(['redis>=2.4,<2.7'], installed_packages, ['centalt-release'])
+        elif os_name == 'redhat':
+            if os_vers >= '6':
+                pkgmgr.check_dependency(['redis>=2.6,<2.9'], installed_packages, ['centalt-release'])
+        elif os_name == 'amazon':
+            if os_vers >= '2014':
+                pkgmgr.check_dependency(['redis>=2.8,<2.9'], installed_packages, ['centalt-release'])
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, (
+                "Unsupported operating system '{os}'").format(os=linux.os['name'])
+            )
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        if isinstance(e, pkgmgr.VersionMismatchError):
+            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
+            msg = (
+                '{pkg}-{ver} is not supported on {os}. Supported:\n'
+                '\tUbuntu 10.04: >=2.2,<2.3\n'
+                '\tUbuntu 12.04: >=2.2,<2.9\n'
+                '\tUbuntu 14.04: >=2.6,<2.9\n'
+                '\tDebian 6: >=2.6,<2.7\n'
+                '\tDebian 7: >=2.6,<2.9\n'
+                '\tCentOS 5: >=2.4,<2.7\n'
+                '\tCentOS 6: >=2.4,<2.8\n'
+                '\tOracle 5: >=2.6,<2.7\n'
+                '\tRHEL 6: >=2.6,<2.9\n'
+                '\tAmazon 14.03: >=2.8,<2.9\n').format(
+                        pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
+            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, e)

@@ -1,7 +1,9 @@
 import os
+import cStringIO
 from fabric.api import *
 
 env.user = 'root'
+env.key_filename = '/Users/marat/.keys/5071.pem'
 
 def _target(hostname=None, keyname=None):
 	if hostname and keyname:
@@ -39,3 +41,24 @@ def setup_tests_deps(hostname=None, keyname=None):
 			run("which git || yum install git")
 			run("which lettuce || pip-python install git+https://github.com/Scalr/lettuce.git")
 	run('easy_install mock nose')
+
+
+def apt_update_from(branch):
+	release = branch.replace('/', '-')
+	deb_source = cStringIO.StringIO('deb http://buildbot.scalr-labs.com/apt/debian {release}/'.format(**locals()))
+	put(deb_source, '/etc/apt/sources.list.d/scalr-stable.list')
+	put(deb_source, '/etc/apt/sources.list.d/scalr-latest.list')
+
+	apt_prefs = cStringIO.StringIO((
+		'Package: scalarizr-base\n'
+		'Pin: release {release}\n'
+		'Pin-Priority: 990\n'
+		'\n'
+		'Package: scalarizr-ec2\n'
+		'Pin: release {release}\n'
+		'Pin-Priority: 990\n'
+	).format(**locals()))
+	put(apt_prefs, '/etc/apt/preferences.d/scalr')
+
+	run('apt-get update')
+

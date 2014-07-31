@@ -14,7 +14,7 @@ from scalarizr import storage2, node
 from scalarizr.util import initdv2, system2, PopenError, wait_until, Singleton
 from scalarizr.services import backup
 from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, PresetProvider
-from scalarizr.util import disttool, cryptotool, firstmatched
+from scalarizr.util import cryptotool, firstmatched
 from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs.metaconf import NoPathError
@@ -74,7 +74,7 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 
     def __init__(self):
         initd_script = None
-        if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if linux.os.ubuntu and linux.os['version'] >= (10, 4):
             initd_script = ('/usr/sbin/service', 'redis-server')
         else:
             initd_script = firstmatched(os.path.exists, ('/etc/init.d/redis', '/etc/init.d/redis-server'))
@@ -184,13 +184,12 @@ class Redisd(object):
 
     @property
     def running(self):
-        process_matches = False
         for config_path in get_redis_processes():
-            if config_path == self.config_path:
-                process_matches = True
-            elif config_path == __redis__['defaults']['redis.conf'] and int(self.port) == __redis__['defaults']['port']:
-                process_matches = True
-        return process_matches
+            is_default_conf = config_path == __redis__['defaults']['redis.conf']
+            is_default_port = int(self.port) == __redis__['defaults']['port']
+            if config_path == self.config_path or (is_default_conf and is_default_port):
+                return True
+        return False
 
     @property
     def pid(self):
@@ -858,6 +857,7 @@ class RedisCLI(object):
 
 class RedisPresetProvider(PresetProvider):
 
+    __metaclass__ = Singleton
 
     def __init__(self):
         pass

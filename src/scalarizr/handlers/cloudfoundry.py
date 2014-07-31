@@ -68,7 +68,8 @@ class list_ex(list):
 class MainHandler(handlers.Handler, handlers.FarmSecurityMixin):
 
     def __init__(self):
-        handlers.FarmSecurityMixin.__init__(self, [4222, 9022, 12345])
+        handlers.FarmSecurityMixin.__init__(self)
+        self.init_farm_securuty([4222, 9022, 12345])
         bus.on(init=self.on_init)
         self._init_globals()
 

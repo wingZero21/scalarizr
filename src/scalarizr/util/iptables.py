@@ -1,11 +1,11 @@
-from __future__ import with_statement
 '''
 Created on Jul 21, 2010
 
 @author: Dmytro Korsakov
 '''
 
-from scalarizr.util import system2, disttool, UtilError
+from scalarizr.util import system2, UtilError
+from scalarizr import linux
 
 import os
 import logging
@@ -152,7 +152,7 @@ class IpTables(object):
         return os.access(self.executable, os.X_OK)
 
     def enabled(self):
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             return self._chkconfig()
         else:
             return self.usable()

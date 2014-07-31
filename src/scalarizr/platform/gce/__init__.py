@@ -1,6 +1,7 @@
 __author__ = 'Nick Demyanchuk'
 
 import os
+import sys
 import base64
 import logging
 import urllib2
@@ -16,7 +17,11 @@ except ImportError:
 from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
 
-from scalarizr.platform import Platform
+
+from scalarizr import node
+from scalarizr import platform
+from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
+from scalarizr.util import LocalPool
 from scalarizr.config import BuiltinPlatforms
 
 
@@ -91,7 +96,7 @@ class GoogleServiceManager(object):
 
     def __init__(self, pl, s_name, s_ver, *scope):
         self.pl = pl
-        self.s_name= s_name
+        self.s_name = s_name
         self.s_ver = s_ver
         self.scope = list(scope)
         self.map = {}
@@ -103,6 +108,7 @@ class GoogleServiceManager(object):
         current_thread = threading.current_thread()
         with self.lock:
             if not current_thread in self.map:
+
                 # Check other threads
                 for t, s in self.map.items():
                     if not t.is_alive():
@@ -112,13 +118,16 @@ class GoogleServiceManager(object):
                 if self.pool:
                     s = self.pool.pop()
                     self.map[current_thread] = s
+                    LOG.debug('Returning connection from pool')
                     return s
 
+                LOG.debug('Creating new connection')
                 http = self._get_auth()
                 s = build(self.s_name, self.s_ver, http=http)
                 wrapped = BadStatusLineHandler(s)
                 self.map[current_thread] = wrapped
 
+            LOG.debug('Returning existing connection for this thread')
             return self.map[current_thread]
 
 
@@ -130,20 +139,62 @@ class GoogleServiceManager(object):
         return cred.authorize(http)
 
 
+class GCEConnectionPool(LocalPool):
 
-class GcePlatform(Platform):
+    def __init__(self, service_name, api_version, scope):
+        super(GCEConnectionPool, self).__init__(self._create_connection)
+        self.service_name = service_name
+        self.api_version = api_version
+        self.scope = list(scope)
+
+    def _create_connection(self):
+        platform = node.__node__['platform']
+        http = httplib2.Http()
+        try:
+            email = platform.get_access_data('service_account_name')
+            pk = base64.b64decode(platform.get_access_data('key'))
+        except platform.PlatformError:
+            raise NoCredentialsError(sys.exc_info()[1])
+        try:
+            cred = SignedJwtAssertionCredentials(email, pk, scope=self.scope)
+            conn = build(self.service_name, self.api_version, http=cred.authorize(http))
+        except:
+            raise InvalidCredentialsError(sys.exc_info()[1])
+        return BadStatusLineHandler(conn)
+
+
+class GCEConnectionProxy(platform.ConnectionProxy):
+
+    def __call__(self, *args, **kwds):
+        for retry in range(2):
+            try:
+                return self.obj(*args, **kwds)
+            except:
+                e = sys.exc_info()[1]
+                if isinstance(e, ConnectionError):
+                    self.conn_pool.dispose_local()
+                    raise
+                continue
+        self.conn_pool.dispose_local()
+        raise ConnectionError(e)
+
+
+class GcePlatform(platform.Platform):
     compute_api_version = 'v1'
     metadata_url = 'http://metadata/computeMetadata/v1/'
     _metadata = None
     name = BuiltinPlatforms.GCE
 
     def __init__(self):
-        Platform.__init__(self)
+        platform.Platform.__init__(self)
         self.compute_svc_mgr = GoogleServiceManager(
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
                 self, 'storage', 'v1beta2', *STORAGE_FULL_SCOPE)
-
+        self._compute_conn_pool = GCEConnectionPool(
+                'compute', 'v1', COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
+        self._storage_conn_pool = GCEConnectionPool(
+                'storage', 'v1beta2', STORAGE_FULL_SCOPE)
 
     def get_user_data(self, key=None):
         if self._userdata is None:
@@ -215,9 +266,20 @@ class GcePlatform(Platform):
         return self._get_metadata('instance/image')
 
 
+    def get_compute_conn(self):
+        conn = self._compute_conn_pool.get()
+        return GCEConnectionProxy(conn, self._compute_conn_pool) 
+
+
+    def get_storage_conn(self):
+        conn = self._storage_conn_pool.get()
+        return GCEConnectionProxy(conn, self._storage_conn_pool) 
+
+
     def new_compute_client(self):
         return self.compute_svc_mgr.get_service()
 
 
     def new_storage_client(self):
         return self.storage_svs_mgr.get_service()
+

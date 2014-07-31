@@ -1,13 +1,16 @@
-from __future__ import with_statement
 '''
 Created on Jun 17, 2010
 
 @author: marat
 '''
-from scalarizr.util import UtilError, system2, disttool
+from scalarizr.util import UtilError, system2
+from scalarizr import linux
+
 import time
 import os
 import socket
+import platform
+
 
 class InitdError(UtilError):
     output = None
@@ -79,7 +82,7 @@ def is_running(name):
     cmd = [_services[name]["initd_script"], "status"]
     out, err = system2(cmd)[0:2]
     out += err
-    if name == "mysql" and disttool.is_ubuntu() and disttool.linux_dist()[1] == '8.04':
+    if name == "mysql" and linux.os.ubuntu and platform.dist()[1] == '8.04':
         return out.lower().find("Uptime:") != -1
     else:
         return out.lower().find("running") != -1 or out.lower().find("[ ok ]") != -1 or out.lower().find("done.") != -1

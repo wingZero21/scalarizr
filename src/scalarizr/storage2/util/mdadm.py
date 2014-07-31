@@ -7,14 +7,15 @@ Created on Nov 11, 2010
 '''
 
 from scalarizr.util import system2, wait_until, firstmatched, PopenError
-from scalarizr.util import dynimp
-from scalarizr.linux import coreutils
+from scalarizr import linux
+from scalarizr.linux import coreutils, pkgmgr
+
 
 import logging
 import os
 import re
 import time
-from scalarizr.util import disttool
+
 
 MDADM_EXEC='/sbin/mdadm'
 logger = logging.getLogger(__name__)
@@ -32,11 +33,10 @@ class Mdadm:
 
     def __init__(self):
         if not os.path.exists(MDADM_EXEC):
-            if disttool.is_redhat_based():
+            if linux.os.redhat_family:
                 system2(('/usr/bin/yum', '-d0', '-y', 'install', 'mdadm', '-x', 'exim'), raise_exc=False)
             else:
-                mgr = dynimp.package_mgr()
-                mgr.install('mdadm', mgr.candidates('mdadm')[-1])
+                pkgmgr.installed('mdadm')
 
         if not os.path.exists('/proc/mdstat'):
             coreutils.modprobe('md_mod')
