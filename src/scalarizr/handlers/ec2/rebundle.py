@@ -120,6 +120,10 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 
         if instance.root_device_type == 'ebs':
             # EBS-root device instance
+            rv_template = self._rebundle_message.body.get('root_volume_template')
+            if not rv_template:
+                rv_template = {}
+
             vol_filters = {'attachment.instance-id': pl.get_instance_id()}
             attached_vols = ec2_conn.get_all_volumes(filters=vol_filters)
             root_vol = None
@@ -130,48 +134,22 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
             else:
                 raise HandlerError("Failed to find root volume")
 
-            device = root_vol.attach_data.device
-            """ detecting root device like rdev=`sda` """
-            rdev = None
-            for el in os.listdir('/sys/block'):
-                if os.path.basename(device) in os.listdir('/sys/block/%s'%el):
-                    rdev = el
-                    break
-            if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(device)):
-                rdev = device
+            rv_template['volume_type'] = rv_template.get('volume_type', root_vol.type)
+            rv_template['size'] = rv_template.get('size', root_vol.size)
+            rv_template['iops'] = rv_template.get('iops', root_vol.iops)
 
-            """ list partition of root device """
-            list_rdevparts = [dev.device for dev in list_device
-                if dev.device.startswith('/dev/%s' % rdev)]
-
-            if len(list(set(list_rdevparts))) > 1:
-                """ size of volume in KByte"""
-                volume_size = system2(('sfdisk', '-s', device[:-1]),)
-                """ size of volume in GByte"""
-                volume_size = int(volume_size[0].strip()) / 1024 / 1024
-                #TODO: need set flag, which be for few partitions
-                #copy_partition_table = True
-            else:
-                """ if one partition we use old method """
-                volume_size = self._rebundle_message.body.get('volume_size')
-                if not volume_size:
-                    volume_size = int(root_vol.size)
-
-            # get volume type
-
-            self._strategy = self._ebs_strategy_cls(
-                    self, self._role_name, image_name, self._excludes,
-                    volume_size=volume_size,  # in Gb
-                    volume_id=self._rebundle_message.body.get('volume_id'),
-                    volume_type=root_vol.type
-            )
+            self._strategy = self._ebs_strategy_cls(self,
+                self._role_name,
+                image_name,
+                self._excludes,
+                volume_id=self._rebundle_message.body.get('volume_id'),
+                volume_template=rv_template)
         else:
             # Instance store
             self._strategy = self._instance_store_strategy_cls(
-                    self, self._role_name, image_name, self._excludes,
-                    image_size = root_disk.size / 1000,  # in Mb
-                    s3_bucket_name = self._s3_bucket_name
-            )
+                self, self._role_name, image_name, self._excludes,
+                image_size = root_disk.size / 1000,  # in Mb
+                s3_bucket_name = self._s3_bucket_name)
 
 
     def rebundle(self):
@@ -609,7 +587,6 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 
 
 class RebundleEbsStrategy(RebundleStratery):
-    _volume_size = None
     _volume_id = None
     _platform = None
     _snap = None
@@ -623,12 +600,10 @@ class RebundleEbsStrategy(RebundleStratery):
         excludes,
         volume='/',
         volume_id=None, 
-        volume_size=None,
-        volume_type=None):
+        volume_template=None):
         RebundleStratery.__init__(self, handler, role_name, image_name, excludes, volume)
         self._volume_id = volume_id
-        self._volume_size = volume_size
-        self._volume_type = volume_type
+        self._volume_template = volume_template
         self._platform = bus.platform
 
     def _create_shapshot(self):
@@ -700,9 +675,8 @@ class RebundleEbsStrategy(RebundleStratery):
             self._ec2_conn,
             self._platform.get_avail_zone(),
             self._platform.get_instance_id(),
-            self._volume_size,
             self._volume_id,
-            self._volume_type,
+            self._volume_template,
             self._excludes)
 
         self._bundle_vol(self._image)
@@ -733,7 +707,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
     _ec2_conn = None
     _avail_zone = None
     _instance_id = None
-    _volume_size = None
     ebs_volume = None
 
     copy_partition_table = None
@@ -743,21 +716,18 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
         ec2_conn,
         avail_zone,
         instance_id,
-        volume_size=None,
         volume_id=None,
-        volume_type=None,
+        volume_template=None,
         excludes=None):
         rebundle_hdlr.LinuxImage.__init__(self, volume, excludes=excludes)
         self._ec2_conn = ec2_conn
         self._avail_zone = avail_zone
         self._instance_id = instance_id
-        self._ebs_config = {'type': 'ebs'}
-        self._ebs_config['volume_type'] = volume_type or 'standard'
+        self._ebs_config = volume_template or {}
+        self._ebs_config['type'] = 'ebs'
 
         if volume_id:
             self._ebs_config['id'] = volume_id
-        else:
-            self._ebs_config['size'] = volume_size
 
 
     def _create_image(self):
