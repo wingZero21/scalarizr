@@ -20,6 +20,7 @@ from scalarizr.messaging import Messages, MessageServiceFactory
 from scalarizr.messaging.p2p import P2pConfigOptions
 from scalarizr.util import system2, port_in_use
 from scalarizr.util.flag import Flag
+from scalarizr.util import metadata
 
 # Libs
 from scalarizr.util import cryptotool, software
@@ -29,6 +30,7 @@ from scalarizr.linux import iptables, os as os_dist
 import logging, os, sys, threading
 from scalarizr.config import STATE
 import time
+import re
 
 
 _lifecycle = None
@@ -144,11 +146,10 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
         # Add internal messages to scripting skip list
         try:
-            map(scalarizr.handlers.script_executor.skip_events.add, (
-                Messages.INT_SERVER_REBOOT, 
-                Messages.INT_SERVER_HALT, 
-                Messages.HOST_INIT_RESPONSE
-            ))
+            for m in (Messages.INT_SERVER_REBOOT, 
+                      Messages.INT_SERVER_HALT, 
+                      Messages.HOST_INIT_RESPONSE):
+                scalarizr.handlers.script_executor.skip_events.add(m)
         except AttributeError:
             pass
 
@@ -156,10 +157,21 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         if os_dist['family'] != 'Windows':
             system2(('mount', '-a'), raise_exc=False)
 
+        # cloud-init scripts may disable root ssh login
+        for path in ('/etc/ec2-init/ec2-config.cfg', '/etc/cloud/cloud.cfg'):
+            if os.path.exists(path):
+                c = None
+                with open(path, 'r') as fp:
+                    c = fp.read()
+                c = re.sub(re.compile(r'^disable_root[^:=]*([:=]).*', re.M), r'disable_root\1 0', c)
+                with open(path, 'w') as fp:
+                    fp.write(c)
+
         # Add firewall rules
         #if self._cnf.state in (ScalarizrState.BOOTSTRAPPING, ScalarizrState.IMPORTING):
         self._insert_iptables_rules()
-        if __node__['state'] !=  ScalarizrState.IMPORTING:
+        #if __node__['state'] !=  ScalarizrState.IMPORTING:
+        if __node__['state'] == 'running':
             scalarizr.handlers.sync_globals()
 
 
@@ -260,6 +272,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         
         # Prepare HostInit
         msg = self.new_message(Messages.HOST_INIT, dict(
+            seconds_since_start=float('%.2f' % (time.time() - __node__['start_time'], )),
+            seconds_since_boot=float('%.2f' % (time.time() - metadata.boot_time(), )),
             operation_id = bus.init_op.operation_id,
             crypto_key = new_crypto_key,
             snmp_port = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
@@ -287,7 +301,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             # only mysql2 should be returned to Scalr
             try:
                 behs.remove('mysql')
-            except IndexError:
+            except (IndexError, ValueError):
                 pass
         msg.body['behaviour'] = behs
         bus.fire("before_hello", msg)
@@ -340,7 +354,8 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             self._logger.warning("`farm_crypto_key` doesn't received in HostInitResponse. " 
                     + "Cross-scalarizr messaging not initialized")
 
-        scalarizr.handlers.sync_globals()
+        # Not necessary, cause we've got fresh GV in HIR
+        # scalarizr.handlers.sync_globals()
         self._assign_hostname()
 
 
@@ -436,7 +451,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             # Important! 
             # After following code run, server will loose network for some time
             # Fixes: SMNG-293
-            conn = __node__['cloudstack']['new_conn']
+            conn = __node__['cloudstack'].connect_cloudstack()
             vm = conn.listVirtualMachines(id=__node__['cloudstack']['instance_id'])[0]
             result = conn.listPublicIpAddresses(ipAddress=vm.publicip)
             if result:
@@ -465,9 +480,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
                         volume.id, sys.exc_info()[1])
 
         if __node__['platform'] == 'openstack':
-            conn = __node__['openstack']['new_nova_connection']
-            conn.reconnect()
-
+            conn = __node__['openstack'].connect_nova()
             sid = __node__['openstack']['server_id']
             for vol in conn.volumes.get_server_volumes(sid):
                 try:

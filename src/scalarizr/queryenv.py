@@ -12,6 +12,7 @@ import urllib
 import urllib2
 import time
 import HTMLParser
+from copy import deepcopy
 
 from scalarizr.util import cryptotool
 from scalarizr.util import urltool
@@ -25,8 +26,10 @@ else:
 class QueryEnvError(Exception):
     pass
 
+
 class InvalidSignatureError(QueryEnvError):
     pass
+
 
 class QueryEnvService(object):
     _logger = None
@@ -36,13 +39,22 @@ class QueryEnvService(object):
     key_path = None
     server_id = None
 
-    def __init__(self, url, server_id=None, key_path=None, api_version='2012-04-17'):
+    def _log_parsed_response(self, response):
+        self._logger.debug("QueryEnv response (parsed): %s", response)
+
+    def __init__(self,
+                 url,
+                 server_id=None,
+                 key_path=None,
+                 api_version='2012-04-17',
+                 autoretry=True):
         self._logger = logging.getLogger(__name__)
         self.url = url if url[-1] != "/" else url[0:-1]
         self.server_id = server_id
         self.key_path = key_path
         self.api_version = api_version
         self.htmlparser = HTMLParser.HTMLParser()
+        self.autoretry = autoretry
 
     def fetch(self, command, params=None, log_response=True):
         """
@@ -66,9 +78,9 @@ class QueryEnvService(object):
 
         post_data = urllib.urlencode(request_body)
         headers = {
-                "Date": timestamp,
-                "X-Signature": signature,
-                "X-Server-Id": self.server_id
+            "Date": timestamp,
+            "X-Signature": signature,
+            "X-Server-Id": self.server_id
         }
         response = None
         wait_seconds = 30
@@ -81,7 +93,7 @@ class QueryEnvService(object):
                 response = opener.open(req)
                 break
             except:
-            	e = sys.exc_info()[1]
+                e = sys.exc_info()[1]
                 if isinstance(e, urllib2.HTTPError):
                     resp_body = e.read() if e.fp is not None else ""
                     msg = resp_body or e.msg
@@ -89,12 +101,13 @@ class QueryEnvService(object):
                         raise InvalidSignatureError(msg)
                     if "not supported" in msg:
                         raise
+                    if e.code in (509, 400, 403) or not self.autoretry:
+                        raise QueryEnvError('QueryEnv failed: %s' % msg)
                     self._logger.warn('QueryEnv failed. HTTP %s. %s. %s', e.code, msg, msg_wait)
                 else:
                     self._logger.warn('QueryEnv failed. %s. %s', e, msg_wait)
                 self._logger.warn('Sleep %s seconds before next attempt...', wait_seconds)
                 time.sleep(wait_seconds)
-
 
         resp_body = response.read()
         resp_body = self.htmlparser.unescape(resp_body)
@@ -121,7 +134,6 @@ class QueryEnvService(object):
             self._logger.debug("QueryEnv response: %s", log_body)
         return resp_body
 
-
     def list_roles(self, role_name=None, behaviour=None, with_init=None, farm_role_id=None):
         """
         @return Role[]
@@ -145,8 +157,7 @@ class QueryEnvService(object):
         parameters = {}
         if name:
             parameters["name"] = name
-        return {'params':self._request("list-role-params", parameters, self._read_list_role_params_response)}
-
+        return {'params': self._request("list-role-params", parameters, self._read_list_role_params_response)}
 
     def list_farm_role_params(self, farm_role_id=None):
         """
@@ -155,8 +166,19 @@ class QueryEnvService(object):
         parameters = {}
         if farm_role_id:
             parameters["farm-role-id"] = farm_role_id
-        return {'params':self._request("list-farm-role-params", parameters, self._read_list_farm_role_params_response) or {}}
+        response = self._request("list-farm-role-params",
+                                 parameters,
+                                 self._read_list_farm_role_params_response,
+                                 log_response=False)
 
+        response_log_copy = deepcopy(response)
+        try:
+            del response_log_copy['chef']['validator_name']
+            del response_log_copy['chef']['validator_key']
+        except (KeyError, TypeError):
+            pass
+        self._log_parsed_response(response_log_copy)
+        return {'params': response or {}}
 
     def get_server_user_data(self):
         """
@@ -165,7 +187,7 @@ class QueryEnvService(object):
         return self._request('get-server-user-data', {}, self._read_get_server_user_data_response)
 
     def list_scripts(self, event=None, event_id=None, asynchronous=None, name=None,
-            target_ip=None, local_ip=None):
+                     target_ip=None, local_ip=None):
         """
         @return Script[]
         """
@@ -176,7 +198,7 @@ class QueryEnvService(object):
             parameters["event_id"] = event_id
         if None != asynchronous:
             parameters["asynchronous"] = asynchronous
-        if None != name :
+        if None != name:
             parameters["name"] = name
         if None != target_ip:
             parameters['target_ip'] = target_ip
@@ -189,7 +211,7 @@ class QueryEnvService(object):
         @return VirtualHost[]
         """
         parameters = {}
-        if None != name :
+        if None != name:
             parameters["name"] = name
         if None != https:
             parameters["https"] = https
@@ -220,14 +242,14 @@ class QueryEnvService(object):
         """
         @return string
         """
-        return self._request("get-latest-version",{}, self._read_get_latest_version_response)
+        return self._request("get-latest-version", {}, self._read_get_latest_version_response)
 
     def get_service_configuration(self, behaviour):
         """
         @return dict
         """
-        return self._request("get-service-configuration",{},
-                        self._read_get_service_configuration_response, (behaviour,))
+        return self._request("get-service-configuration", {},
+                             self._read_get_service_configuration_response, (behaviour,))
 
     def get_scaling_metrics(self):
         '''
@@ -250,10 +272,10 @@ class QueryEnvService(object):
                                   self._read_list_global_variables,
                                   log_response=False)
 
-        self._logger.debug("QueryEnv response (parsed): %s", glob_vars['public'])
+        self._log_parsed_response(glob_vars['public'])
         return glob_vars
 
-###############################################################################
+#
 
     def _request(self,
                  command,
@@ -266,12 +288,11 @@ class QueryEnvService(object):
         try:
             parsed_response = response_reader(xml, *response_reader_args)
             if log_response:
-                self._logger.debug("QueryEnv response (parsed): %s", parsed_response)
+                self._log_parsed_response(parsed_response)
             return parsed_response
         except (Exception, BaseException), e:
             self._logger.debug("QueryEnv response: %s", xml)
             raise
-
 
     def _read_list_global_variables(self, xml):
         '''
@@ -285,9 +306,8 @@ class QueryEnvService(object):
                                    for k, v in values.items())
         private_values = data.get('private_values', {})
         glob_vars['private'] = dict((k, v.encode('utf-8') if v else '')
-                                           for k, v in private_values.items())
+                                    for k, v in private_values.items())
         return glob_vars
-
 
     def _read_get_global_config_response(self, xml):
         """
@@ -297,7 +317,6 @@ class QueryEnvService(object):
         if ret:
             data = ret[0]
         return data['values'] if 'values' in data else {}
-
 
     def _read_list_roles_response(self, xml):
         ret = []
@@ -311,11 +330,10 @@ class QueryEnvService(object):
             hosts = []
             if 'hosts' in rdict and rdict['hosts']:
                 hosts = [RoleHost.from_dict(d) for d in rdict['hosts']]
-            farm_role_id  = rdict['id'] if 'id' in rdict else None
+            farm_role_id = rdict['id'] if 'id' in rdict else None
             role = Role(behaviours, name, hosts, farm_role_id)
             ret.append(role)
         return ret
-
 
     def _read_list_ebs_mountpoints_response(self, xml):
         ret = []
@@ -328,7 +346,6 @@ class QueryEnvService(object):
             ret.append(Mountpoint(mp["name"], mp["dir"], create_fs, is_array, volumes))
         return ret
 
-
     def _read_list_scripts_response(self, xml):
         ret = []
         data = xml2dict(ET.XML(xml))
@@ -337,7 +354,7 @@ class QueryEnvService(object):
             asynchronous = bool(int(raw_script["asynchronous"]))
             exec_timeout = int(raw_script["exec-timeout"])
             script = Script(asynchronous, exec_timeout, raw_script["name"], raw_script.get("body"),
-                                             raw_script.get("path"))
+                            raw_script.get("path"))
             ret.append(script)
         return ret
 
@@ -348,7 +365,7 @@ class QueryEnvService(object):
         for raw_param in role_params:
             key = raw_param['name']
             value = raw_param['value']
-            ret[key]=value
+            ret[key] = value
         return ret
 
     def _read_get_server_user_data_response(self, xml):
@@ -373,7 +390,6 @@ class QueryEnvService(object):
             return (cert, pkey, ca)
         return (None, None, None)
 
-
     def _read_list_virtualhosts_response(self, xml):
         ret = []
 
@@ -385,10 +401,9 @@ class QueryEnvService(object):
                 v_type = raw_vhost['type']
                 raw_data = raw_vhost['raw']
                 https = bool(int(raw_vhost['https'])) if 'https' in raw_vhost else False
-                vhost = VirtualHost(hostname,v_type,raw_data,https)
+                vhost = VirtualHost(hostname, v_type, raw_data, https)
                 ret.append(vhost)
         return ret
-
 
     def _read_get_service_configuration_response(self, xml, behaviour):
         data = xml2dict(ET.XML(xml))
@@ -404,7 +419,6 @@ class QueryEnvService(object):
                 preset.settings = raw_preset['values'] if 'values' in raw_preset else {}
                 preset.new_engine = False
         return preset
-
 
     def _read_get_scaling_metrics_response(self, xml):
         ret = []
@@ -426,7 +440,7 @@ class Preset(object):
     restart_service = None
     new_engine = None
 
-    def __init__(self, name = None, settings = None, restart_service = None):
+    def __init__(self, name=None, settings=None, restart_service=None):
         self.settings = {} if not settings else settings
         self.name = None if not name else name
         self.restart_service = None if not restart_service else restart_service
@@ -443,7 +457,7 @@ class Mountpoint(object):
     dir = None
     create_fs = False
     is_array = False
-    volumes  = None
+    volumes = None
 
     def __init__(self, name=None, dir=None, create_fs=False, is_array=False, volumes=None):
         self.volumes = volumes or []
@@ -458,13 +472,14 @@ class Mountpoint(object):
 
     def __repr__(self):
         return "name = " + str(self.name) \
-+ "; dir = " + str(self.dir) \
-+ "; create_fs = " + str(self.create_fs) \
-+ "; is_array = " + str(self.is_array) \
-+ "; volumes = " + str(self.volumes)
+            + "; dir = " + str(self.dir) \
+            + "; create_fs = " + str(self.create_fs) \
+            + "; is_array = " + str(self.is_array) \
+            + "; volumes = " + str(self.volumes)
+
 
 class Volume(object):
-    volume_id  = None
+    volume_id = None
     device = None
 
     def __init__(self, volume_id=None, device=None):
@@ -476,7 +491,8 @@ class Volume(object):
 
     def __repr__(self):
         return 'volume_id = ' + str(self.volume_id) \
-+ "; device = " + str(self.device)
+            + "; device = " + str(self.device)
+
 
 class Role(object):
     behaviour = None
@@ -496,21 +512,23 @@ class Role(object):
 
     def __repr__(self):
         return 'behaviour = ' + str(self.behaviour) \
-+ "; name = " + str(self.name) \
-+ "; hosts = " + str(self.hosts) \
-+ "; farm_role_id = " + str(self.farm_role_id) + ";"
+            + "; name = " + str(self.name) \
+            + "; hosts = " + str(self.hosts) \
+            + "; farm_role_id = " + str(self.farm_role_id) + ";"
 
 
 class QueryEnvResult(object):
+
     @classmethod
-    def from_dict(cls,dict_data):
+    def from_dict(cls, dict_data):
         kwargs = {}
-        for k,v in dict_data.items():
-            member = k.replace('-','_')
+        for k, v in dict_data.items():
+            member = k.replace('-', '_')
             if hasattr(cls, member):
                 kwargs[member] = v
         obj = cls(**kwargs)
         return obj
+
 
 class RoleHost(QueryEnvResult):
     index = None
@@ -536,7 +554,6 @@ class RoleHost(QueryEnvResult):
             self.shard_index = int(shard_index)
         if replica_set_index:
             self.replica_set_index = int(replica_set_index)
-
 
     def __repr__(self):
         return "index = " + str(self.index) \
@@ -567,6 +584,7 @@ class Script(object):
             + "; name = " + str(self.name) \
             + "; body = " + str(self.body)
 
+
 class VirtualHost(object):
     hostname = None
     type = None
@@ -579,14 +597,15 @@ class VirtualHost(object):
         self.raw = raw
         self.https = https
 
-
     def __repr__(self):
         return "hostname = " + str(self.hostname) \
             + "; type = " + str(self.type) \
             + "; raw = " + str(self.raw) \
             + "; https = " + str(self.https)
 
+
 class ScalingMetric(object):
+
     class RetriveMethod:
         EXECUTE = 'execute'
         READ = 'read'
@@ -596,8 +615,10 @@ class ScalingMetric(object):
     path = None
 
     _retrieve_method = None
+
     def _get_retrieve_method(self):
         return self._retrieve_method
+
     def _set_retrieve_method(self, v):
         if v in (self.RetriveMethod.EXECUTE, self.RetriveMethod.READ):
             self._retrieve_method = v
@@ -660,10 +681,10 @@ def xml2dict(el):
                 ret['values'][key] = value
             return ret
 
-
         tag = el[0].tag
-        list_tags = ('item', 'role', 'host', 'settings', 'volume', 'mountpoint', 'script', 'param', 'vhost', 'metric', 'variable')
-        if tag in list_tags and  all(ch.tag == tag for ch in el):
+        list_tags = ('item', 'role', 'host', 'settings', 'volume',
+                     'mountpoint', 'script', 'param', 'vhost', 'metric', 'variable')
+        if tag in list_tags and all(ch.tag == tag for ch in el):
             return list(xml2dict(ch) for ch in el)
         else:
             return dict((ch.tag, xml2dict(ch)) for ch in el)

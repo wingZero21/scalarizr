@@ -10,7 +10,7 @@ from scalarizr.storage2 import StorageError
 
 if not linux.which('mdadm'):
     from scalarizr.linux import pkgmgr
-    pkgmgr.installed('mdadm')
+    pkgmgr.installed('mdadm', updatedb=True)
 
 mdadm_binary = linux.which('mdadm')
 

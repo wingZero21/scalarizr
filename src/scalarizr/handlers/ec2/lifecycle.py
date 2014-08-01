@@ -15,7 +15,7 @@ from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.config import STATE
 from scalarizr.handlers import Handler
-from scalarizr.util import system2, disttool, add_authorized_key
+from scalarizr.util import system2, add_authorized_key
 from scalarizr.linux import mount, system, os as os_dist
 
 
@@ -64,7 +64,7 @@ class Ec2LifeCycleHandler(Handler):
                 self._logger.debug('Setting hostname to %s' % pub_hostname)
                 system2("hostname " + pub_hostname, shell=True)
 
-        if disttool.is_ubuntu():
+        if linux.os.ubuntu:
             # Ubuntu cloud-init scripts may disable root ssh login
             for path in ('/etc/ec2-init/ec2-config.cfg', '/etc/cloud/cloud.cfg'):
                 if os.path.exists(path):

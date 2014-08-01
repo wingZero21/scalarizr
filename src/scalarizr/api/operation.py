@@ -23,6 +23,13 @@ class OperationNotFoundError(OperationError):
     pass
 
 class OperationAPI(object):
+    """
+    Basic API to control operations.
+
+    Namespace::
+
+        operation
+    """
 
     __metaclass__ = Singleton
 
@@ -37,10 +44,22 @@ class OperationAPI(object):
 
     @rpc.query_method
     def result(self, operation_id=None):
+        """
+        Returns result of an operation by operation ID.
+
+        :param operation_id: Operation ID
+        :type operation_id: str
+        """
         return self.get(operation_id).serialize()
 
     @rpc.command_method
     def cancel(self, operation_id=None):
+        """
+        Cancels operation.
+
+        :param operation_id: Operation ID
+        :type operation_id: str
+        """
         self.get(operation_id).cancel()
 
     @rpc.query_method

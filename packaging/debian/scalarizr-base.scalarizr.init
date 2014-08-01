@@ -8,7 +8,7 @@
 # Required-Stop:
 # Should-Start:      $named
 # Should-Stop:
-# Default-Start:     0 
+# Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: Scalarizr
 # Description:       Converts any server to Scalr-manageable node
@@ -146,12 +146,12 @@ stop_server() {
 	    rm -f $PIDFILE
         fi
 
-		__zomby_pids=$(ps aux | grep 'bin/scalarizr' | awk '{ print $2 }')
-		if [ "$__zomby_pids" ]; then
-			for __zomby_pid in $__zomby_pids; do
-				kill -9 $__zomby_pid || :
-			done
-		fi
+        zomby_pids=$(ps -efww | grep 'bin/scalarizr' | awk '{ print $2 }')
+        if [ "$zomby_pids" ]; then
+            for zomby_pid in $zomby_pids; do
+                kill -9 $zomby_pid 2>/dev/null
+            done
+        fi
 
         return $errcode
 }

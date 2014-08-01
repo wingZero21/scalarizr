@@ -18,7 +18,7 @@ URL:            http://scalr.net
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:       python26 python26-m2crypto >= 0.20 python26-pexpect >= 2.3
 Requires:       python26-pysnmp >= 4.1 python26-pyasn1 >= 0.1.7 python26-pysnmp-mibs >= 0.0.8a 
-Requires:       python26-prettytable python26-PyYAML
+Requires:       python26-prettytable python26-PyYAML python26-docopt
 #Requires:		python26-pymongo
 Requires:		python26-pymysql
 Requires:		python26-pychef
@@ -31,7 +31,7 @@ Requires:       python >= 2.5 m2crypto >= 0.20 pexpect >= 2.3
 # snmp
 Requires:       pysnmp >= 4.2.4 python-pyasn1 >= 0.1.7 python-pysnmp-mibs >= 0.0.8a 
 # szradm
-Requires:       python-prettytable PyYAML
+Requires:       python-prettytable PyYAML python-docopt >= 0.6.2
 # mongodb behavior
 #Requires:		pymongo >= 2.1
 #Requires:		python-bson >= 2.1
@@ -353,7 +353,7 @@ if compare_versions "$installed_version" lt '0.9.r4762-1'; then
 	fi
 fi
 
-if compare_versions "$installed_version" lt '2.7.7'; then
+if compare_versions "$installed_version" lt '2.7.18'; then
 	if [ -f "$priv_cnf_dir/.state" ] && [ $(cat "$priv_cnf_dir/.state") = 'running' ]; then
     	# scalr-upd-client binary here still points to old python module
 		%{__python} -m scalarizr.updclient.app --make-status-file --downgrades-disabled
@@ -379,6 +379,13 @@ rm -f percona.ini  # Measly config in several builds
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini
 popd
+
+rm -f /usr/local/bin/szradm
+if [ ! -d /usr/local/bin ]; then
+	mkdir -p /usr/local/bin
+	chmod 755 /usr/local/bin
+fi
+ln -s /usr/bin/szradm /usr/local/bin/szradm
 
 
 %posttrans
@@ -430,8 +437,14 @@ rm -rf "$RPM_BUILD_ROOT"
 
 
 %files
-%defattr(-,root,root)
-/usr
+%defattr(-,root,root,0755)
+%{_bindir}/scalarizr
+%{_bindir}/scalr-upd-client
+%{_bindir}/szradm
+/usr/lib/python*
+/usr/local/scalarizr
+/usr/share/scalr
+
 %config	           %{_initrddir}/scalarizr
 %config            %{_initrddir}/scalr-upd-client
 %config(noreplace) %{_sysconfdir}/scalr/public.d/*
@@ -465,4 +478,3 @@ rm -rf "$RPM_BUILD_ROOT"
 %defattr(-,root,root)
 
 %changelog
-

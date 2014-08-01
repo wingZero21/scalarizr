@@ -24,7 +24,8 @@ import string
 
 from boto.s3.key import Key
 from boto.exception import BotoServerError, S3ResponseError
-from scalarizr.util import firstmatched, wait_until, disttool
+from scalarizr.util import firstmatched, wait_until
+from scalarizr import linux
 
 
 class EbsConfig(VolumeConfig):
@@ -63,7 +64,7 @@ class EbsVolumeProvider(VolumeProvider):
     letters_lock = threading.Lock()
 
     # Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-    all_letters = set(string.ascii_lowercase[7 if disttool.is_rhel() else 5:16])
+    all_letters = set(string.ascii_lowercase[7 if linux.os.rhel else 5:16])
     acquired_letters = set()
 
 

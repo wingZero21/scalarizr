@@ -28,7 +28,24 @@ class UtilError(BaseException):
     pass
 
 
-class LocalObject:
+class NullPool(object):
+
+    def __init__(self, creator):
+        self._creator = creator
+        self._object = None
+
+    def get(self):
+        return self._object or self._creator()
+
+    def dispose_local(self):
+        self._object = None
+
+    def dispose_all(self):
+        self._object = None
+
+
+class LocalPool(object):
+
     def __init__(self, creator, pool_size=50):
         self._logger = logging.getLogger(__name__)
         self._creator = creator         
@@ -67,8 +84,15 @@ class LocalObject:
             self._logger.debug("Removing %s from connection pool", self._all_conns[:l])
             self._all_conns = self._all_conns[l:]
 
+    def dispose_local(self):
+        if hasattr(self._object, 'current'):
+            del self._object.current
 
-class SqliteLocalObject(LocalObject):
+    def dispose_all(self):
+        self._object = threading.local()
+
+
+class SqliteLocalObject(LocalPool):
     def do_create(self):
         return _SqliteConnection(self, self._creator)
 
@@ -613,21 +637,15 @@ def which(arg):
 
 def import_class(import_str):
     """Returns a class from a string including module and class"""
-    mod_str, _sep, class_str = import_str.rpartition('.')
+    mod_name = '.'.join(import_str.split('.')[:-1])
+    cls_name = import_str.split('.')[-1]
     try:
-        loader = pkgutil.find_loader(mod_str)
-        if not loader:
-            raise ImportError('No module named %s' % mod_str)
-    except ImportError:
-        pass
-    else:
-        loader.load_module('')
-        try:
-            return getattr(sys.modules[mod_str], class_str)
-        except (ValueError, AttributeError):
-            pass
-    raise exceptions.NotFound('Class %s cannot be found' % import_str)
-    
+        if mod_name not in sys.modules:
+            __import__(mod_name)
+        return getattr(sys.modules[mod_name], cls_name)
+    except:
+        raise exceptions.NotFound('Class %s cannot be found' % import_str)
+
 
 def import_object(import_str, *args, **kwds):
     """Returns an object including a module or module and class"""

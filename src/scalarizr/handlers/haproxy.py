@@ -21,7 +21,7 @@ import hashlib
 
 
 def get_handlers():
-    return [HAProxyHandler()]
+    return [HAProxyHandler()] if haproxy_api.HAProxyAPI.software_supported else []
 
 LOG = logging.getLogger(__name__)
 
@@ -139,24 +139,17 @@ class HAProxyHandler(Handler):
         self.cnf = bus.cnf
         self.svs = haproxy_svs.HAProxyInitScript()
 
-    def on_start(self):
-        if __node__['state'] != 'running':
-            return
 
+    def _fix_haproxy_data(self, haproxy_params):
         healthcheck_names = {
             "healthcheck.fallthreshold": "fall_threshold",
             "healthcheck.interval": "check_interval",
             "healthcheck.risethreshold": "rise_threshold",
         }
-
-        LOG.debug("HAProxyHandler on_start")
-        queryenv = bus.queryenv_service
-        role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])
-        haproxy_params = role_params["params"]["haproxy"]
-        LOG.debug("Haproxy params from queryenv: %s", pformat(haproxy_params))
-
+        if not haproxy_params:
+            haproxy_params = {}
         # convert haproxy params to more suitable form for the api
-        if haproxy_params["proxies"] is None:
+        if haproxy_params.get("proxies") is None:
             haproxy_params["proxies"] = []
         for proxy in haproxy_params["proxies"]:
             for backend in proxy["backends"]:
@@ -167,18 +160,29 @@ class HAProxyHandler(Handler):
             for name in healthcheck_names:
                 if name in proxy:
                     proxy["healthcheck_params"][healthcheck_names[name]] = proxy[name]
+        return haproxy_params
 
+
+    def on_start(self):
+        if __node__['state'] != 'running':
+            return
+
+        LOG.debug("HAProxyHandler on_start")
+        queryenv = bus.queryenv_service
+        role_params = queryenv.list_farm_role_params(__node__['farm_role_id'])
+        haproxy_params = role_params["params"]["haproxy"]
+        LOG.debug("Haproxy params from queryenv: %s", pformat(haproxy_params))
         # useful for on_hostup
-        self.haproxy_params = haproxy_params
+        self.haproxy_params = self._fix_haproxy_data(haproxy_params)
 
-        # if we have a sample conf, recreate
-        with open(self.api.cfg.cnf_path) as f:
-            conf_md5 = hashlib.md5(f.read()).hexdigest()
-        LOG.debug("%s md5 sum: %s", self.api.cfg.cnf_path, conf_md5)
-        if conf_md5 == "c3bfb0c86138552475dea458e8ab36f3":  # TODO: remove actual sum
-            LOG.debug("Creating new haproxy conf")
-            self.api.recreate_conf()
+        # # if we have a sample conf, recreate
+        # with open(self.api.cfg.cnf_path) as f:
+        #     conf_md5 = hashlib.md5(f.read()).hexdigest()
+        # LOG.debug("%s md5 sum: %s", self.api.cfg.cnf_path, conf_md5)
+        # if conf_md5 == "c3bfb0c86138552475dea458e8ab36f3":  # TODO: remove actual sum
 
+        LOG.debug("Creating new haproxy conf")
+        self.api.recreate_conf()
         self._configure(haproxy_params["proxies"])
 
 
@@ -189,13 +193,11 @@ class HAProxyHandler(Handler):
             with open('/etc/default/haproxy', 'w+') as fp:
                 fp.write('ENABLED=1\n')
 
-        haproxy = msg.body.get('haproxy')
-        if haproxy is None:
-            haproxy = {}
-        proxies = haproxy.get('haproxy')
-        if proxies is None:
-            proxies = []
-        self._configure(proxies)
+        LOG.debug("Creating new haproxy conf")
+        self.api.recreate_conf()
+
+        self.haproxy_params = self._fix_haproxy_data(msg.body.get('haproxy', {}))
+        self._configure(self.haproxy_params['proxies'])
 
 
     """
@@ -244,8 +246,10 @@ class HAProxyHandler(Handler):
         farm_role_id = msg.body.get('farm_role_id')
 
         calls = []
+        LOG.debug('self.haproxy_params["proxies"]: %s', self.haproxy_params["proxies"])
         for proxy in self.haproxy_params["proxies"]:
             for backend in proxy["backends"]:
+                LOG.debug('compare %s and %s', backend["farm_role_id"], farm_role_id)
                 if backend["farm_role_id"] == farm_role_id:
                     kwargs = {}
                     calls.append(kwargs)

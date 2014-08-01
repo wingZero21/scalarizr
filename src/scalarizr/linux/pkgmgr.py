@@ -20,6 +20,8 @@ from scalarizr import linux, util
 from scalarizr.linux import coreutils
 from urlparse import urlparse
 
+from pkg_resources import parse_requirements
+
 LOG = logging.getLogger(__name__)
 
 
@@ -130,6 +132,18 @@ class PackageMgr(object):
         raise NotImplementedError()
 
 
+    def list(self):
+        '''
+        Returns dict of installed packages
+        :returns: dict
+        Example:
+            {
+                'python': '2.6.7-ubuntu1',
+            }
+        '''
+        raise NotImplementedError()
+
+
     def updatedb(self, **kwds):
         ''' Updates package manager internal database '''
         raise NotImplementedError()
@@ -154,7 +168,7 @@ class PackageMgr(object):
 
         installed = self.info(name)['installed']
         if not installed:
-            LOG.info('Installing %s=%s', name, version)
+            LOG.info('Installing %s=%s', name, version or 'latest')
             self.install(name, version, **kwds)
 
 
@@ -260,6 +274,26 @@ class AptPackageMgr(PackageMgr):
         files = glob.glob('/etc/apt/sources.list.d/*.list')
         names = [os.path.basename(os.path.splitext(f)[0]) for f in files]
         return names
+
+
+    def list(self):
+        '''
+        Returns dict of installed packages
+        :returns: dict
+        Example:
+            {
+                'python':'2.6.7-ubuntu1',
+            }
+        '''
+        out, err, code = linux.system(
+                ("dpkg-query", "-W", "-f=${Status}|${Package}|${Version}\n",),
+                raise_exc=True
+                )
+        if err:
+            raise Exception("'dpkg-query -W' command failed. Out: %s \nErrors: %s" % (out, err))
+        pkgs = dict([(line.split('|')[1], line.split('|')[2].split(':')[-1]) \
+                for line in out.split('\n') if line.split('|')[0]=='install ok installed'])
+        return pkgs
 
 
     def remove(self, name, purge=False):
@@ -451,6 +485,25 @@ class YumPackageMgr(PackageMgr):
             if m:
                 ret.append(m.group(1))
         return map(string.lower, ret)
+
+
+    def list(self):
+        '''
+        Returns dict of installed packages
+        :returns: dict
+        Example:
+            {
+                'python':'2.6.7-ubuntu1',
+            }
+        '''
+        out, err, code = linux.system(
+                ('rpm', '-qa', '--queryformat', '%{NAME}|%{VERSION}\n',),
+                raise_exc=True
+                )
+        if err:
+            raise Exception("'rpm -qa' command failed. Out: %s \nErrors: %s" % (out, err))
+        pkgs = dict([_.split('|') for _ in out.split('\n') if _])
+        return pkgs
 
 
     def restore_backup(self, name, backup_id):
@@ -799,4 +852,74 @@ def latest(name, updatedb=True):
 
 def removed(name, purge=False):
     return package_mgr().removed(name, purge)
+
+
+class DependencyError(Exception):
+    pass
+
+
+class NotInstalledError(DependencyError):
+    pass
+
+
+class ConflictError(DependencyError):
+    pass
+
+
+class VersionMismatchError(DependencyError):
+    pass
+
+
+def check_dependency(required, installed_packages=None, conflicted_packages=None):
+    '''
+    :param required: list
+        The syntax of a requirement specifier can be defined in EBNF as follows:
+            requirement  ::= project_name versionspec? extras?
+            versionspec  ::= comparison version (',' comparison version)*
+            comparison   ::= '<' | '<=' | '!=' | '==' | '>=' | '>'
+            extras       ::= '[' extralist? ']'
+            extralist    ::= identifier (',' identifier)*
+            project_name ::= identifier
+            identifier   ::= [-A-Za-z0-9_]+
+            version      ::= [-A-Za-z0-9_.]+
+        Some examples of valid requirement specifiers:
+            ['FooProject >= 1.2']
+            ['FooProject >= 1.2', 'BarProject <= 1.2']
+            ['PickyThing<1.6,>1.9,!=1.9.6,<2.0a0,==2.4c1']
+            ['SomethingWhoseVersionIDontCareAbout']
+    :param installed_packages: dict
+        Example:
+            {
+                'python':'2.6.7-ubuntu1',
+            }
+    :param conflicted_packages: list
+        Same as required
+    '''
+    installed_packages = installed_packages or package_mgr().list()
+    conflicted_packages = conflicted_packages or list()
+    for conflict in parse_requirements(conflicted_packages):
+        name = conflict.project_name
+        if name in installed_packages:
+            vers = installed_packages[name]
+            if vers in conflict:
+                raise ConflictError(name, vers)
+    for requirement in parse_requirements(required):
+        name = requirement.project_name
+        required_vers = ','.join([''.join(_) for _ in requirement.specs])
+        if name not in installed_packages:
+            raise NotInstalledError(name, required_vers)
+        vers = installed_packages[name]
+        if vers not in requirement:
+            raise VersionMismatchError(name, vers, required_vers)
+
+
+def check_any_dependency(required_list, installed_packages=None, conflicted_packages=None):
+    for required in required_list:
+        try:
+            check_dependency(required, installed_packages, conflicted_packages)
+            break
+        except:
+            continue
+    else:
+        raise
 

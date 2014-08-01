@@ -16,6 +16,7 @@ from scalarizr.services import mysql as mysql_svc
 from scalarizr.services import backup
 from scalarizr.libs import bases
 from scalarizr.handlers import transfer_result_to_backup_result
+from scalarizr.util import software
 
 
 LOG = logging.getLogger(__name__)
@@ -613,16 +614,16 @@ class PerconaExec(Exec):
                         gpg_keyserver='hkp://keys.gnupg.net',
                         gpg_keyid='CD2EFD2A')
             mgr.updatedb()
-
+        if software.mysql_software_info().version < (5, 5):
+            self.package = 'percona-xtrabackup-21'
+        else:
+            self.package = 'percona-xtrabackup'
 
         return super(PerconaExec, self).check()
 
 
-innobackupex = PerconaExec('/usr/bin/innobackupex',
-                package='percona-xtrabackup')
-
-xbstream = PerconaExec('/usr/bin/xbstream',
-                package='percona-xtrabackup')
+innobackupex = PerconaExec('/usr/bin/innobackupex')
+xbstream = PerconaExec('/usr/bin/xbstream')
 
 
 def my_print_defaults(*option_groups):
@@ -692,4 +693,7 @@ def mysqlbinlog_head():
 
 def innodb_enabled():
     opts = my_print_defaults('mysqld')
-    return not (opts.get('ignore-builtin-innodb') or opts.get('skip-innodb'))
+    return not (opts.get('ignore-builtin-innodb') or \
+                opts.get('ignore_builtin_innodb') or \
+                opts.get('skip-innodb') or \
+                opts.get('skip_innodb'))

@@ -1,17 +1,13 @@
-from __future__ import with_statement
-
-from __future__ import with_statement
-
-from scalarizr.bus import bus
-from scalarizr.handlers import Handler
-from scalarizr.messaging import Messages
-from scalarizr.util import firstmatched
 
 import re
 import os
 import sys
 import logging
-from scalarizr.util import disttool
+
+from scalarizr.bus import bus
+from scalarizr.handlers import Handler
+from scalarizr.messaging import Messages
+from scalarizr.util import firstmatched
 from scalarizr.util.initdv2 import ParametrizedInitScript
 from scalarizr import linux
 
@@ -34,9 +30,9 @@ class SSHKeys(Handler):
     def __init__(self):
         self._logger = logging.getLogger(__name__)
 
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             init_script = ('/sbin/service', 'sshd')
-        elif disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        elif linux.os.ubuntu and linux.os['version'] >= (10, 4):
             init_script = ('/usr/sbin/service', 'ssh')
         else:
             init_script = firstmatched(os.path.exists, ('/etc/init.d/ssh', '/etc/init.d/sshd'))
@@ -53,36 +49,38 @@ class SSHKeys(Handler):
         lines = sshd_config.readlines()
         sshd_config.close()
 
-        variables = {
-                'RSAAuthentication' : 'yes',
-                'PubkeyAuthentication' : 'yes',
-                'AuthorizedKeysFile' :  '%h/.ssh/authorized_keys',
+        updates = {
+            'RSAAuthentication' : 'yes',
+            'PubkeyAuthentication' : 'yes',
+            'AuthorizedKeysFile' :  '%h/.ssh/authorized_keys'
         }
+        if linux.os.amazon:
+            updates.update({'PermitRootLogin': 'without-password'})
 
-        if 'Amazon' == linux.os['name']:
-            variables.update({'PermitRootLogin'   :   'without-password'})
-
-        regexps = {}
-        for key, value in variables.items():
-            regexps[key] = re.compile(r'^%s\s+%s' % (key, value))
-
+        updated_keys = set()
         new_lines = []
         for line in lines:
-            for key, regexp in regexps.items():
-                if regexp.search(line):
-                    self._logger.debug('Found %s', regexp)
-                    if key in variables:
-                        del variables[key]
-                elif line.startswith(key) and key in variables:
-                    # second condition is a workaround over duplicate options in sshd_config
-                    self._logger.debug('Update %s option %s: %s', self.sshd_config_path, key, variables[key])
-                    line = '%s %s\n' % (key, variables[key])
-                    if key in variables:
-                        del variables[key]
+            for key, new_value in updates.items():
+                if line.startswith(key):
+                    try:
+                        old_value = line.split(' ', 1)[1].strip()
+                    except IndexError:
+                        old_value = None
+                    if old_value != new_value:
+                        # update
+                        self._logger.debug('Updating %s, old/new: %s/%s', key, old_value, new_value)
+                        line = '{0} {1}\n'.format(key, new_value)
+                    updated_keys.add(key)
             new_lines.append(line)
-        for key, value in variables.items():
-            self._logger.debug('Update %s option %s: %s', self.sshd_config_path, key, value)
-            new_lines.append('%s %s\n' % (key, value))
+        # Ensure NL at the end of the file
+        if new_lines[-1][-1] != '\n':
+            new_lines[-1] = new_lines[-1] + '\n'
+        for key, new_value in updates.items():
+            if key not in updated_keys:
+                # add
+                self._logger.debug('Adding %s: %s', key, new_value)
+                line = '{0} {1}\n'.format(key, new_value)
+                new_lines.append(line)
 
         if new_lines != lines:
             self._logger.debug('Writing new %s', self.sshd_config_path)
@@ -92,7 +90,7 @@ class SSHKeys(Handler):
             try:
                 self._sshd_init.restart()
             except:
-                self._logger.debug('Error during SSH restart', exc_info=sys.exc_info())
+                self._logger.debug('Failed to restart sshd: %s', sys.exc_info()[1])
 
 
         # Setup .ssh directory structure

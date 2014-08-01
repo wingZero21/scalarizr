@@ -7,8 +7,9 @@ Created on Nov 11, 2010
 from __future__ import with_statement
 
 
-from scalarizr.util import system2, PopenError, disttool
+from scalarizr.util import system2, PopenError
 from scalarizr.linux import mount
+from scalarizr import linux
 
 import logging
 import threading
@@ -354,7 +355,7 @@ def devname_not_empty(f):
 
 
 RHEL_DEVICE_ORDERING_BUG = False
-if disttool.is_redhat_based():
+if linux.os.redhat_family:
     # Check that system is affected by devices ordering bug
     # https://bugzilla.redhat.com/show_bug.cgi?id=729340
     rootfs = [entry for entry in mount.mounts() if entry.mpoint == '/' and entry.device.startswith('/dev')][0]

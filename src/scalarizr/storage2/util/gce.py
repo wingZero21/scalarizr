@@ -59,7 +59,7 @@ def ensure_disk_detached(connection, project_id, zone, instance_name, disk_link)
     from any instance)
 
     Handles: - Disk already detached
-                     - Instance doesn't exist
+             - Instance doesn't exist
 
     """
     def try_detach():
@@ -89,4 +89,14 @@ def ensure_disk_detached(connection, project_id, zone, instance_name, disk_link)
         except:
             if _time == 2:
                 raise
+            time.sleep(5)
+
+
+def wait_snapshot_ready(snapshot):
+        while True:
+            status = snapshot.status()
+            if status == snapshot.COMPLETED:
+                break
+            elif status == snapshot.FAILED:
+                raise Exception('Snapshot status is "Failed"')
             time.sleep(5)
