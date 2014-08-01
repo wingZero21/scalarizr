@@ -375,12 +375,6 @@ class MysqlHandler(DBMSRHandler):
                                 type='snap_mysql',
                                 volume=md['volume'])
 
-        #test
-        if md['volume'].id:
-            LOG.info('Data volume size: %s' % md['volume'].size)
-            md["volume_growth"] = {"size": int(md['volume'].size) + 2}
-            LOG.info("Growth for the test: %s" % md["volume_growth"])
-
         self._hir_volume_growth = md.pop('volume_growth', None)
 
         __mysql__.update(md)

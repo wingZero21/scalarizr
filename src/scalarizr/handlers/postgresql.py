@@ -368,12 +368,6 @@ class PostgreSqlHander(ServiceCtlHandler):
                     type='snap_postgresql',
                     volume=postgresql_data['volume'])
 
-        #test
-        if postgresql_data['volume'].id:
-            LOG.info('Data volume size: %s' % postgresql_data['volume'].size)
-            postgresql_data["volume_growth"] = {"size": int(postgresql_data['volume'].size)+2}
-            LOG.info("Growth for the test: %s" % postgresql_data["volume_growth"])
-
         self._hir_volume_growth = postgresql_data.pop('volume_growth', None)
 
         LOG.debug("Update postgresql config with %s", postgresql_data)

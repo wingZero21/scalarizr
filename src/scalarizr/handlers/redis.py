@@ -310,13 +310,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     snapshot=redis_data.pop('snapshot_config'),
                     volume=redis_data['volume'])
 
-
-        #test
-        if redis_data['volume'].id:
-            LOG.info('Data volume size: %s' % redis_data['volume'].size)
-            redis_data["volume_growth"] = {"size": int(redis_data['volume'].size) + 2}
-            LOG.info("Growth for the test: %s" % redis_data["volume_growth"])
-
         self._hir_volume_growth = redis_data.pop('volume_growth', None)
 
 
