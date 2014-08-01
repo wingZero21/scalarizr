@@ -6,13 +6,13 @@ default_version "0.21.1"
 
 dependency "python"
 
-if platform?("debian")
+if node['platform'] == 'debian'
   build do
     command "export CFLAGS=-I#{install_dir}/embedded/include/python2.7 && #{install_dir}/embedded/bin/pip install -I #{pypi_name}==#{default_version}"
   end
 end
 
-if platform?("redhat")
+if node['platform'] == 'rhel'
   source :url => "https://pypi.python.org/packages/source/M/M2Crypto/M2Crypto-#{default_version}.tar.gz",
          :md5 => 'f93d8462ff7646397a9f77a2fe602d17'
 
@@ -25,3 +25,4 @@ if platform?("redhat")
     command "export CFLAGS=-I#{install_dir}/embedded/include/python2.7 && /var/cache/omnibus/src/M2Crypto-#{default_version}/fedora_setup.sh install --prefix=#{install_dir}/embedded"
   end
 end
+
