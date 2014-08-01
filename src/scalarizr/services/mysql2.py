@@ -456,7 +456,7 @@ class MySQLDumpBackup(backup.Backup):
         mysqldump_errors = []
         for db_name, retcode, err in mysqldump_results:
             if retcode:
-                mysqldump_errors.append('%s: "%s"' % db_name, err)
+                mysqldump_errors.append('%s: "%s"' % (db_name, err))
         if mysqldump_errors:
             raise Error("Mysqldump has returned a non-zero code.\n" + 
                         '\n'.join(mysqldump_errors))
