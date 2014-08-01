@@ -352,13 +352,6 @@ class PostgreSqlHander(ServiceCtlHandler):
             else:
                 raise HandlerError('No volume config or snapshot config provided')
 
-
-            #test
-            LOG.info('Data volume size: %s' % postgresql_data['volume'].size)
-            postgresql_data["volume_growth"] = int(postgresql_data['volume'].size) + 2
-            LOG.info("Growth for the test: %s" % postgresql_data["volume_growth"])
-
-
             if postgresql_data['volume'].device and \
                             postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid', 'gce_persistent'):
                 LOG.debug("Master n'th start detected. Removing snapshot config from message")
