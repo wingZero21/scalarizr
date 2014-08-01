@@ -6,13 +6,13 @@ default_version "0.21.1"
 
 dependency "python"
 
-if OHAI.platform_family == "debian"
+if platform?("debian")
   build do
     command "export CFLAGS=-I#{install_dir}/embedded/include/python2.7 && #{install_dir}/embedded/bin/pip install -I #{pypi_name}==#{default_version}"
   end
 end
 
-if OHAI.platform_family == "rhel"
+if platform?("redhat")
   source :url => "https://pypi.python.org/packages/source/M/M2Crypto/M2Crypto-#{default_version}.tar.gz",
          :md5 => 'f93d8462ff7646397a9f77a2fe602d17'
 
