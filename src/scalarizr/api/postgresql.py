@@ -286,8 +286,7 @@ class PostgreSQLAPI(BehaviorAPI):
         """
 
         def do_backup(op):
-            tmpdir = None
-            dumps = []
+            tmpdir = backup_path = None
             tmp_path = os.path.join(__postgresql__['storage_dir'], 'tmp')
             try:
                 # Get databases list
@@ -298,6 +297,13 @@ class PostgreSQLAPI(BehaviorAPI):
                 
                 if not os.path.exists(tmp_path):
                     os.makedirs(tmp_path)
+                    
+                # Defining archive name and path
+                backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
+                backup_path = os.path.join(tmp_path, backup_filename)
+                
+                # Creating archive 
+                backup_obj = tarfile.open(backup_path, 'w:gz')
 
                 # Dump all databases
                 LOG.info("Dumping all databases")
@@ -311,11 +317,19 @@ class PostgreSQLAPI(BehaviorAPI):
                     err = system2(su_args)[1]
                     if err:
                         raise HandlerError('Error while dumping database %s: %s' % (db_name, err))  #?
-                    dumps.append(dump_path)
-
+                    backup_obj.add(dump_path, os.path.basename(dump_path))  
 
                 for db_name in databases:
                     _single_backup(db_name)
+                       
+                backup_obj.close()
+                
+                # Creating list of full paths to archive chunks
+                #if os.path.getsize(backup_path) > __postgresql__['pgdump_chunk_size']:
+                #    parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, __postgresql__['pgdump_chunk_size'], tmpdir)]
+                #else:
+                #    parts = [backup_path]
+                #sizes = [os.path.getsize(file) for file in parts]
 
                 cloud_storage_path = __node__.platform.scalrfs.backups(BEHAVIOUR)
 
@@ -323,9 +337,10 @@ class PostgreSQLAPI(BehaviorAPI):
                 backup_tags = {'scalr-purpose': 'postgresql-%s' % suffix}
 
                 LOG.info("Uploading backup to %s with tags %s" % (cloud_storage_path, backup_tags))
-                trn = LargeTransfer(dumps, cloud_storage_path, tags=backup_tags)
+                trn = LargeTransfer(backup_path, cloud_storage_path, tags=backup_tags)
                 manifest = trn.run()
-                LOG.info("Postgresql backup uploaded to cloud storage under %s", cloud_storage_path)
+                LOG.info("Postgresql backup uploaded to cloud storage under %s/%s",
+                                cloud_storage_path, backup_filename)
                 
                 result = list(dict(path=os.path.join(os.path.dirname(manifest.cloudfs_path), c[0]), size=c[2]) for c in
                                 manifest['files'][0]['chunks'])
@@ -336,7 +351,7 @@ class PostgreSQLAPI(BehaviorAPI):
                                              status='ok',
                                              backup_parts=result))
 
-                return result
+                return result  #?
                             
             except (Exception, BaseException), e:
                 LOG.exception(e)
@@ -350,9 +365,91 @@ class PostgreSQLAPI(BehaviorAPI):
             finally:
                 if tmpdir:
                     shutil.rmtree(tmpdir, ignore_errors=True)
+                if backup_path and os.path.exists(backup_path):
+                    os.remove(backup_path)
 
         return self._op_api.run('postgresql.create-backup', 
                                 func=do_backup,
                                 func_kwds={},
                                 async=async,
                                 exclusive=True)
+
+                            
+    @classmethod
+    def do_check_software(cls, installed_packages=None):
+        os_name = linux.os['name'].lower()
+        os_vers = linux.os['version']
+        if os_name == 'ubuntu':
+            if os_vers >= '12':
+                required_list = [
+                    ['postgresql-9.1', 'postgresql-client-9.1'],
+                    ['postgresql-9.2', 'postgresql-client-9.2'],
+                    ['postgresql-9.3', 'postgresql-client-9.3'],
+                    ['postgresql>=9.1,<9.4', 'postgresql-client>=9.1,<9.4'],
+                ]
+            elif os_vers >= '10':
+                required_list = [
+                    ['postgresql-9.0', 'postgresql-client-9.0'],
+                    ['postgresql-9.1', 'postgresql-client-9.1'],
+                    ['postgresql-9.2', 'postgresql-client-9.2'],
+                    ['postgresql-9.3', 'postgresql-client-9.3'],
+                    ['postgresql>=9.0,<9.4', 'postgresql-client>=9.0,<9.4'],
+                ]
+        elif os_name == 'debian':
+                required_list = [
+                    ['postgresql-9.2', 'postgresql-client-9.2'],
+                    ['postgresql-9.3', 'postgresql-client-9.3'],
+                    ['postgresql>=9.2,<9.4', 'postgresql-client>=9.2,<9.4'],
+                ]
+        elif linux.os.redhat_family:
+            if os_vers >= '6':
+                required_list = [
+                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
+                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                    ['postgresql93', 'postgresql93-server', 'postgresql93-devel'],
+                    [
+                        'postgresql>=9.1,<9.4',
+                        'postgresql-server>=9.1,<9.4',
+                        'postgresql-devel>=9.1,<9.4'
+                    ]
+                ]
+            elif os_vers >= '5':
+                required_list = [
+                    ['postgresql90', 'postgresql90-server', 'postgresql90-devel'],
+                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
+                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                    ['postgresql93', 'postgresql93-server', 'postgresql93-devel'],
+                    [
+                        'postgresql>=9.0,<9.4',
+                        'postgresql-server>=9.0,<9.4',
+                        'postgresql-devel>=9.0,<9.4'
+                    ]
+                ]
+        elif linux.os.oracle_family:
+            required_list = [
+                ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
+                [
+                    'postgresql>=9.2,<9.3',
+                    'postgresql-server>=9.2,<9.3',
+                    'postgresql-devel>=9.2,<9.3'
+                ]
+            ]
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, (
+                "Unsupported operating system '{os}'").format(os=linux.os['name'])
+            )
+        pkgmgr.check_any_dependency(required_list, installed_packages)
+
+    @classmethod
+    def do_handle_check_software_error(cls, e):
+        if isinstance(e, pkgmgr.VersionMismatchError):
+            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
+            msg = (
+                '{pkg}-{ver} is not supported on {os}. Supported:\n'
+                '\tUbuntu 10.04, CentOS 5: >=9.0,<9.4\n'
+                '\tUbuntu 12.04, Debian, CentOS 6, RedHat, Amazon: >=9.1,<9.4\n'
+                '\tOracle: >=9.2,<9.3').format(
+                        pkg=pkg, ver=ver, os=linux.os['name'])
+            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, e)
