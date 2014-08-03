@@ -79,6 +79,7 @@ class Volume(Base):
         try:
             self._ensure()
         except storage2.VolumeNotExistsError, e:
+            LOG.debug("recreate_if_missing: %s" % self.recreate_if_missing)
             if self.recreate_if_missing:
                 LOG.warning(e)
                 LOG.info('Volume %s not exists, re-creating %s from template', self.id, self.type)
