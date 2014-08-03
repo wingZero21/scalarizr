@@ -51,6 +51,10 @@ class Volume(Base):
         # Get rid of fscreated flag
         kwds.pop('fscreated', None)
 
+        #Backwards compatibility with block_device handler
+        from_template_if_missing = kwds.pop('from_template_if_missing', False)
+        kwds['recreate_if_missing'] = kwds.get('recreate_if_missing', False) or from_template_if_missing
+
         super(Volume, self).__init__(
                         device=device,
                         fstype=fstype,
@@ -72,7 +76,18 @@ class Volume(Base):
             self._check_restore_unsupported()
         if self.snap and isinstance(self.snap, Snapshot):
             self.snap = self.snap.config()
-        self._ensure()
+        try:
+            self._ensure()
+        except storage2.VolumeNotExistsError, e:
+            if self.recreate_if_missing:
+                LOG.warning(e)
+                LOG.info('Volume %s not exists, re-creating %s from template', self.id, self.type)
+                template = self.clone()
+                vol = storage2.volume(**template)
+                vol.ensure(mount=bool(vol.mpoint), mkfs=True)
+                self = vol  # XXX hueta
+            else:
+                raise
         self._check_attr('device')
         if not self.id:
             self.id = self._genid('vol-')

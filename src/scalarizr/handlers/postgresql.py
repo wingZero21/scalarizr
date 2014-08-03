@@ -370,6 +370,9 @@ class PostgreSqlHander(ServiceCtlHandler):
 
         self._hir_volume_growth = postgresql_data.pop('volume_growth', None)
 
+        #test for SCALARIZR-1405 (do not forget to remove this!)
+        postgresql_data['recreate_if_missing'] = True
+
         LOG.debug("Update postgresql config with %s", postgresql_data)
         __postgresql__.update(postgresql_data)
         __postgresql__['volume'].mpoint = __postgresql__['storage_dir']
