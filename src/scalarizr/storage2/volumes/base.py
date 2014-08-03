@@ -84,7 +84,7 @@ class Volume(Base):
                 LOG.warning(e)
                 LOG.info('Volume %s not exists, re-creating %s from template', self.id, self.type)
                 template = self.clone()
-                vol = storage2.volume(**template)
+                vol = storage2.volume(**dict(template))
                 vol.ensure(mount=bool(vol.mpoint), mkfs=True)
                 self._config.update(vol.config)  # will this work?
             else:

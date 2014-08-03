@@ -379,7 +379,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
         #test for SCALARIZR-1405 (do not forget to remove this!)
         __postgresql__['volume'].recreate_if_missing = True
-        
+
 
     def on_before_host_up(self, message):
         """
