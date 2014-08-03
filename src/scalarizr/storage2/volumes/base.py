@@ -85,7 +85,7 @@ class Volume(Base):
                 template = self.clone()
                 vol = storage2.volume(**template)
                 vol.ensure(mount=bool(vol.mpoint), mkfs=True)
-                self = vol  # XXX hueta
+                self._config.update(vol.config)  # will this work?
             else:
                 raise
         self._check_attr('device')
