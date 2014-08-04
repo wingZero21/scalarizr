@@ -86,7 +86,7 @@ class Volume(Base):
                 template = self.clone()
                 vol = storage2.volume(**dict(template))
                 vol.ensure(mount=bool(vol.mpoint), mkfs=True)
-                self._config.update(vol.config())  # will this work?
+                self._config = vol.config()
             else:
                 raise
         self._check_attr('device')
