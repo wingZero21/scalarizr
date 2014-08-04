@@ -17,6 +17,7 @@ omnibus_dir = os.path.join(build_dir, 'omnibus')
 project_dir = os.path.join(home_dir, project)
 build_number_file = os.path.join(project_dir, '.build_number')
 omnibus_md5sum_file = os.path.join(project_dir, '.omnibus.md5')
+permitted_artifacts_number = 2
 build_number = None
 artifacts_dir = None
 tag = None
@@ -26,6 +27,7 @@ repo = None
 
 
 def read_build_number():
+    print_green('Setting up artifacts dir')
     with open(build_number_file) as fp:
         return int(fp.read())
 
@@ -264,6 +266,7 @@ def publish_deb():
         if repo in local('aptly publish list', capture=True):
             local('aptly publish drop {0}'.format(repo))
         local('aptly publish repo {0}'.format(repo))
+        cleanup_artifacts()
     finally:
         # cleanup contents of remote .deb source
         run("rm -rf /var/cache/omnibus/pkg/*")
@@ -348,11 +351,20 @@ def publish_rpm():
 
         with cd(host_destination):
             local('createrepo {0}'.format(host_destination))
+        cleanup_artifacts()
     finally:
         # cleanup contents of remote .rpm source
         run("rm -rf /var/cache/omnibus/pkg/*")
         time_delta = time.time() - time0
         print_green('publish rpm took {0}'.format(time_delta))
+
+
+def cleanup_artifacts():
+    artifact_dirs = glob.glob('{0}*/'.format(project_dir))
+    artifact_dirs = sorted(artifact_dirs)
+    if len(artifact_dirs) > permitted_artifacts_number:
+        for directory in artifact_dirs[0:-permitted_artifacts_number]:
+            local('rm -rf {0}'.format(directory))
 
 
 @task
