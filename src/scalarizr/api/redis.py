@@ -466,10 +466,7 @@ class RedisAPI(BehaviorAPI):
             elif os_vers >= '6':
                 pkgmgr.check_dependency(['redis-server>=2.6,<2.7'], installed_packages)
         elif linux.os.oracle_family or os_name == 'redhat' or os_name == 'centos':
-            if os_vers >= '5':
-                pkgmgr.check_dependency(['redis>=2.6,<2.9'], installed_packages, ['centalt-release'])
-            elif os_vers >= '6':
-                pkgmgr.check_dependency(['redis>=2.4,<2.9'], installed_packages, ['centalt-release'])
+            pkgmgr.check_dependency(['redis>=2.4,<2.9'], installed_packages, ['centalt-release'])
         elif os_name == 'amazon':
             if os_vers >= '2014':
                 pkgmgr.check_dependency(['redis>=2.8,<2.9'], installed_packages, ['centalt-release'])
