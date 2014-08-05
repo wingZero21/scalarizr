@@ -1116,6 +1116,8 @@ class Service(object):
                 try:
                     upd_state[0] = upd.status()['state']
                     return upd_state[0] != 'noop'
+                except (IOError, socket.error), exc:
+                    self._logger.debug('Failed to get UpdateClient status: %s', exc)
                 except:
                     exc = sys.exc_info()[1]
                     if 'Server-ID header not presented' in str(exc):
@@ -1123,8 +1125,6 @@ class Service(object):
                             'Looks like we are in a process of migration to new update sytem. '
                             'UpdateClient restart will handle this situation. Restarting'))
                         upd_svs.restart()
-                    elif type(exc) in (urllib2.HTTPError, socket.error, IOError):
-                        self._logger.debug('Failed to get UpdateClient status: %s', exc)
                     else:
                         raise
 
