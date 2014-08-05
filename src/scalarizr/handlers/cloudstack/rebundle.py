@@ -8,6 +8,8 @@ Created on Sep 9, 2011
 import os
 import time
 
+from cloudstack.dataobject import DataObject
+
 from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError
 from scalarizr.handlers import rebundle as rebundle_hdlr
@@ -62,10 +64,19 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
             LOG.info('ROOT volume snapshot created (snapshot: %s)', snap.id)
 
             LOG.info('Creating image')
-            image = conn.createTemplate(image_name, image_name, self.get_os_type_id(conn),
-                        snapshotId=snap.id,
-                        passwordEnabled=instance.passwordenabled,
-                        details=tpl_details)  # clone details like 'hypervisortoolsversion' etc.
+            image = conn.process_async('createTemplate', {
+                'name': image_name, 
+                'displaytext': image_name, 
+                'ostypeid': self.get_os_type_id(conn),
+                'passwordenabled': instance.passwordenabled,
+                'snapshotid': snap.id,
+                'details': tpl_details}, # clone details like 'hypervisortoolsversion' etc.
+                DataObject)
+
+            # image = conn.createTemplate(image_name, image_name, self.get_os_type_id(conn),
+            #             snapshotId=snap.id,
+            #             passwordEnabled=instance.passwordenabled,
+            #             details=tpl_details)  
             LOG.info('Image created (template: %s)', image.id)
 
             return image.id
