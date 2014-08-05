@@ -48,19 +48,19 @@ class CloudStackRebundleHandler(rebundle_hdlr.RebundleHandler):
                             "Can't find root volume for virtual machine %s" % pl.get_instance_id())
 
         instance = conn.listVirtualMachines(id=pl.get_instance_id())[0]
+        tpl = conn.listTemplates(id=instance.templateid)[0]
 
         try:
             # Create snapshot
             LOG.info('Creating ROOT volume snapshot (volume: %s)', root_vol.id)
-            snap = voltool.create_snapshot(conn, root_vol.id,
-                                                                                    wait_completion=True, logger=LOG)
+            snap = voltool.create_snapshot(conn, root_vol.id, wait_completion=True, logger=LOG)
             LOG.info('ROOT volume snapshot created (snapshot: %s)', snap.id)
 
             LOG.info('Creating image')
-            image = conn.createTemplate(image_name, image_name,
-                                            self.get_os_type_id(conn),
-                                            snapshotId=snap.id,
-                                            passwordEnabled=instance.passwordenabled)
+            image = conn.createTemplate(image_name, image_name, self.get_os_type_id(conn),
+                        snapshotId=snap.id,
+                        passwordEnabled=instance.passwordenabled,
+                        details=tpl.details)  # clone details like 'hypervisortoolsversion' etc.
             LOG.info('Image created (template: %s)', image.id)
 
             return image.id
