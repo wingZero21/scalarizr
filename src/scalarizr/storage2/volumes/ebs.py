@@ -282,7 +282,8 @@ class EbsVolume(base.Volume, EbsMixin):
                         detach volume
                 attach volume
         '''
-
+        LOG.debug("Ebs volume _ensure")
+        LOG.debug("Ebs volume encrypted", self.encrypted)
         self._conn = self._connect_ec2()
         assert self._conn or self.id, self.error_messages['no_id_or_conn']
 
@@ -319,7 +320,8 @@ class EbsVolume(base.Volume, EbsMixin):
                                 snapshot=snap,
                                 volume_type=self.volume_type,
                                 iops=self.iops,
-                                tags=self.tags)
+                                tags=self.tags,
+                                encrypted=self.encrypted)
                 size = ebs.size
                 encrypted = ebs.encrypted
 

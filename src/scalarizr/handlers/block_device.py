@@ -123,8 +123,10 @@ class BlockDeviceHandler(handlers.Handler):
             vol.tags.update(build_tags())
             self._log_ensure_volume(vol)
             try:
+                LOG.debug("Blk handler ensure volume")
                 vol.ensure(mount=bool(vol.mpoint), mkfs=True)
             except storage2.VolumeNotExistsError, e:
+                LOG.debug("Blk handler template")
                 if template and bool(int(from_template_if_missing)):
                     LOG.warn('Volume %s not exists, re-creating %s from template', 
                             str(e), vol.type)
