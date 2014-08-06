@@ -174,8 +174,6 @@ class EbsVolume(base.Volume, EbsMixin):
                  iops=None,
                  encrypted=False,
                  **kwds):
-        LOG.debug("Ebs volume encrypted: %s", encrypted)
-        LOG.debug("Ebs volume kwds: %s", kwds)
         base.Volume.__init__(self, name=name, avail_zone=avail_zone,
                         size=size and int(size) or None,
                         volume_type=volume_type, iops=iops, encrypted=encrypted,
@@ -282,8 +280,7 @@ class EbsVolume(base.Volume, EbsMixin):
                         detach volume
                 attach volume
         '''
-        LOG.debug("Ebs volume _ensure")
-        LOG.debug("Ebs volume encrypted", self.encrypted)
+
         self._conn = self._connect_ec2()
         assert self._conn or self.id, self.error_messages['no_id_or_conn']
 

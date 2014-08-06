@@ -22,7 +22,6 @@ class Base(bases.ConfigDriven):
                             id=None,
                             tags=None,
                             **kwds):
-        LOG.debug("Base kwds: %s", kwds)
         super(Base, self).__init__(
                         version=version, type=type,
                         id=id, tags=tags or {}, **kwds)
@@ -73,7 +72,6 @@ class Volume(Base):
             self._check_restore_unsupported()
         if self.snap and isinstance(self.snap, Snapshot):
             self.snap = self.snap.config()
-        LOG.debug("Volume base encrypted: %s", self.encrypted)
         self._ensure()
         self._check_attr('device')
         if not self.id:
