@@ -22,6 +22,8 @@ def volume(*args, **kwds):
     """
     Takes volume configuration or volume instance, returns volume instance
     """
+    LOG.debug("Volume args: %s", args)
+    LOG.debug("Volume kwds: %s", kwds)
 
     if args:
         if isinstance(args[0], dict):

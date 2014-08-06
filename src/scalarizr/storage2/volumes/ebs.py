@@ -174,6 +174,8 @@ class EbsVolume(base.Volume, EbsMixin):
                  iops=None,
                  encrypted=False,
                  **kwds):
+        LOG.debug("Ebs volume encrypted: %s", encrypted)
+        LOG.debug("Ebs volume kwds: %s", kwds)
         base.Volume.__init__(self, name=name, avail_zone=avail_zone,
                         size=size and int(size) or None,
                         volume_type=volume_type, iops=iops, encrypted=encrypted,
