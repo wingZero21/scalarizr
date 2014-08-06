@@ -22,6 +22,7 @@ class Base(bases.ConfigDriven):
                             id=None,
                             tags=None,
                             **kwds):
+        LOG.debug("Base kwds: %s", kwds)
         super(Base, self).__init__(
                         version=version, type=type,
                         id=id, tags=tags or {}, **kwds)

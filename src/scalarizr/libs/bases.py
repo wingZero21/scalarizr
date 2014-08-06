@@ -3,7 +3,10 @@ from __future__ import with_statement
 import sys
 import types
 import inspect
+import logging
 
+
+LOG = logging.getLogger(__name__)
 
 class Observable(object):
 
@@ -80,9 +83,13 @@ class ConfigDriven(object):
     features = {}
 
     def __init__(self, **kwds):
+        LOG.debug("ConfigBase kwds: %s", kwds)
         arginfo = inspect.getargvalues(inspect.currentframe())
+        LOG.debug("ConfigBase arginfo: %s", str(arginfo))
         self._config = dict((arg, arginfo.locals[arg]) for arg in arginfo.args[1:])
+        LOG.debug("ConfigBase config 1: %s", self._config)
         self._config.update(arginfo.locals[arginfo.keywords])
+        LOG.debug("ConfigBase config 2: %s", self._config)
 
 
     def config(self):
