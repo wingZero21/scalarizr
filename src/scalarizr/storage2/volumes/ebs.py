@@ -385,7 +385,8 @@ class EbsVolume(base.Volume, EbsMixin):
                         volume_type, iops, encrypted)
         if snapshot:
             self._wait_snapshot(snapshot)
-        ebs = self._conn.create_volume(size, zone, snapshot, volume_type, iops)
+        ebs = self._conn.create_volume(size, zone, snapshot, volume_type, iops,
+                                       encrypted)
         LOG.debug('EBS volume %s created', ebs.id)
 
         LOG.debug('Checking that EBS volume %s is available', ebs.id)
