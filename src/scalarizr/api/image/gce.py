@@ -97,7 +97,7 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
 
             util.system2((semanage, 'permissive', '-a', 'rsync_t'))
 
-    def snapshot(self, op, role_name):
+    def snapshot(self, op, name):
         rebundle_dir = tempfile.mkdtemp()
         archive_path = ''
         try:
@@ -110,7 +110,7 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
             root_part_sysblock_path = glob.glob('/sys/block/*/%s' % os.path.basename(root_part_path))[0]
             root_device = '/dev/%s' % os.path.basename(os.path.dirname(root_part_sysblock_path))
 
-            archive_name = '%s.tar.gz' % role_name.lower()
+            archive_name = '%s.tar.gz' % name.lower()
             archive_path = os.path.join(rebundle_dir, archive_name)
 
             self._prepare_software()
@@ -146,13 +146,13 @@ class GCEImageAPIDelegate(ImageAPIDelegate):
             if os.path.exists(archive_path):
                 os.remove(archive_path)
 
-        image_name = role_name.lower().replace('_', '-') + '-' + str(int(time.time()))
+        image_name = name.lower().replace('_', '-') + '-' + str(int(time.time()))
         self._register_image(image_name, tmp_bucket_name, archive_name, cloudstorage)
 
         return '%s/images/%s' % (proj_name, image_name)
 
-    def prepare(self, operation, role_name):
+    def prepare(self, operation, name):
         pass
 
-    def finalize(self, operation, role_name):
+    def finalize(self, operation, name):
         pass

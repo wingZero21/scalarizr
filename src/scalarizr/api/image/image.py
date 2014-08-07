@@ -71,7 +71,7 @@ class ImageAPI(object):
         self.delegate = self.delegate_for_platform(__node__['platform'].name)
 
     @rpc.command_method
-    def prepare(self, role_name=None, async=False):
+    def prepare(self, name=None, async=False):
         self.init_delegate()
         if not system2(('which', 'wall'), raise_exc=False)[2]:
             system2(('wall'), stdin=WALL_MESSAGE, raise_exc=False)
@@ -79,7 +79,7 @@ class ImageAPI(object):
             func=self.delegate.prepare,
             async=async,
             exclusive=True,
-            func_kwds={'role_name': role_name})
+            func_kwds={'name': name})
         result = {}
         if prepare_result:
             result['prepare_result'] = prepare_result
@@ -88,7 +88,7 @@ class ImageAPI(object):
         return result
 
     @rpc.command_method
-    def snapshot(self, role_name, async=False):
+    def snapshot(self, name=None, async=False):
         self.init_delegate()
         cnf = bus.cnf
         saved_state = cnf.state
@@ -98,34 +98,34 @@ class ImageAPI(object):
                 func=self.delegate.snapshot,
                 async=async,
                 exclusive=True,
-                func_kwds={'role_name': role_name})
+                func_kwds={'name': name})
         finally:
             cnf.state = saved_state
 
     @rpc.command_method
-    def finalize(self, role_name=None, async=False):
+    def finalize(self, name=None, async=False):
         self.init_delegate()
         self._op_api.run('api.image.finalize',
             func=self.delegate.finalize,
             async=async,
             exclusive=True,
-            func_kwds={'role_name': role_name})
+            func_kwds={'name': name})
         LOG.info('Image created. If you imported this server to Scalr, '
                      'you can terminate Scalarizr now.')
 
     @rpc.command_method
-    def create(self, role_name, async=True):
+    def create(self, name=None, async=True):
         """ Creates image """
         self.init_delegate()
         return self._op_api.run('api.image.create',
             func=self._create,
-            func_kwds={'role_name': role_name},
+            func_kwds={'name': name},
             exclusive=True)
 
-    def _create(self, op, role_name):
-        prepare_result = self.prepare(role_name)
-        image_id = self.snapshot(role_name)
-        finalize_result = self.finalize(role_name)
+    def _create(self, op, name):
+        prepare_result = self.prepare(name)
+        image_id = self.snapshot(name)
+        finalize_result = self.finalize(name)
 
         result = {'image_id': image_id}
         if prepare_result:

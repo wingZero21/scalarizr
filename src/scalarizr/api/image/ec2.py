@@ -444,11 +444,11 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         return 'scalr2-images-%s-%s' % \
             (platform.get_region(), platform.get_account_id())
 
-    def prepare(self, operation, role_name):
+    def prepare(self, operation, name):
         pass
         
-    def snapshot(self, operation, role_name):
-        image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+    def snapshot(self, operation, name):
+        image_name = name + "-" + time.strftime("%Y%m%d%H%M%S")
 
         root_device_type = self._get_root_device_type()          
         root_disk = self._get_root_disk(root_device_type)
@@ -471,5 +471,5 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         # system2(('/usr/local/rvm/bin/rvm use system',), shell=True)
         return image_id
 
-    def finalize(self, operation, role_name):
+    def finalize(self, operation, name):
         pass
