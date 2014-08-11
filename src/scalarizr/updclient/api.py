@@ -21,6 +21,7 @@ import uuid
 import time
 import pkg_resources
 import multiprocessing
+import distutils.version
 
 from scalarizr import linux, queryenv, rpc, config, __version__
 from scalarizr.api import operation
@@ -472,7 +473,7 @@ class UpdClientAPI(object):
                     self.pkgmgr.removed('scalr-upd-client', purge=True)
                 if linux.os.redhat_family:
                     installed_ver = self.pkgmgr.info('scalarizr')['installed']
-                    if installed_ver and LooseVersion(installed_ver) < '0.7':      
+                    if installed_ver and distutils.version.LooseVersion(installed_ver) < '0.7':      
                         # On CentOS 5 there is a case when scalarizr-0.6.24-5 has error 
                         # in preun scriplet and cannot be uninstalled
                         linux.system('rpm -e scalarizr --noscripts', shell=True, raise_exc=False)
