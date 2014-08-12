@@ -291,18 +291,14 @@ def publish_rpm():
 
         five = host_dest.format(alias='5')
         # remove previous
-        if os.path.exists(host_dest):
-            local('rm -rf {0}'.format(five))
-        local('mkdir -p {}'.format(five))
+        local('rm -rf {0}; mkdir -p {0}'.format(five))
 
         # create symlinks for alternate versions
-        local(
-            'ln -s {0} {1}'.format(
-                five, host_dest.format(
-                    alias='{5server,6Server,6.0,6.1,6.2,6.3,6.4,6.5,7Server,7.0,7.1,latest}'
-                )
-            )
-        )
+        for dirname in ('5server', '6Server', '6.0', '6.1', '6.2', '6.3', '6.4',
+                        '6.5', '7Server', '7.0', '7.1', 'latest'):
+            link = host_dest.format(alias=dirname)
+            local('rm -rf {1}; ln -s {0} {1}'.format(five, link))
+
         # copy package file from artifacts_dir to repo_dir
         local('cp {0}/*.rpm {1}'.format(artifacts_dir, five))
 
