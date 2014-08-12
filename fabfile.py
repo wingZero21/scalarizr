@@ -279,105 +279,34 @@ def publish_rpm():
     '''
     publish .rpm packages into local repository.
 
-    Create the following directory structurerhel/
-    5/
-        x86_64/
-        i386/
-    symlink:
-        5Server -> 5
-    6/
-        x86_64/
-        i386/
-    symlink:
-        6.0 -> 6
-        6.1 -> 6
-        6.2 -> 6
-        6.3 -> 6
-        6.4 -> 6
-        6.5 -> 6
-        6Server -> 6
-        6x -> 6
-        latest -> 6
-    7/
-        x86_64/
-        i386/
-    symlink:
-        7Server -> 7
-        7.0 -> 7
-        7.1 -> 7
+    Use 1 distr for all rhel versions. Symlink repo for 5 to all alternate supported
+    versions.
 
     '''
     time0 = time.time()
     try:
         branch = env.branch
         arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
-        remote_source = '/var/cache/omnibus/pkg/{0}*.rpm'.format(project)
-        host_dest_str = '/var/www/rpm/%s/rhel/{alias}/%s'
-        hds_cp = host_dest_str % (branch, arch + '/')  # host destination string for copying
-        hds_ln = host_dest_str % (branch + '/', '')  # host destination string for symlinks
-        host_destination = hds_cp.format(alias='5')
+        host_dest = '/var/www/rpm/%s/rhel/{alias}/%s' % (branch, arch + '/')
 
-        # remove previous packages
+        five = host_dest.format(alias='5')
+        # remove previous
         if os.path.exists(host_destination):
-            local('rm -rf {0}'.format(host_destination))
+            local('rm -rf {0}'.format(five))
+        local('mkdir -p {}'.format(five))
 
-        # create symlinks for alternate 6 versions
-        for alias in ('6Server', '6.0', '6.1',
-                      '6.2', '6.3', '6.4', '6.5', 'latest',):
-            destination = hds_ln.format(alias=alias)
-            if not os.path.exists(destination):
-                os.makedirs(hds_ln.format(alias=alias))
-                local('ln -s {source} {dest}'.format(
-                    source=host_destination, dest=destination)
-                )
-
-        # create symlinks for alternate 7 versions
-        for alias in ('7Server', '7.0', '7.1'):
-            destination = hds_ln.format(alias=alias)
-            if not os.path.exists(destination):
-                os.makedirs(hds_ln.format(alias=alias))
-                local('ln -s {source} {dest}'.format(
-                    source=host_destination, dest=destination)
-                )
-
-        # create symlink for 5server
-        if not os.path.exists(hds_ln.format(alias='5server')):
-            os.makedirs(hds_ln.format(alias='5server'))
-            local(
-                'ln -s {five} {fivesrv}'.format(
-                    five=host_destination,
-                    fivesrv=hds_ln.format(alias='5server')
-                )
-            )
-
-        # download package file from remote to host machine
-        get(remote_source, host_destination + '%(path)s')
-
-        # on host copy contents for 5 into 6
-        # and create repo in six
-        if not os.path.exists(hds_cp.format(alias='6')):
-            os.makedirs(hds_cp.format(alias='6'))
+        # create symlinks for alternate versions
         local(
-            'cp -r {five} {six}; createrepo {six}'.format(
-                five=host_destination,
-                six=hds_cp.format(alias='6')
+            'ln -s {0} {1}'.format(
+            five,
+            host_dest.format(alias='{5server,6Server,6.0,6.1,6.2,6.3,6.4,6.5,7Server,7.0,7.1,latest}')
             )
         )
-        # on host copy contents for 5 into 7
-        # and create repo in seven
-        if not os.path.exists(hds_cp.format(alias='7')):
-            os.makedirs(hds_cp.format(alias='7'))
-        local(
-            'cp -r {five} {seven}; createrepo {seven}'.format(
-                five=host_destination,
-                six=hds_cp.format(alias='7')
-            )
-        )
+        # copy package file from artifacts_dir to repo_dir
+        local('cp {0}/*.rpm {1}'.format(artifacts_dir, five))
 
         # now it's ok to create repo in 5
-        local('createrepo {five}'.format(five=host_destination))
-        with cd(host_destination):
-            local('createrepo {0}'.format(host_destination))
+        local('createrepo {0}'.format(five))
     finally:
         # cleanup contents of remote .rpm source
         run("rm -rf /var/cache/omnibus/pkg/*")
