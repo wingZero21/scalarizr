@@ -21,7 +21,6 @@ dependency "scalarizr"
 
 # version manifest file
 dependency "version-manifest"
-extra_package_file("--deb-changelog '#{Omnibus::Config.project_root}/changelog'")
 
 exclude "\.git*"
 exclude "bundler\/git"
