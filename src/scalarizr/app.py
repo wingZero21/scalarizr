@@ -277,6 +277,7 @@ def _init_db(file=None):
         if not os.path.exists(db_file) or not os.stat(db_file).st_size:
             logger.debug("Database doesn't exist, creating new one from script")
             _create_db(file)
+        os.chmod(db_file, 0600)
 
         # XXX(marat) Added here cause postinst script sometimes failed and we get
         # OperationalError: table p2pmessage has no column named format
