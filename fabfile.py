@@ -210,6 +210,7 @@ def build_binary():
     init()
     git_export()
     generate_changelog()
+    run('rm -rf /var/cache/omnibus/pkg/{0}*'.format(project))
     build_omnibus()
     import_artifact('/var/cache/omnibus/pkg/{0}*'.format(project))
     time_delta = time.time() - time0
@@ -267,8 +268,6 @@ def publish_deb():
             local('aptly publish drop {0}'.format(repo))
         local('aptly publish repo {0}'.format(repo))
     finally:
-        # cleanup contents of remote .deb source
-        run("rm -rf /var/cache/omnibus/pkg/*")
         time_delta = time.time() - time0
         print_green('publish deb took {0}'.format(time_delta))
 
@@ -278,35 +277,36 @@ def publish_deb():
 def publish_rpm():
     '''
     publish .rpm packages into local repository.
-
-    Use 1 distr for all rhel versions. Symlink repo for 5 to all alternate supported
-    versions.
-
     '''
     time0 = time.time()
     try:
-        branch = env.branch
         arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
-        host_dest = '/var/www/rpm/%s/rhel/{alias}/%s' % (branch, arch)
+        pkg_arch = 'i686' if env.host_string.endswith('32') else 'x86_64'
+        repo_path = '/var/www/rpm/%s/rhel' % repo
 
-        five = host_dest.format(alias='5')
-        # remove previous
-        local('rm -rf {0}; mkdir -p {0}'.format(five))
+        # create directory structure
+        local('mkdir -p %s/{5,6,7}/{x86_64,i386}' % repo_path, shell='/bin/bash')
+        cwd = os.getcwd()
+        os.chdir(repo_path)
 
-        # create symlinks for alternate versions
-        for dirname in ('5server', '6Server', '6.0', '6.1', '6.2', '6.3', '6.4',
-                        '6.5', '7Server', '7.0', '7.1', 'latest'):
-            link = host_dest.format(alias=dirname)
-            local('rm -rf {1}; mkdir -p {1}; ln -s {0} {1}'.format(five, link))
-
-        # copy package file from artifacts_dir to repo_dir
-        local('cp {0}/*.rpm {1}'.format(artifacts_dir, five))
-
-        # now it's ok to create repo in 5
-        local('createrepo {0}'.format(five))
+        def symlink(target, linkname):
+            if not os.path.exists(linkname):
+                os.symlink(target, linkname)
+        for linkname in '5Server'.split(','):
+            symlink('5', linkname)
+        for linkname in '6Server,6.0,6.1,6.2,6.3,6.4,6.5'.split(','):
+            symlink('6', linkname)
+        for linkname in '7Server,7.0,7.1,latest'.split(','):
+            symlink('7', linkname)
+        os.chdir(cwd)
+        # remove previous version
+        local('rm -f %s/*/%s/%s*.rpm' % (repo_path, arch, project))
+        # publish artifacts into repo
+        for ver in ('5', '6', '7'):
+            dst = os.path.join(repo_path, ver, arch)
+            local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
+            local('createrepo %s' % dst)
     finally:
-        # cleanup contents of remote .rpm source
-        run("rm -rf /var/cache/omnibus/pkg/*")
         time_delta = time.time() - time0
         print_green('publish rpm took {0}'.format(time_delta))
 
