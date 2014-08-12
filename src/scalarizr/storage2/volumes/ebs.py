@@ -167,15 +167,17 @@ class EbsVolume(base.Volume, EbsMixin):
     _global_timeout = 3600
 
     def __init__(self,
-                            name=None,
-                            avail_zone=None,
-                            size=None,
-                            volume_type='standard',
-                            iops=None,
-                            **kwds):
+                 name=None,
+                 avail_zone=None,
+                 size=None,
+                 volume_type='standard',
+                 iops=None,
+                 encrypted=False,
+                 **kwds):
         base.Volume.__init__(self, name=name, avail_zone=avail_zone,
                         size=size and int(size) or None,
-                        volume_type=volume_type, iops=iops, **kwds)
+                        volume_type=volume_type, iops=iops, encrypted=encrypted,
+                        **kwds)
         EbsMixin.__init__(self)
         self.error_messages.update({
                 'no_id_or_conn': 'Volume has no ID and EC2 connection '
@@ -286,6 +288,7 @@ class EbsVolume(base.Volume, EbsMixin):
             zone = self._avail_zone()
             snap = name = None
             size = self.size() if callable(self.size) else self.size
+            encrypted = self.encrypted
 
             if self.id:
                 try:
@@ -314,8 +317,10 @@ class EbsVolume(base.Volume, EbsMixin):
                                 snapshot=snap,
                                 volume_type=self.volume_type,
                                 iops=self.iops,
-                                tags=self.tags)
+                                tags=self.tags,
+                                encrypted=self.encrypted)
                 size = ebs.size
+                encrypted = ebs.encrypted
 
             if not (ebs.volume_state() == 'in-use' and
                             ebs.attach_data.instance_id == self._instance_id()):
@@ -335,7 +340,8 @@ class EbsVolume(base.Volume, EbsMixin):
                     'device': device,
                     'avail_zone': zone,
                     'size': size,
-                    'snap': None
+                    'snap': None,
+                    'encrypted': encrypted
             })
 
 
@@ -370,13 +376,14 @@ class EbsVolume(base.Volume, EbsMixin):
 
 
     def _create_volume(self, zone=None, size=None, snapshot=None,
-                                    volume_type=None, iops=None, tags=None):
+                       volume_type=None, iops=None, tags=None, encrypted=False):
         LOG.debug('Creating EBS volume (zone: %s size: %s snapshot: %s '
-                        'volume_type: %s iops: %s)', zone, size, snapshot,
-                        volume_type, iops)
+                  'volume_type: %s iops: %s encrypted: %s)', zone, size, snapshot,
+                        volume_type, iops, encrypted)
         if snapshot:
             self._wait_snapshot(snapshot)
-        ebs = self._conn.create_volume(size, zone, snapshot, volume_type, iops)
+        ebs = self._conn.create_volume(size, zone, snapshot, volume_type, iops,
+                                       encrypted)
         LOG.debug('EBS volume %s created', ebs.id)
 
         LOG.debug('Checking that EBS volume %s is available', ebs.id)
