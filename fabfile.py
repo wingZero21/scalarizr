@@ -65,6 +65,7 @@ def prepare():
     print_green('artifacts_dir: {0}'.format(artifacts_dir))
 
 
+
 @runs_once
 def init():
     '''
@@ -210,6 +211,7 @@ def build_binary():
     init()
     git_export()
     generate_changelog()
+    run('rm -rf /var/cache/omnibus/pkg/{0}*'.format(project))
     build_omnibus()
     import_artifact('/var/cache/omnibus/pkg/{0}*'.format(project))
     time_delta = time.time() - time0
@@ -267,8 +269,6 @@ def publish_deb():
             local('aptly publish drop {0}'.format(repo))
         local('aptly publish repo {0}'.format(repo))
     finally:
-        # cleanup contents of remote .deb source
-        run("rm -rf /var/cache/omnibus/pkg/*")
         time_delta = time.time() - time0
         print_green('publish deb took {0}'.format(time_delta))
 
@@ -278,10 +278,6 @@ def publish_deb():
 def publish_rpm():
     '''
     publish .rpm packages into local repository.
-
-    Use 1 distr for all rhel versions. Symlink repo for 5 to all alternate supported
-    versions.
-
     '''
     time0 = time.time()
     try:
@@ -289,10 +285,16 @@ def publish_rpm():
         repo_path = '/var/www/rpm/%s/rhel' % repo
 
         # create directory structure
-        local('mkdir -p %s/{5,6,7}/{x86_64,i386}' % repo_path)
-        local('ln -s %s/5 %s' % (repo_path, '5Server'))
-        local('ln -s %s/6 %s' % (repo_path, '{6Server,6.0,6.1,6.2,6.3,6.4,6.5}'))
-        local('ln -s %s/7 %s' % (repo_path, '{7Server,7.0,7.1,latest}'))
+        local('mkdir -p %s/{5,6,7}/{x86_64,i386}' % repo_path, shell='/bin/bash')
+        cwd = os.getcwd()
+        os.chdir(repo_path)
+        for target in '5Server'.split(','):
+            os.symlink('5', target)
+        for target in '6Server,6.0,6.1,6.2,6.3,6.4,6.5'.split(','):
+            os.symlink('6', target)
+        for target in '7Server,7.0,7.1,latest'.split(','):
+            os.symlink('7', target)
+        os.chdir(cwd)
 
         # remove previous version
         local('rm -f %s/*/%s/%s*.rpm' % (repo_path, arch, project))
@@ -304,7 +306,6 @@ def publish_rpm():
             local('createrepo %s' % dst)
     finally:
         # cleanup contents of remote .rpm source
-        run("rm -rf /var/cache/omnibus/pkg/*")
         time_delta = time.time() - time0
         print_green('publish rpm took {0}'.format(time_delta))
 
