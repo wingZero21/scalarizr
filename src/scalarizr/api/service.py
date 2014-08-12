@@ -18,12 +18,12 @@ from scalarizr.api.apache import ApacheAPI
 from scalarizr.services import mysql, postgresql, redis
 
 services = {
-    "mysql": mysql.MySQLPresetProvider,
+    "mysql2": mysql.MySQLPresetProvider,
     "percona": mysql.MySQLPresetProvider,
     "mariadb": mysql.MySQLPresetProvider,
     "postgresql": postgresql.PgSQLPresetProvider,
     "redis": redis.RedisPresetProvider
-            }
+}
 
 
 behavior_apis = {
