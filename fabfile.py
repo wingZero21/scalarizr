@@ -288,12 +288,15 @@ def publish_rpm():
         local('mkdir -p %s/{5,6,7}/{x86_64,i386}' % repo_path, shell='/bin/bash')
         cwd = os.getcwd()
         os.chdir(repo_path)
-        for target in '5Server'.split(','):
-            os.symlink('5', target)
-        for target in '6Server,6.0,6.1,6.2,6.3,6.4,6.5'.split(','):
-            os.symlink('6', target)
-        for target in '7Server,7.0,7.1,latest'.split(','):
-            os.symlink('7', target)
+        def symlink(target, linkname):
+            if not os.path.exists(linkname):
+                os.symlink(target, linkname)
+        for linkname in '5Server'.split(','):
+            symlink('5', linkname)
+        for linkname in '6Server,6.0,6.1,6.2,6.3,6.4,6.5'.split(','):
+            symlink('6', linkname)
+        for linkname in '7Server,7.0,7.1,latest'.split(','):
+            symlink('7', linkname)
         os.chdir(cwd)
 
         # remove previous version
