@@ -73,7 +73,8 @@ class ServiceAPI(object):
         if behavior not in services:
             raise AssertionError('Behaviour %s is not registred in ServiceAPI (%s)' % (behavior, str(services.keys())))
 
-        provider = services[behavior]
+        provider_cls = services[behavior]
+        provider = provider_cls()
         manifest = provider.get_manifest(behavior)
         if manifest:
             provider.set_preset(values, manifest)
