@@ -282,6 +282,7 @@ def publish_rpm():
     time0 = time.time()
     try:
         arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
+        pkg_arch = 'i686' if env.host_string.endswith('32') else 'x86_64'
         repo_path = '/var/www/rpm/%s/rhel' % repo
 
         # create directory structure
@@ -305,7 +306,7 @@ def publish_rpm():
         # publish artifacts into repo
         for ver in ('5', '6', '7'):
             dst = os.path.join(repo_path, ver, arch)
-            local('cp %s/%s*.rpm %s/' % (artifacts_dir, project, dst))
+            local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
             local('createrepo %s' % dst)
     finally:
         # cleanup contents of remote .rpm source
