@@ -133,7 +133,7 @@ def git_export():
     archive = '{0}-{1}.tar.gz'.format(project, host_str)  # add host str, for safe concurrent execution
     local("git archive --format=tar HEAD | gzip >{0}".format(archive))
     if not os.path.exists(archive):
-        f = open(arhive, 'w+')
+        f = open(archive, 'w+')
         f.close()
     if '.strider' in build_dir:
         build_dir_pattern = build_dir.rsplit('-', 1)[0] + '-*'
@@ -286,7 +286,7 @@ def publish_rpm():
     symlink:
         5Server -> 5
     6/
-        x86_64
+        x86_64/
         i386/
     symlink:
         6.0 -> 6
@@ -298,6 +298,13 @@ def publish_rpm():
         6Server -> 6
         6x -> 6
         latest -> 6
+    7/
+        x86_64/
+        i386/
+    symlink:
+        7Server -> 7
+        7.0 -> 7
+        7.1 -> 7
 
     '''
     time0 = time.time()
@@ -323,6 +330,16 @@ def publish_rpm():
                 local('ln -s {source} {dest}'.format(
                     source=host_destination, dest=destination)
                 )
+
+        # create symlinks for alternate 7 versions
+        for alias in ('7Server', '7.0', '7.1'):
+            destination = hds_ln.format(alias=alias)
+            if not os.path.exists(destination):
+                os.makedirs(hds_ln.format(alias=alias))
+                local('ln -s {source} {dest}'.format(
+                    source=host_destination, dest=destination)
+                )
+
         # create symlink for 5server
         if not os.path.exists(hds_ln.format(alias='5server')):
             os.makedirs(hds_ln.format(alias='5server'))
@@ -346,9 +363,19 @@ def publish_rpm():
                 six=hds_cp.format(alias='6')
             )
         )
+        # on host copy contents for 5 into 7
+        # and create repo in seven
+        if not os.path.exists(hds_cp.format(alias='7')):
+            os.makedirs(hds_cp.format(alias='7'))
+        local(
+            'cp -r {five} {seven}; createrepo {seven}'.format(
+                five=host_destination,
+                six=hds_cp.format(alias='7')
+            )
+        )
+
         # now it's ok to create repo in 5
         local('createrepo {five}'.format(five=host_destination))
-
         with cd(host_destination):
             local('createrepo {0}'.format(host_destination))
     finally:
