@@ -285,29 +285,23 @@ def publish_rpm():
     '''
     time0 = time.time()
     try:
-        branch = env.branch
         arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
-        host_dest = '/var/www/rpm/%s/rhel/{alias}/%s' % (branch, arch + '/')
+        repo_path = '/var/www/rpm/%s/rhel' % repo
 
-        five = host_dest.format(alias='5')
-        # remove previous
-        if os.path.exists(host_dest):
-            local('rm -rf {0}'.format(five))
-        local('mkdir -p {}'.format(five))
+        # create directory structure
+        local('mkdir -p %s/{5,6,7}/{x86_64,i386}' % repo_path)
+        local('ln -s %s/5 %s' % (repo_path, '5Server'))
+        local('ln -s %s/6 %s' % (repo_path, '{6Server,6.0,6.1,6.2,6.3,6.4,6.5}'))
+        local('ln -s %s/7 %s' % (repo_path, '{7Server,7.0,7.1,latest}'))
 
-        # create symlinks for alternate versions
-        local(
-            'ln -s {0} {1}'.format(
-                five, host_dest.format(
-                    alias='{5server,6Server,6.0,6.1,6.2,6.3,6.4,6.5,7Server,7.0,7.1,latest}'
-                )
-            )
-        )
-        # copy package file from artifacts_dir to repo_dir
-        local('cp {0}/*.rpm {1}'.format(artifacts_dir, five))
+        # remove previous version
+        local('rm -f %s/*/%s/%s*.rpm' % (repo_path, arch, project))
 
-        # now it's ok to create repo in 5
-        local('createrepo {0}'.format(five))
+        # publish artifacts into repo
+        for ver in ('5', '6', '7'):
+            dst = os.path.join(repo_path, ver, arch)
+            local('cp %s/%s*.rpm %s/' % (artifacts_dir, project, dst))
+            local('createrepo %s' % dst)
     finally:
         # cleanup contents of remote .rpm source
         run("rm -rf /var/cache/omnibus/pkg/*")
