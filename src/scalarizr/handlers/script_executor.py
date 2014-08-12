@@ -410,7 +410,7 @@ class Script(object):
 
     def check_runability(self):
         path_params = urlparse(self.path or '')
-        if path_params.scheme == 'http' or path_params.scheme == 'https':
+        if path_params.scheme != '':
             try:
                 script_body = urlopen(self.path)
                 self.body = script_body.read()
