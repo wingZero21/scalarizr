@@ -312,11 +312,17 @@ def publish_rpm():
 
 
 def cleanup_artifacts():
-    artifact_dirs = glob.glob('{0}*/'.format(project_dir))
-    artifact_dirs = sorted(artifact_dirs)
-    if len(artifact_dirs) > permitted_artifacts_number:
+    print_green('Running cleanup task in {0}'.format(project_dir))
+    artifact_dirs = sorted(glob.glob('{0}/*'.format(project_dir)))
+    num_artifacts = len(artifact_dirs)
+    if num_artifacts > permitted_artifacts_number:
+        print_green(
+            'Artifact number exeeding permitted value.'
+            'Removing {0} artifact directories'.format(num_artifacts - permitted_artifacts_number))
+
         for directory in artifact_dirs[0:-permitted_artifacts_number]:
-            local('rm -rf {0}'.format(directory))
+            if os.path.isdir(directory):
+                local('rm -rf {0}'.format(directory))
 
 
 @task
