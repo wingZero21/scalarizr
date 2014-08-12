@@ -287,7 +287,7 @@ def publish_rpm():
     try:
         branch = env.branch
         arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
-        host_dest = '/var/www/rpm/%s/rhel/{alias}/%s' % (branch, arch + '/')
+        host_dest = '/var/www/rpm/%s/rhel/{alias}/%s' % (branch, arch)
 
         five = host_dest.format(alias='5')
         # remove previous
