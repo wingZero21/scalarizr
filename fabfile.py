@@ -60,7 +60,7 @@ def prepare():
     # setp artifacts dir
     if not os.path.exists(artifacts_dir):
         os.makedirs(artifacts_dir)
-
+    cleanup_artifacts()
     print_green('build_number: {0}'.format(build_number))
     print_green('artifacts_dir: {0}'.format(artifacts_dir))
 
@@ -266,7 +266,6 @@ def publish_deb():
         if repo in local('aptly publish list', capture=True):
             local('aptly publish drop {0}'.format(repo))
         local('aptly publish repo {0}'.format(repo))
-        cleanup_artifacts()
     finally:
         # cleanup contents of remote .deb source
         run("rm -rf /var/cache/omnibus/pkg/*")
@@ -310,13 +309,20 @@ def publish_rpm():
         hds_cp = host_dest_str % (branch, arch + '/')  # host destination string for copying
         hds_ln = host_dest_str % (branch + '/', '')  # host destination string for symlinks
         host_destination = hds_cp.format(alias='5')
+
         # remove previous packages
         if os.path.exists(host_destination):
             local('rm -rf {0}'.format(host_destination))
 
-        # download package file from remote to host machine
-        get(remote_source, host_destination + '%(path)s')
-
+        # create symlinks for alternate 6 versions
+        for alias in ('6Server', '6.0', '6.1',
+                      '6.2', '6.3', '6.4', '6.5', 'latest',):
+            destination = hds_ln.format(alias=alias)
+            if not os.path.exists(destination):
+                os.makedirs(hds_ln.format(alias=alias))
+                local('ln -s {source} {dest}'.format(
+                    source=host_destination, dest=destination)
+                )
         # create symlink for 5server
         if not os.path.exists(hds_ln.format(alias='5server')):
             os.makedirs(hds_ln.format(alias='5server'))
@@ -326,6 +332,10 @@ def publish_rpm():
                     fivesrv=hds_ln.format(alias='5server')
                 )
             )
+
+        # download package file from remote to host machine
+        get(remote_source, host_destination + '%(path)s')
+
         # on host copy contents for 5 into 6
         # and create repo in six
         if not os.path.exists(hds_cp.format(alias='6')):
@@ -339,19 +349,8 @@ def publish_rpm():
         # now it's ok to create repo in 5
         local('createrepo {five}'.format(five=host_destination))
 
-        # create symlinks for alternate 6 versions
-        for alias in ('6Server', '6.0', '6.1',
-                      '6.2', '6.3', '6.4', '6.5', 'latest',):
-            destination = hds_ln.format(alias=alias)
-            if not os.path.exists(destination):
-                os.makedirs(hds_ln.format(alias=alias))
-                local('ln -s {source} {dest}'.format(
-                    source=host_destination, dest=destination)
-                )
-
         with cd(host_destination):
             local('createrepo {0}'.format(host_destination))
-        cleanup_artifacts()
     finally:
         # cleanup contents of remote .rpm source
         run("rm -rf /var/cache/omnibus/pkg/*")
