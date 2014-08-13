@@ -362,7 +362,7 @@ def build_and_publish_binary():
         publish_binary()
     finally:
         run('rm -rf /root/.strider/data/scalr-int-scalarizr-*')
-        run('rm -rf /tmp/!(vagrant-chef-1)')
+        run('shopt -s extglob; rm -rf /tmp/!(vagrant-chef-1)')
         time_delta = time.time() - time0
         print_green('build_and_publish_binary took {0} minutes '.format(time_delta / 60))
 
