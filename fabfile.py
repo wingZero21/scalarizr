@@ -303,7 +303,13 @@ def publish_rpm():
         # publish artifacts into repo
         for ver in ('5', '6', '7'):
             dst = os.path.join(repo_path, ver, arch)
-            local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
+
+            for package_file_path in glob.glob('{0}/{1}*{2}.rpm'.format(artifacts_dir, project, pkg_arch)):
+                if package_file_path.split('.')[-2] == 'i686':
+                    newname = package_file_path.replace('i686', 'i386')
+                    os.rename(package_file_path, newname)
+
+            local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, arch, dst))
             local('createrepo %s' % dst)
     finally:
         time_delta = time.time() - time0
