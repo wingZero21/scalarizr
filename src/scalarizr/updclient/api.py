@@ -21,6 +21,7 @@ import uuid
 import time
 import pkg_resources
 import multiprocessing
+import distutils.version
 
 from scalarizr import linux, queryenv, rpc, config, __version__
 from scalarizr.api import operation
@@ -466,6 +467,16 @@ class UpdClientAPI(object):
                     # Only latest package don't stop scalr-upd-client in postrm script
                     self.pkgmgr.latest('scalr-upd-client')
                     self.pkgmgr.removed('scalr-upd-client', purge=True)
+                if linux.os.redhat_family:
+                    try:
+                        installed_ver = self.pkgmgr.info('scalarizr')['installed']
+                        if installed_ver and distutils.version.LooseVersion(installed_ver) < '0.7':      
+                            # On CentOS 5 there is a case when scalarizr-0.6.24-5 has error 
+                            # in preun scriplet and cannot be uninstalled
+                            linux.system('rpm -e scalarizr --noscripts', shell=True, raise_exc=False)
+                    except linux.LinuxError, e:
+                        # XXX: a workaround for No matching Packages to list error
+                        LOG.debug('Caught non-critical error: %s', e)
             if linux.os.debian_family:
                 self.pkgmgr.apt_get_command('autoremove')
         finally:

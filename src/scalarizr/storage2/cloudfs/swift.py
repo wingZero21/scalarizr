@@ -47,7 +47,7 @@ class SwiftFileSystem(CloudFileSystem):
             try:
                 conn.put_object(container, object_, fd)
             except ClientException, e:
-                if e.http_reason == "Not Found":
+                if e.http_status == 404:
                     # stand closer, shoot again
                     conn.put_container(container)
                     conn.put_object(container, object_, fd)
@@ -83,7 +83,7 @@ class SwiftFileSystem(CloudFileSystem):
             conn = self._get_connection()
             conn.delete_object(container, object_)
         except ClientException, e:
-            if e.http_reason == "Not Found":
+            if e.http_status == 404:
                 return False
             else:
                 raise

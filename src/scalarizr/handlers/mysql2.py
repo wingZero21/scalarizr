@@ -88,12 +88,13 @@ class MysqlMessages:
 
 
 def get_handlers():
-    if __node__['behavior'] == 'percona':
-        return [MysqlHandler()] if percona_api.PerconaAPI.software_supported else []
-    elif __node__['behavior'] == 'mariadb':
-        return [MysqlHandler()] if mariadb_api.MariaDBAPI.software_supported else []
-    else:
-        return [MysqlHandler()] if mysql_api.MySQLAPI.software_supported else []
+    return [MysqlHandler()]
+    # if __node__['behavior'] == 'percona':
+    #     return [MysqlHandler()] if percona_api.PerconaAPI.software_supported else []
+    # elif __node__['behavior'] == 'mariadb':
+    #     return [MysqlHandler()] if mariadb_api.MariaDBAPI.software_supported else []
+    # else:
+    #     return [MysqlHandler()] if mysql_api.MySQLAPI.software_supported else []
 
 
 class DBMSRHandler(ServiceCtlHandler):
