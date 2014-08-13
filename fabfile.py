@@ -280,7 +280,7 @@ def publish_deb():
             repo, ' '.join(glob.glob(artifacts_dir + '/*.deb'))))
         if repo in local('aptly publish list', capture=True):
             local('aptly publish drop {0}'.format(repo))
-        local('aptly publish repo {0} -gpg-key=04B54A2A'.format(repo))
+        local('aptly publish repo -gpg-key=04B54A2A {0}'.format(repo))
     finally:
         time_delta = time.time() - time0
         print_green('publish deb took {0}'.format(time_delta))
