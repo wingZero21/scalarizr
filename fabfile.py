@@ -10,7 +10,7 @@ from fabric.context_managers import shell_env
 from fabric.colors import green
 
 env['use_ssh_config'] = True
-project = os.environ.get('CI_PROJECT', 'int-scalarizr')
+project = os.environ.get('CI_PROJECT', 'scalarizr')
 build_dir = os.environ['PWD']
 home_dir = os.environ.get('CI_HOME_DIR', '/var/lib/ci')
 omnibus_dir = os.path.join(build_dir, 'omnibus')
@@ -355,7 +355,7 @@ def build_and_publish_binary():
         build_binary()
         publish_binary()
     finally:
-        run('rm -rf /root/.strider/data/scalr-{0}-*'.format(project))
+        run('rm -rf /root/.strider/data/scalr-int-scalarizr-*')
         run('rm -rf /tmp/*')
         time_delta = time.time() - time0
         print_green('build_and_publish_binary took {0} minutes '.format(time_delta / 60))
