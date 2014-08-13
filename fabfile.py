@@ -273,9 +273,13 @@ def publish_deb():
     time0 = time.time()
     try:
         init()
+        arch_query = '$Architecture (amd64)'
+        if env.host_string.endswith('32'):
+        	arch_query = '!' + arch_query
+
         if repo not in local('aptly repo list', capture=True):
             local('aptly repo create -distribution {0} {0}'.format(repo))
-        local('aptly repo remove {0} {1}'.format(repo, project))
+        local('aptly repo remove {0} "{1}, Name (~ {2}.*)"'.format(repo, arch_query, project))
         local('aptly repo add {0} {1}'.format(
             repo, ' '.join(glob.glob(artifacts_dir + '/*.deb'))))
         if repo in local('aptly publish list', capture=True):
