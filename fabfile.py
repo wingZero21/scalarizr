@@ -192,7 +192,7 @@ def build_meta_packages():
 			run(('fpm -t {pkg_type} -s empty '
 				'--name scalarizr-{platform} '
 				'--version {version}-1 '
-				'--depends "scalarizr = {version}-1" '
+				'--depends "scalarizr = {version}" '
 				'--maintainer "Scalr Inc. <packages@scalr.net>" '
 				'--url "http://scalr.net"').format(pkg_type=pkg_type, version=version, platform=platform))
 
