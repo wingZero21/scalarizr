@@ -306,7 +306,7 @@ def publish_rpm():
 
             for package_file_path in glob.glob('{0}/{1}*{2}.rpm'.format(artifacts_dir, project, pkg_arch)):
                 if package_file_path.split('.')[-2] == 'i686':
-                    newname = package_file_path.replace('i686', 'i386')
+                    newname = package_file_path.replace('i686.rpm', 'i386.rpm')
                     os.rename(package_file_path, newname)
 
             local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, arch, dst))
@@ -362,7 +362,7 @@ def build_and_publish_binary():
         publish_binary()
     finally:
         run('rm -rf /root/.strider/data/scalr-int-scalarizr-*')
-        run('rm -rf /tmp/*')
+        run('rm -rf /tmp/!(vagrant-chef-1)')
         time_delta = time.time() - time0
         print_green('build_and_publish_binary took {0} minutes '.format(time_delta / 60))
 
