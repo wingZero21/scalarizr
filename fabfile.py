@@ -377,18 +377,7 @@ def build_and_publish_binary():
         publish_binary()
     finally:
         run('rm -rf /root/.strider/data/scalr-int-scalarizr-*')
-        # cleanup tmp dir, the following hack is required to run negative wildcards
-        # shopt call is required on centos to enable negative wildcards
-        # and works only when called as a separate command
-        # next in the same session(which ever fab run is) we should call rm
-        # so those 2 commands are called in a second run call inside a script.
-        run(
-            'cat <<EOC > /tmp/cleanup\n'
-            'shopt -s extglob\n'
-            'rm -rf /tmp/!(vagrant-chef-1)\n'
-            'EOC\n'
-        )
-        run('. /tmp/cleanup')
+        run('find /tmp -mindepth 1 -maxdepth 1 ! -name "vagrant-chef-*" | xargs rm -rf')
         time_delta = time.time() - time0
         print_green('build_and_publish_binary took {0} minutes '.format(time_delta / 60))
 
