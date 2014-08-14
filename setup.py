@@ -14,10 +14,11 @@ def make_data_files(dst, src):
 
 description = "Scalarizr converts any server to Scalr-manageable node"
 
-data_files = make_data_files('etc', 'etc')
-data_files.extend(make_data_files('share', 'share'))
-data_files.extend(make_data_files('scripts', 'scripts'))
-data_files.extend(make_data_files('init', 'init'))
+install_dir = '/opt/scalarizr'
+data_files = make_data_files('%s/etc' % install_dir, 'etc')
+data_files.extend(make_data_files('%s/share' % install_dir, 'share'))
+data_files.extend(make_data_files('%s/scripts' % install_dir, 'scripts'))
+data_files.extend(make_data_files('%s/init' % install_dir, 'init'))
 
 
 cfg = dict(
