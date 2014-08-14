@@ -14,33 +14,34 @@ def make_data_files(dst, src):
 
 description = "Scalarizr converts any server to Scalr-manageable node"
 
-data_files = make_data_files('/etc/scalr', 'etc')
-data_files.extend(make_data_files('/usr/share/scalr', 'share'))
-data_files.extend(make_data_files('/usr/local/scalarizr/scripts', 'scripts'))
+data_files = make_data_files('etc', 'etc')
+data_files.extend(make_data_files('share', 'share'))
+data_files.extend(make_data_files('scripts', 'scripts'))
+data_files.extend(make_data_files('init', 'init'))
 
 
 cfg = dict(
-        name = "scalarizr",
-        version = open('src/scalarizr/version').read().strip(),
-        description = description,
-        long_description = description,
-        author = "Scalr Inc.",
-        author_email = "info@scalr.net",
-        url = "https://scalr.net",
-        license = "GPL",
-        platforms = "any",
-        package_dir = {"" : "src"},
-        packages = find_packages("src"),
-        include_package_data = True,
-        requires = ["m2crypto (>=0.20)", "boto"],
-        data_files = data_files,
-        entry_points = {
-            'console_scripts': [
-                'scalr-upd-client = scalarizr.updclient.app:main',
-                'scalarizr = scalarizr.app:main',
-                'szradm = scalarizr.adm.app:main'
-            ]
-        }
+    name = "scalarizr",
+    version = open('src/scalarizr/version').read().strip(),
+    description = description,
+    long_description = description,
+    author = "Scalr Inc.",
+    author_email = "info@scalr.net",
+    url = "https://scalr.net",
+    license = "GPL",
+    platforms = "any",
+    package_dir = {"" : "src"},
+    packages = find_packages("src"),
+    include_package_data = True,
+    requires = ["m2crypto (>=0.20)", "boto"],
+    data_files = data_files,
+    entry_points = {
+        'console_scripts': [
+            'scalr-upd-client = scalarizr.updclient.app:main',
+            'scalarizr = scalarizr.app:main',
+            'szradm = scalarizr.adm.app:main'
+        ]
+    }
 )
 setup(**cfg)
 
