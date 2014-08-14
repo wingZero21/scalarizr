@@ -17,7 +17,7 @@
 
 . /lib/lsb/init-functions
 
-PYTHON='/opt/scalarizr/embeded/bin/python'
+PYTHON='/opt/scalarizr/embedded/bin/python'
 NAME='scalr-upd-client'
 PID_FILE='/var/run/scalr-upd-client.pid'
 LOG_FILE='/var/log/scalarizr_update.log'

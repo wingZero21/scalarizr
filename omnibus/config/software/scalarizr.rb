@@ -9,4 +9,5 @@ build do
             "--prefix=#{install_dir}/embedded " \
             "--install-data #{install_dir} " \
             "--install-scripts #{install_dir}/bin"
+  command "sed -i 's/\\#\\!\\/usr\\/bin\\/python/\\#\\!\\/opt\\/scalarizr\\/embedded\\/bin\\/python/1' #{install_dir}/scripts/*"
 end

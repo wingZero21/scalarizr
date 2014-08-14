@@ -16,7 +16,7 @@
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
-DAEMON=/opt/scalarizr/embeded/bin/python # Introduce the server's location here
+DAEMON=/opt/scalarizr/embedded/bin/python # Introduce the server's location here
 SCALARIZR_BIN=/usr/bin/scalarizr
 NAME="scalarizr"           # Introduce the short server's name here
 DESC="Scalarizr"           # Introduce a short description here
@@ -79,7 +79,7 @@ if [ -n "$DAEMONUSER" ]; then
 fi
 
 SCALARIZR_CONF_FILE="/etc/scalr/public.d/config.ini"
-SCRIPTS_PATH=$(cat $SCALARIZR_CONF_FILE | grep "scripts_path" | awk '{print $3}')
+SCRIPTS_PATH='/opt/scalarizr/scripts'
 RUNLEVEL=$(who -r | awk '{print $2}')
 
 

@@ -101,12 +101,12 @@ prog=$(basename $scalarizr)
 
 SCALARIZR_CONF_DIR="/etc/scalr"
 SCALARIZR_CONF_FILE="$SCALARIZR_CONF_DIR/public.d/config.ini"
-PYTHON='/usr/bin/python2.6'
+PYTHON='/opt/scalarizr/embedded/bin/python'
 
 [ -f /etc/sysconfig/scalarizr ] && . /etc/sysconfig/scalarizr
 
 lockfile=/var/lock/subsys/scalarizr
-scripts_path=$(cat $SCALARIZR_CONF_FILE | grep "scripts_path" | awk '{print $3}')
+scripts_path='/opt/scalarizr/scripts'
 run_level=$(who -r | awk '{print $2}')
 
 start() {
