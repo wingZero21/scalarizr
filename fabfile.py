@@ -114,7 +114,7 @@ def import_artifact(src):
             import_artifact('dist/*')
     '''
 
-    run("rename 's/i686.rpm/i386.rpm/;' {0}".format(src))
+    run('for i in {0} ;do mv -- "$i" "${i//i686/i386}";done'.format(src))
     files = get(src, artifacts_dir)
     print_green('imported artifacts: {0!r}'.format(
         [os.path.basename(f) for f in files]))
@@ -187,17 +187,17 @@ def build_omnibus():
 
 
 def build_meta_packages():
-	print_green('building meta packages')
-	pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
-	for platform in 'ec2,gce,openstack,cloudstack,ecs,idcf,ucloud,eucalyptus,rackspace'.split(','):
-		with cd('/var/cache/omnibus/pkg'):
-			run(('fpm -t {pkg_type} -s empty '
-				'--name scalarizr-{platform} '
-				'--version {version} '
-				'--iteration 1 '
-				'--depends "scalarizr = {version}" '
-				'--maintainer "Scalr Inc. <packages@scalr.net>" '
-				'--url "http://scalr.net"').format(pkg_type=pkg_type, version=version, platform=platform))
+    print_green('building meta packages')
+    pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
+    for platform in 'ec2,gce,openstack,cloudstack,ecs,idcf,ucloud,eucalyptus,rackspace'.split(','):
+        with cd('/var/cache/omnibus/pkg'):
+            run(('fpm -t {pkg_type} -s empty '
+                 '--name scalarizr-{platform} '
+                 '--version {version} '
+                 '--iteration 1 '
+                 '--depends "scalarizr = {version}" '
+                 '--maintainer "Scalr Inc. <packages@scalr.net>" '
+                 '--url "http://scalr.net"').format(pkg_type=pkg_type, version=version, platform=platform))
 
 
 @task
@@ -208,7 +208,7 @@ def build_source():
     init()
     git_export()
     with cd(build_dir):
-        # bump project version
+    # bump project version
         run("echo {0!r} >version".format(version))
         # build project
         run("python setup_agent.py sdist", quiet=True)
@@ -277,7 +277,7 @@ def publish_deb():
         init()
         arch_query = '$Architecture (amd64)'
         if env.host_string.endswith('32'):
-        	arch_query = '!' + arch_query
+            arch_query = '!' + arch_query
 
         if repo not in local('aptly repo list', capture=True):
             local('aptly repo create -distribution {0} {0}'.format(repo))
