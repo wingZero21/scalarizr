@@ -524,7 +524,13 @@ class YumPackageMgr(PackageMgr):
 
 
     def _installed_and_candidate(self, name):
-        out = self.yum_command('list --showduplicates %s' % name)[0].strip()
+        try:
+            out = self.yum_command('list --showduplicates %s' % name)[0].strip()
+        except linux.LinuxError, e:
+            if 'No matching Packages to list' in e.err:
+                return None, None
+            else:
+                raise
 
         version_re = re.compile(r'[^\s]+\s+([^\s]+)')
         lines = map(string.strip, out.splitlines())

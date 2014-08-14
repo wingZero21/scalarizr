@@ -171,7 +171,7 @@ def local_export():
 
 def build_omnibus():
     # rm old installation
-    print_green('building omnibus ')
+    print_green('building omnibus')
     with cd(omnibus_dir):
         run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
@@ -184,6 +184,20 @@ def build_omnibus():
 
     with open(omnibus_md5sum_file, 'w+') as fp:
         fp.write(omnibus_md5sum())
+
+
+def build_meta_packages():
+	print_green('building meta packages')
+	pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
+	for platform in 'ec2,gce,openstack,cloudstack,ecs,idcf,ucloud,eucalyptus,rackspace'.split(','):
+		with cd('/var/cache/omnibus/pkg'):
+			run(('fpm -t {pkg_type} -s empty '
+				'--name scalarizr-{platform} '
+				'--version {version} '
+				'--iteration 1 '
+				'--depends "scalarizr = {version}" '
+				'--maintainer "Scalr Inc. <packages@scalr.net>" '
+				'--url "http://scalr.net"').format(pkg_type=pkg_type, version=version, platform=platform))
 
 
 @task
@@ -213,6 +227,7 @@ def build_binary():
     generate_changelog()
     run('rm -rf /var/cache/omnibus/pkg/{0}*'.format(project))
     build_omnibus()
+    build_meta_packages()
     import_artifact('/var/cache/omnibus/pkg/{0}*'.format(project))
     time_delta = time.time() - time0
     print_green('build binary took {0}'.format(time_delta))
@@ -260,14 +275,18 @@ def publish_deb():
     time0 = time.time()
     try:
         init()
+        arch_query = '$Architecture (amd64)'
+        if env.host_string.endswith('32'):
+        	arch_query = '!' + arch_query
+
         if repo not in local('aptly repo list', capture=True):
             local('aptly repo create -distribution {0} {0}'.format(repo))
-        local('aptly repo remove {0} {1}'.format(repo, project))
+        local('aptly repo remove {0} "{1}, Name (~ {2}.*)"'.format(repo, arch_query, project))
         local('aptly repo add {0} {1}'.format(
             repo, ' '.join(glob.glob(artifacts_dir + '/*.deb'))))
         if repo in local('aptly publish list', capture=True):
             local('aptly publish drop {0}'.format(repo))
-        local('aptly publish repo {0}'.format(repo))
+        local('aptly publish repo -gpg-key=04B54A2A {0}'.format(repo))
     finally:
         time_delta = time.time() - time0
         print_green('publish deb took {0}'.format(time_delta))
@@ -296,7 +315,7 @@ def publish_rpm():
             symlink('5', linkname)
         for linkname in '6Server,6.0,6.1,6.2,6.3,6.4,6.5'.split(','):
             symlink('6', linkname)
-        for linkname in '7Server,7.0,7.1,latest'.split(','):
+        for linkname in '7Server,7.0,latest'.split(','):
             symlink('7', linkname)
         os.chdir(cwd)
         # remove previous version
