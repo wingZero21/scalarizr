@@ -334,7 +334,7 @@ def _init_logging():
     # Change console loggel level from DEBUG to INFO  
     if optparser and optparser.values.import_server:
         for hdlr in logging.getLogger('scalarizr').handlers:
-            if isinstance(hdlr, logging.StreamHandler) and hdlr.stream == sys.stdout:
+            if isinstance(hdlr, logging.StreamHandler) and hdlr.stream == sys.stderr:
                 hdlr.setLevel(logging.INFO)
 
 

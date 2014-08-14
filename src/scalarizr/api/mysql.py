@@ -314,16 +314,14 @@ class MySQLAPI(BehaviorAPI):
                     ['mysql-client>=5.0,<5.6'],
                     ['mysql-client-5.5'],
                 ],
-                installed_packages,
-                ['apparmor']
+                installed_packages
             )
             pkgmgr.check_any_dependency(
                 [
                     ['mysql-server>=5.0,<5.6'],
                     ['mysql-server-5.5'],
                 ],
-                installed_packages,
-                ['apparmor']
+                installed_packages
             )
         elif linux.os.redhat_family or linux.os.oracle_family:
             pkgmgr.check_dependency(
