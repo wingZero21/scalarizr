@@ -330,11 +330,11 @@ def _init_logging():
     globals()['_logging_configured'] = True
     logger = logging.getLogger(__name__)
     
-    # During server import user must see all scalarizr activity in his terminal
-    # Add console handler if it doesn't configured in logging.ini    
+    # During server import user must see all scalarizr general activity in his terminal
+    # Change console loggel level from DEBUG to INFO  
     if optparser and optparser.values.import_server:
         for hdlr in logging.getLogger('scalarizr').handlers:
-            if isinstance(hdlr, logging.StreamHandler):
+            if isinstance(hdlr, logging.StreamHandler) and hdlr.stream == sys.stdout:
                 hdlr.setLevel(logging.INFO)
 
 
