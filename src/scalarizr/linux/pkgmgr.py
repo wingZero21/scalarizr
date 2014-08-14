@@ -380,30 +380,26 @@ class AptPackageMgr(PackageMgr):
 
 
     def apt_get_command(self, command, **kwds):
-        kwds.update(env={'DEBIAN_FRONTEND': 'noninteractive',
-                        'DEBIAN_PRIORITY': 'critical',
-                        'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
-                        raise_exc=False
+        kwds.update(
+            env={'DEBIAN_FRONTEND': 'noninteractive',
+                'DEBIAN_PRIORITY': 'critical',
+                'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
+            error_text='Package manager command failed'
         )
-        for _ in range(18):  # timeout approx 3 minutes
-            out, err, code = linux.system(('/usr/bin/apt-get',
-                                            '-q', '-y', '--force-yes',
-                                            '-o Dpkg::Options::=--force-confold') + \
-                                            tuple(filter(None, command.split())), **kwds)
-            if code:
-                if 'is another process using it?' in err \
-                    or 'Could not get lock' in err:
+        max_attempt = 17  
+        for attempt in range(max_attempt+1):  # timeout approx 3 minutes 
+            try:
+                return linux.system(('/usr/bin/apt-get',
+                                    '-q', '-y', '--force-yes',
+                                    '-o Dpkg::Options::=--force-confold') + \
+                                    tuple(filter(None, command.split())), **kwds)
+            except linux.LinuxError, e:
+                if attempt < max_attempt and 'is another process using it?' in e.err \
+                        or 'Could not get lock' in e.err:
                     LOG.debug('Could not get dpkg lock (perhaps, another process is using it.)')
                     time.sleep(10)
                     continue
-                else:
-                    args = list(e.args)
-                    args[0] = 'Package manager command failed'
-                    raise linux.LinuxError(*args)
-            else:
-                return out, err, code
-
-        raise Exception('Package manager command failed: dpkg is being used by another process')
+                raise
 
 
     def apt_cache_command(self, command, **kwds):
