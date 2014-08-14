@@ -187,17 +187,17 @@ def build_omnibus():
 
 
 def build_meta_packages():
-    print_green('building meta packages')
-    pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
-    for platform in 'ec2,gce,openstack,cloudstack,ecs,idcf,ucloud,eucalyptus,rackspace'.split(','):
-        with cd('/var/cache/omnibus/pkg'):
-            run(('fpm -t {pkg_type} -s empty '
-                 '--name scalarizr-{platform} '
-                 '--version {version} '
-                 '--iteration 1 '
-                 '--depends "scalarizr = {version}" '
-                 '--maintainer "Scalr Inc. <packages@scalr.net>" '
-                 '--url "http://scalr.net"').format(pkg_type=pkg_type, version=version, platform=platform))
+	print_green('building meta packages')
+	pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
+	for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud eucalyptus rackspace'.split():
+		with cd('/var/cache/omnibus/pkg'):
+			run(('fpm -t {pkg_type} -s empty '
+				'--name scalarizr-{platform} '
+				'--version {version} '
+				'--iteration 1 '
+				'--depends "scalarizr = {version}" '
+				'--maintainer "Scalr Inc. <packages@scalr.net>" '
+				'--url "http://scalr.net"').format(pkg_type=pkg_type, version=version, platform=platform))
 
 
 @task
@@ -281,7 +281,9 @@ def publish_deb():
 
         if repo not in local('aptly repo list', capture=True):
             local('aptly repo create -distribution {0} {0}'.format(repo))
+        # remove previous version
         local('aptly repo remove {0} "{1}, Name (~ {2}.*)"'.format(repo, arch_query, project))
+        # publish artifacts into repo 
         local('aptly repo add {0} {1}'.format(
             repo, ' '.join(glob.glob(artifacts_dir + '/*.deb'))))
         if repo in local('aptly publish list', capture=True):
@@ -311,17 +313,17 @@ def publish_rpm():
         def symlink(target, linkname):
             if not os.path.exists(linkname):
                 os.symlink(target, linkname)
-        for linkname in '5Server'.split(','):
+        for linkname in '5Server'.split():
             symlink('5', linkname)
-        for linkname in '6Server,6.0,6.1,6.2,6.3,6.4,6.5'.split(','):
+        for linkname in '6Server 6.0 6.1 6.2 6.3 6.4 6.5'.split():
             symlink('6', linkname)
-        for linkname in '7Server,7.0,latest'.split(','):
+        for linkname in '7Server 7.0 latest'.split():
             symlink('7', linkname)
         os.chdir(cwd)
         # remove previous version
         local('rm -f %s/*/%s/%s*.rpm' % (repo_path, arch, project))
         # publish artifacts into repo
-        for ver in ('5', '6', '7'):
+        for ver in '5 6 7'.split():
             dst = os.path.join(repo_path, ver, arch)
 
             local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, arch, dst))
