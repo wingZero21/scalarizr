@@ -502,7 +502,7 @@ class UpdClientAPI(object):
         repo.ensure()
         if updatedb:
             LOG.info('Updating packages cache')
-            self.pkgmgr.updatedb() 
+            self.pkgmgr.updatedb()
 
 
     def _configure_devel_repo(self, repo):
@@ -656,11 +656,11 @@ class UpdClientAPI(object):
             self.executed_at = time.strftime(DATE_FORMAT, time.gmtime())
             self.state = 'in-progress/prepare'
             self.error = ''
-            self._sync()
-            self._ensure_repos()
-
             pkgmgr.LOG.addHandler(op.logger.handlers[0])
+            
             try:
+                self._sync()
+                self._ensure_repos()
                 pkginfo = self.pkgmgr.info(self.package)
                 if not pkginfo['candidate']:
                     self.state = 'completed'

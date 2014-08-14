@@ -397,12 +397,13 @@ class AptPackageMgr(PackageMgr):
                     time.sleep(10)
                     continue
                 else:
-                    raise linux.LinuxError('Apt-get command failed. Out: %s \nErrors: %s' % (out, err))
-
+                    args = list(e.args)
+                    args[0] = 'Package manager command failed'
+                    raise linux.LinuxError(*args)
             else:
                 return out, err, code
 
-        raise Exception('Apt-get command failed: dpkg is being used by another process')
+        raise Exception('Package manager command failed: dpkg is being used by another process')
 
 
     def apt_cache_command(self, command, **kwds):
