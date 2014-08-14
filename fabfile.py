@@ -114,7 +114,7 @@ def import_artifact(src):
             import_artifact('dist/*')
     '''
 
-    run('for i in {0} ;do mv -- "$i" "${i//i686/i386}";done'.format(src))
+    run('for i in %s ;do mv -- "$i" "${i//i686/i386}";done' % src)
     files = get(src, artifacts_dir)
     print_green('imported artifacts: {0!r}'.format(
         [os.path.basename(f) for f in files]))
