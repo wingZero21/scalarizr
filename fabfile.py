@@ -113,6 +113,8 @@ def import_artifact(src):
             run('python setup.py sdist')
             import_artifact('dist/*')
     '''
+
+    run("rename 's/i686.rpm/i386.rpm/;' {0}".format(src))
     files = get(src, artifacts_dir)
     print_green('imported artifacts: {0!r}'.format(
         [os.path.basename(f) for f in files]))
@@ -280,7 +282,6 @@ def publish_rpm():
     time0 = time.time()
     try:
         arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
-        pkg_arch = 'i686' if env.host_string.endswith('32') else 'x86_64'
         repo_path = '/var/www/rpm/%s/rhel' % repo
 
         # create directory structure
@@ -303,11 +304,6 @@ def publish_rpm():
         # publish artifacts into repo
         for ver in ('5', '6', '7'):
             dst = os.path.join(repo_path, ver, arch)
-
-            for package_file_path in glob.glob('{0}/{1}*{2}.rpm'.format(artifacts_dir, project, pkg_arch)):
-                if package_file_path.split('.')[-2] == 'i686':
-                    newname = package_file_path.replace('i686.rpm', 'i386.rpm')
-                    os.rename(package_file_path, newname)
 
             local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, arch, dst))
             local('createrepo %s' % dst)
@@ -362,6 +358,11 @@ def build_and_publish_binary():
         publish_binary()
     finally:
         run('rm -rf /root/.strider/data/scalr-int-scalarizr-*')
+        # cleanup tmp dir, the following hack is required to run negative wildcards
+        # shopt call is required on centos to enable negative wildcards
+        # and works only when called as a separate command
+        # next in the same session(which ever fab run is) we should call rm
+        # so those 2 commands are called in a second run call inside a script.
         run(
             'cat <<EOC > /tmp/cleanup\n'
             'shopt -s extglob\n'
