@@ -5,12 +5,86 @@
 #
 
 PROGNAME=$(basename $0)
+INSTALL_DIR='/opt/scalarizr'
+if which apt-get 1>&2 2>/dev/null; then
+    DIST='debian'
+else
+    DIST='redhat'
+fi
 
 function error_exit
 {
-  echo "${PROGNAME}: ${1:-"Unknown Error"}" 1>&2
-  exit 1
+    echo "${PROGNAME}: ${1:-"Unknown Error"}" 1>&2
+    exit 1
 }
+
+function debian_init
+{
+    if which insserv > /dev/null && test -e /etc/issue.net && ! grep -q 'Ubuntu' /etc/issue.net; then
+        insserv -r scalarizr_update || :
+        rm -f /etc/init.d/scalarizr_update
+        insserv -r scalarizr
+        insserv scalarizr
+        insserv scalr-upd-client
+    else
+        rm -f /etc/init.d/scalarizr_update
+        update-rc.d scalarizr_update remove || :
+        update-rc.d -f scalarizr remove || :
+        if test -e /etc/issue.net && grep -q '10.04' /etc/issue.net; then
+            # We've reverted back scalarizr autostart because 
+            # some clients have scalarizr bundled without scalr-upd-client,
+            # and Ubuntu 10.04 init doesn't execute new init scripts, 
+            # that was installed during init
+            update-rc.d scalarizr defaults 99 >/dev/null
+        else
+            update-rc.d scalarizr stop 99 0 1 6 .
+        fi
+        update-rc.d scalr-upd-client defaults 98 >/dev/null
+    fi 
+}
+
+function redhat_init
+{
+    
+}
+
+if [ ! -e /etc/scalr ]; then
+    cp -R "$INSTALL_DIR/etc" /etc/scalr
+fi
+for name in $(ls $INSTALL_DIR/bin); do
+    ln -s /usr/bin/$name "$INSTALL_DIR/bin/$name"
+done
+for name in $(ls $INSTALL_DIR/init/$DIST); do
+    ln -s /etc/init.d/$name "$INSTALL_DIR/init/$DIST/$name"
+done
+
+
+if [ "$DIST" = 'debian' ]; then
+    debian_init
+else
+    redhat_init
+fi
+
+
+zomby_pids=$(ps aux | grep 'bin/scalarizr' | awk '{ print $2 }')
+if [ "$zomby_pids" ]; then
+    for zomby_pid in $zomby_pids; do
+        kill -9 $zomby_pid 2>/dev/null
+    done
+fi
+
+if [ -f "/tmp/scalarizr.status" ]; then
+    status=$(cat /tmp/scalarizr.status)
+    rm -f "/tmp/scalarizr.status"
+    if [ "0" = "$status" ]; then
+        /etc/init.d/scalarizr start || exit $?
+    fi
+else
+    if [ -f "/etc/scalr/private.d/.state" ]; then
+        /etc/init.d/scalarizr start || exit $?
+    fi
+fi
+
 
 echo "Thank you for installing scalarizr!"
 
