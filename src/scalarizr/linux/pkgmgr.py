@@ -42,7 +42,7 @@ class Repository(object):
 
     def ensure(self):
         assert self.filename and self.config
-        LOG.info('Creating repository configuration in: %s', self.filename)
+        LOG.info('Ensuring repository "%s" (file: %s)', self.name, self.filename)
         with open(self.filename, 'w+') as fp:
             fp.write(self.config)
 

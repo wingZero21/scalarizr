@@ -397,7 +397,7 @@ class UpdClientAPI(object):
                 else:
                     raise
             norm_user_data(user_data)
-            LOG.info('Applying user-data settings')
+            LOG.info('Applying configuration from user-data')
             self._update_self_dict(user_data)
 
             crypto_dir = os.path.dirname(self.crypto_file)
