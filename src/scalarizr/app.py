@@ -485,8 +485,9 @@ def _cleanup_after_rebundle():
     # Reset private configuration
     priv_path = cnf.private_path()
     for file in os.listdir(priv_path):
-        if file in ('.user-data', '.update', 'keys'):
-             # keys/default maybe already refreshed by UpdateClient
+        if file in ('.user-data', 'update.status', 'keys'):
+            # protect user-data and UpdateClient status
+            # keys/default maybe already refreshed by UpdateClient
             continue
         path = os.path.join(priv_path, file)
         coreutils.chmod_r(path, 0700)
