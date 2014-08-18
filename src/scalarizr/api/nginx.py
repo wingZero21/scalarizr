@@ -94,7 +94,10 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
             if returncode == 0:
                 return initdv2.Status.RUNNING
             else:
-                return initdv2.Status.NOT_RUNNING
+                if system2('ps -C nginx --noheaders', shell=True, raise_exc=False)[0].strip():
+                    return initdv2.Status.RUNNING
+                else:
+                    return initdv2.Status.NOT_RUNNING
 
     def configtest(self, path=None):
         args = '%s -t' % self._nginx_binary
