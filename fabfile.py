@@ -317,7 +317,6 @@ def publish_rpm():
         local('mkdir -p %s/{5,6,7}/{x86_64,i386}' % repo_path, shell='/bin/bash')
         cwd = os.getcwd()
         os.chdir(repo_path)
-
         def symlink(target, linkname):
             if not os.path.exists(linkname):
                 os.symlink(target, linkname)
@@ -328,8 +327,10 @@ def publish_rpm():
         for linkname in '7Server 7.0 latest'.split():
             symlink('7', linkname)
         os.chdir(cwd)
+
         # remove previous version
         local('rm -f %s/*/%s/%s*.rpm' % (repo_path, arch, project))
+        
         # publish artifacts into repo
         for ver in '5 6 7'.split():
             dst = os.path.join(repo_path, ver, arch)
