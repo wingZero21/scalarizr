@@ -193,13 +193,17 @@ def build_meta_packages():
     pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
     for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud eucalyptus rackspace'.split():
         with cd('/var/cache/omnibus/pkg'):
+            pkg_arch = 'i686' if '32' in env.host_string else 'amd64'
             run(('fpm -t {pkg_type} -s empty '
                  '--name scalarizr-{platform} '
                  '--version {version} '
                  '--iteration 1 '
+                 '--architecture {pkg_arch} '
                  '--depends "scalarizr = {version}" '
                  '--maintainer "Scalr Inc. <packages@scalr.net>" '
-                 '--url "http://scalr.net"').format(pkg_type=pkg_type, version=version, platform=platform))
+                 '--url "http://scalr.net"').format(
+                    pkg_type=pkg_type, version=version, 
+                    platform=platform, pkg_arch=pkg_arch))
 
 
 @task
@@ -330,7 +334,7 @@ def publish_rpm():
 
         # remove previous version
         local('rm -f %s/*/%s/%s*.rpm' % (repo_path, arch, project))
-        
+
         # publish artifacts into repo
         for ver in '5 6 7'.split():
             dst = os.path.join(repo_path, ver, arch)
