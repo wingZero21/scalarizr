@@ -7,7 +7,7 @@ import glob
 from fabric.api import *
 from fabric.decorators import runs_once
 from fabric.context_managers import shell_env
-from fabric.colors import green
+from fabric.colors import green, red
 
 env['use_ssh_config'] = True
 project = os.environ.get('CI_PROJECT', 'scalarizr')
@@ -288,8 +288,13 @@ def publish_deb():
         # publish artifacts into repo
         local('aptly repo add {0} {1}'.format(
             repo, ' '.join(glob.glob(artifacts_dir + '/*.deb'))))
-        if repo in local('aptly publish list', capture=True):
-            local('aptly publish drop {0}'.format(repo))
+        aptly_list = local('aptly publish list', capture=True)
+        if repo in aptly_list:
+            print_green('repo reference `{0}`\n is in\n `{1}`\n'.format(repo, aptly_list))
+            try:
+                local('aptly publish drop {0}'.format(repo))
+            except:
+                print_red('Unable to drop repo {0}'.format(repo))
         local('aptly publish repo -gpg-key=04B54A2A {0}'.format(repo))
     finally:
         time_delta = time.time() - time0
@@ -388,3 +393,7 @@ def build_and_publish_binary():
 
 def print_green(msg):
     print green('[localhost] {0}'.format(msg))
+
+
+def print_red(msg):
+    print red('[localhost] {0}'.format(msg))
