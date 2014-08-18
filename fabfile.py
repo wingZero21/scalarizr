@@ -36,6 +36,7 @@ def setup_artifacts_dir():
     global artifacts_dir
     # append build_number to artifacts dir
     artifacts_dir = os.path.join(project_dir, str(build_number))
+    local('mkdir -p {0}'.format(artifacts_dir))
 
 
 @task
@@ -113,9 +114,12 @@ def import_artifact(src):
             run('python setup.py sdist')
             import_artifact('dist/*')
     '''
+    print_green('importing artifacts from {0} to {1}'.format(src, artifacts_dir))
+
     files = get(src, artifacts_dir)
-    print_green('imported artifacts: {0!r}'.format(
-        [os.path.basename(f) for f in files]))
+    print_green('imported artifacts:')
+    for f in files:
+        print_green(os.path.basename(f))
 
 
 @serial
@@ -178,24 +182,24 @@ def build_omnibus():
         }
         with shell_env(**env):
             run("bin/omnibus clean %s --log-level=warn" % project)
-            run("bin/omnibus build %s --log-level=warn" % project)
+            run("bin/omnibus build %s --log-level=info" % project)
 
     with open(omnibus_md5sum_file, 'w+') as fp:
         fp.write(omnibus_md5sum())
 
 
 def build_meta_packages():
-	print_green('building meta packages')
-	pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
-	for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud eucalyptus rackspace'.split():
-		with cd('/var/cache/omnibus/pkg'):
-			run(('fpm -t {pkg_type} -s empty '
-				'--name scalarizr-{platform} '
-				'--version {version} '
-				'--iteration 1 '
-				'--depends "scalarizr = {version}" '
-				'--maintainer "Scalr Inc. <packages@scalr.net>" '
-				'--url "http://scalr.net"').format(pkg_type=pkg_type, version=version, platform=platform))
+    print_green('building meta packages')
+    pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
+    for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud eucalyptus rackspace'.split():
+        with cd('/var/cache/omnibus/pkg'):
+            run(('fpm -t {pkg_type} -s empty '
+                 '--name scalarizr-{platform} '
+                 '--version {version} '
+                 '--iteration 1 '
+                 '--depends "scalarizr = {version}" '
+                 '--maintainer "Scalr Inc. <packages@scalr.net>" '
+                 '--url "http://scalr.net"').format(pkg_type=pkg_type, version=version, platform=platform))
 
 
 @task
@@ -281,7 +285,7 @@ def publish_deb():
             local('aptly repo create -distribution {0} {0}'.format(repo))
         # remove previous version
         local('aptly repo remove {0} "{1}, Name (~ {2}.*)"'.format(repo, arch_query, project))
-        # publish artifacts into repo 
+        # publish artifacts into repo
         local('aptly repo add {0} {1}'.format(
             repo, ' '.join(glob.glob(artifacts_dir + '/*.deb'))))
         if repo in local('aptly publish list', capture=True):
@@ -301,6 +305,7 @@ def publish_rpm():
     time0 = time.time()
     try:
         arch, pkg_arch = 'i386', 'i686' if env.host_string.endswith('32') else 'x86_64', 'x86_64'
+        print_green('detected architecture: omnibus-naming - {0}, general-naming {1}'.format(pkg_arch, arch))
         repo_path = '/var/www/rpm/%s/rhel' % repo
 
         # create directory structure
@@ -323,13 +328,7 @@ def publish_rpm():
         # publish artifacts into repo
         for ver in '5 6 7'.split():
             dst = os.path.join(repo_path, ver, arch)
-
-            for package_file_path in glob.glob('{0}/{1}*{2}.rpm'.format(artifacts_dir, project, pkg_arch)):
-                if package_file_path.split('.')[-2] == 'i686':
-                    newname = package_file_path.replace('i686', 'i386')
-                    os.rename(package_file_path, newname)
-
-            local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, arch, dst))
+            local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
             local('createrepo %s' % dst)
     finally:
         time_delta = time.time() - time0
