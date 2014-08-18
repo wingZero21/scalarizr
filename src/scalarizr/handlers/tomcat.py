@@ -70,7 +70,7 @@ class TomcatHandler(handlers.Handler):
                 pkgmgr.installed(pkg)
         '''
 
-        pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
+        pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas', updatedb=True)
 
     '''
     def _aug_load_tomcat(self, aug):
