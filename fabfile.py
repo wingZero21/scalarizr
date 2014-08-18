@@ -113,8 +113,6 @@ def import_artifact(src):
             run('python setup.py sdist')
             import_artifact('dist/*')
     '''
-
-    run('for i in %s ;do mv -- "$i" "${i//i686/i386}";done' % src)
     files = get(src, artifacts_dir)
     print_green('imported artifacts: {0!r}'.format(
         [os.path.basename(f) for f in files]))
@@ -300,7 +298,7 @@ def publish_rpm():
     '''
     time0 = time.time()
     try:
-        arch = 'i386' if env.host_string.endswith('32') else 'x86_64'
+        arch, pkg_arch = 'i386', 'i686' if env.host_string.endswith('32') else 'x86_64', 'x86_64'
         repo_path = '/var/www/rpm/%s/rhel' % repo
 
         # create directory structure
@@ -323,6 +321,11 @@ def publish_rpm():
         # publish artifacts into repo
         for ver in ('5', '6', '7'):
             dst = os.path.join(repo_path, ver, arch)
+
+            for package_file_path in glob.glob('{0}/{1}*{2}.rpm'.format(artifacts_dir, project, pkg_arch)):
+                if package_file_path.split('.')[-2] == 'i686':
+                    newname = package_file_path.replace('i686', 'i386')
+                    os.rename(package_file_path, newname)
 
             local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, arch, dst))
             local('createrepo %s' % dst)
