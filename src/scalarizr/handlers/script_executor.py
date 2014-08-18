@@ -20,6 +20,7 @@ import Queue
 import binascii
 from urlparse import urlparse
 from urllib2 import urlopen
+from urllib2 import HTTPError
 
 from scalarizr import config as szrconfig
 from scalarizr import linux
