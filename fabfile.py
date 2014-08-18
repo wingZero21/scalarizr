@@ -199,7 +199,7 @@ def build_meta_packages():
                  '--version {version} '
                  '--iteration 1 '
                  '--architecture {pkg_arch} '
-                 '--depends "scalarizr = {version}" '
+                 '--depends "scalarizr = {version}-1" '
                  '--maintainer "Scalr Inc. <packages@scalr.net>" '
                  '--url "http://scalr.net"').format(
                     pkg_type=pkg_type, version=version, 

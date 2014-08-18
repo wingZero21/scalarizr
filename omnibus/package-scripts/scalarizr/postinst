@@ -6,7 +6,7 @@
 
 PROGNAME=$(basename $0)
 INSTALL_DIR='/opt/scalarizr'
-if which apt-get 1>&2 2>/dev/null; then
+if which apt-get 2>&1 >/dev/null; then
     DIST='debian'
 else
     DIST='redhat'
@@ -45,17 +45,19 @@ function debian_init
 
 function redhat_init
 {
-    
+    exit 1 
 }
 
 if [ ! -e /etc/scalr ]; then
     cp -R "$INSTALL_DIR/etc" /etc/scalr
 fi
 for name in $(ls $INSTALL_DIR/bin); do
-    ln -s /usr/bin/$name "$INSTALL_DIR/bin/$name"
+    unlink /usr/bin/$name 
+    ln -s "$INSTALL_DIR/bin/$name" /usr/bin/$name 
 done
 for name in $(ls $INSTALL_DIR/init/$DIST); do
-    ln -s /etc/init.d/$name "$INSTALL_DIR/init/$DIST/$name"
+    unlink /etc/init.d/$name
+    ln -s "$INSTALL_DIR/init/$DIST/$name" /etc/init.d/$name 
 done
 
 
