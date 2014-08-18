@@ -219,6 +219,7 @@ def _init():
     # Find shared resources dir
     if not bus.share_path:
         share_places = [
+            '/opt/scalarizr/share'
             '/usr/share/scalr',
             '/usr/local/share/scalr',
             os.path.join(bus.base_path, 'share')
@@ -330,11 +331,11 @@ def _init_logging():
     globals()['_logging_configured'] = True
     logger = logging.getLogger(__name__)
     
-    # During server import user must see all scalarizr activity in his terminal
-    # Add console handler if it doesn't configured in logging.ini    
+    # During server import user must see all scalarizr general activity in his terminal
+    # Change console loggel level from DEBUG to INFO  
     if optparser and optparser.values.import_server:
         for hdlr in logging.getLogger('scalarizr').handlers:
-            if isinstance(hdlr, logging.StreamHandler):
+            if isinstance(hdlr, logging.StreamHandler) and hdlr.stream == sys.stderr:
                 hdlr.setLevel(logging.INFO)
 
 
