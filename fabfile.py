@@ -304,7 +304,7 @@ def publish_rpm():
     '''
     time0 = time.time()
     try:
-        arch, pkg_arch = 'i386', 'i686' if env.host_string.endswith('32') else 'x86_64', 'x86_64'
+        arch, pkg_arch = ('i386', 'i686') if env.host_string.endswith('32') else ('x86_64', 'x86_64')
         print_green('detected architecture: omnibus-naming - {0}, general-naming {1}'.format(pkg_arch, arch))
         repo_path = '/var/www/rpm/%s/rhel' % repo
 
