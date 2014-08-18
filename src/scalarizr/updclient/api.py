@@ -444,7 +444,13 @@ class UpdClientAPI(object):
                 self.state = 'completed'
             self.store()
         if not (self.shutdown_ev.is_set() or dry_run or \
-                self.state == 'error' or self.daemon.running):
+                (self.state == 'error' and not system_matches) or \
+                self.daemon.running):
+            # we shouldn't start Scalarizr 
+            # - when UpdateClient is terminating
+            # - when UpdateClient is not performing any updates
+            # - when state is 'error' and it's a first UpdateClient start on a new system
+            # - when Scalarizr is already running
             self.daemon.start()
         if self.state == 'completed/wait-ack':
             obsoletes = pkg_resources.Requirement.parse('A<=2.7.5')
