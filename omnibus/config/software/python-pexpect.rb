@@ -1,6 +1,6 @@
 name "python-pexpect"
 pypi_name = "pexpect"
-default_version "3.3"
+default_version "2.4"
 
 dependency "python"
 

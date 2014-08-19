@@ -1,6 +1,6 @@
 name "python-pysnmp"
 pypi_name = "pysnmp"
-default_version "4.2.5"
+default_version "4.2.4"
 
 dependency "python"
 

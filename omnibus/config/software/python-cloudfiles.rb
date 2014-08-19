@@ -1,6 +1,6 @@
 name "python-cloudfiles"
 pypi_name = "python-cloudfiles"
-default_version "1.7.11"
+default_version "1.7.10"
 
 dependency "python"
 

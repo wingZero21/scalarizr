@@ -1,6 +1,6 @@
 name "python-cinderclient"
 pypi_name = "python-cinderclient"
-default_version "1.0.9"
+default_version "1.0.5"
 
 dependency "python"
 

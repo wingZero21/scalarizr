@@ -1,6 +1,6 @@
 name "python-pymongo"
 pypi_name = "pymongo"
-default_version "2.7.2"
+default_version "2.6.2"
 
 dependency "python"
 

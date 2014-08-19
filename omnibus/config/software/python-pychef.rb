@@ -1,6 +1,6 @@
 name "python-pychef"
 pypi_name = "PyChef"
-default_version "0.2.3"
+default_version "0.2.2"
 
 dependency "python"
 

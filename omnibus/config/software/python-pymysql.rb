@@ -1,6 +1,6 @@
 name "python-pymysql"
 pypi_name = "PyMySQL"
-default_version "0.6.2"
+default_version "0.5"
 
 dependency "python"
 

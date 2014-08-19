@@ -1,6 +1,6 @@
 name "python-novaclient"
 pypi_name = "python-novaclient"
-default_version "2.18.1"
+default_version "2.15.0"
 
 dependency "python"
 
