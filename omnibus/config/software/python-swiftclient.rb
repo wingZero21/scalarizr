@@ -1,6 +1,6 @@
 name "python-swiftclient"
 pypi_name = "python-swiftclient"
-default_version "1.7.0"
+default_version "2.2.0"
 
 dependency "python"
 

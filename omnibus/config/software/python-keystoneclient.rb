@@ -1,6 +1,6 @@
 name "python-keystoneclient"
 pypi_name = "python-keystoneclient"
-default_version "0.3.2"
+default_version "0.10.1"
 
 dependency "python"
 

@@ -1,6 +1,6 @@
 name "python-rackspace-novaclient"
 pypi_name = "rackspace-novaclient"
-default_version "1.3"
+default_version "1.4"
 
 dependency "python"
 

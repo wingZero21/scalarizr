@@ -1,6 +1,6 @@
 name "python-pbr"
 pypi_name = "pbr"
-default_version "0.5.21"
+default_version "0.10.0"
 
 dependency "python"
 
