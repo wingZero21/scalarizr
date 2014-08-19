@@ -5,7 +5,7 @@ dependency "python"
 dependency "libyaml"
 
 source :url => "https://pypi.python.org/packages/source/P/PyYAML/PyYAML-#{default_version}.tar.gz",
-       :md5 => '74c94a383886519e9e7b3dd1ee540247'
+       :md5 => 'f50e08ef0fe55178479d3a618efe21db'
 
 relative_path "PyYAML-#{default_version}"
 
