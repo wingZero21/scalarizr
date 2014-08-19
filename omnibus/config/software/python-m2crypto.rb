@@ -6,7 +6,7 @@ dependency "python"
 
 if ohai['platform_family'] == "debian"
   build do
-    command "export CFLAGS=-I #{install_dir}/embedded/include/python2.7 && #{install_dir}/embedded/bin/pip install -I #{pypi_name}==#{default_version}"
+    command "export CFLAGS=-I#{install_dir}/embedded/include/python2.7 && #{install_dir}/embedded/bin/pip install -I #{pypi_name}==#{default_version}"
   end
 end
 
