@@ -158,7 +158,7 @@ class UpdClient(util.Server):
             signal.signal(signal.SIGHUP, self.onSIGHUP)
             signal.signal(signal.SIGTERM, self.onSIGTERM)
 
-        LOG.info('Starting updclient (pid: %s)', os.getpid())
+        LOG.info('Starting UpdateClient (pid: %s)', os.getpid())
         self._check_singleton()
         try:
             self._start_api()
@@ -177,7 +177,7 @@ class UpdClient(util.Server):
 
 
     def do_stop(self):
-        LOG.info('Stopping updclient')
+        LOG.info('Stopping UpdateClient')
 
         if not linux.os.windows:
             LOG.debug('Kill child processes')

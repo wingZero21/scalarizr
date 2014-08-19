@@ -18,6 +18,9 @@ import signal
 import logging
 import Queue
 import binascii
+from urlparse import urlparse
+from urllib2 import urlopen
+from urllib2 import HTTPError
 
 from scalarizr import config as szrconfig
 from scalarizr import linux
@@ -389,7 +392,7 @@ class Script(object):
                 self.interpreter = split_strip(self.interpreter)[0]
                 
         self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
-        self.exec_path = self.path or os.path.join(exec_dir_prefix + self.id, self.name)
+        self.exec_path = self.path or self._generate_exec_path()
 
         if self.exec_timeout:
             self.exec_timeout = int(self.exec_timeout)
@@ -403,7 +406,21 @@ class Script(object):
             self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
             self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
 
+    def _generate_exec_path(self):
+        return os.path.join(exec_dir_prefix + self.id, self.name)
+
     def check_runability(self):
+        path_params = urlparse(self.path or '')
+        if path_params.scheme != '':
+            try:
+                script_body = urlopen(self.path)
+                self.body = script_body.read()
+            except HTTPError, e:
+                raise HandlerError("Can't download script from URL '%s'. Reason: "
+                    "%s" % (self.path, e))
+            self.path = None
+            self.exec_path = self._generate_exec_path()
+
         if self.body or self.path:
             self.interpreter = read_shebang(path=self.path, script=self.body)
             if linux.os['family'] == 'Windows' and self.body:
@@ -425,7 +442,7 @@ class Script(object):
                                "under user other than Administrator. " \
                                "Script '%s', given user: '%s'" % (self.name, self.run_as))
         if not self.interpreter:
-            raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
+            raise HandlerError("Can't execute script '%s' cause it has no shebang.\n"
                 "First line of the script should have the form of a shebang "
                 "interpreter directive is as follows:\n"
                 "#!interpreter [optional-arg]" % (self.name, ))

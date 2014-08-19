@@ -21,6 +21,7 @@ import uuid
 import time
 import pkg_resources
 import multiprocessing
+import distutils.version
 
 from scalarizr import linux, queryenv, rpc, config, __version__
 from scalarizr.api import operation
@@ -159,6 +160,8 @@ class UpdClientAPI(object):
         def fget(self):
             return self._state
         def fset(self, state):
+            if state == self._state:
+                return
             self.prev_state = self._state
             self._state = state
             LOG.info('State transition: {0} -> {1}'.format(self.prev_state, state))
@@ -282,6 +285,7 @@ class UpdClientAPI(object):
             except:
                 LOG.debug('dmidecode failed: %s', sys.exc_info()[1])
 
+        LOG.info('Getting System ID')
         ret = win32_serial_number() if linux.os.windows else dmidecode_uuid()
         if not ret:
             ret = self.meta['instance_id']
@@ -310,13 +314,15 @@ class UpdClientAPI(object):
                     status_data['downgrades_enabled'] = False
             system_matches = status_data['system_id'] == self.system_id
             if not system_matches:
-                LOG.info('System ID in lock file and machine one are not matched: %s != %s', 
+                LOG.info('System ID changed: %s => %s', 
                         status_data['system_id'], self.system_id)
             else:
                 LOG.debug('Serial number in lock file matches machine one')
+        else:
+            LOG.debug('Status file %s not exists', self.status_file)
 
         if system_matches:
-            LOG.debug('Apply %s settings', self.status_file)
+            LOG.info('Reading state from %s', self.status_file)
             self._update_self_dict(status_data)
 
             if self.ps_script_pid:
@@ -363,7 +369,8 @@ class UpdClientAPI(object):
                 if self.shutdown_ev.is_set():
                     return
         if not system_matches:
-            LOG.info('Getting cloud user-data')
+            LOG.info('Initializing UpdateClient...')
+            LOG.info('Getting user-data')
             try:
                 user_data = self.meta['user_data']
             except metadata.NoUserDataError:
@@ -390,7 +397,7 @@ class UpdClientAPI(object):
                 else:
                     raise
             norm_user_data(user_data)
-            LOG.info('Applying user-data settings')
+            LOG.info('Applying configuration from user-data')
             self._update_self_dict(user_data)
 
             crypto_dir = os.path.dirname(self.crypto_file)
@@ -437,7 +444,13 @@ class UpdClientAPI(object):
                 self.state = 'completed'
             self.store()
         if not (self.shutdown_ev.is_set() or dry_run or \
-                self.state == 'error' or self.daemon.running):
+                (self.state == 'error' and not system_matches) or \
+                self.daemon.running):
+            # we shouldn't start Scalarizr 
+            # - when UpdateClient is terminating
+            # - when UpdateClient is not performing any updates
+            # - when state is 'error' and it's a first UpdateClient start on a new system
+            # - when Scalarizr is already running
             self.daemon.start()
         if self.state == 'completed/wait-ack':
             obsoletes = pkg_resources.Requirement.parse('A<=2.7.5')
@@ -470,6 +483,12 @@ class UpdClientAPI(object):
                     # Only latest package don't stop scalr-upd-client in postrm script
                     self.pkgmgr.latest('scalr-upd-client')
                     self.pkgmgr.removed('scalr-upd-client', purge=True)
+                if linux.os.redhat_family:
+                    installed_ver = self.pkgmgr.info('scalarizr')['installed']
+                    if installed_ver and distutils.version.LooseVersion(installed_ver) < '0.7':      
+                        # On CentOS 5 there is a case when scalarizr-0.6.24-5 has error 
+                        # in preun scriplet and cannot be uninstalled
+                        linux.system('rpm -e scalarizr --noscripts', shell=True, raise_exc=False)
             if linux.os.debian_family:
                 self.pkgmgr.apt_get_command('autoremove') 
         finally:
@@ -495,7 +514,7 @@ class UpdClientAPI(object):
         repo.ensure()
         if updatedb:
             LOG.info('Updating packages cache')
-            self.pkgmgr.updatedb() 
+            self.pkgmgr.updatedb()
 
 
     def _configure_devel_repo(self, repo):
@@ -534,6 +553,7 @@ class UpdClientAPI(object):
 
 
     def _sync(self):
+        LOG.info('Syncing configuration from Scalr')
         params = self.queryenv.list_farm_role_params(self.farm_role_id)
         update = params.get('params', {}).get('base', {}).get('update', {})
         self._update_self_dict(update)
@@ -649,11 +669,11 @@ class UpdClientAPI(object):
             self.executed_at = time.strftime(DATE_FORMAT, time.gmtime())
             self.state = 'in-progress/prepare'
             self.error = ''
-            self._sync()
-            self._ensure_repos()
-
             pkgmgr.LOG.addHandler(op.logger.handlers[0])
+            
             try:
+                self._sync()
+                self._ensure_repos()
                 pkginfo = self.pkgmgr.info(self.package)
                 if not pkginfo['candidate']:
                     self.state = 'completed'

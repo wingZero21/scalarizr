@@ -7,6 +7,7 @@ import shutil
 
 from scalarizr.node import __node__
 from scalarizr import linux, handlers
+from scalarizr.linux import coreutils
 from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr.util import software, system2, wait_until
 from scalarizr.messaging import Messages
@@ -86,10 +87,13 @@ class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
 
 
     def before_rebundle(self):
-        if os.path.exists('/etc/udev/rules.d/70-persistent-net.rules'):
-            shutil.move('/etc/udev/rules.d/70-persistent-net.rules', '/tmp')
+        rulename = '70-persistent-net.rules'
+        coreutils.remove('/tmp/' + rulename)
+        if os.path.exists('/etc/udev/rules.d/' + rulename):
+            shutil.move('/etc/udev/rules.d/' + rulename, '/tmp')
 
 
     def after_rebundle(self):
-        if os.path.exists('/tmp/70-persistent-net.rules'):
-            shutil.move('/tmp/70-persistent-net.rules', '/etc/udev/rules.d')
+        rulename = '70-persistent-net.rules'
+        if os.path.exists('/tmp/' + rulename):
+            shutil.move('/tmp/' + rulename, '/etc/udev/rules.d')

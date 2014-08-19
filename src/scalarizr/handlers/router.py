@@ -59,7 +59,7 @@ class RouterHandler(handlers.Handler):
         self._configure()
 
     def _configure(self):
-        pkgmgr.installed('augeas-tools' if linux.os['family'] == 'Debian' else 'augeas')
+        pkgmgr.installed('augeas-tools' if linux.os['family'] == 'Debian' else 'augeas', updatedb=True)
         augscript = '\n'.join([
             'set /files/etc/sysctl.conf/net.ipv4.ip_forward 1',
             'rm /files/etc/sysctl.conf/net.bridge.bridge-nf-call-ip6tables',

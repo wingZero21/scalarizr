@@ -997,8 +997,9 @@ def get_busy_ports():
     for redis_process in p:
         for port in __redis__['ports_range']:
             conf_name = get_redis_conf_basename(port)
-            if conf_name in redis_process:
+            if conf_name in redis_process or str(port) in redis_process:
                 busy_ports.append(port)
+                break
             elif __redis__['defaults']['port'] == port and __redis__['defaults']['redis.conf'] in redis_process:
                 busy_ports.append(port)
     LOG.debug('busy_ports: %s' % busy_ports)

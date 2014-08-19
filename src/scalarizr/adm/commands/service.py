@@ -61,9 +61,9 @@ class Service(Command):
 
     Usage:
       service redis (start | stop) [(<index> | --port=<port>)]
-      service redis [--format=(xml|json|yaml)] status [(<index> | --port=<port>)]
+      service redis status [--format=(xml|json|yaml)] [(<index> | --port=<port>)]
       service <service> (start | stop)
-      service <service> [--format=(xml|json|yaml)] status
+      service <service> status [--format=(xml|json|yaml)]
 
     Options:
       -p <port>, --port=<port>
