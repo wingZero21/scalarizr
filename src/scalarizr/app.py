@@ -219,7 +219,7 @@ def _init():
     # Find shared resources dir
     if not bus.share_path:
         share_places = [
-            '/opt/scalarizr/share'
+            '/opt/scalarizr/share',
             '/usr/share/scalr',
             '/usr/local/share/scalr',
             os.path.join(bus.base_path, 'share')
