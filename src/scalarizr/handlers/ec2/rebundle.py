@@ -138,6 +138,8 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
             rv_template['size'] = rv_template.get('size', root_vol.size)
             rv_template['iops'] = rv_template.get('iops', root_vol.iops)
 
+            LOG.debug('Making rebundle with root volume template: %s' % rv_template)
+
             self._strategy = self._ebs_strategy_cls(self,
                 self._role_name,
                 image_name,
