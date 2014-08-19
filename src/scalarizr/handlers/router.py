@@ -53,7 +53,7 @@ class RouterHandler(handlers.Handler):
 
     def on_start(self):
         if __node__['state'] == 'running':
-            self._configure()
+            linux.system('/etc/init.d/nginx start', shell=True, raise_exc=False)
 
     def on_before_host_up(self, hostup):
         self._configure()
