@@ -203,7 +203,7 @@ def build_meta_packages():
                  '--maintainer "Scalr Inc. <packages@scalr.net>" '
                  '--url "http://scalr.net"').format(
                     pkg_type=pkg_type, version=version, 
-                    platform=platform, pkg_arch=pkg_arch))
+                    platform=platform))
 
 
 @task
