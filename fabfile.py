@@ -280,15 +280,15 @@ def publish_deb():
     time0 = time.time()
     try:
         init()
-        arch_query = '~ i.86' if env.host_string.endswith('32') else 'amd64'
+        pkg_arch = 'i386' if env.host_string.endswith('32') else 'amd64'
 
         if repo not in local('aptly repo list', capture=True):
             local('aptly repo create -distribution {0} {0}'.format(repo))
         # remove previous version
-        local('aptly repo remove {0} "Architecture ({1}), Name (~ {2}.*)"'.format(repo, arch_query, project))
+        local('aptly repo remove {0} "Architecture ({1}), Name (~ {2}.*)"'.format(repo, pkg_arch, project))
         # publish artifacts into repo
         local('aptly repo add {0} {1}'.format(
-            repo, ' '.join(glob.glob(artifacts_dir + '/*.deb'))))
+            repo, ' '.join(glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch)))))
         local('aptly publish drop {0} || :'.format(repo))
         local('aptly publish repo -gpg-key=04B54A2A {0} || :'.format(repo))
     finally:
