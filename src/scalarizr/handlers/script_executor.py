@@ -21,6 +21,7 @@ import binascii
 from urlparse import urlparse
 from urllib2 import urlopen
 from urllib2 import HTTPError
+import httplib2
 
 from scalarizr import config as szrconfig
 from scalarizr import linux
@@ -413,9 +414,15 @@ class Script(object):
         path_params = urlparse(self.path or '')
         if path_params.scheme != '':
             try:
-                script_body = urlopen(self.path)
-                self.body = script_body.read()
-            except HTTPError, e:
+                if path_params.scheme == 'https':
+                    # we are using httplib2 for opening https url because it
+                    # makes ssl certificate validation and urlopen doesn't
+                    h = httplib2.Http()
+                    _, self.body = h.request(self.path)
+                else:
+                    response = urlopen(self.path)
+                    self.body = response.read()
+            except (HTTPError, httplib2.SSLHandshakeError), e:
                 raise HandlerError("Can't download script from URL '%s'. Reason: "
                     "%s" % (self.path, e))
             self.path = None
