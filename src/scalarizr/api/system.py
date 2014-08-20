@@ -906,7 +906,7 @@ if linux.os.windows_family:
                 'user': int(user),
                 'system': int(system),
                 'idle': int(idle),
-                'nice': None,
+                'nice': 0,
             }
 
         @coinitialized
