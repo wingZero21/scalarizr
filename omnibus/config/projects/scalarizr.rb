@@ -17,7 +17,7 @@ dependency "scalarizr"
 dependency "version-manifest"
 
 if ohai['platform_family'] == 'redhat'
-    if ohai['platform_version'].to_i == 5:
+    if ohai['platform_version'].to_i == 5
         runtime_dependency "yum-downloadonly"
         runtime_dependency "yum-priorities"
     else
