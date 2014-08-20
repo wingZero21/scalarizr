@@ -82,6 +82,7 @@ for name in $(ls $INSTALL_DIR/bin); do
 done
 for name in $(ls $INSTALL_DIR/init/$DIST); do
     link_to /etc/init.d/$name "$INSTALL_DIR/init/$DIST/$name"
+    chmod +x /etc/init.d/$name
 done
 
 # update init scripts symlinks
