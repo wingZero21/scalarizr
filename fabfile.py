@@ -193,12 +193,11 @@ def build_meta_packages():
     pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
     for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud eucalyptus rackspace'.split():
         with cd('/var/cache/omnibus/pkg'):
-            #pkg_arch = 'i386' if '32' in env.host_string else 'amd64'
             run(('fpm -t {pkg_type} -s empty '
                  '--name scalarizr-{platform} '
                  '--version {version} '
                  '--iteration 1 '
-                 #'--architecture {pkg_arch} '
+                 '--epoch 0 '
                  '--depends "scalarizr = {version}-1" '
                  '--maintainer "Scalr Inc. <packages@scalr.net>" '
                  '--url "http://scalr.net"').format(
