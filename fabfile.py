@@ -221,6 +221,11 @@ def build_source():
         import_artifact('dist/*.tar.gz')
 
 
+def bump_version():
+    with cd(build_dir):
+        run("echo {0!r} >src/scalarizr/version".format(version))
+
+
 @task
 def build_binary():
     '''
@@ -229,6 +234,7 @@ def build_binary():
     time0 = time.time()
     init()
     git_export()
+    bump_version()
     generate_changelog()
     run('rm -rf /var/cache/omnibus/pkg/{0}*'.format(project))
     build_omnibus()
