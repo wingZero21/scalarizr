@@ -328,8 +328,13 @@ node = {
         'state': File(private_dir + '/.state'),
         'rebooted': BoolFile(private_dir + '/.reboot'),
         'halted': BoolFile(private_dir + '/.halt'),
-        'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
+        'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region'),
 }
+if linux.os.windows_family:
+    node['install_dir'] = r'C:\Program Files\Scalarizr' 
+else:
+    node['install_dir'] = '/opt/scalarizr'
+node['embedded_bin_dir'] = os.path.join(node['install_dir'], 'embedded', 'bin')
 
 node['defaults'] = {
     'base': {
