@@ -422,7 +422,7 @@ class Script(object):
                 else:
                     response = urlopen(self.path)
                     self.body = response.read()
-            except (HTTPError, httplib2.SSLHandshakeError), e:
+            except Exception, e:
                 raise HandlerError("Can't download script from URL '%s'. Reason: "
                     "%s" % (self.path, e))
             self.path = None
