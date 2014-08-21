@@ -5,6 +5,7 @@ import sys
 import time
 import subprocess
 import pprint
+import itertools
 
 from boto.ec2.blockdevicemapping import BlockDeviceType
 from boto.ec2.blockdevicemapping import BlockDeviceMapping
@@ -195,12 +196,15 @@ class EBSImageMaker(object):
     def fix_fstab(self, volume):
         fstab_file_path = os.path.join(volume.mpoint, 'etc/fstab')
         fstab = mount.fstab(fstab_file_path)
-        # TODO: remove all ebses
 
-        try:
-            del fstab[volume.mpoint]
-        except KeyError:
-            pass
+        vol_filters = {'attachment.instance-id': pl.get_instance_id()}
+        attached_vols = ec2_conn.get_all_volumes(filters=vol_filters)
+
+        for vol in attached_vols:
+            try:
+                fstab.remove(vol.attach_data.device)
+            except KeyError:
+                LOG.warn("Can't remove %s from fstab" % vol.attach_data.device)
 
     def cleanup_ssh_keys(self, homedir):
         filename = os.path.join(homedir, '.ssh/authorized_keys')
@@ -316,12 +320,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
     def _install_support_packages(self):
         pkgmgr.installed('unzip')
-        # system2(('curl cache.ruby-lang.org/pub/ruby/1.9/ruby-1.9.3-p545.tar.gz',
-        #     '-o', 'ruby193.tar.gz'))
-        # system2(('tar xvf ruby193.tar.gz', '-C', '/tmp'))
-        # system2(('/tmp/ruby193/configure', '--prefix', self._tools_dir))
-        # system2(('make', '-C', '/tmp/ruby193'))
-        # system2(('make install', '-C', '/tmp/ruby193'))
+
         install_script = system2(('curl', '-sSL', 'https://get.rvm.io'),)[0]
 
         with open('/tmp/rvm_install.sh', 'w') as fp:
@@ -339,19 +338,14 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         self.environ['MY_RUBY_HOME'] = ruby_path
 
     def _prepare_software(self):
-        if linux.os['family'] == 'Windows':
-            # TODO:
-            raise ImageAPIError('Windows')
-        else:
+        # windows has no ami tools. Bundle is made by scalr
+        if linux.os['family'] != 'Windows':
             system2(('apt-get', 'update'),)
             system2(('wget',
                 'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
                 '-P',
                 '/tmp'),)
-            # system2(('wget',
-            #     'http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip',
-            #     '-P',
-            #     '/tmp'),)
+
             if not os.path.exists(self._tools_dir):
                 if not os.path.exists(os.path.dirname(self._tools_dir)):
                     os.mkdir(os.path.dirname(self._tools_dir))
@@ -361,10 +355,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             self._install_support_packages()
 
             system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir))
-            # system2(('unzip', '/tmp/ec2-api-tools.zip', '-d', self._tools_dir))
 
             os.remove('/tmp/ec2-ami-tools.zip')
-            # os.remove('/tmp/ec2-api-tools.zip')
 
             directory_contents = os.listdir(self._tools_dir)
             self.ami_bin_dir = None
@@ -377,31 +369,14 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
             system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
                 shell=True)
-            # system2(('export', 'EC2_HOME=%s' % os.path.dirname(self.api_bin_dir)),
-            #     shell=True)
 
             pkgmgr.installed('kpartx')
 
-    def _get_root_device_type(self):
-        platform = __node__['platform']
-        ec2_conn = platform.new_ec2_conn()
-        instance_id = platform.get_instance_id()
-        try:
-            instance = ec2_conn.get_all_instances([instance_id])[0].instances[0]
-        except IndexError:
-            msg = 'Failed to find instance %s. ' \
-                'If you are importing this server, check that you are doing it from the ' \
-                'right Scalr environment' % instance_id
-            raise ImageAPIError(msg)
-
-        return instance.root_device_type
-
-    def _get_root_disk(self, root_device_type):
+    def _get_root_disk(self, root_device_type, instance):
         # list of all mounted devices 
-        if root_device_type = 'ebs':
+        if root_device_type == 'ebs':
             vol_filters = {'attachment.instance-id': pl.get_instance_id()}
             attached_vols = ec2_conn.get_all_volumes(filters=vol_filters)
-            root_vol = None
             for vol in attached_vols:
                 if instance.root_device_name == vol.attach_data.device:
                     return vol
@@ -409,7 +384,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         else:
             devices = coreutils.df()
             # root device partition like `df(device='/dev/sda2', ..., mpoint='/')
-            root_disk = None
             for device in devices:
                 if device.mpoint == '/':
                     return device
@@ -431,7 +405,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             'EC2_USER_ID': platform.get_account_id(),
             'AWS_ACCESS_KEY': access_key,
             'AWS_SECRET_KEY': secret_key})
-            # 'EC2_URL': platform.get_access_data('ec2_url')})
         self.credentials = {
             'cert': cert_path,
             'key': pk_path,
@@ -450,8 +423,19 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def snapshot(self, operation, role_name):
         image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
 
-        root_device_type = self._get_root_device_type()          
-        root_disk = self._get_root_disk(root_device_type)
+        platform = __node__['platform']
+        ec2_conn = platform.new_ec2_conn()
+        instance_id = platform.get_instance_id()
+        try:
+            instance = ec2_conn.get_all_instances([instance_id])[0].instances[0]
+        except IndexError:
+            msg = 'Failed to find instance %s. ' \
+                'If you are importing this server, check that you are doing it from the ' \
+                'right Scalr environment' % instance_id
+            raise ImageAPIError(msg)
+        root_device_type = instance.root_device_type  
+
+        root_disk = self._get_root_disk(root_device_type, instance)
         self._setup_environment()
         LOG.debug('device type: %s' % root_device_type)
         if root_device_type == 'ebs':

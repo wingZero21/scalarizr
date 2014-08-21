@@ -48,22 +48,6 @@ class ImageAPI(object):
             raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
         module = importlib.import_module(delegate[0])
         return module.__getattribute__(delegate[1])()
-        # if platform_name == BuiltinPlatforms.OPENSTACK:
-        #     module = importlib.import_module('scalarizr.api.image.openstack')
-        #     return module.OpenStackImageAPIDelegate()
-        # elif platform_name == BuiltinPlatforms.EC2:
-        #     module = importlib.import_module('scalarizr.api.image.ec2')
-        #     return module.EC2ImageAPIDelegate()
-        # elif platform_name in (BuiltinPlatforms.CLOUDSTACK, BuiltinPlatforms.IDCF):
-        #     module = importlib.import_module('scalarizr.api.image.cloudstack')
-        #     return module.CloudStackImageAPIDelegate()
-        # elif platform_name == BuiltinPlatforms.GCE:
-        #     module = importlib.import_module('scalarizr.api.image.gce')
-        #     return module.GCEImageAPIDelegate()
-        # # ...
-        # else:
-        #     LOG.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))
-        #     raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
 
     def init_delegate(self):
         if self.delegate:
