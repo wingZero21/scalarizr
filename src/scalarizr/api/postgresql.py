@@ -286,7 +286,8 @@ class PostgreSQLAPI(BehaviorAPI):
         """
 
         def do_backup(op):
-            tmpdir = backup_path = None
+            tmpdir = None
+            dumps = []
             tmp_path = os.path.join(__postgresql__['storage_dir'], 'tmp')
             try:
                 # Get databases list
@@ -297,13 +298,6 @@ class PostgreSQLAPI(BehaviorAPI):
                 
                 if not os.path.exists(tmp_path):
                     os.makedirs(tmp_path)
-                    
-                # Defining archive name and path
-                backup_filename = time.strftime('%Y-%m-%d-%H:%M:%S')+'.tar.gz'
-                backup_path = os.path.join(tmp_path, backup_filename)
-                
-                # Creating archive 
-                backup_obj = tarfile.open(backup_path, 'w:gz')
 
                 # Dump all databases
                 LOG.info("Dumping all databases")
@@ -317,19 +311,11 @@ class PostgreSQLAPI(BehaviorAPI):
                     err = system2(su_args)[1]
                     if err:
                         raise HandlerError('Error while dumping database %s: %s' % (db_name, err))  #?
-                    backup_obj.add(dump_path, os.path.basename(dump_path))  
+                    dumps.append(dump_path)
+
 
                 for db_name in databases:
                     _single_backup(db_name)
-                       
-                backup_obj.close()
-                
-                # Creating list of full paths to archive chunks
-                #if os.path.getsize(backup_path) > __postgresql__['pgdump_chunk_size']:
-                #    parts = [os.path.join(tmpdir, file) for file in split(backup_path, backup_filename, __postgresql__['pgdump_chunk_size'], tmpdir)]
-                #else:
-                #    parts = [backup_path]
-                #sizes = [os.path.getsize(file) for file in parts]
 
                 cloud_storage_path = __node__.platform.scalrfs.backups(BEHAVIOUR)
 
@@ -337,10 +323,9 @@ class PostgreSQLAPI(BehaviorAPI):
                 backup_tags = {'scalr-purpose': 'postgresql-%s' % suffix}
 
                 LOG.info("Uploading backup to %s with tags %s" % (cloud_storage_path, backup_tags))
-                trn = LargeTransfer(backup_path, cloud_storage_path, tags=backup_tags)
+                trn = LargeTransfer(dumps, cloud_storage_path, tags=backup_tags)
                 manifest = trn.run()
-                LOG.info("Postgresql backup uploaded to cloud storage under %s/%s",
-                                cloud_storage_path, backup_filename)
+                LOG.info("Postgresql backup uploaded to cloud storage under %s", cloud_storage_path)
                 
                 result = list(dict(path=os.path.join(os.path.dirname(manifest.cloudfs_path), c[0]), size=c[2]) for c in
                                 manifest['files'][0]['chunks'])
@@ -351,7 +336,7 @@ class PostgreSQLAPI(BehaviorAPI):
                                              status='ok',
                                              backup_parts=result))
 
-                return result  #?
+                return result
                             
             except (Exception, BaseException), e:
                 LOG.exception(e)
@@ -365,8 +350,6 @@ class PostgreSQLAPI(BehaviorAPI):
             finally:
                 if tmpdir:
                     shutil.rmtree(tmpdir, ignore_errors=True)
-                if backup_path and os.path.exists(backup_path):
-                    os.remove(backup_path)
 
         return self._op_api.run('postgresql.create-backup', 
                                 func=do_backup,
@@ -453,3 +436,4 @@ class PostgreSQLAPI(BehaviorAPI):
             raise exceptions.UnsupportedBehavior(cls.behavior, msg)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
+

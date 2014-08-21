@@ -277,6 +277,7 @@ def _init_db(file=None):
         if not os.path.exists(db_file) or not os.stat(db_file).st_size:
             logger.debug("Database doesn't exist, creating new one from script")
             _create_db(file)
+        os.chmod(db_file, 0600)
 
         # XXX(marat) Added here cause postinst script sometimes failed and we get
         # OperationalError: table p2pmessage has no column named format
@@ -329,11 +330,11 @@ def _init_logging():
     globals()['_logging_configured'] = True
     logger = logging.getLogger(__name__)
     
-    # During server import user must see all scalarizr activity in his terminal
-    # Add console handler if it doesn't configured in logging.ini    
+    # During server import user must see all scalarizr general activity in his terminal
+    # Change console loggel level from DEBUG to INFO  
     if optparser and optparser.values.import_server:
         for hdlr in logging.getLogger('scalarizr').handlers:
-            if isinstance(hdlr, logging.StreamHandler):
+            if isinstance(hdlr, logging.StreamHandler) and hdlr.stream == sys.stderr:
                 hdlr.setLevel(logging.INFO)
 
 
@@ -484,8 +485,9 @@ def _cleanup_after_rebundle():
     # Reset private configuration
     priv_path = cnf.private_path()
     for file in os.listdir(priv_path):
-        if file in ('.user-data', '.update', 'keys'):
-             # keys/default maybe already refreshed by UpdateClient
+        if file in ('.user-data', 'update.status', 'keys'):
+            # protect user-data and UpdateClient status
+            # keys/default maybe already refreshed by UpdateClient
             continue
         path = os.path.join(priv_path, file)
         coreutils.chmod_r(path, 0700)
