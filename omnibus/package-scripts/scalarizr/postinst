@@ -4,6 +4,8 @@
 # after package is installed.
 #
 
+set -x
+
 PROGNAME=$(basename $0)
 INSTALL_DIR='/opt/scalarizr'
 if which apt-get 2>&1 >/dev/null; then
@@ -42,7 +44,10 @@ function debian_init {
 }
 
 function redhat_init {
-    exit 1 
+    /sbin/chkconfig --add scalarizr
+    /sbin/chkconfig --add scalr-upd-client
+    chmod +x /etc/init.d/scalarizr
+    chmod +x /etc/init.d/scalr-upd-client
 }
 
 function safe_restart {
