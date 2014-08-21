@@ -417,11 +417,11 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         return 'scalr2-images-%s-%s' % \
             (platform.get_region(), platform.get_account_id())
 
-    def prepare(self, operation, role_name):
+    def prepare(self, operation, name):
         pass
         
-    def snapshot(self, operation, role_name):
-        image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
+    def snapshot(self, operation, name):
+        image_name = name + "-" + time.strftime("%Y%m%d%H%M%S")
 
         platform = __node__['platform']
         ec2_conn = platform.new_ec2_conn()
@@ -455,5 +455,5 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         # system2(('/usr/local/rvm/bin/rvm use system',), shell=True)
         return image_id
 
-    def finalize(self, operation, role_name):
+    def finalize(self, operation, name):
         pass

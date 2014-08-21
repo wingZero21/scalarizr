@@ -21,12 +21,12 @@ class CloudStackImageAPIDelegate(ImageAPIDelegate):
         vm = conn.listVirtualMachines(id=instance_id)[0]
         return vm.guestosid
 
-    def snapshot(self, op, role_name):
+    def snapshot(self, op, name):
         now = time.strftime('%Y%m%d%H%M%S')
-        if len(role_name) > self.IMAGE_NAME_MAXLEN - len(now) - 1:
-            image_name = role_name[0:len(now)+2] + '--' + now
+        if len(name) > self.IMAGE_NAME_MAXLEN - len(now) - 1:
+            image_name = name[0:len(now)+2] + '--' + now
         else:
-            image_name = role_name + "-" + now
+            image_name = name + "-" + now
 
         pl = __node__['platform']
         conn = pl.new_cloudstack_conn()
@@ -60,10 +60,10 @@ class CloudStackImageAPIDelegate(ImageAPIDelegate):
 
         return image.id
 
-    def prepare(self, op, role_name=None):
+    def prepare(self, op, name=None):
         if os.path.exists('/etc/udev/rules.d/70-persistent-net.rules'):
             shutil.move('/etc/udev/rules.d/70-persistent-net.rules', '/tmp')
 
-    def after_rebundle(self, op, role_name=None):
+    def after_rebundle(self, op, name=None):
         if os.path.exists('/tmp/70-persistent-net.rules'):
             shutil.move('/tmp/70-persistent-net.rules', '/etc/udev/rules.d')

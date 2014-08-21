@@ -82,11 +82,11 @@ class OpenStackImageAPIDelegate(ImageAPIDelegate):
         else:
             self._image_taker = OpenStackLinuxImageTaker()
 
-    def prepare(self, op, role_name):
+    def prepare(self, op, name):
         return self._image_taker.prepare()
 
-    def snapshot(self, op, role_name):
-        return self._image_taker.snapshot(role_name)
+    def snapshot(self, op, name):
+        return self._image_taker.snapshot(name)
 
-    def finalize(self, op, role_name):
+    def finalize(self, op, name):
         return self._image_taker.finalize()
