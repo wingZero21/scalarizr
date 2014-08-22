@@ -57,7 +57,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         self._logger = logging.getLogger(__name__)
         self._op_api = operation.OperationAPI()
         self._system_api = system_api.SystemAPI()
-        
+
         bus.define_events(
             # Fires before HostInit message is sent
             # @param msg 
