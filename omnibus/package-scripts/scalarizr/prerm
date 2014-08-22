@@ -4,7 +4,7 @@
 # prior to installing package.
 #
 
-PROGNAME=$(basename $0)
+PROGNAME='scalarizr'
 
 function error_exit
 {

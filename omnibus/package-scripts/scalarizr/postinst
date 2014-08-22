@@ -6,7 +6,7 @@
 
 set -x
 
-PROGNAME=$(basename $0)
+PROGNAME='scalarizr'
 INSTALL_DIR='/opt/scalarizr'
 if which apt-get 2>&1 >/dev/null; then
     DIST='debian'
@@ -99,6 +99,6 @@ fi
 
 safe_restart
 
-echo "Thank you for installing scalarizr!"
+echo "Thank you for installing ${PROGNAME}!"
 
 exit 0

@@ -182,7 +182,7 @@ def build_omnibus():
         }
         with shell_env(**env):
             run("bin/omnibus clean %s --log-level=warn" % project)
-            run("bin/omnibus build %s --log-level=warn" % project)
+            run("bin/omnibus build %s --log-level=info" % project)
 
     with open(omnibus_md5sum_file, 'w+') as fp:
         fp.write(omnibus_md5sum())
