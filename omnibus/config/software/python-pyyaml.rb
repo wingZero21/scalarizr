@@ -9,6 +9,12 @@ source :url => "https://pypi.python.org/packages/source/P/PyYAML/PyYAML-#{defaul
 
 relative_path "PyYAML-#{default_version}"
 
-build do
-  command "#{install_dir}/embedded/bin/python setup.py --with-libyaml install --prefix=#{install_dir}/embedded"
+if windows?
+  build do
+    command "#{install_dir}/embedded/python/python.exe setup.py --without-libyaml install"
+  end
+else
+  build do
+    command "#{install_dir}/embedded/bin/python setup.py --with-libyaml install --prefix=#{install_dir}/embedded"
+  end
 end
