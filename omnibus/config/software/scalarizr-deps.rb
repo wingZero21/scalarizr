@@ -4,11 +4,13 @@ default_version   "0.1"
 
 if windows?
   dependency "python-windows"
+end
 if linux?
   dependency "rsync"
   dependency "sqlite3"
   dependency "bzip2"
   dependency "python"
+end
 
 dependency "pip"
 dependency "python-prettytable"
@@ -35,3 +37,4 @@ dependency "python-docopt"
 if linux?
   dependency "python-openssl"
   dependency "python-m2crypto"
+end
