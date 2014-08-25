@@ -24,6 +24,7 @@ import multiprocessing
 import distutils.version
 
 from scalarizr import linux, queryenv, rpc, config, __version__
+from scalarizr.node import __node__
 from scalarizr.api import operation
 from scalarizr.api.binding import jsonrpc_http
 from scalarizr.bus import bus
@@ -132,14 +133,13 @@ class UpdClientAPI(object):
     system_matches = False
 
     if linux.os.windows:
-        _base = r'C:\Program Files\Scalarizr'
-        etc_path = os.path.join(_base, 'etc')
-        share_path = os.path.join(_base, 'share')
+        etc_path = os.path.join(__node__['install_dir'], 'etc')
+        share_path = os.path.join(__node__['install_dir'], 'share')
         log_file = os.path.join(_base, r'var\log\scalarizr_update.log')
         del _base
     else:
         etc_path = '/etc/scalr'
-        share_path = '/usr/share/scalr'
+        share_path = os.path.join(__node__['install_dir'], 'share')
         log_file = '/var/log/scalarizr_update.log'
 
     _private_path = os.path.join(etc_path, 'private.d')
