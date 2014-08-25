@@ -36,6 +36,7 @@ else:
 
 # Utils
 from scalarizr import util
+from scalarizr.util import metadata
 from scalarizr.util import initdv2, log, PeriodicalExecutor
 from scalarizr.util import SqliteLocalObject, daemonize, system2, firstmatched, format_size
 from scalarizr.util import wait_until, sqlite_server
@@ -157,6 +158,8 @@ Next time when SNMP process should be forked
 '''
 
 _logging_configured = False
+
+_meta = None
 
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
@@ -361,24 +364,25 @@ def _init_platform():
         raise ScalarizrError("Platform not defined")
 
 
-def _apply_user_data(cnf):
+def _apply_user_data(*args):
     logger = logging.getLogger(__name__)
-    platform = bus.platform
     cnf = bus.cnf
     
+
+    logger.debug('Applying user-data to configuration')    
     if cnf.state == ScalarizrState.RUNNING and bus.scalr_version >= (3, 1, 0):
         logger.debug('Scalr version: %s', bus.scalr_version)
         queryenv = bus.queryenv_service
-        userdata = queryenv.get_server_user_data()
-        def g(key):
-            return userdata.get(key, '')
+        user_data = queryenv.get_server_user_data()
+        logger.debug('User-data (QueryEnv):\n%s', pprint.pformat(user_data))
     else:
-        def g(key):
-            value = platform.get_user_data(key)
-            return value if value is not None else ''    
+        meta = metadata.Metadata()
+        user_data = meta['user_data']
+        logger.debug('User-data (Instance):\n%s', pprint.pformat(user_data))
+ 
+    def g(key):
+        return user_data.get(key, '')
     
-    logger.debug('Applying user-data to configuration')
-    logger.debug('User-data:\n%s', pprint.pformat(platform.get_user_data()))
     updates = dict(
         general={
             'server_id' : g(UserDataOptions.SERVER_ID),
@@ -645,7 +649,7 @@ class Service(object):
                 fp.write(str(pid))
 
         cnf = bus.cnf
-        cnf.on('apply_user_data', _apply_user_data)
+        #cnf.on('apply_user_data', _apply_user_data)
 
         optparser = bus.optparser
         if optparser and optparser.values.configure:
@@ -663,6 +667,8 @@ class Service(object):
                 values['server_id'] = str(uuid.uuid4())
             self._logger.info('Configuring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
+
+        _apply_user_data()
 
         # Load INI files configuration
         cnf.bootstrap(force_reload=True)
@@ -729,8 +735,8 @@ class Service(object):
             cnf.state = ScalarizrState.BOOTSTRAPPING
 
         # At first startup platform user-data should be applied
-        if cnf.state == ScalarizrState.BOOTSTRAPPING:
-            cnf.fire('apply_user_data', cnf)
+        #if cnf.state == ScalarizrState.BOOTSTRAPPING:
+        #    cnf.fire('apply_user_data', cnf)
             
         if node.__node__['state'] != 'importing':
             self._talk_to_updclient()
