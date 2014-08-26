@@ -667,7 +667,8 @@ class Service(object):
             self._logger.info('Configuring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
-        _apply_user_data()
+        if node.__node__['state'] != 'running':
+            _apply_user_data()
 
         # Load INI files configuration
         cnf.bootstrap(force_reload=True)
@@ -777,9 +778,9 @@ class Service(object):
                 body={'scalarizr': {'version': __version__}}
             )
 
-        if cnf.state == ScalarizrState.RUNNING:
+        if node.__node__['state'] == 'running':
             # ReSync user-data
-            cnf.fire('apply_user_data', cnf)
+            _apply_user_data()
         try:
             bus.fire('init')
         except:
