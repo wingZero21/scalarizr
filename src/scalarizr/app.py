@@ -385,6 +385,7 @@ def _apply_user_data(*args):
     
     updates = dict(
         general={
+            'platform': g('platform'),
             'server_id' : g(UserDataOptions.SERVER_ID),
             'server_index': g('server_index'),
             'role_name' : g(UserDataOptions.ROLE_NAME),
