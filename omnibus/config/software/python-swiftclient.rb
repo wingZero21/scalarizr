@@ -11,5 +11,5 @@ else
 end
 
 build do
-  command "#{pip} -I #{pypi_name}==#{default_version}"
+  command "#{pip} install -I #{pypi_name}==#{default_version}"
 end
