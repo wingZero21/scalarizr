@@ -5,6 +5,12 @@ dependency "python"
 
 source = "git+git://github.com/Scalr/python-cloudstack.git@#{default_version}"
 
+if windows?
+  pip = "#{install_dir}/embedded/python/Scripts/pip.exe"
+else
+  pip = "#{install_dir}/embedded/bin/pip"
+end
+
 build do
-  command "#{install_dir}/embedded/bin/pip install -I #{source}"
+  command "#{pip} install -I #{source}"
 end

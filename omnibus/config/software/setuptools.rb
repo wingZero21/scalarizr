@@ -9,6 +9,12 @@ source :url => "https://pypi.python.org/packages/source/s/setuptools/setuptools-
 
 relative_path "setuptools-#{version}"
 
-build do
-  command "#{install_dir}/embedded/bin/python setup.py install --prefix=#{install_dir}/embedded"
+if windows?
+  build do
+    command "#{install_dir}/embedded/python/python.exe setup.py install"
+  end
+else
+  build do
+    command "#{install_dir}/embedded/bin/python setup.py install --prefix=#{install_dir}/embedded"
+  end
 end
