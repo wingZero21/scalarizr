@@ -366,12 +366,8 @@ def _init_platform():
 
 def _apply_user_data(*args):
     logger = logging.getLogger(__name__)
-    cnf = bus.cnf
-    
-
     logger.debug('Applying user-data to configuration')    
-    if cnf.state == ScalarizrState.RUNNING and bus.scalr_version >= (3, 1, 0):
-        logger.debug('Scalr version: %s', bus.scalr_version)
+    if node.__node__['state'] == 'running':
         queryenv = bus.queryenv_service
         user_data = queryenv.get_server_user_data()
         logger.debug('User-data (QueryEnv):\n%s', pprint.pformat(user_data))
@@ -413,6 +409,7 @@ def _apply_user_data(*args):
             behaviour = ''
         updates['general']['behaviour'] = behaviour
         
+    cnf = bus.cnf
     if not cnf.rawini.has_option('general', 'scalr_id') and \
             bus.scalr_version >= (3, 5, 7):
         queryenv = bus.queryenv_service
