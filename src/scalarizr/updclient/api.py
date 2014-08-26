@@ -453,7 +453,9 @@ class UpdClientAPI(object):
             self.daemon.start()
         if self.state == 'completed/wait-ack':
             obsoletes = pkg_resources.Requirement.parse('A<=2.7.5')
-            if self.installed in obsoletes:
+            inst = re.sub(r'^\d\:', '', self.installed)  # remove debian epoch
+            if inst in obsoletes:
+                LOG.info('UpdateClient is going to restart itself, cause ')
                 def restart_self():
                     time.sleep(5)
                     name = 'ScalrUpdClient' if linux.os.windows else 'scalr-upd-client'
