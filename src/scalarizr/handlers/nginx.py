@@ -25,8 +25,7 @@ import StringIO
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.util import cached, firstmatched,\
-        validators, software, initdv2
+from scalarizr.util import cached, firstmatched, validators, software, initdv2
 from scalarizr.linux import iptables
 from scalarizr.services import BaseConfig, PresetProvider
 
@@ -114,7 +113,7 @@ def get_handlers():
 class NginxCnfController(CnfController):
     def __init__(self):
         nginx_conf_path = os.path.join(os.path.dirname(__nginx__['app_include_path']), 'nginx.conf')
-        CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx', {"on":'1',"'off'":'0','off':'0'})
+        CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx', {"on":'1', "'off'":'0', 'off':'0'})
 
     @property
     def _software_version(self):
@@ -401,7 +400,7 @@ class NginxHandler(ServiceCtlHandler):
         self.api._reload_service()
 
     def _copy_error_pages(self):
-        pages_source = '/usr/share/scalr/nginx/html/'
+        pages_source = __node__['share_dir'] + '/nginx/html/'
         pages_destination = '/usr/share/nginx/html/'
 
         current_dir = ''

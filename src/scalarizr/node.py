@@ -335,6 +335,7 @@ if linux.os.windows_family:
 else:
     node['install_dir'] = '/opt/scalarizr'
 node['embedded_bin_dir'] = os.path.join(node['install_dir'], 'embedded', 'bin')
+node['share_dir'] = os.path.join(node['install_dir'], 'share')
 
 node['defaults'] = {
     'base': {
