@@ -127,8 +127,6 @@ def git_export():
     '''
     Export current git tree to slave server into the same directory name
     '''
-    print_green('in git export')
-    print_green('current dir is %s ' % local('echo pwd'))
     try:
         host_str = env.host_string.split('@')[1]
     except IndexError:
@@ -151,7 +149,7 @@ def git_export():
     put(archive_path, build_dir)
     if os.path.exists(archive):
         local('rm -f %s' % archive)
-    print_green('build_dir is %s ' % build_dir)
+    print_green('exported git tree into %s on slave' % build_dir)
     with cd(build_dir):
         run("tar -xf %s" % archive)
 
