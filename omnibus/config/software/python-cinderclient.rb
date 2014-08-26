@@ -2,7 +2,7 @@ name "python-cinderclient"
 pypi_name = "python-cinderclient"
 default_version "1.0.5"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

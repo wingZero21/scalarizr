@@ -2,7 +2,7 @@ name "python-cloudfiles"
 pypi_name = "python-cloudfiles"
 default_version "1.7.10"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

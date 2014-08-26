@@ -2,7 +2,7 @@ name "python-requests"
 pypi_name = "requests"
 default_version "1.2.3"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

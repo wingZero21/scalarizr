@@ -1,7 +1,13 @@
 name "setuptools"
 #version "1.1.6"
 default_version "3.6"
-dependency "python"
+
+if windows?
+  dependency "python-windows"
+end
+if linux?
+  dependency "python"
+end
 
 source :url => "https://pypi.python.org/packages/source/s/setuptools/setuptools-#{version}.tar.gz",       
        :md5 => "8f3a1dcdc14313c8334eb6af4f66ea0a"

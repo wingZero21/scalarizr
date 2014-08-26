@@ -2,7 +2,7 @@ name "python-keystoneclient"
 pypi_name = "python-keystoneclient"
 default_version "0.3.2"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

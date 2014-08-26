@@ -2,7 +2,7 @@ name "python-pymysql"
 pypi_name = "PyMySQL"
 default_version "0.5"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

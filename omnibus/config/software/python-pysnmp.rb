@@ -2,7 +2,7 @@ name "python-pysnmp"
 pypi_name = "pysnmp"
 default_version "4.2.4"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

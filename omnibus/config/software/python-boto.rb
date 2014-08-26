@@ -2,7 +2,7 @@ name "python-boto"
 pypi_name = "boto"
 default_version "2.13.0"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

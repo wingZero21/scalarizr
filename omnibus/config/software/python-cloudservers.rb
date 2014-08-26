@@ -2,7 +2,7 @@ name "python-cloudservers"
 pypi_name = "python-cloudservers"
 default_version "1.2"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

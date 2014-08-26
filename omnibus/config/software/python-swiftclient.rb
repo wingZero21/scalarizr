@@ -2,7 +2,7 @@ name "python-swiftclient"
 pypi_name = "python-swiftclient"
 default_version "1.7.0"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

@@ -2,7 +2,7 @@ name "python-pymongo"
 pypi_name = "pymongo"
 default_version "2.6.2"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

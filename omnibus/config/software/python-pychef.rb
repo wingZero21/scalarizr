@@ -2,7 +2,7 @@ name "python-pychef"
 pypi_name = "PyChef"
 default_version "0.2.2"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

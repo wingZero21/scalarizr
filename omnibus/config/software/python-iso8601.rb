@@ -2,7 +2,7 @@ name "python-iso8601"
 pypi_name = "iso8601"
 default_version "0.1.4"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

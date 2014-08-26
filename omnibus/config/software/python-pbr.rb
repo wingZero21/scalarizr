@@ -2,7 +2,7 @@ name "python-pbr"
 pypi_name = "pbr"
 default_version "0.5.21"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

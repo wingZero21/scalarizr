@@ -2,7 +2,7 @@ name "python-rackspace-novaclient"
 pypi_name = "rackspace-novaclient"
 default_version "1.3"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

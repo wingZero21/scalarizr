@@ -1,7 +1,12 @@
 name "pip"
 default_version "1.5.6"
 
-dependency "python"
+if windows?
+  dependency "python-windows"
+end
+if linux?
+  dependency "python"
+end
 dependency "setuptools"
 
 source :url => "http://pypi.python.org/packages/source/p/pip/pip-#{version}.tar.gz",

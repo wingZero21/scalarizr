@@ -1,7 +1,7 @@
 name "python-pyyaml"
 default_version "3.10"
 
-dependency "python"
+dependency "pip"
 dependency "libyaml"
 
 source :url => "https://pypi.python.org/packages/source/P/PyYAML/PyYAML-#{default_version}.tar.gz",

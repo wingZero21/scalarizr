@@ -2,7 +2,7 @@ name "python-novaclient"
 pypi_name = "python-novaclient"
 default_version "2.15.0"
 
-dependency "python"
+dependency "pip"
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"

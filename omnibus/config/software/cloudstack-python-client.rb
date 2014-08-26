@@ -1,7 +1,7 @@
 name "cloudstack-python-client"
 default_version "0.2.3"
 
-dependency "python"
+dependency "pip"
 
 source = "git+git://github.com/Scalr/python-cloudstack.git@#{default_version}"
 
