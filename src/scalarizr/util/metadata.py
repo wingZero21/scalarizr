@@ -255,9 +255,17 @@ class OpenStackQueryPvd(Provider):
 class OpenStackXenStorePvd(Provider):
     LOG = logging.getLogger(__name__ + '.openstack-xenbus')
 
+    def __init__(self):
+        self._xls_path = linux.which('xenstore-ls')
+
+    def _xls_out(self):
+        return linux.system(
+                (self._xls_path, 'vm-data/user-metadata'), 
+                raise_exc=False)[0].strip()
+
     def vote(self, votes):
-        if self.try_file('/proc/xen/xenbus') and linux.which('xenstore-ls') \
-                and linux.which('nova-agent'):
+        if self.try_file('/proc/xen/xenbus') and self._xls_path \
+                and linux.which('nova-agent') and self._xls_out():
             self.LOG.debug('matched user_data')
             votes[self]['user_data'] += 1
             votes['Ec2Pvd']['user_data'] -= 1
@@ -265,8 +273,7 @@ class OpenStackXenStorePvd(Provider):
     def user_data(self):
         keyvalue_re = re.compile(r'([^\s]+)\s+=\s+\"{2}([^\"]+)\"{2}')
         ret = []
-        out = linux.system((linux.which('xenstore-ls'), 'vm-data/user-metadata'))[0]
-        for line in out.splitlines():
+        for line in self._xls_out().splitlines():
             m = keyvalue_re.search(line)
             if m:
                 ret.append(m.groups())

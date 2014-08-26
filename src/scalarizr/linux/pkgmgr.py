@@ -42,7 +42,7 @@ class Repository(object):
 
     def ensure(self):
         assert self.filename and self.config
-        LOG.info('Creating repository configuration in: %s', self.filename)
+        LOG.info('Ensuring repository "%s" (file: %s)', self.name, self.filename)
         with open(self.filename, 'w+') as fp:
             fp.write(self.config)
 
@@ -267,7 +267,11 @@ class AptPackageMgr(PackageMgr):
                     '-o Dir::Etc::sourceparts=- '
                     ).format(kwds['apt_repository'])
         cmd += 'update'
-        self.apt_get_command(cmd)
+        try:
+            self.apt_get_command(cmd)
+        except linux.LinuxError, e:
+            if e.returncode != 100:
+                raise
 
 
     def repos(self):

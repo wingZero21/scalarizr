@@ -22,6 +22,7 @@ Requires:       python26-prettytable python26-PyYAML python26-docopt
 #Requires:		python26-pymongo
 Requires:		python26-pymysql
 Requires:		python26-pychef
+Requires:       python26-httplib2
 Requires:       yum-downloadonly
 Requires:		yum-priorities
 %else
@@ -38,6 +39,7 @@ Requires:       python-prettytable PyYAML python-docopt >= 0.6.2
 #Requires:		python-pymongo
 Requires:		python-pymysql
 Requires:		python-pychef
+Requires:       python-httplib2
 Requires:       yum-plugin-downloadonly
 Requires:       yum-plugin-priorities
 %endif
