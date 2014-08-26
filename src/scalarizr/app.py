@@ -364,10 +364,10 @@ def _init_platform():
         raise ScalarizrError("Platform not defined")
 
 
-def _apply_user_data(*args):
+def _apply_user_data(from_scalr=True):
     logger = logging.getLogger(__name__)
     logger.debug('Applying user-data to configuration')    
-    if node.__node__['state'] == 'running':
+    if from_scalr:
         queryenv = bus.queryenv_service
         user_data = queryenv.get_server_user_data()
         logger.debug('User-data (QueryEnv):\n%s', pprint.pformat(user_data))
@@ -648,7 +648,6 @@ class Service(object):
                 fp.write(str(pid))
 
         cnf = bus.cnf
-        #cnf.on('apply_user_data', _apply_user_data)
 
         optparser = bus.optparser
         if optparser and optparser.values.configure:
@@ -667,8 +666,9 @@ class Service(object):
             self._logger.info('Configuring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
-        if node.__node__['state'] != 'running':
-            _apply_user_data()
+
+        if not os.path.exists(cnf.private_path('.state')):
+            _apply_user_data(from_scalr=False)
 
         # Load INI files configuration
         cnf.bootstrap(force_reload=True)
