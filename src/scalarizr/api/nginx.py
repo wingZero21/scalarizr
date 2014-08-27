@@ -220,7 +220,7 @@ def get_role_servers(role_id=None, role_name=None, network=None):
     roles = _queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
     servers = []
     for role in roles:
-        ips = [_choose_host_ip(h, network) or h in role.hosts]
+        ips = [_choose_host_ip(h, network) for h in role.hosts]
         servers.extend(ips)
 
     return servers
