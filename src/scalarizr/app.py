@@ -199,38 +199,15 @@ def _init():
     
     # Initialize configuration
     if not bus.etc_path:
-        etc_places = [
-            "/etc/scalr",
-            "/etc/scalarizr", 
-            "/usr/etc/scalarizr", 
-            "/usr/local/etc/scalarizr",
-            os.path.join(bus.base_path, 'etc')
-        ]
-        if optparser and optparser.values.etc_path:
-            # Insert command-line passed etc_path into begining
-            etc_places.insert(0, optparser.values.etc_path)
-            
-        bus.etc_path = firstmatched(lambda p: os.access(p, os.F_OK), etc_places)
-        if not bus.etc_path:
-            raise ScalarizrError('Cannot find scalarizr configuration dir. Search path: %s' % ':'.join(etc_places))
+        bus.etc_path = node.__node__['etc_dir']
     cnf = ScalarizrCnf(bus.etc_path)
     if not os.path.exists(cnf.private_path()):
         os.makedirs(cnf.private_path())
     bus.cnf = cnf
     
-    
     # Find shared resources dir
     if not bus.share_path:
-        share_places = [
-            '/opt/scalarizr/share',
-            '/usr/share/scalr',
-            '/usr/local/share/scalr',
-            os.path.join(bus.base_path, 'share')
-        ]
-        bus.share_path = firstmatched(lambda p: os.access(p, os.F_OK), share_places)
-        if not bus.share_path:
-            raise ScalarizrError('Cannot find scalarizr share dir. Search path: %s' % ':'.join(share_places))
-
+        bus.share_path = node.__node__['share_dir']
     
     # Registering in init.d
     initdv2.explore("scalarizr", ScalarizrInitScript)

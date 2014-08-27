@@ -132,17 +132,9 @@ class UpdClientAPI(object):
 
     system_matches = False
 
-    if linux.os.windows:
-        etc_path = os.path.join(__node__['install_dir'], 'etc')
-        share_path = os.path.join(__node__['install_dir'], 'share')
-        log_file = os.path.join(__node__['install_dir'], r'var\log\scalarizr_update.log')
-    else:
-        etc_path = '/etc/scalr'
-        share_path = os.path.join(__node__['install_dir'], 'share')
-        # Needed only by integration tests
-        if not os.path.exists(share_path):  
-            share_path = '/usr/share/scalr'
-        log_file = '/var/log/scalarizr_update.log'
+    etc_path = __node__['etc_dir']
+    share_path = __node__['share_dir']
+    log_file = os.path.join(__node__['log_dir'], 'scalarizr_update.log')
 
     _private_path = os.path.join(etc_path, 'private.d')
     status_file = os.path.join(_private_path, 'update.status')

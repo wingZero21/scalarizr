@@ -11,6 +11,7 @@ except ImportError:
     import simplejson as json 
 
 from scalarizr import linux
+from scalarizr import util
 
 
 if linux.os.windows_family:
@@ -332,10 +333,23 @@ node = {
 }
 if linux.os.windows_family:
     node['install_dir'] = r'C:\Program Files\Scalarizr' 
+    node['etc_dir'] = os.path.join(node['install_dir'], 'etc')
+    node['log_dir'] = os.path.join(node['install_dir'], r'var\log')
 else:
     node['install_dir'] = '/opt/scalarizr'
+    node['etc_dir'] = '/etc/scalr'
+    node['log_dir'] = '/var/log'
 node['embedded_bin_dir'] = os.path.join(node['install_dir'], 'embedded', 'bin')
-node['share_dir'] = os.path.join(node['install_dir'], 'share')
+
+node['share_dir'] = util.firstmatched(
+    lambda p: os.access(p, os.F_OK), [
+        os.path.join(node['install_dir'], 'share'),
+        '/usr/share/scalr',
+        '/usr/local/share/scalr'
+    ], 
+    os.path.join(node['install_dir'], 'share')
+)
+
 
 node['defaults'] = {
     'base': {
