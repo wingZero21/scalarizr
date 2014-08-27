@@ -195,7 +195,6 @@ def build_meta_packages():
                  '--name scalarizr-{platform} '
                  '--version {version} '
                  '--iteration 1 '
-                 '--epoch 0 '
                  '--depends "scalarizr = {version}-1" '
                  '--maintainer "Scalr Inc. <packages@scalr.net>" '
                  '--url "http://scalr.net"').format(
