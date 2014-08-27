@@ -42,10 +42,11 @@ function debian_init {
 }
 
 function redhat_init {
-    /sbin/chkconfig --add scalarizr
-    /sbin/chkconfig --add scalr-upd-client
-    chmod +x /etc/init.d/scalarizr
-    chmod +x /etc/init.d/scalr-upd-client
+    for service in scalarizr scalr-upd-client; do
+        /sbin/chkconfig --del $service || :
+        /sbin/chkconfig --add $service
+        chmod +x /etc/init.d/$service
+    done
 }
 
 function safe_restart {
