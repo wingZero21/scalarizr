@@ -605,7 +605,7 @@ class RebundleEbsStrategy(RebundleStratery):
         volume_template=None):
         RebundleStratery.__init__(self, handler, role_name, image_name, excludes, volume)
         self._volume_id = volume_id
-        self._volume_template = volume_template or {}
+        self._volume_template = volume_template.copy() if volume_template else {}
         self._platform = bus.platform
 
     def _create_shapshot(self):
@@ -628,7 +628,9 @@ class RebundleEbsStrategy(RebundleStratery):
     def _register_image(self):
         instance = self._ec2_conn.get_all_instances((self._platform.get_instance_id(), ))[0].instances[0]
 
-        root_device_type = EBSBlockDeviceType(**self._volume_template)
+        root_device_type = EBSBlockDeviceType(size=self._volume_template.get('size'),
+            volume_type=self._volume_template.get('volume_type'),
+            iops=self._volume_template.get('iops'))
         root_device_type.snapshot_id = self._snap.id
         root_device_type.delete_on_termination = True
 
@@ -725,7 +727,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
         self._ec2_conn = ec2_conn
         self._avail_zone = avail_zone
         self._instance_id = instance_id
-        self._ebs_config = volume_template or {}
+        self._ebs_config = volume_template.copy() if volume_template else {}
         self._ebs_config['type'] = 'ebs'
 
         if volume_id:
