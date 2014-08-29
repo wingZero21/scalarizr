@@ -26,6 +26,7 @@ api_routes = {
     'service': 'scalarizr.api.service.ServiceAPI',
     'tomcat': 'scalarizr.api.tomcat.TomcatAPI',
     'www': 'scalarizr.api.nginx.NginxAPI',
+    'image': 'scalarizr.api.image.image.ImageAPI',
 }
 
 
