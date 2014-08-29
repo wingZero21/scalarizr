@@ -145,7 +145,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
                 image_name,
                 self._excludes,
                 volume_id=self._rebundle_message.body.get('volume_id'),
-                volume_template=rv_template)
+                ebs_type_template=rv_template)
         else:
             # Instance store
             self._strategy = self._instance_store_strategy_cls(
@@ -602,10 +602,10 @@ class RebundleEbsStrategy(RebundleStratery):
         excludes,
         volume='/',
         volume_id=None, 
-        volume_template=None):
+        ebs_type_template=None):
         RebundleStratery.__init__(self, handler, role_name, image_name, excludes, volume)
         self._volume_id = volume_id
-        self._volume_template = volume_template.copy() if volume_template else {}
+        self._ebs_type_template = ebs_type_template.copy() if ebs_type_template else {}
         self._platform = bus.platform
 
     def _create_shapshot(self):
@@ -628,9 +628,7 @@ class RebundleEbsStrategy(RebundleStratery):
     def _register_image(self):
         instance = self._ec2_conn.get_all_instances((self._platform.get_instance_id(), ))[0].instances[0]
 
-        root_device_type = EBSBlockDeviceType(size=self._volume_template.get('size'),
-            volume_type=self._volume_template.get('volume_type'),
-            iops=self._volume_template.get('iops'))
+        root_device_type = EBSBlockDeviceType(**ebs_type_template)
         root_device_type.snapshot_id = self._snap.id
         root_device_type.delete_on_termination = True
 
@@ -680,7 +678,7 @@ class RebundleEbsStrategy(RebundleStratery):
             self._platform.get_avail_zone(),
             self._platform.get_instance_id(),
             self._volume_id,
-            self._volume_template,
+            None,
             self._excludes)
 
         self._bundle_vol(self._image)
@@ -721,13 +719,13 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
         avail_zone,
         instance_id,
         volume_id=None,
-        volume_template=None,
+        config_template=None,
         excludes=None):
         rebundle_hdlr.LinuxImage.__init__(self, volume, excludes=excludes)
         self._ec2_conn = ec2_conn
         self._avail_zone = avail_zone
         self._instance_id = instance_id
-        self._ebs_config = volume_template.copy() if volume_template else {}
+        self._ebs_config = config_template.copy() if config_template else {}
         self._ebs_config['type'] = 'ebs'
 
         if volume_id:
