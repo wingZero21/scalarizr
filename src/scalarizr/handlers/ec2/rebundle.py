@@ -628,7 +628,7 @@ class RebundleEbsStrategy(RebundleStratery):
     def _register_image(self):
         instance = self._ec2_conn.get_all_instances((self._platform.get_instance_id(), ))[0].instances[0]
 
-        root_device_type = EBSBlockDeviceType(**ebs_type_template)
+        root_device_type = EBSBlockDeviceType(**self._ebs_type_template)
         root_device_type.snapshot_id = self._snap.id
         root_device_type.delete_on_termination = True
 
@@ -678,7 +678,7 @@ class RebundleEbsStrategy(RebundleStratery):
             self._platform.get_avail_zone(),
             self._platform.get_instance_id(),
             self._volume_id,
-            None,
+            {'size': self._ebs_type_template['size']},
             self._excludes)
 
         self._bundle_vol(self._image)
