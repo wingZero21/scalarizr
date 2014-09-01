@@ -273,7 +273,6 @@ class EBSImageMaker(object):
             kernel_id=instance.kernel,
             architecture=instance.architecture)
 
-
     def cleanup(self):
         try:
             os.removedirs(self.destination)
@@ -283,13 +282,18 @@ class EBSImageMaker(object):
     def create_image(self):
         volume = None
         try:
+            LOG.debug('Preparing data for snapshot')
             self.prepare_image()
             volume_config = {'volume_type': self.root_disk.volume_type,
                 'size': self.root_disk.size,
                 'iops': self.root_disk.iops}
+            LOG.debug('Creating volume for snapshot')
             volume = self.make_volume(volume_config, '/mnt/img-mnt')
+            LOG.debug('Making snapshot')
             snapshot_id = self.make_snapshot(volume)
+            LOG.debug('Registering image')
             image_id = self.register_image(snapshot_id, volume.device)
+            LOG.debug('Image is registered. ID: %s' % image_id)
             return image_id
         finally:
             if volume:
