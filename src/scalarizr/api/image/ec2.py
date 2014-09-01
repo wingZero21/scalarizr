@@ -284,8 +284,7 @@ class EBSImageMaker(object):
         try:
             LOG.debug('Preparing data for snapshot')
             self.prepare_image()
-            volume_config = {'volume_type': self.root_disk.volume_type,
-                'size': self.root_disk.size,
+            volume_config = {'size': self.root_disk.size,
                 'iops': self.root_disk.iops}
             LOG.debug('Creating volume for snapshot')
             volume = self.make_volume(volume_config, '/mnt/img-mnt')
