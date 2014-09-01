@@ -194,11 +194,12 @@ class EBSImageMaker(object):
         return volume
 
     def fix_fstab(self, volume):
+        conn = self.platform.new_ec2_conn()
         fstab_file_path = os.path.join(volume.mpoint, 'etc/fstab')
         fstab = mount.fstab(fstab_file_path)
 
         vol_filters = {'attachment.instance-id': self.platform.get_instance_id()}
-        attached_vols = ec2_conn.get_all_volumes(filters=vol_filters)
+        attached_vols = conn.get_all_volumes(filters=vol_filters)
 
         for vol in attached_vols:
             try:
