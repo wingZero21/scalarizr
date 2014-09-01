@@ -325,7 +325,8 @@ class MySQLAPI(BehaviorAPI):
             )
         elif linux.os.redhat_family or linux.os.oracle_family:
             pkgmgr.check_dependency(
-                ['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'],
+                [['mysql>=5.0,<5.6', 'mysql-server>=5.0,<5.6'],
+                ['mysql55', 'mysql-server>=5.0,<5.6']],
                 installed_packages
             )
         else:
