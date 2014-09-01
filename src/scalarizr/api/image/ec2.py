@@ -197,7 +197,7 @@ class EBSImageMaker(object):
         fstab_file_path = os.path.join(volume.mpoint, 'etc/fstab')
         fstab = mount.fstab(fstab_file_path)
 
-        vol_filters = {'attachment.instance-id': pl.get_instance_id()}
+        vol_filters = {'attachment.instance-id': self.platform.get_instance_id()}
         attached_vols = ec2_conn.get_all_volumes(filters=vol_filters)
 
         for vol in attached_vols:
@@ -375,7 +375,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def _get_root_disk(self, root_device_type, instance):
         # list of all mounted devices 
         if root_device_type == 'ebs':
-            vol_filters = {'attachment.instance-id': pl.get_instance_id()}
+            vol_filters = {'attachment.instance-id': instance.id}
             attached_vols = ec2_conn.get_all_volumes(filters=vol_filters)
             for vol in attached_vols:
                 if instance.root_device_name == vol.attach_data.device:
