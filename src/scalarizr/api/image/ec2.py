@@ -159,9 +159,9 @@ class EBSImageMaker(object):
 
     def prepare_image(self):
         """Prepares imiage with ec2-bundle-vol command"""
-        self._assure_space()
         if not os.path.exists(self.destination):
             os.mkdir(self.destination)
+        self._assure_space()
         cmd = (
             os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
             '--cert', self.credentials['cert'],
