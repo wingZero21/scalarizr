@@ -98,7 +98,7 @@ class ImageAPI(object):
                      'you can terminate Scalarizr now.')
 
     @rpc.command_method
-    def create(self, name=None, async=True):
+    def create(self, name=None, async=False):
         """ Creates image """
         self.init_delegate()
         return self._op_api.run('api.image.create',
