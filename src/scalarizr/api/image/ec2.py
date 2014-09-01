@@ -275,7 +275,10 @@ class EBSImageMaker(object):
 
 
     def cleanup(self):
-        os.removedirs(self.destination)
+        try:
+            os.removedirs(self.destination)
+        except OSError:
+            pass
 
     def create_image(self):
         volume = None
