@@ -372,7 +372,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
             pkgmgr.installed('kpartx')
 
-    def _get_root_disk(self, root_device_type, instance):
+    def _get_root_disk(self, root_device_type, instance, ec2_conn):
         # list of all mounted devices 
         if root_device_type == 'ebs':
             vol_filters = {'attachment.instance-id': instance.id}
@@ -435,7 +435,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             raise ImageAPIError(msg)
         root_device_type = instance.root_device_type  
 
-        root_disk = self._get_root_disk(root_device_type, instance)
+        root_disk = self._get_root_disk(root_device_type, instance, ec2_conn)
         self._setup_environment()
         LOG.debug('device type: %s' % root_device_type)
         if root_device_type == 'ebs':
