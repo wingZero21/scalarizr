@@ -103,6 +103,7 @@ class ImageAPI(object):
         self.init_delegate()
         return self._op_api.run('api.image.create',
             func=self._create,
+            async=async,
             func_kwds={'name': name},
             exclusive=True)
 
