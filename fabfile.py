@@ -198,8 +198,8 @@ def build_meta_packages():
                  '--depends "scalarizr = {version}-1" '
                  '--maintainer "Scalr Inc. <packages@scalr.net>" '
                  '--url "http://scalr.net"').format(
-                    pkg_type=pkg_type, version=version, 
-                    platform=platform))
+                pkg_type=pkg_type, version=version,
+                platform=platform))
 
 
 @task
@@ -294,6 +294,7 @@ def publish_deb():
             repo, ' '.join(glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch)))))
         local('aptly publish drop {0} || :'.format(repo))
         local('aptly publish repo -gpg-key=04B54A2A {0} || :'.format(repo))
+        local('aptly db cleanup')
     finally:
         time_delta = time.time() - time0
         print_green('publish deb took {0}'.format(time_delta))
@@ -315,6 +316,7 @@ def publish_rpm():
         local('mkdir -p %s/{5,6,7}/{x86_64,i386}' % repo_path, shell='/bin/bash')
         cwd = os.getcwd()
         os.chdir(repo_path)
+
         def symlink(target, linkname):
             if not os.path.exists(linkname):
                 os.symlink(target, linkname)
