@@ -386,7 +386,7 @@ node['mongodb'] = Compound({
 })
 
 node['nginx'] = Compound({
-    'binary_path,app_include_path,https_include_path,app_port,upstream_app_role':
+    'app_port,upstream_app_role':
         Ini('%s/%s.ini' % (public_dir, 'www'), 'www')
 })
 
