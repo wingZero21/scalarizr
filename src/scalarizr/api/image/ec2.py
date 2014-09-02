@@ -154,7 +154,8 @@ class EBSImageMaker(object):
         if avail_space <= self.image_size:
             os.mkdir('/mnt/temp-vol')
             LOG.debug('Making temp volume')
-            self.temp_vol = self.make_volume({'size': self.image_size},
+            self.temp_vol = self.make_volume({'size': self.image_size, 
+                {'scalr-status': 'temporary'}},
                 '/mnt/temp-vol',
                 mount=True)
             self.destination = '/mnt/temp-vol'
@@ -290,7 +291,8 @@ class EBSImageMaker(object):
             LOG.debug('Preparing data for snapshot')
             self.prepare_image()
             volume_config = {'size': self.root_disk.size,
-                'iops': self.root_disk.iops}
+                'iops': self.root_disk.iops,
+                'tags': {'scalr-status': 'temporary'}}
             LOG.debug('Creating volume for snapshot')
             volume = self.make_volume(volume_config, '/mnt/img-mnt')
             LOG.debug('Making snapshot')
