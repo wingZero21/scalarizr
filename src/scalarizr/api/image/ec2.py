@@ -107,7 +107,7 @@ class InstanceStoreImageMaker(object):
             image_location=s3_manifest_path,
             kernel_id=instance.kernel,
             virtualization_type=instance.virtualization_type,
-            delete_root_volume_on_termination=True,
+            ramdisk_id=self._platform.get_ramdisk_id(),
             architecture=instance.architecture)
 
         LOG.debug("Image is registered.")
@@ -276,7 +276,7 @@ class EBSImageMaker(object):
             block_device_map=block_device_map,
             kernel_id=instance.kernel,
             virtualization_type=instance.virtualization_type,
-            delete_root_volume_on_termination=True,
+            ramdisk_id=self.platform.get_ramdisk_id(),
             architecture=instance.architecture)
 
     def cleanup(self):
