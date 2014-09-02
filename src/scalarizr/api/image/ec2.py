@@ -377,6 +377,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
                 shell=True)
 
+            if linux.os['family'] == 'RedHat':
+                pkgmgr.installed('parted')
             pkgmgr.installed('kpartx')
 
     def _get_root_disk(self, root_device_type, instance, ec2_conn):
