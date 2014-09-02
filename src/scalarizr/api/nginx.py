@@ -1,6 +1,7 @@
 from __future__ import with_statement
 
 import os
+import glob
 import shutil
 import logging
 import time
@@ -18,6 +19,7 @@ from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
 from scalarizr.util import Singleton
+from scalarizr.util import firstmatched
 from scalarizr import linux
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
@@ -29,6 +31,23 @@ from scalarizr.api import BehaviorAPI
 
 
 __nginx__ = __node__['nginx']
+try:
+    # RedHat Software Collection
+    nginx_rhscl_root = glob.glob('/opt/rh/nginx*/root')[0]
+except IndexError:
+    nginx_rhscl_root = None
+if nginx_rhscl_root and linux.os.redhat:
+    __nginx__['nginx.conf'] = os.path.join(nginx_rhscl_root, 'etc/nginx/nginx.conf')
+    __nginx__['binary_path'] = os.path.join(nginx_rhscl_root, 'usr/sbin/nginx')
+    __nginx__['service_name'] = '{0}-nginx'.format(os.path.basename(os.path.dirname(nginx_rhscl_root)))
+else:
+    __nginx__['nginx.conf'] = '/etc/nginx/nginx.conf'
+    __nginx__['binary_path'] = firstmatched(lambda p: os.access(p, os.F_OK | os.X_OK),
+                                ('/usr/sbin/nginx', '/usr/local/nginx/sbin/nginx'), '/usr/sbin/nginx')
+    __nginx__['service_name'] = 'nginx'
+__nginx__['app_include_path'] = os.path.join(os.path.dirname(__nginx__['nginx.conf']), 'app-servers.include')
+__nginx__['https_include_path'] = os.path.join(os.path.dirname(__nginx__['nginx.conf']), 'https.include')
+
 
 
 _logger = logging.getLogger(__name__)
@@ -58,7 +77,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
         initdv2.ParametrizedInitScript.__init__(self,
                                                 'nginx',
-                                                '/etc/init.d/nginx',
+                                                os.path.join('/etc/init.d', __nginx__['service_name']),
                                                 pid_file=pid_file,
                                                 socks=[])
 
