@@ -347,7 +347,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def _prepare_software(self):
         # windows has no ami tools. Bundle is made by scalr
         if linux.os['family'] != 'Windows':
-            system2(('apt-get', 'update'),)
+            pkgmgr.updatedb()
             system2(('wget',
                 'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
                 '-P',
