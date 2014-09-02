@@ -155,7 +155,7 @@ class EBSImageMaker(object):
             os.mkdir('/mnt/temp-vol')
             LOG.debug('Making temp volume')
             self.temp_vol = self.make_volume({'size': self.image_size, 
-                {'scalr-status': 'temporary'}},
+                'tags': {'scalr-status': 'temporary'}},
                 '/mnt/temp-vol',
                 mount=True)
             self.destination = '/mnt/temp-vol'
