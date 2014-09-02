@@ -1950,7 +1950,8 @@ class NginxAPI(BehaviorAPI):
 
     @classmethod
     def do_check_software(cls, installed_packages=None):
-        pkgmgr.check_dependency(['nginx'], installed_packages)
+        pkgmgr.check_any_dependency([['nginx'], ['nginx14']], installed_packages)
+
 
     @classmethod
     def do_handle_check_software_error(cls, e):

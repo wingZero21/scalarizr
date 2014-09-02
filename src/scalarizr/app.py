@@ -686,6 +686,7 @@ class Service(object):
             if server_id and ud_server_id and server_id != ud_server_id:
                 self._logger.info('Server was started after rebundle. Performing some cleanups')
                 _cleanup_after_rebundle()
+                _apply_user_data(from_scalr=False)
                 cnf.state = ScalarizrState.BOOTSTRAPPING
 
         if cnf.state == ScalarizrState.UNKNOWN:
@@ -707,9 +708,6 @@ class Service(object):
 
         STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__))
         STATE['global.version'] = __version__
-
-        if cnf.state == ScalarizrState.UNKNOWN:
-            cnf.state = ScalarizrState.BOOTSTRAPPING
 
         # At first startup platform user-data should be applied
         #if cnf.state == ScalarizrState.BOOTSTRAPPING:

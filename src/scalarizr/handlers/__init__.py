@@ -105,25 +105,29 @@ class Handler(object):
 
 
     def get_ready_behaviours(self):
-        possible_behaviors = config.BuiltinBehaviours.values()
-        ready_behaviors = list()
+        LOG.info('Detecting supported behaviors...')        
         if linux.os['family'] != 'Windows':
-            LOG.info('Detecting supported behaviors...')
             installed_packages = pkgmgr.package_mgr().list()
-            for behavior in possible_behaviors:
-                if behavior == 'base' or behavior not in api.api_routes.keys():
-                    continue
-                try:
-                    api_cls = util.import_class(api.api_routes[behavior])
-                    api_cls.check_software(installed_packages)
-                    ready_behaviors.append(behavior)
-                    LOG.info('%s: yes', behavior)
-                except (exceptions.NotFound, exceptions.UnsupportedBehavior, ImportError), e:
-                    if isinstance(e, exceptions.UnsupportedBehavior):
-                        LOG.info('%s: %s', behavior, e.args[1])
-                    else:
-                        LOG.info('%s: %s', behavior, e)
-                    continue
+            possible_behaviors = config.BuiltinBehaviours.values()
+        else:
+            installed_packages = []
+            possible_behaviors = ('base', 'chef')
+
+        ready_behaviors = list()
+        for behavior in possible_behaviors:
+            if behavior == 'base' or behavior not in api.api_routes.keys():
+                continue
+            try:
+                api_cls = util.import_class(api.api_routes[behavior])
+                api_cls.check_software(installed_packages)
+                ready_behaviors.append(behavior)
+                LOG.info('%s: yes', behavior)
+            except (exceptions.NotFound, exceptions.UnsupportedBehavior, ImportError), e:
+                if isinstance(e, exceptions.UnsupportedBehavior):
+                    LOG.info('%s: %s', behavior, e.args[1])
+                else:
+                    LOG.info('%s: %s', behavior, e)
+                continue
         return ready_behaviors
 
 
