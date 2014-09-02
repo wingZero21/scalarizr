@@ -9,8 +9,8 @@ source :url => "https://launchpad.net/ubuntu/+archive/primary/+files/python-supp
 relative_path "python-support-#{default_version}"
 
 configure_env = {
-  "LDFLAGS" => "-L#{install_dir}/embedded/lib -I#{install_dir}/embedded/include -L/lib -L/usr/lib",
-  "CFLAGS" => "-L#{install_dir}/embedded/lib -I#{install_dir}/embedded/include",
+  "LDFLAGS" => "-L #{install_dir}/embedded/lib -I #{install_dir}/embedded/include -L/lib -L/usr/lib",
+  "CFLAGS" => "-L #{install_dir}/embedded/lib -I #{install_dir}/embedded/include",
   "LD_RUN_PATH" => "#{install_dir}/embedded/lib",
   "PATH" => "#{install_dir}/embedded/bin:#{ENV["PATH"]}"
 }
