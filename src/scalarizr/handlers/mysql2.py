@@ -937,14 +937,17 @@ class MysqlHandler(DBMSRHandler):
         self._change_my_cnf()
 
         if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
-            LOG.info('Ensuring debian-sys-maint user')
-            self.mysql.service.start()
-            debian_cnf = metaconf.Configuration('mysql')
-            debian_cnf.read(__mysql__['debian.cnf'])
-            sql = ("GRANT ALL PRIVILEGES ON *.* "
-                    "TO 'debian-sys-maint'@'localhost' "
-                    "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
-            linux.system(['mysql', '-u', 'root', '-e', sql])
+            try:
+                LOG.info('Ensuring debian-sys-maint user')
+                self.mysql.service.start()
+                debian_cnf = metaconf.Configuration('mysql')
+                debian_cnf.read(__mysql__['debian.cnf'])
+                sql = ("GRANT ALL PRIVILEGES ON *.* "
+                        "TO 'debian-sys-maint'@'localhost' "
+                        "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
+                linux.system(['mysql', '-u', 'root', '-e', sql])
+            except:
+                LOG.warn('Failed to set password for debian-sys-maint: %s', sys.exc_info()[1])
             self.mysql.service.stop()
 
         coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')

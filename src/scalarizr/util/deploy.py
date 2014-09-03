@@ -47,7 +47,7 @@ class SvnSource(Source):
         log = bus.init_op.logger if bus.init_op else self._logger
         if not os.access(self.executable, os.X_OK):
             log.info('Installing Subversion SCM...')
-            pkgmgr.installed('subversion')
+            pkgmgr.installed('subversion', updatedb=True)
 
         do_update = False
         if os.path.exists(os.path.join(workdir, '.svn')):
@@ -115,7 +115,7 @@ class GitSource(Source):
                 package = 'git-core'
             else:
                 package = 'git'
-            pkgmgr.installed(package)
+            pkgmgr.installed(package, updatedb=True)
 
         #if not os.path.exists(workdir):
         #    self._logger.info('Creating destination directory')
@@ -219,7 +219,7 @@ class HttpSource(Source):
                 elif mime[0] == 'application/zip':
                     if not linux.which('unzip'):
                         log.info('Installing unzip de-archiver')
-                        pkgmgr.installed('unzip')
+                        pkgmgr.installed('unzip', updatedb=True)
                     unar = ['unzip', tmpdst, '-d', workdir]
                 else:
                     raise UndefinedSourceError('Unexpected archive format %s' % str(mime))

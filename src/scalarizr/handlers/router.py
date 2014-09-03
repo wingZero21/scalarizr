@@ -5,6 +5,7 @@ import json
 
 
 from scalarizr import handlers, linux
+from scalarizr.bus import bus
 from scalarizr.node import __node__
 from scalarizr.linux import pkgmgr, iptables
 from scalarizr.bus import bus
@@ -53,7 +54,12 @@ class RouterHandler(handlers.Handler):
 
     def on_start(self):
         if __node__['state'] == 'running':
-            self._configure()
+            lfrp = bus.queryenv_service.list_farm_role_params(farm_role_id=__node__['farm_role_id'])['params']
+            self._data = lfrp.get('router', {})
+            if self._data:
+                self._configure()
+            else:
+                linux.system('/etc/init.d/nginx start', shell=True, raise_exc=False)
 
     def on_before_host_up(self, hostup):
         self._configure()

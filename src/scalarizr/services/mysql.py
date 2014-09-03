@@ -703,7 +703,8 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
             args.append(action)
             out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
         except PopenError, e:
-            if 'Job is already running' not in str(e):
+            if 'Job is already running' not in str(e) and \
+                'percona' not in node.__node__['behavior']:
                 raise InitdError("Popen failed with error %s" % (e,))
 
         if action == 'restart':

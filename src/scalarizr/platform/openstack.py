@@ -25,6 +25,7 @@ from scalarizr.platform import PlatformError
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 from scalarizr.storage.transfer import Transfer, TransferProvider
 from scalarizr.storage2.cloudfs import swift as swiftcloudfs
+from scalarizr.config import BuiltinPlatforms
 
 
 LOG = logging.getLogger(__name__)
@@ -168,6 +169,7 @@ class OpenstackPlatform(platform.Platform):
     _ip_addr = None
 
     features = ['volumes', 'snapshots']
+    name = BuiltinPlatforms.OPENSTACK
 
     def __init__(self):
         platform.Platform.__init__(self)
