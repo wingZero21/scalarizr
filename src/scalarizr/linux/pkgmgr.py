@@ -470,7 +470,7 @@ class RpmVersion(object):
 
 class YumPackageMgr(PackageMgr):
     def updatedb(self, **kwds):
-        self.yum_command('clean expire-cache')
+        self.yum_command('clean all')
 
 
     def remove(self, name, purge=False):
