@@ -57,6 +57,7 @@ class InstanceStoreImageMaker(object):
                 ]
 
     def prepare_image(self):
+        # TODO: block device mapping: https://github.com/Scalr/int-scalarizr/blob/master/src/scalarizr/handlers/ec2/rebundle.py#L642
         # prepares image with ec2-bundle-vol command
         cmd = (
             os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
@@ -188,6 +189,8 @@ class EBSImageMaker(object):
         config['type'] = 'ebs'
 
         LOG.debug('Creating ebs volume')
+        # TODO: take fstype from original volume
+        # https://github.com/Scalr/int-scalarizr/blob/master/src/scalarizr/handlers/rebundle.py#L326
         volume = create_volume(config, fstype='ext4')
         volume.mpoint = mpoint
         volume.ensure(mount=True, mkfs=True)
@@ -267,6 +270,8 @@ class EBSImageMaker(object):
         instance_id = self.platform.get_instance_id()
         instance = conn.get_all_instances([instance_id])[0].instances[0]
 
+        # TODO: take your attention, that block device mapping should have all possible for this instance type devices 
+        # https://github.com/Scalr/int-scalarizr/blob/master/src/scalarizr/handlers/ec2/rebundle.py#L642
         root_vol = BlockDeviceType(snapshot_id=snapshot_id)
         block_device_map = BlockDeviceMapping()
         block_device_map[root_device_name] = root_vol
@@ -331,7 +336,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             if item.startswith(self._ami_tools_name):
                 os.removedirs(os.path.join(self._tools_dir, item))
 
-    def _install_support_packages(self):
+    def _install_support_packages(self):  
+        # TODO rename to  _install_ruby
         pkgmgr.installed('unzip')
 
         install_script = system2(('curl', '-sSL', 'https://get.rvm.io'),)[0]
@@ -353,6 +359,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def _prepare_software(self):
         # windows has no ami tools. Bundle is made by scalr
         if linux.os['family'] != 'Windows':
+            # TODO: extract method _install_ami_tools
             pkgmgr.updatedb()
             system2(('wget',
                 'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
@@ -471,4 +478,5 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         return image_id
 
     def finalize(self, operation, name):
+        # TODO: remove private key and certificates created in _setup_environment
         pass
