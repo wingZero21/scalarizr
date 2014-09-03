@@ -69,6 +69,10 @@ EPH_STORAGE_MAPPING = {
 
 NETWORK_FILESYSTEMS = ('nfs', 'glusterfs')
 
+MIN_IOPS_VALUE = 100
+MAX_IOPS_VALUE = 4000
+MAX_IOPS_TO_SIZE_RATIO = 30.0
+
 
 class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
     _ebs_strategy_cls = None
@@ -84,6 +88,23 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
         self._strategy = None
         bus.on(rebundle=self.on_rebundle)
 
+    def _validate_rv_template(self, rv_template):
+        # Throws exception if rv_template do not pass validation, returns True instead
+        if rv_template.get('volume_type') == 'io1':
+            iops = rv_template.get('iops')
+            if iops is None:
+                raise HandlerError('No disk iops given for io1 type of disks')
+
+            iops = float(iops)
+            if iops < MIN_IOPS_VALUE or iops > MAX_IOPS_VALUE:
+                raise HandlerError('IOPS must be between %s and %s' % 
+                    (MIN_IOPS_VALUE, MAX_IOPS_VALUE))
+
+            size = float(rv_template['size'])
+            if iops > MAX_IOPS_TO_SIZE_RATIO * size:
+                raise HandlerError('Maximum raito of %.0f:1 is permitted between iops '
+                    'and volume size' % MAX_IOPS_TO_SIZE_RATIO)
+        return True
 
     def before_rebundle(self):
         '''
@@ -104,8 +125,8 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
             instance = ec2_conn.get_all_instances([instance_id])[0].instances[0]
         except IndexError:
             msg = 'Failed to find instance %s. ' \
-                            'If you are importing this server, check that you are doing it from the ' \
-                            'right Scalr environment' % instance_id
+                'If you are importing this server, check that you are doing it from the ' \
+                'right Scalr environment' % instance_id
             raise HandlerError(msg)
         self._instance = instance
 
@@ -137,6 +158,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
             rv_template['volume_type'] = rv_template.get('volume_type', root_vol.type)
             rv_template['size'] = rv_template.get('size', root_vol.size)
             rv_template['iops'] = rv_template.get('iops', root_vol.iops)
+            self._validate_rv_template(rv_template)
 
             LOG.debug('Making rebundle with root volume template: %s' % rv_template)
 
