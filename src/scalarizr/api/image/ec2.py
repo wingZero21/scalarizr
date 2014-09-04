@@ -7,7 +7,7 @@ import subprocess
 import pprint
 import itertools
 
-from boto.ec2.blockdevicemapping import BlockDeviceType
+from boto.ec2.blockdevicemapping import EBSBlockDeviceType
 from boto.ec2.blockdevicemapping import BlockDeviceMapping
 
 from scalarizr import linux
@@ -278,7 +278,7 @@ class EBSImageMaker(object):
         instance_id = self.platform.get_instance_id()
         instance = conn.get_all_instances([instance_id])[0].instances[0]
 
-        root_vol = BlockDeviceType(snapshot_id=snapshot_id)
+        root_vol = EBSBlockDeviceType(snapshot_id=snapshot_id)
         block_device_map = BlockDeviceMapping(conn)
         # Adding ephemeral devices
         for eph, device in EPH_STORAGE_MAPPING[linux.os['arch']].items():
@@ -492,6 +492,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def finalize(self, operation, name):
         cnf = ScalarizrCnf(etc_dir)
         for key_name in ('ec2-cert.pem', 'ec2-pk.pem', 'ec2-cloud-cert.pem'):
-            path = cnf.key_path(keyname)
+            path = cnf.key_path(key_name)
             linux.system('chmod 755 %s' % path, shell=True)
             linux.system('rm -f %s' % path, shell=True)
