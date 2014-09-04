@@ -33,8 +33,5 @@ dependency "python-pyyaml"
 dependency "cloudstack-python-client"
 dependency "python-pymongo"
 dependency "python-docopt"
+dependency "python-openssl"
 dependency "python-m2crypto"
-
-if linux?
-  dependency "python-openssl"
-end
