@@ -166,9 +166,9 @@ sed -i 's/platform = ec2/platform = openstack/i' /etc/scalr/public.d/config.ini
 Summary:        Scalarizr CloudStack (cloud.com) edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-cloudstack >= 0.2.3
+Requires:       python26-cloudstack
 %else
-Requires:       python-cloudstack >= 0.2.3
+Requires:       python-cloudstack
 Requires:       lsscsi
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
