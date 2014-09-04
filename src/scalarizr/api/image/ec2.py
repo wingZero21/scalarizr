@@ -31,6 +31,16 @@ from scalarizr.util import system2
 LOG = logging.getLogger(__name__)
 
 
+EPH_STORAGE_MAPPING = {
+    'i386': {
+        'ephemeral0': '/dev/sda2',},
+    'x86_64': {
+        'ephemeral0': '/dev/sdb',
+        'ephemeral1': '/dev/sdc',
+        'ephemeral2': '/dev/sdd',
+        'ephemeral3': '/dev/sde',}}
+
+
 class InstanceStoreImageMaker(object):
     
     def __init__(self,
@@ -57,7 +67,6 @@ class InstanceStoreImageMaker(object):
                 ]
 
     def prepare_image(self):
-        # TODO: block device mapping: https://github.com/Scalr/int-scalarizr/blob/master/src/scalarizr/handlers/ec2/rebundle.py#L642
         # prepares image with ec2-bundle-vol command
         cmd = (
             os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
@@ -68,6 +77,7 @@ class InstanceStoreImageMaker(object):
             '--size', str(self.image_size),
             '--destination', self.destination,
             # '--exclude', ','.join(self.excludes),
+            # '--block-device-mapping', ,  # TODO:
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
@@ -93,7 +103,7 @@ class InstanceStoreImageMaker(object):
         LOG.debug('Image upload command out: %s' % out)
         return bucket, manifest
 
-    def register_image(self, bucket, manifest):
+    def _register_image(self, bucket, manifest):
         LOG.debug('Registering image')
         s3_manifest_path = '%s/%s' % (bucket, os.path.basename(manifest))
         LOG.debug("Registering image '%s'", s3_manifest_path)
@@ -117,15 +127,13 @@ class InstanceStoreImageMaker(object):
 
     def cleanup(self):
         # remove image from the server
-        linux.system('chmod 755 %s/keys/ec2-*' % private_dir, shell=True)
-        linux.system('rm -f %s/keys/ec2-*' % private_dir, shell=True)
         linux.system('rm -f %s/%s.*' % (self.destination, self.image_name), shell=True)
 
     def create_image(self):
         try:
             self.prepare_image()
             bucket, manifest = self.upload_image()
-            image_id = self.register_image(bucket, manifest)
+            image_id = self._register_image(bucket, manifest)
             return image_id
         finally:
             self.cleanup()
@@ -264,16 +272,20 @@ class EBSImageMaker(object):
         volume.ensure(mount=True)
         return snapshot.id
 
-    def register_image(self, snapshot_id, root_device_name):
+    def _register_image(self, snapshot_id, root_device_name):
         conn = self.platform.new_ec2_conn()
     
         instance_id = self.platform.get_instance_id()
         instance = conn.get_all_instances([instance_id])[0].instances[0]
 
-        # TODO: take your attention, that block device mapping should have all possible for this instance type devices 
-        # https://github.com/Scalr/int-scalarizr/blob/master/src/scalarizr/handlers/ec2/rebundle.py#L642
         root_vol = BlockDeviceType(snapshot_id=snapshot_id)
-        block_device_map = BlockDeviceMapping()
+        block_device_map = BlockDeviceMapping(conn)
+        # Adding ephemeral devices
+        for eph, device in EPH_STORAGE_MAPPING[linux.os['arch']].items():
+            bdt = EBSBlockDeviceType(conn)
+            bdt.ephemeral_name = eph
+            block_device_map[device] = bdt
+
         block_device_map[root_device_name] = root_vol
         return conn.register_image(
             name=self.image_name,
@@ -303,7 +315,7 @@ class EBSImageMaker(object):
             LOG.debug('Making snapshot')
             snapshot_id = self.make_snapshot(volume)
             LOG.debug('Registering image')
-            image_id = self.register_image(snapshot_id, volume.device)
+            image_id = self._register_image(snapshot_id, volume.device)
             LOG.debug('Image is registered. ID: %s' % image_id)
             return image_id
         finally:
@@ -336,8 +348,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             if item.startswith(self._ami_tools_name):
                 os.removedirs(os.path.join(self._tools_dir, item))
 
-    def _install_support_packages(self):  
-        # TODO rename to  _install_ruby
+    def _install_support_packages(self):
         pkgmgr.installed('unzip')
 
         install_script = system2(('curl', '-sSL', 'https://get.rvm.io'),)[0]
@@ -356,40 +367,41 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         self.environ['PATH'] = self.environ['PATH'] + (':%s/bin' % ruby_path)
         self.environ['MY_RUBY_HOME'] = ruby_path
 
+    def _install_ami_tools(self):
+        system2(('wget',
+            'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
+            '-P',
+            '/tmp'),)
+
+        if not os.path.exists(self._tools_dir):
+            if not os.path.exists(os.path.dirname(self._tools_dir)):
+                os.mkdir(os.path.dirname(self._tools_dir))
+            os.mkdir(self._tools_dir)
+
+        self._remove_old_versions()
+        self._install_support_packages()
+
+        system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir))
+
+        os.remove('/tmp/ec2-ami-tools.zip')
+
+        directory_contents = os.listdir(self._tools_dir)
+        self.ami_bin_dir = None
+        for item in directory_contents:
+            if self.ami_bin_dir:
+                break
+            elif item.startswith('ec2-ami-tools'):
+                self.ami_bin_dir = os.path.join(self._tools_dir,
+                    os.path.join(item, 'bin'))
+
+        system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
+            shell=True)
+
     def _prepare_software(self):
         # windows has no ami tools. Bundle is made by scalr
         if linux.os['family'] != 'Windows':
-            # TODO: extract method _install_ami_tools
             pkgmgr.updatedb()
-            system2(('wget',
-                'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
-                '-P',
-                '/tmp'),)
-
-            if not os.path.exists(self._tools_dir):
-                if not os.path.exists(os.path.dirname(self._tools_dir)):
-                    os.mkdir(os.path.dirname(self._tools_dir))
-                os.mkdir(self._tools_dir)
-
-            self._remove_old_versions()
-            self._install_support_packages()
-
-            system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir))
-
-            os.remove('/tmp/ec2-ami-tools.zip')
-
-            directory_contents = os.listdir(self._tools_dir)
-            self.ami_bin_dir = None
-            for item in directory_contents:
-                if self.ami_bin_dir:
-                    break
-                elif item.startswith('ec2-ami-tools'):
-                    self.ami_bin_dir = os.path.join(self._tools_dir,
-                        os.path.join(item, 'bin'))
-
-            system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
-                shell=True)
-
+            self._install_ami_tools()
             if linux.os['family'] == 'RedHat':
                 pkgmgr.installed('parted')
             pkgmgr.installed('kpartx')
@@ -478,5 +490,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         return image_id
 
     def finalize(self, operation, name):
-        # TODO: remove private key and certificates created in _setup_environment
-        pass
+        cnf = ScalarizrCnf(etc_dir)
+        for key_name in ('ec2-cert.pem', 'ec2-pk.pem', 'ec2-cloud-cert.pem'):
+            path = cnf.key_path(keyname)
+            linux.system('chmod 755 %s' % path, shell=True)
+            linux.system('rm -f %s' % path, shell=True)
