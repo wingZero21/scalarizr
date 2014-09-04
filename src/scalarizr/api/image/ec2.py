@@ -278,15 +278,23 @@ class EBSImageMaker(object):
         instance_id = self.platform.get_instance_id()
         instance = conn.get_all_instances([instance_id])[0].instances[0]
 
-        root_vol = EBSBlockDeviceType(snapshot_id=snapshot_id)
         block_device_map = BlockDeviceMapping(conn)
+
+
+        root_vol = EBSBlockDeviceType(snapshot_id=snapshot_id)
+        root_vol.delete_on_termination = True
         # Adding ephemeral devices
         for eph, device in EPH_STORAGE_MAPPING[linux.os['arch']].items():
             bdt = EBSBlockDeviceType(conn)
             bdt.ephemeral_name = eph
             block_device_map[device] = bdt
 
-        block_device_map[root_device_name] = root_vol
+        root_partition = root_device_name[:-1]
+        if root_partition in self.platform.get_block_device_mapping().values():
+            block_device_map[root_partition] = root_vol
+        else:
+            block_device_map[root_device_name] = root_vol
+
         return conn.register_image(
             name=self.image_name,
             root_device_name=root_device_name,
