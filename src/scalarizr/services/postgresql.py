@@ -1127,8 +1127,9 @@ class PgSQLPresetProvider(PresetProvider):
         self.postgresql = PostgreSql()
         config_object = self.postgresql.postgresql_conf
         service = initdv2.lookup(SERVICE_NAME)
-        config_mapping = {'postgresql.conf':config_object}
+        config_mapping = {'postgresql.conf': config_object}
         PresetProvider.__init__(self, service, config_mapping)
+        LOG.debug("Presets got config: %s" % config_object.path)
 
 
 class PostgresqlSnapBackup(backup.SnapBackup):
