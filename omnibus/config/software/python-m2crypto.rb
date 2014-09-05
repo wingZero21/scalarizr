@@ -3,6 +3,7 @@ pypi_name = "M2Crypto"
 default_version "0.21.1"
 
 dependency "python"
+dependency "cacerts"
 if windows?
   source :url => "https://github.com/saltstack/salt-windows-install/blob/master/deps/win32-py2.7/M2Crypto-0.21.1.win32-py2.7.msi?raw=true"
 
