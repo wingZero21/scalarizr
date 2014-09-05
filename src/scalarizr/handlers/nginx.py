@@ -125,7 +125,8 @@ class NginxHandler(ServiceCtlHandler):
                              Messages.HOST_DOWN,
                              Messages.BEFORE_HOST_TERMINATE,
                              Messages.VHOST_RECONFIGURE,
-                             Messages.UPDATE_SERVICE_CONFIGURATION)
+                             Messages.UPDATE_SERVICE_CONFIGURATION,
+                             Messages.SSL_CERTIFICATE_UPDATE)
 
     def _set_nginx_v2_mode_flag(self, on):
         if on and not self._get_nginx_v2_mode_flag():
@@ -332,7 +333,7 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('after vhost reconf backend table is %s' % self.api.backend_table)
 
     def on_SSLCertificateUpdate(self, message):
-        ssl_cert_id = message.id  # TODO: check datastructure
+        ssl_cert_id = message.id
         private_key = message.private_key
         certificate = message.certificate
         cacertificate = message.cacertificate
