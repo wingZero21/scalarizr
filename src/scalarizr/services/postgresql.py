@@ -259,11 +259,12 @@ class PostgreSql(BaseService):
         self.cluster_dir.clean()
         
         if linux.os.redhat_family:
+            LOG.debug("Config dir before moving: %s" % self.postgresql_conf.path)
             self.config_dir.move_to(self.unified_etc_path)
             make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
             self.postgresql_conf = PostgresqlConf.find(self.config_dir)
             self.pg_hba_conf = PgHbaConf.find(self.config_dir)
-            
+            LOG.debug("Config dir after moving: %s" % self.postgresql_conf.path)
         self.pg_hba_conf.allow_local_connections()
         
 
