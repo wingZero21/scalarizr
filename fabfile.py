@@ -171,12 +171,12 @@ def local_export():
 
 def build_omnibus():
     # rm old installation
-    print_green('building omnibus')
+    print_green('building omnibus package')
     with cd(omnibus_dir):
         run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
-            'OMNIBUS_BUILD_VERSION': version,
+            'OMNIBUS_BUILD_VERSION': version, # TODO: should be a value of form 2.9.1.0 to work on win
         }
         with shell_env(**env):
             run("bin/omnibus clean %s --log-level=warn" % project)
