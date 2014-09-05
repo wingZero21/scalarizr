@@ -333,7 +333,7 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('after vhost reconf backend table is %s' % self.api.backend_table)
 
     def on_SSLCertificateUpdate(self, message):
-        ssl_cert_id = message.id
+        ssl_cert_id = message.body['id']
         private_key = message.private_key
         certificate = message.certificate
         cacertificate = message.cacertificate
