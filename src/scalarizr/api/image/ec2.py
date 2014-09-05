@@ -272,7 +272,7 @@ class EBSImageMaker(object):
         volume.ensure(mount=True)
         return snapshot.id
 
-    def _register_image(self, snapshot_id, root_device_name):
+    def _register_image(self, snapshot_id):
         conn = self.platform.new_ec2_conn()
     
         instance_id = self.platform.get_instance_id()
@@ -289,15 +289,15 @@ class EBSImageMaker(object):
             bdt.ephemeral_name = eph
             block_device_map[device] = bdt
 
-        root_partition = root_device_name[:-1]
+        root_partition = instance.root_device_name[:-1]
         if root_partition in self.platform.get_block_device_mapping().values():
             block_device_map[root_partition] = root_vol
         else:
-            block_device_map[root_device_name] = root_vol
+            block_device_map[instance.root_device_name] = root_vol
 
         return conn.register_image(
             name=self.image_name,
-            root_device_name=root_device_name,
+            root_device_name=instance.root_device_name,
             block_device_map=block_device_map,
             kernel_id=instance.kernel,
             virtualization_type=instance.virtualization_type,
@@ -323,7 +323,7 @@ class EBSImageMaker(object):
             LOG.debug('Making snapshot')
             snapshot_id = self.make_snapshot(volume)
             LOG.debug('Registering image')
-            image_id = self._register_image(snapshot_id, volume.device)
+            image_id = self._register_image(snapshot_id)
             LOG.debug('Image is registered. ID: %s' % image_id)
             return image_id
         finally:
