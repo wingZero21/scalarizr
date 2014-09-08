@@ -1126,11 +1126,12 @@ class PgSQLPresetProvider(PresetProvider):
 
     def __init__(self):
         self.postgresql = PostgreSql()
-        config_object = PostgresqlConf.find(self.postgresql.unified_etc_path)
+        conf_path = os.path.join(self.postgresql.unified_etc_path, 'postgresql.conf')
+        config_object = PostgresqlConf(conf_path)
         service = initdv2.lookup(SERVICE_NAME)
         config_mapping = {'postgresql.conf': config_object}
         PresetProvider.__init__(self, service, config_mapping)
-        LOG.debug("Presets got config: %s" % config_object.path)
+        LOG.debug("Presets got config: %s" % conf_path)
 
 
 class PostgresqlSnapBackup(backup.SnapBackup):
