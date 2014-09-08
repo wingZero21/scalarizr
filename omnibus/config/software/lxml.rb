@@ -8,7 +8,7 @@ source :url => "https://pypi.python.org/packages/2.7/l/lxml/lxml-#{default_versi
 if windows?
     easy_install = "#{install_dir}/embedded/python/Scripts/easy_install.exe"
     package_src = "C:/omnibus-ruby/src/lxml/lxml-#{default_version}.win-amd64-py2.7.exe"
-    package_location = "C:/opt/scalarizr/embedded/python/Lib/site-packages/"
+    package_location = "#{install_dir}/embedded/python/Lib/site-packages/"
     build do  
       command "#{easy_install} --install-dir=#{package_location} #{package_src}"
     end
