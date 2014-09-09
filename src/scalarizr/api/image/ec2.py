@@ -254,7 +254,7 @@ class EBSImageMaker(object):
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
         LOG.debug('sgp_dd image into volume %s' % volume.device)
-        system2(('sgp_dd', 'if='+prepared_image_path, 'of='+volume.device))
+        system2(('sgp_dd', 'if='+prepared_image_path, 'of='+volume.device, 'bs=512'))
         # coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '8M'})
 
         volume.mount()
