@@ -380,11 +380,21 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         # Installs sg3_utils package for fast sgp_dd command
         # TODO: on centos download and install .rpm
         # TODO: install for proper arch
+        
+        system2(('wget',
+            'http://sg.danny.cz/sg/p/libsgutils2-2_1.39-0.1_amd64.deb',
+            '-P',
+            '/tmp'),)
+        system2(('dpkg', '-i', '/tmp/libsgutils2-2_1.39-0.1_amd64.deb'))
+
         system2(('wget',
             'http://sg.danny.cz/sg/p/sg3-utils_1.39-0.1_amd64.deb',
             '-P',
             '/tmp'),)
         system2(('dpkg', '-i', '/tmp/sg3-utils_1.39-0.1_amd64.deb'))
+        
+        os.remove('/tmp/sg3-utils_1.39-0.1_amd64.deb')
+        os.remove('/tmp/libsgutils2-2_1.39-0.1_amd64.deb')
 
     def _install_ami_tools(self):
         system2(('wget',
