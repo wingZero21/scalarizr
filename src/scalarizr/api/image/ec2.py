@@ -254,7 +254,7 @@ class EBSImageMaker(object):
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
         LOG.debug('sgp_dd image into volume %s' % volume.device)
-        system2(('sgp_dd', 'if='+prepared_image_path, 'of='+volume.device, 'bs=8M'))
+        system2(('sgp_dd', 'if='+prepared_image_path, 'of='+volume.device))
         # coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '8M'})
 
         volume.mount()
@@ -392,7 +392,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             '-P',
             '/tmp'),)
         system2(('dpkg', '-i', '/tmp/sg3-utils_1.39-0.1_amd64.deb'))
-        
+
         os.remove('/tmp/sg3-utils_1.39-0.1_amd64.deb')
         os.remove('/tmp/libsgutils2-2_1.39-0.1_amd64.deb')
 
