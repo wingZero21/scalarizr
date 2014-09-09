@@ -253,8 +253,9 @@ class EBSImageMaker(object):
         
     def make_snapshot(self, volume):
         prepared_image_path = os.path.join(self.destination, self.image_name)
-        LOG.debug('dd image into volume %s' % volume.device)
-        coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '8M'})
+        LOG.debug('sgp_dd image into volume %s' % volume.device)
+        system2(('sgp_dd', 'if='+prepared_image_path, 'of='+volume.device, 'bs=8M'))
+        # coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '8M'})
 
         volume.mount()
         self.clean_snapshot(volume)
@@ -356,7 +357,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             if item.startswith(self._ami_tools_name):
                 os.removedirs(os.path.join(self._tools_dir, item))
 
-    def _install_support_packages(self):
+    def _install_ruby(self):
         pkgmgr.installed('unzip')
 
         install_script = system2(('curl', '-sSL', 'https://get.rvm.io'),)[0]
@@ -375,6 +376,16 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         self.environ['PATH'] = self.environ['PATH'] + (':%s/bin' % ruby_path)
         self.environ['MY_RUBY_HOME'] = ruby_path
 
+    def _install_sg3_utils(self):
+        # Installs sg3_utils package for fast sgp_dd command
+        # TODO: on centos download and install .rpm
+        # TODO: install for proper arch
+        system2(('wget',
+            'http://sg.danny.cz/sg/p/sg3-utils_1.39-0.1_amd64.deb',
+            '-P',
+            '/tmp'),)
+        system2(('dpkg', '-i', '/tmp/sg3-utils_1.39-0.1_amd64.deb'))
+
     def _install_ami_tools(self):
         system2(('wget',
             'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
@@ -387,7 +398,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             os.mkdir(self._tools_dir)
 
         self._remove_old_versions()
-        self._install_support_packages()
+        self._install_ruby()
+        self._install_sg3_utils()
 
         system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir))
 
