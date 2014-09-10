@@ -258,7 +258,7 @@ class EBSImageMaker(object):
             'if='+prepared_image_path,
             'of='+volume.device,
             'bs=8k', 
-            'count=%s' % (self.image_size*1024/8)))
+            'count=%s' % (self.image_size*1024*1024/8)))
         # coreutils.dd(**{'if': prepared_image_path, 'of': volume.device, 'bs': '8M'})
 
         volume.mount()
