@@ -382,33 +382,27 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
     def _install_sg3_utils(self):
         # Installs sg3_utils package for fast sgp_dd command
-        lib_package = None
-        utils_package = None
-        cmd = None
         if linux.os['family'] == 'RedHat':
-            lib_package = 'sg3_utils-libs-1.39-1.%s.rpm' % linux.os['arch']
-            utils_package = 'sg3_utils-1.39-1.%s.rpm' % linux.os['arch']
-            cmd = 'rpm'
+            pkgmgr.installed('sg3_utils')
         else:
             arch = 'i386' if linux.os['arch'] == 'i386' else 'amd64'
             lib_package = 'libsgutils2-2_1.39-0.1_%s.deb' % arch
             utils_package = 'sg3-utils_1.39-0.1_%s.deb' % arch
-            cmd = 'dpkd'
             
-        system2(('wget',
-            'http://sg.danny.cz/sg/p/'+lib_package,
-            '-P',
-            '/tmp'),)
-        system2((cmd, '-i', '/tmp/'+lib_package))
+            system2(('wget',
+                'http://sg.danny.cz/sg/p/'+lib_package,
+                '-P',
+                '/tmp'),)
+            system2(('dpkg', '-i', '/tmp/'+lib_package))
 
-        system2(('wget',
-            'http://sg.danny.cz/sg/p/'+utils_package,
-            '-P',
-            '/tmp'),)
-        system2((cmd, '-i', '/tmp/'+utils_package))
+            system2(('wget',
+                'http://sg.danny.cz/sg/p/'+utils_package,
+                '-P',
+                '/tmp'),)
+            system2(('dpkg', '-i', '/tmp/'+utils_package))
 
-        os.remove('/tmp/'+lib_package)
-        os.remove('/tmp/'+utils_package)
+            os.remove('/tmp/'+lib_package)
+            os.remove('/tmp/'+utils_package)
 
     def _install_ami_tools(self):
         system2(('wget',
