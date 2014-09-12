@@ -941,4 +941,5 @@ def check_any_dependency(required_list, installed_packages=None, conflicted_pack
             raise VersionMismatchError([e for ee in vers_mismatch_errors for e in ee.args[0]])
         if not_installed_errors:
             raise NotInstalledError([e for ee in not_installed_errors for e in ee.args[0]])
+        raise
 
