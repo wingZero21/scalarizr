@@ -133,14 +133,16 @@ class RabbitMQAPI(BehaviorAPI):
     @classmethod
     def do_handle_check_software_error(cls, e):
         if isinstance(e, pkgmgr.VersionMismatchError):
-            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
-            msg = (
-                '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 10.04 >=2.6,<2.7\n'
-                '\tUbuntu 12.04, Debian: >=3.0,<3.4\n'
-                '\tCentOS-6, RedHat-6, Amazon: >=3.1,<3.4').format(
-                    pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
-            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+            msg = []
+            for pkg in e.args[0]:
+                name, ver, req_ver = pkg
+                msg.append((
+                    '{name}-{ver} is not supported on {os}. Supported:\n'
+                    '\tUbuntu 10.04 >=2.6,<2.7\n'
+                    '\tUbuntu 12.04, Debian: >=3.0,<3.4\n'
+                    '\tCentOS-6, RedHat-6, Amazon: >=3.1,<3.4'
+                ).format(name=name, ver=ver, os=linux.os['name'], req_ver=req_ver))
+            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

@@ -336,15 +336,18 @@ class MySQLAPI(BehaviorAPI):
     @classmethod
     def do_handle_check_software_error(cls, e):
         if isinstance(e, pkgmgr.VersionMismatchError):
-            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
-            msg = (
-                '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 10.04, CentOS 6, RedHat: >=5.1,<5,2\n'
-                '\tUbuntu 12.04, Debian 7, Amazon: >=5.5,<5.6\n'
-                '\tDebian 6: >=5.1,<5.6\n'
-                '\tCentOS 5: >=5.0,<5.1\n'
-                '\tOracle: >=5.0,<5.1').format(pkg=pkg, ver=ver, os=linux.os['name'])
-            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+            msg = []
+            for pkg in e.args[0]:
+                name, ver, req_ver = pkg
+                msg.append((
+                    '{name}-{ver} is not supported on {os}. Supported:\n'
+                    '\tUbuntu 10.04, CentOS 6, RedHat: >=5.1,<5,2\n'
+                    '\tUbuntu 12.04, Debian 7, Amazon: >=5.5,<5.6\n'
+                    '\tDebian 6: >=5.1,<5.6\n'
+                    '\tCentOS 5: >=5.0,<5.1\n'
+                    '\tOracle: >=5.0,<5.1'
+                ).format(name=name, ver=ver, os=linux.os['name']))
+            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

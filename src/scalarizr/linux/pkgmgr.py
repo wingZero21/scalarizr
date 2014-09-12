@@ -8,6 +8,7 @@ import logging
 import glob
 import re
 import os
+import sys
 import string
 import time
 import urllib2
@@ -914,19 +915,30 @@ def check_dependency(required, installed_packages=None, conflicted_packages=None
         name = requirement.project_name
         required_vers = ','.join([''.join(_) for _ in requirement.specs])
         if name not in installed_packages:
-            raise NotInstalledError(name, required_vers)
+            raise NotInstalledError([(name, required_vers)])
         vers = installed_packages[name]
         if vers not in requirement:
-            raise VersionMismatchError(name, vers, required_vers)
+            raise VersionMismatchError([(name, vers, required_vers)])
 
 
 def check_any_dependency(required_list, installed_packages=None, conflicted_packages=None):
+    not_installed_errors = []
+    vers_mismatch_errors = []
     for required in required_list:
         try:
             check_dependency(required, installed_packages, conflicted_packages)
             break
-        except:
+        except NotInstalledError:
+            not_installed_errors.append(sys.exc_info()[1])
+            continue
+        except VersionMismatchError:
+            vers_mismatch_errors.append(sys.exc_info()[1])
+            continue
+        except ConflictError:
             continue
     else:
-        raise
+        if vers_mismatch_errors:
+            raise VersionMismatchError([e for ee in vers_mismatch_errors for e in ee.args[0]])
+        if not_installed_errors:
+            raise NotInstalledError([e for ee in not_installed_errors for e in ee.args[0]])
 

@@ -478,20 +478,23 @@ class RedisAPI(BehaviorAPI):
     @classmethod
     def do_handle_check_software_error(cls, e):
         if isinstance(e, pkgmgr.VersionMismatchError):
-            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
-            msg = (
-                '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 10.04: >=2.2,<2.3\n'
-                '\tUbuntu 12.04: >=2.2,<2.9\n'
-                '\tUbuntu 14.04: >=2.6,<2.9\n'
-                '\tDebian 6: >=2.6,<2.7\n'
-                '\tDebian 7: >=2.6,<2.9\n'
-                '\tCentOS 5: >=2.4,<2.7\n'
-                '\tCentOS 6: >=2.4,<2.8\n'
-                '\tOracle 5: >=2.6,<2.7\n'
-                '\tRHEL 6: >=2.6,<2.9\n'
-                '\tAmazon 14.03: >=2.8,<2.9\n').format(
-                        pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
-            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+            msg = []
+            for pkg in e.args[0]:
+                name, ver, req_ver = pkg
+                msg.append((
+                    '{name}-{ver} is not supported on {os}. Supported:\n'
+                    '\tUbuntu 10.04: >=2.2,<2.3\n'
+                    '\tUbuntu 12.04: >=2.2,<2.9\n'
+                    '\tUbuntu 14.04: >=2.6,<2.9\n'
+                    '\tDebian 6: >=2.6,<2.7\n'
+                    '\tDebian 7: >=2.6,<2.9\n'
+                    '\tCentOS 5: >=2.4,<2.7\n'
+                    '\tCentOS 6: >=2.4,<2.8\n'
+                    '\tOracle 5: >=2.6,<2.7\n'
+                    '\tRHEL 6: >=2.6,<2.9\n'
+                    '\tAmazon 14.03: >=2.8,<2.9\n'
+                ).format(name=name, ver=ver, os=linux.os['name'], req_ver=req_ver))
+            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
+

@@ -61,12 +61,15 @@ class PerconaAPI(mysql.MySQLAPI):
     @classmethod
     def do_handle_check_software_error(cls, e):
         if isinstance(e, pkgmgr.VersionMismatchError):
-            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
-            msg = (
-                '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 14.04: >=5.1,<5.7\n'
-                '\tUbuntu 10.04, Ubuntu 12.04, Debian, RedHat, Oracle: >=5.1,<5.6').format(
-                        pkg=pkg, ver=ver, os=linux.os['name'])
-            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
+            msg = []
+            for pkg in e.args[0]:
+                name, ver, req_ver = pkg
+                msg.append((
+                    '{name}-{ver} is not supported on {os}. Supported:\n'
+                    '\tUbuntu 14.04: >=5.1,<5.7\n'
+                    '\tUbuntu 10.04, Ubuntu 12.04, Debian, RedHat, Oracle: >=5.1,<5.6'
+                    ).format(name=name, ver=ver, os=linux.os['name']))
+            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, e)
+

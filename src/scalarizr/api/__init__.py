@@ -43,20 +43,24 @@ class BehaviorAPI(object):
                     "Linux operation systems").format(beh=cls.behavior)
                 )
             cls.do_check_software(installed_packages=installed_packages)
-            BehaviorAPI.software_supported = True
+            cls.software_supported = True
         except:
-            BehaviorAPI.software_supported = False
+            cls.software_supported = False
             e = sys.exc_info()[1]
             if isinstance(e, exceptions.UnsupportedBehavior):
                 raise
             elif isinstance(e, pkgmgr.NotInstalledError):
-                pkg, ver = e.args[0], e.args[1]
-                if ver:
-                    msg = '{pkg} {ver} is not installed on {os}'.format(
-                            pkg=pkg, ver=ver, os=linux.os['name'])
+                pkgs = e.args[0]
+                tmp = []
+                for pkg in pkgs:
+                    if pkg[1]:
+                        tmp.append('{pkg} {ver}'.format(pkg=pkg[0], ver=pkg[1]))
+                    else:
+                        tmp.append('{pkg}'.format(pkg=pkg[0]))
+                if len(tmp) > 1:
+                    msg = '{0} are not installed on {1}'.format(' or '.join(tmp), linux.os['name'])
                 else:
-                    msg = '{pkg} is not installed on {os}'.format(
-                            pkg=pkg, os=linux.os['name'])
+                    msg = '{0} is not installed on {1}'.format(' or '.join(tmp), linux.os['name'])
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, pkgmgr.ConflictError):
                 pkg, ver = e.args[0], e.args[1]
