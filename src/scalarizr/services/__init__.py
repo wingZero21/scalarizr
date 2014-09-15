@@ -380,11 +380,11 @@ class PresetProvider(object):
 
 
     def _before_rollback(self):
-        pass
+        LOG.info("Starting configuration rollback")
 
 
     def _after_rollback(self):
-        pass
+        LOG.info("Configuration has been successfully reverted to previous version.")
 
 
     def configtest(self):
