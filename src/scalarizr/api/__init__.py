@@ -58,9 +58,9 @@ class BehaviorAPI(object):
                     else:
                         tmp.append('{pkg}'.format(pkg=pkg[0]))
                 if len(tmp) > 1:
-                    msg = '{0} are not installed on {1}'.format(' or '.join(tmp), linux.os['name'])
+                    msg = '{0} are not installed'.format(' or '.join(tmp))
                 else:
-                    msg = '{0} is not installed on {1}'.format(' or '.join(tmp), linux.os['name'])
+                    msg = '{0} is not installed'.format(' or '.join(tmp))
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, pkgmgr.ConflictError):
                 pkg, ver = e.args[0], e.args[1]
@@ -76,5 +76,14 @@ class BehaviorAPI(object):
 
     @classmethod
     def do_handle_check_software_error(cls, e):
-        raise NotImplementedError()
+        if isinstance(e, pkgmgr.VersionMismatchError):
+            msg = []
+            for pkg in e.args[0]:
+                name, ver, req_ver = pkg
+                msg.append((
+                    '{name}-{ver} is not supported. Install {name} {req_ver}'
+                    ).format(name=name, ver=ver, req_ver=req_ver))
+            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
+        else:
+            raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

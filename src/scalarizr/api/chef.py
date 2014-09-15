@@ -165,7 +165,3 @@ class ChefAPI(BehaviorAPI):
         else:
             pkgmgr.check_dependency(['chef'], installed_packages)
 
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        raise exceptions.UnsupportedBehavior(cls.behavior, e)
-

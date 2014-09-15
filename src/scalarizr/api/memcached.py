@@ -46,10 +46,6 @@ class MemcachedAPI(BehaviorAPI):
     def do_check_software(cls, installed_packages=None):
         pkgmgr.check_dependency(['memcached'], installed_packages)
 
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        raise exceptions.UnsupportedBehavior(cls.behavior, e)
-
 
 class MemcachedInitScript(initdv2.ParametrizedInitScript):
 

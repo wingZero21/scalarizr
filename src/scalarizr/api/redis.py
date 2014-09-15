@@ -472,29 +472,6 @@ class RedisAPI(BehaviorAPI):
                 pkgmgr.check_dependency(['redis>=2.8,<2.9'], installed_packages, ['centalt-release'])
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
+                "Unsupported operating system '{os}'").format(linux.os['name'])
             )
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            msg = []
-            for pkg in e.args[0]:
-                name, ver, req_ver = pkg
-                msg.append((
-                    '{name}-{ver} is not supported on {os}. Supported:\n'
-                    '\tUbuntu 10.04: >=2.2,<2.3\n'
-                    '\tUbuntu 12.04: >=2.2,<2.9\n'
-                    '\tUbuntu 14.04: >=2.6,<2.9\n'
-                    '\tDebian 6: >=2.6,<2.7\n'
-                    '\tDebian 7: >=2.6,<2.9\n'
-                    '\tCentOS 5: >=2.4,<2.7\n'
-                    '\tCentOS 6: >=2.4,<2.8\n'
-                    '\tOracle 5: >=2.6,<2.7\n'
-                    '\tRHEL 6: >=2.6,<2.9\n'
-                    '\tAmazon 14.03: >=2.8,<2.9\n'
-                ).format(name=name, ver=ver, os=linux.os['name'], req_ver=req_ver))
-            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

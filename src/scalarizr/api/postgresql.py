@@ -418,24 +418,7 @@ class PostgreSQLAPI(BehaviorAPI):
                 ]
             ]
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
-            )
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
         pkgmgr.check_any_dependency(required_list, installed_packages)
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            msg = []
-            for pkg in e.args[0]:
-                name, ver, req_ver = pkg
-                msg.append((
-                    '{name}-{ver} is not supported on {os}. Supported:\n'
-                    '\tUbuntu 10.04, CentOS 5: >=9.0,<9.4\n'
-                    '\tUbuntu 12.04, Debian, CentOS 6, RedHat, Amazon: >=9.1,<9.4\n'
-                    '\tOracle: >=9.2,<9.3'
-                    ).format(name=name, ver=ver, os=linux.os['name']))
-            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

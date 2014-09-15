@@ -126,23 +126,6 @@ class RabbitMQAPI(BehaviorAPI):
                 raise exceptions.UnsupportedBehavior(cls.behavior,
                         "RabbitMQ doesn't supported on %s-5" % linux.os['name'])
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
-            )
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            msg = []
-            for pkg in e.args[0]:
-                name, ver, req_ver = pkg
-                msg.append((
-                    '{name}-{ver} is not supported on {os}. Supported:\n'
-                    '\tUbuntu 10.04 >=2.6,<2.7\n'
-                    '\tUbuntu 12.04, Debian: >=3.0,<3.4\n'
-                    '\tCentOS-6, RedHat-6, Amazon: >=3.1,<3.4'
-                ).format(name=name, ver=ver, os=linux.os['name'], req_ver=req_ver))
-            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
 

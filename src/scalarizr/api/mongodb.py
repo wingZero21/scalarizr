@@ -246,25 +246,7 @@ class MongoDBAPI(BehaviorAPI):
                 ['mongo-server>=2.0,<2.1']
             ]
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
-            )
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
         pkgmgr.check_any_dependency(required_list, installed_packages)
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            msg = []
-            for pkg in e.args[0]:
-                name, ver, req_ver = pkg
-                msg.append((
-                    '{name}-{ver} is not supported on {os}. Supported:\n'
-                    '\tUbuntu 10.04, CentOS 5, Oracle: >=2.0,<2.1\n'
-                    '\tUbuntu 12.04, CentOS 6: >=2.0,<2.7\n'
-                    '\tUbuntu 14.04, Debian 7, RHEL 6, Amazon 14.03: >=2.4,<2.7\n'
-                    '\tDebian 6: >=2.4,<2.5'
-                ).format(name=name, ver=ver, os=linux.os['name'], req_ver=req_ver))
-            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
 

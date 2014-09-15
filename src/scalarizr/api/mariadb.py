@@ -22,34 +22,19 @@ class MariaDBAPI(mysql.MySQLAPI):
 
     @classmethod
     def do_check_software(cls, installed_packages=None):
-            if linux.os.debian_family:
-                pkgmgr.check_dependency(
-                    ['mariadb-client>=5.5,<5.6', 'mariadb-server>=5.5,<5.6'],
-                    installed_packages,
-                    ['mysql-client']
-                )
-            elif linux.os.redhat_family or linux.os.oracle_family:
-                pkgmgr.check_dependency(
-                    ['MariaDB-client>=5.5,<5.6', 'MariaDB-server>=5.5,<5.6', 'gpg'],
-                    installed_packages,
-                    ['mysql']
-                )
-            else:
-                raise exceptions.UnsupportedBehavior(cls.behavior, (
-                    "Unsupported operating system '{os}'").format(os=linux.os['name'])
-                )
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            msg = []
-            for pkg in e.args[0]:
-                name, ver, req_ver = pkg
-                msg.append((
-                    '{name}-{ver} is not supported on {os}. Supported:\n'
-                    '\tUbuntu, Debian, CentOS, OEL, RHEL, Amazon: {req_ver}'
-                ).format(name=name, ver=ver, os=linux.os['name'], req_ver=req_ver))
-            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
+        if linux.os.debian_family:
+            pkgmgr.check_dependency(
+                ['mariadb-client>=5.5,<5.6', 'mariadb-server>=5.5,<5.6'],
+                installed_packages,
+                ['mysql-client']
+            )
+        elif linux.os.redhat_family or linux.os.oracle_family:
+            pkgmgr.check_dependency(
+                ['MariaDB-client>=5.5,<5.6', 'MariaDB-server>=5.5,<5.6', 'gpg'],
+                installed_packages,
+                ['mysql']
+            )
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
+            raise exceptions.UnsupportedBehavior(
+                cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
 

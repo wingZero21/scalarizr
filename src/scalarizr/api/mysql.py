@@ -329,25 +329,6 @@ class MySQLAPI(BehaviorAPI):
             pkgmgr.check_dependency('mysql-server>=5.0,<5.6', installed_packages)
             pkgmgr.check_any_dependency([['mysql>=5.0,<5.6'], ['mysql55']], installed_packages)
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
-            )
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            msg = []
-            for pkg in e.args[0]:
-                name, ver, req_ver = pkg
-                msg.append((
-                    '{name}-{ver} is not supported on {os}. Supported:\n'
-                    '\tUbuntu 10.04, CentOS 6, RedHat: >=5.1,<5,2\n'
-                    '\tUbuntu 12.04, Debian 7, Amazon: >=5.5,<5.6\n'
-                    '\tDebian 6: >=5.1,<5.6\n'
-                    '\tCentOS 5: >=5.0,<5.1\n'
-                    '\tOracle: >=5.0,<5.1'
-                ).format(name=name, ver=ver, os=linux.os['name']))
-            raise exceptions.UnsupportedBehavior(cls.behavior, '\n'.join(msg))
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
 
