@@ -364,7 +364,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def _install_ruby(self):
         pkgmgr.installed('unzip')
 
-        install_script = system2(('curl', '-sSL', 'https://get.rvm.io'),)[0]
+        install_script = system2(('curl', '-sSLk', 'https://get.rvm.io'),)[0]
 
         with open('/tmp/rvm_install.sh', 'w') as fp:
             fp.write(install_script)
