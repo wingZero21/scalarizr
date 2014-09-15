@@ -155,9 +155,18 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
             else:
                 raise HandlerError("Failed to find root volume")
 
+            LOG.debug('Searching for partitions on root device %s' % root_disk.device)
+            rdevparts = [dev.device for dev in list_device
+                if dev.device.startswith('/dev/%s' % root_disk.device)]
+            if len(set(rdevparts)) > 1 or rv_template != {}:
+                rv_template['size'] = rv_template.get('size', root_vol.size)
+            else:
+                vol_size = self._rebundle_message.body.get('volume_size')
+                rv_template['size'] = vol_size or root_vol.size
+
             rv_template['volume_type'] = rv_template.get('volume_type', root_vol.type)
-            rv_template['size'] = rv_template.get('size', root_vol.size)
             rv_template['iops'] = rv_template.get('iops', root_vol.iops)
+
             self._validate_rv_template(rv_template)
 
             LOG.debug('Making rebundle with root volume template: %s' % rv_template)
