@@ -1,8 +1,9 @@
+
 name       "scalarizr"
 maintainer "Scalr Inc"
 homepage   "http://scalr.com"
 
-install_dir    File.absolute_path("/opt/scalarizr")
+install_dir    "/opt/scalarizr"
 
 if ENV['OMNIBUS_BUILD_VERSION']
     build_version   ENV['OMNIBUS_BUILD_VERSION']

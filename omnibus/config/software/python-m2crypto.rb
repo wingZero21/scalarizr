@@ -3,19 +3,8 @@ pypi_name = "M2Crypto"
 default_version "0.21.1"
 
 dependency "python"
-dependency "cacerts"
-dependency "python-openssl"
-dependency "gdbm"
-dependency "ncurses"
 
-
-if windows?
-  source :url => "https://github.com/saltstack/salt-windows-install/blob/master/deps/win32-py2.7/M2Crypto-0.21.1.win32-py2.7.msi?raw=true",
-         :md5 => "3e2a1207b4b55037e21592278fd166ea"
-  build do
-    "#{install_dir}/embedded/python/Scripts/easy_install.exe C:/omnibus-ruby/src/M2Crypto-0.21.1.win32-py2.7.msi"
-  end
-elsif ohai['platform_family'] == "debian"
+if ohai['platform_family'] == "debian"
   build do
     command "export CFLAGS=-I#{install_dir}/embedded/include/python2.7 && #{install_dir}/embedded/bin/pip install -I #{pypi_name}==#{default_version}"
   end
