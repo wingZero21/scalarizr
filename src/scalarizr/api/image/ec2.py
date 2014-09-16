@@ -365,7 +365,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         pkgmgr.installed('unzip')
 
         # update curl certificate on centos 5
-        if linux.os == 'CentOS':
+        if linux.os['name'] == 'CentOS':
             system2(('curl', 
                 '-L', 'http://curl.haxx.se/ca/cacert.pem',
                 '-o', '/etc/pki/tls/certs/ca-bundle.crt'))
