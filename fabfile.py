@@ -176,11 +176,11 @@ def build_omnibus():
         run("[ -f bin/omnibus ] || bundle install --binstubs")
         env = {
             'BUILD_DIR': build_dir,
-            'OMNIBUS_BUILD_VERSION': version, # TODO: should be a value of form 2.9.1.0 to work on win
+            'OMNIBUS_BUILD_VERSION': version,  # TODO: should be a value of form 2.9.1.0 to work on win
         }
         with shell_env(**env):
             run("bin/omnibus clean %s --log-level=warn" % project)
-            run("bin/omnibus build %s --log-level=info" % project)
+            run("ruby -W2 bin/omnibus build %s --log-level=debug" % project)
 
     with open(omnibus_md5sum_file, 'w+') as fp:
         fp.write(omnibus_md5sum())
