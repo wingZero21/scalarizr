@@ -1,14 +1,36 @@
 name "gdbm"
-default_version "1.8.3-1"
+default_version "1.9.1"
 
-dependency "pip"
+dependency "libgcc"
 
+source url: "http://ftp.gnu.org/gnu/gdbm/gdbm-1.9.1.tar.gz",
+       md5: "59f6e4c4193cb875964ffbe8aa384b58"
 
-source :url => "http://downloads.sourceforge.net/project/gnuwin32/gdbm/#{default_version}/gdbm-#{default_version}.exe?r=&ts=1410156881&use_mirror=dfn",
-       :md5 => 'c8dc73944363ac2215b2bf218a0e0211'
-if windows?
-    package_src = "C:/omnibus-ruby/src/gdbm/gdbm-#{default_version}.exe"
-    build do  
-      command "call #{windows_safe_path(package_src)} /sp /verysilent /suppressmsgboxes"
+relative_path "gdbm-1.9.1"
+
+build do
+  env = with_standard_compiler_flags(with_embedded_path)
+  if windows?
+    if system("echo $0") # we're on mingw or cygwin
+        configure = "sh .\\configure"
+    elsif system('$PSVersionTable.PSVersion')
+        configure = "configure"
     end
+  else
+    configure = "./configure"
+  end
+
+  if freebsd?
+    command "./configure" \
+            " --enable-libgdbm-compat" \
+            " --with-pic" \
+            " --prefix=#{install_dir}/embedded", env: env
+  else
+    command "#{configure}" \
+            " --enable-libgdbm-compat" \
+            " --prefix=#{install_dir}/embedded", env: env
+  end
+
+  make "-j #{max_build_jobs}", env: env
+  make "install", env: env
 end

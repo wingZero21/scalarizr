@@ -2,16 +2,12 @@ name "scalarizr-deps"
 
 default_version   "0.1"
 
-if windows?
-  dependency "python-windows"
-end
 if linux?
   dependency "rsync"
   dependency "sqlite3"
   dependency "bzip2"
-  dependency "python"
 end
-
+dependency "python"
 dependency "pip"
 dependency "python-prettytable"
 dependency "python-pymysql"
@@ -33,7 +29,8 @@ dependency "python-pyyaml"
 dependency "cloudstack-python-client"
 dependency "python-pymongo"
 dependency "python-docopt"
+dependency "python-openssl"
+
 if linux?
-    dependency "python-openssl"
     dependency "python-m2crypto"
 end
