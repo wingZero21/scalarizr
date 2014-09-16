@@ -375,8 +375,9 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         with open('/tmp/rvm_install.sh', 'w') as fp:
             fp.write(install_script)
         os.chmod('/tmp/rvm_install.sh', 0770)
-        system2(('/tmp/rvm_install.sh', '-s', 'stable'), shell=True)
+        system2(('/tmp/rvm_install.sh', 'stable'), shell=True)
         system2(('/usr/local/rvm/bin/rvm install 1.9.3', '--auto-dotfiles'), shell=True)
+        system2(('chmod', '-R', '0755', '/usr/local/rvm'))
 
         ruby_path = None
         for item in os.listdir('/usr/local/rvm/rubies/'):
