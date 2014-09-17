@@ -52,7 +52,7 @@ class BehaviorAPI(object):
             installed = cls.do_check_software(system_packages=system_packages)
             cls.software_supported = True
             msg = '{0}: Available. Installed version: {1}.'
-            msg = msg.format(cls._software_name, installed[0][1])
+            msg = msg.format(cls._software_name, installed[1])
             LOG.debug(msg)
         except:
             cls.software_supported = False
