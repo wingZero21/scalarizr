@@ -23,6 +23,7 @@ from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
+from scalarizr.api import DependencyError
 
 
 class MySQLAPI(BehaviorAPI):
@@ -37,6 +38,8 @@ class MySQLAPI(BehaviorAPI):
     __metaclass__ = Singleton
 
     behavior = ['mysql', 'mysql2']
+
+    _software_name = 'myslq'
 
     error_messages = {
         'empty': "'%s' can't be blank",
@@ -307,28 +310,37 @@ class MySQLAPI(BehaviorAPI):
                 async=async, exclusive=True)
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         if linux.os.debian_family:
-            pkgmgr.check_any_dependency(
-                [
-                    ['mysql-client>=5.0,<5.7'],
-                    ['mysql-client-5.5'],
-                    ['mysql-client-5.6']
-                ],
-                installed_packages
-            )
-            pkgmgr.check_any_dependency(
-                [
-                    ['mysql-server>=5.0,<5.7'],
-                    ['mysql-server-5.5'],
-                    ['mysql-server-5.6']
-                ],
-                installed_packages
-            )
+            requirements = [
+                ['mysql-server>=5.0,<5.7', 'mysql-client>=5.0,<5.7'],
+                ['mysql-server-5.5', 'mysql-client-5.5'],
+                ['mysql-server-5.6', 'mysql-client-5.6'],
+            ]
         elif linux.os.redhat_family or linux.os.oracle_family:
-            pkgmgr.check_dependency('mysql-server>=5.0,<5.6', installed_packages)
-            pkgmgr.check_any_dependency([['mysql>=5.0,<5.6'], ['mysql55']], installed_packages)
+            requirements = [
+                ['mysql-server>=5.0,<5.6', 'mysql>=5.0,<5.6'],
+                ['mysql-server>=5.0,<5.6', 'mysql55'],
+            ]
         else:
             raise exceptions.UnsupportedBehavior(
-                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
+                    cls.behavior,
+                    "mysql: Not supported on {0} os family".format(linux.os['family']))
+        errors = list()
+        for requirement in requirements:
+            try:
+                installed = pkgmgr.check_software(requirement[0], system_packages)[0]
+                try:
+                    pkgmgr.check_software(requirement[1:], system_packages)[0]
+                    return installed
+                except pkgmgr.NotInstalledError:
+                    e = sys.exc_info()[1]
+                    raise DependencyError(e.args[0])
+            except:
+                e = sys.exc_info()[1]
+                errors.append(e)
+        for cls in [pkgmgr.VersionMismatchError, DependencyError, pkgmgr.NotInstalledError]:
+            for error in errors:
+                if isinstance(error, cls):
+                    raise error
 

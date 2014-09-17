@@ -58,6 +58,8 @@ class HAProxyAPI(BehaviorAPI):
 
     behavior = 'haproxy'
 
+    _software_name = 'haproxy'
+
     def __init__(self, path=None):
         self.path_cfg = path
         self.cfg = haproxy.HAProxyCfg(path)
@@ -678,6 +680,6 @@ class HAProxyAPI(BehaviorAPI):
         return res
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
-        pkgmgr.check_dependency(['haproxy'], installed_packages)
+    def do_check_software(cls, system_packages=None):
+        return pkgmgr.check_software(['haproxy'], system_packages)[0]
 

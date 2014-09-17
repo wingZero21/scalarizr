@@ -290,6 +290,8 @@ class NginxAPI(BehaviorAPI):
 
     behavior = 'www'
 
+    _software_name = 'nginx'
+
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
         """
         Basic API for configuring and managing Nginx service.
@@ -1968,6 +1970,6 @@ class NginxAPI(BehaviorAPI):
                 self._reload_service()
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
-        pkgmgr.check_any_dependency([['nginx'], ['nginx14']], installed_packages)
+    def do_check_software(cls, system_packages=None):
+        return pkgmgr.check_any_software([['nginx'], ['nginx14']], system_packages)[0]
 

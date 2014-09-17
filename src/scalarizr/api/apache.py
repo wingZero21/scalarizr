@@ -12,6 +12,7 @@ from __future__ import with_statement
 
 import os
 import re
+import sys
 import pwd
 import time
 import uuid
@@ -133,6 +134,8 @@ class ApacheAPI(BehaviorAPI):
     __metaclass__ = Singleton
 
     behavior = 'app'
+
+    _software_name = 'apache'
 
     service = None
     mod_ssl = None
@@ -854,14 +857,16 @@ class ApacheAPI(BehaviorAPI):
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         if linux.os.debian_family:
-            pkgmgr.check_dependency(['apache2>=2.2,<2.5'], installed_packages)
+            requirements = ['apache2>=2.2,<2.5']
         elif linux.os.redhat_family or linux.os.oracle_family:
-            pkgmgr.check_dependency(['httpd>=2.2,<2.5'], installed_packages)
+            requirements = ['httpd>=2.2,<2.5']
         else:
             raise exceptions.UnsupportedBehavior(
-                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
+                    cls.behavior,
+                    "apache: Not supported on {0} os family".format(linux.os['family']))
+        return pkgmgr.check_software(requirements, system_packages)[0]
 
     def fix_default_ssl_virtual_host(self):
         self.mod_ssl.set_default_certificate(SSLCertificate())

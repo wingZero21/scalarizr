@@ -19,6 +19,8 @@ class MemcachedAPI(BehaviorAPI):
 
     behavior = 'memcached'
 
+    _software_name = 'memcached'
+
     def __init__(self):
         self.service = MemcachedInitScript()
 
@@ -43,8 +45,8 @@ class MemcachedAPI(BehaviorAPI):
         return self.service.status()
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
-        pkgmgr.check_dependency(['memcached'], installed_packages)
+    def do_check_software(cls, system_packages=None):
+        return pkgmgr.check_software(['memcached'], system_packages)[0]
 
 
 class MemcachedInitScript(initdv2.ParametrizedInitScript):

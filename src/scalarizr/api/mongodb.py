@@ -114,6 +114,8 @@ class MongoDBAPI(BehaviorAPI):
 
     behavior = 'mongodb'
 
+    _software_name = 'mongodb'
+
     @rpc.command_method
     def reset_password(self):
         """
@@ -182,7 +184,7 @@ class MongoDBAPI(BehaviorAPI):
         return {'status':status, 'error':error}
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         """
         Asserts MongoDB version.
         """
@@ -190,63 +192,64 @@ class MongoDBAPI(BehaviorAPI):
         os_vers = linux.os['version']
         if os_name == 'ubuntu':
             if os_vers >= '14':
-                required_list = [
+                requirements = [
                     ['mongodb-org>=2.4,<2.7'],
                     ['mongodb-10gen>=2.4,<2.7'],
                     ['mongodb>=2.4,<2.7']
                 ]
             elif os_vers >= '12':
-                required_list = [
+                requirements = [
                     ['mongodb-org>=2.0,<2.7'],
                     ['mongodb-10gen>=2.0,<2.7'],
                     ['mongodb>=2.0,<2.7']
                 ]
             elif os_vers >= '10':
-                required_list = [
+                requirements = [
                     ['mongodb-org>=2.0,<2.1'],
                     ['mongodb-10gen>=2.0,<2.1'],
                     ['mongodb>=2.0,<2.1']
                 ]
         elif os_name == 'debian':
             if os_vers >= '7':
-                required_list = [
+                requirements = [
                     ['mongodb-org>=2.4,<2.7'],
                     ['mongodb-10gen>=2.4,<2.7'],
                     ['mongodb>=2.4,<2.7']
                 ]
             elif os_vers >= '6':
-                required_list = [
+                requirements = [
                     ['mongodb-org>=2.4,<2.5'],
                     ['mongodb-10gen>=2.4,<2.5'],
                     ['mongodb>=2.4,<2.5']
                 ]
         elif os_name == 'centos':
             if os_vers >= '6':
-                required_list = [
+                requirements = [
                     ['mongodb-org>=2.0,<2.7'],
                     ['mongo-10gen-server>=2.0,<2.7'],
                     ['mongo-server>=2.0,<2.7']
                 ]
             elif os_vers >= '5':
-                required_list = [
+                requirements = [
                     ['mongodb-org>=2.0,<2.1'],
                     ['mongo-10gen-server>=2.0,<2.1'],
                     ['mongo-server>=2.0,<2.1']
                 ]
         elif linux.os.redhat_family:
-            required_list = [
+            requirements = [
                 ['mongodb-org>=2.4,<2.7'],
                 ['mongo-10gen-server>=2.4,<2.7'],
                 ['mongo-server>=2.4,<2.7']
             ]
         elif linux.os.oracle_family:
-            required_list = [
+            requirements = [
                 ['mongodb-org>=2.0,<2.1'],
                 ['mongo-10gen-server>=2.0,<2.1'],
                 ['mongo-server>=2.0,<2.1']
             ]
         else:
             raise exceptions.UnsupportedBehavior(
-                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
-        pkgmgr.check_any_dependency(required_list, installed_packages)
+                    cls.behavior,
+                    "mongodb: Not supported on {0} os family".format(linux.os['family']))
+        return pkgmgr.check_any_software(requirements, system_packages)[0]
 

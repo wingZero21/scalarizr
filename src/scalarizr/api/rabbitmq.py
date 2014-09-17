@@ -21,6 +21,8 @@ class RabbitMQAPI(BehaviorAPI):
 
     behavior = 'rabbitmq'
 
+    _software_name = 'rabbitmq'
+
     def __init__(self):
         self.service = rabbitmq_module.RabbitMQInitScript()
         self.rabbitmq = rabbitmq_sgt
@@ -109,23 +111,26 @@ class RabbitMQAPI(BehaviorAPI):
         return new_password
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         if os_name == 'ubuntu':
             if os_vers >= '12':
-                pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.4'], installed_packages)
+                requirements = ['rabbitmq-server>=3.0,<3.4']
             elif os_vers >= '10':
-                pkgmgr.check_dependency(['rabbitmq-server>=2.6,<2.7'], installed_packages)
+                requirements = ['rabbitmq-server>=2.6,<2.7']
         elif os_name == 'debian':
-            pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.4'], installed_packages)
+            requirements = ['rabbitmq-server>=3.0,<3.4']
         elif linux.os.redhat_family:
             if os_vers >= '6':
-                pkgmgr.check_dependency(['rabbitmq-server>=3.1,<3.4', 'erlang'], installed_packages)
+                requirements = ['rabbitmq-server>=3.1,<3.4']
             elif os_vers >= '5':
-                raise exceptions.UnsupportedBehavior(cls.behavior,
-                        "RabbitMQ doesn't supported on %s-5" % linux.os['name'])
+                raise exceptions.UnsupportedBehavior(
+                        cls.behavior,
+                        "rabbitmq: Not supported by Scalr on {0} {1}".format(linux.os['name'], linux.os['version']))
         else:
             raise exceptions.UnsupportedBehavior(
-                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
+                    cls.behavior,
+                    "rabbitmq: Not supported on {0} os family".format(linux.os['family']))
+        return pkgmgr.check_software(requirements, system_packages)[0]
 

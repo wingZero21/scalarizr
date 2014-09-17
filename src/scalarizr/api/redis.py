@@ -49,6 +49,8 @@ class RedisAPI(BehaviorAPI):
 
     behavior = 'redis'
 
+    _software_name = 'redis'
+
     _cnf = None
     _queryenv = None
 
@@ -450,28 +452,29 @@ class RedisAPI(BehaviorAPI):
                                 exclusive=True)  #?
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         if os_name == 'ubuntu':
             if os_vers >= '14':
-                pkgmgr.check_dependency(['redis-server>=2.6,<2.9'], installed_packages)
+                requirements = ['redis-server>=2.6,<2.9']
             elif os_vers >= '12':
-                pkgmgr.check_dependency(['redis-server>=2.2,<2.9'], installed_packages)
+                requirements = ['redis-server>=2.2,<2.9']
             elif os_vers >= '10':
-                pkgmgr.check_dependency(['redis-server>=2.2,<2.3'], installed_packages)
+                requirements = ['redis-server>=2.2,<2.3']
         elif os_name == 'debian':
             if os_vers >= '7':
-                pkgmgr.check_dependency(['redis-server>=2.6,<2.9'], installed_packages)
+                requirements = ['redis-server>=2.6,<2.9']
             elif os_vers >= '6':
-                pkgmgr.check_dependency(['redis-server>=2.6,<2.7'], installed_packages)
+                requirements = ['redis-server>=2.6,<2.7']
         elif linux.os.oracle_family or os_name == 'redhat' or os_name == 'centos':
-            pkgmgr.check_dependency(['redis>=2.4,<2.9'], installed_packages, ['centalt-release'])
+            requirements = ['redis>=2.4,<2.9']
         elif os_name == 'amazon':
             if os_vers >= '2014':
-                pkgmgr.check_dependency(['redis>=2.8,<2.9'], installed_packages, ['centalt-release'])
+                requirements = ['redis>=2.8,<2.9']
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(linux.os['name'])
-            )
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior,
+                    "apache: Not supported on {0} os family".format(linux.os['family']))
+        return pkgmgr.check_software(requirements, system_packages)[0]
 

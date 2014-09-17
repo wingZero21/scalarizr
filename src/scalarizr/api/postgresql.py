@@ -6,6 +6,7 @@ Created on Feb 25, 2013
 
 import os
 import re
+import sys
 import logging
 import time
 import tarfile
@@ -30,6 +31,7 @@ from scalarizr.util import Singleton
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
+from scalarizr.api import DependencyError
 
 
 LOG = logging.getLogger(__name__)
@@ -53,6 +55,8 @@ class PostgreSQLAPI(BehaviorAPI):
     __metaclass__ = Singleton
 
     behavior = 'postgresql'
+
+    _software_name = 'postgresql'
 
     replication_status_query = '''SELECT
     CASE WHEN pg_last_xlog_receive_location() = pg_last_xlog_replay_location()
@@ -359,19 +363,19 @@ class PostgreSQLAPI(BehaviorAPI):
 
                             
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         if os_name == 'ubuntu':
             if os_vers >= '12':
-                required_list = [
+                requirements = [
                     ['postgresql-9.1', 'postgresql-client-9.1'],
                     ['postgresql-9.2', 'postgresql-client-9.2'],
                     ['postgresql-9.3', 'postgresql-client-9.3'],
                     ['postgresql>=9.1,<9.4', 'postgresql-client>=9.1,<9.4'],
                 ]
             elif os_vers >= '10':
-                required_list = [
+                requirements = [
                     ['postgresql-9.0', 'postgresql-client-9.0'],
                     ['postgresql-9.1', 'postgresql-client-9.1'],
                     ['postgresql-9.2', 'postgresql-client-9.2'],
@@ -379,46 +383,51 @@ class PostgreSQLAPI(BehaviorAPI):
                     ['postgresql>=9.0,<9.4', 'postgresql-client>=9.0,<9.4'],
                 ]
         elif os_name == 'debian':
-                required_list = [
+                requirements = [
                     ['postgresql-9.2', 'postgresql-client-9.2'],
                     ['postgresql-9.3', 'postgresql-client-9.3'],
                     ['postgresql>=9.2,<9.4', 'postgresql-client>=9.2,<9.4'],
                 ]
         elif linux.os.redhat_family:
             if os_vers >= '6':
-                required_list = [
-                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
-                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                    ['postgresql93', 'postgresql93-server', 'postgresql93-devel'],
-                    [
-                        'postgresql>=9.1,<9.4',
-                        'postgresql-server>=9.1,<9.4',
-                        'postgresql-devel>=9.1,<9.4'
-                    ]
+                requirements = [
+                    ['postgresql91-server', 'postgresql91', 'postgresql91-devel'],
+                    ['postgresql92-server', 'postgresql92', 'postgresql92-devel'],
+                    ['postgresql93-server', 'postgresql93', 'postgresql93-devel'],
+                    ['postgresql-server>=9.1,<9.4', 'postgresql>=9.1,<9.4', 'postgresql-devel>=9.1,<9.4'],
                 ]
             elif os_vers >= '5':
-                required_list = [
-                    ['postgresql90', 'postgresql90-server', 'postgresql90-devel'],
-                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
-                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                    ['postgresql93', 'postgresql93-server', 'postgresql93-devel'],
-                    [
-                        'postgresql>=9.0,<9.4',
-                        'postgresql-server>=9.0,<9.4',
-                        'postgresql-devel>=9.0,<9.4'
-                    ]
+                requirements = [
+                    ['postgresql90-server', 'postgresql90', 'postgresql90-devel'],
+                    ['postgresql91-server', 'postgresql91', 'postgresql91-devel'],
+                    ['postgresql92-server', 'postgresql92', 'postgresql92-devel'],
+                    ['postgresql93-server', 'postgresql93', 'postgresql93-devel'],
+                    ['postgresql-server>=9.0,<9.4', 'postgresql>=9.0,<9.4', 'postgresql-devel>=9.0,<9.4'],
                 ]
         elif linux.os.oracle_family:
-            required_list = [
-                ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                [
-                    'postgresql>=9.2,<9.3',
-                    'postgresql-server>=9.2,<9.3',
-                    'postgresql-devel>=9.2,<9.3'
-                ]
+            requirements = [
+                ['postgresql92-server', 'postgresql92', 'postgresql92-devel'],
+                ['postgresql-server>=9.2,<9.3', 'postgresql>=9.2,<9.3', 'postgresql-devel>=9.2,<9.3'],
             ]
         else:
             raise exceptions.UnsupportedBehavior(
-                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
-        pkgmgr.check_any_dependency(required_list, installed_packages)
+                    cls.behavior,
+                    "postgresql: Not supported on {0} os family".format(linux.os['family']))
+        errors = list()
+        for requirement in requirements:
+            try:
+                installed = pkgmgr.check_software(requirement[0], system_packages)[0]
+                try:
+                    pkgmgr.check_software(requirement[1:], system_packages)[0]
+                    return installed
+                except pkgmgr.NotInstalledError:
+                    e = sys.exc_info()[1]
+                    raise DependencyError(e.args[0])
+            except:
+                e = sys.exc_info()[1]
+                errors.append(e)
+        for cls in [pkgmgr.VersionMismatchError, DependencyError, pkgmgr.NotInstalledError]:
+            for error in errors:
+                if isinstance(error, cls):
+                    raise error
 

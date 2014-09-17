@@ -1,4 +1,5 @@
 import os
+import sys
 import socket
 import glob
 import logging
@@ -12,6 +13,7 @@ from scalarizr import exceptions
 from scalarizr.util import initdv2
 from scalarizr.util import firstmatched
 from scalarizr.api import BehaviorAPI
+from scalarizr.api import DependencyError
 
 LOG = logging.getLogger(__name__)
 
@@ -80,6 +82,8 @@ class TomcatAPI(BehaviorAPI):
     __metaclass__ = Singleton
 
     behavior = 'tomcat'
+
+    _software_name = 'tomcat'
 
     @classmethod
     def catalina_home_dir(cls):
@@ -183,24 +187,58 @@ class TomcatAPI(BehaviorAPI):
         return self.service.status()
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         if cls.catalina_home_dir():
             return
-        if os_name == 'ubuntu':
-            if os_vers >= '12':
-                pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
-            elif os_vers >= '10':
-                pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed_packages)
-        elif os_name == 'debian':
-            if os_vers >= '7':
-                pkgmgr.check_dependency(['tomcat7', 'tomcat7-admin'], installed_packages)
-            elif os_vers >= '6':
-                pkgmgr.check_dependency(['tomcat6', 'tomcat6-admin'], installed_packages)
+        if linux.os.debian_family:
+            if os_name == 'ubuntu':
+                if os_vers >= '12':
+                    requirements_main = ['tomcat7']
+                    requirements_dependencies = ['tomcat7-admin']
+                elif os_vers >= '10':
+                    requirements_main = ['tomcat6']
+                    requirements_dependencies = ['tomcat6-admin']
+            elif os_name == 'debian':
+                if os_vers >= '7':
+                    requirements_main = ['tomcat7']
+                    requirements_dependencies = ['tomcat7-admin']
+                elif os_vers >= '6':
+                    requirements_main = ['tomcat6']
+                    requirements_dependencies = ['tomcat6-admin']
+            installed = pkgmgr.check_software(requirements_main, system_packages)[0]
+            try:
+                pkgmgr.check_software(requirements_dependencies, system_packages)
+                return installed
+            except pkgmgr.NotInstalledError:
+                e = sys.exc_info()[1]
+                raise DependencyError(e.args[0])
         elif linux.os.redhat_family or linux.os.oracle_family:
-            pkgmgr.check_any_dependency(['tomcat6', 'tomcat'], installed_packages)
+            requirements = [
+                ['tomcat', 'tomcat-admin-webapps'],
+                ['tomcat6', 'tomcat6-admin-webapps'],
+                ['tomcat7', 'tomcat7-admin-webapps'],
+            ]
+            errors = list()
+            for requirement in requirements:
+                try:
+                    installed = pkgmgr.check_software(requirement[0], system_packages)[0]
+                    try:
+                        pkgmgr.check_software(requirement[1:], system_packages)[0]
+                        return installed
+                    except pkgmgr.NotInstalledError:
+                        e = sys.exc_info()[1]
+                        raise DependencyError(e.args[0])
+                except:
+                    e = sys.exc_info()[1]
+                    errors.append(e)
+            for cls in [pkgmgr.VersionMismatchError, DependencyError, pkgmgr.NotInstalledError]:
+                for error in errors:
+                    if isinstance(error, cls):
+                        raise error
         else:
             raise exceptions.UnsupportedBehavior(
-                    cls.behavior, "Unsupported os family {0}".format(linux.os['family']))
+                    cls.behavior,
+                    "tomcat: Not supported on {0} os family".format(linux.os['family']))
 
