@@ -459,7 +459,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             for line in fileinput.input(file_to_patch, inplace=True):
                 if 'ROOT_DEVICE_REGEX = ' in line:
                     definition_part = line.split('=')[0]
-                    fixed_regex = '^(\/dev\/(?:root|(?:xvd|sd)(?:[a-z]|[a-c][a-z]|d[a-x])))[1]?$'
+                    fixed_regex = '/^(\/dev\/(?:root|(?:xvd|sd)(?:[a-z]|[a-c][a-z]|d[a-x])))[1]?$/'
                     print '%s=%s' % (definition_part, fixed_regex)
                 else:
                     print line,
