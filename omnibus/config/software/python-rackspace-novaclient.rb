@@ -3,7 +3,7 @@ pypi_name = "rackspace-novaclient"
 default_version "1.3"
 
 dependency "pip"
-dependency "lxml"
+
 
 if windows?
   pip = "#{install_dir}/embedded/python/Scripts/pip.exe"
