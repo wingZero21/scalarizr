@@ -6,6 +6,7 @@ import time
 import subprocess
 import pprint
 import itertools
+import fileinput
 
 from boto.ec2.blockdevicemapping import EBSBlockDeviceType
 from boto.ec2.blockdevicemapping import BlockDeviceMapping
@@ -285,7 +286,6 @@ class EBSImageMaker(object):
 
         block_device_map = BlockDeviceMapping(conn)
 
-
         root_vol = EBSBlockDeviceType(snapshot_id=snapshot_id)
         root_vol.delete_on_termination = True
         # Adding ephemeral devices
@@ -451,6 +451,18 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             elif item.startswith('ec2-ami-tools'):
                 self.ami_bin_dir = os.path.join(self._tools_dir,
                     os.path.join(item, 'bin'))
+
+        if linux.os['name'] == 'CentOS' and linux.os['release'] < (6, 0):
+            # patching ami tools so /dev/root is determinated as valid device
+            ami_tools_dir = os.path.dirname(self.ami_bin_dir)
+            file_to_patch = os.path.join(ami_tools_dir, 'lib/ec2/platform/linux/image.rb')
+            for line in fileinput.input(file_to_patch, inplace=True):
+                if 'ROOT_DEVICE_REGEX = ' in line:
+                    definition_part = line.split('=')[0]
+                    fixed_regex = '^(\/dev\/(?:root|(?:xvd|sd)(?:[a-z]|[a-c][a-z]|d[a-x])))[1]?$'
+                    print '%s=%s' % (definition_part, fixed_regex)
+                else:
+                    print line,
 
         system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
             shell=True)
