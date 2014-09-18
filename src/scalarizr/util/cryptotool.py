@@ -30,14 +30,14 @@ def _new_cipher(key):
 def _new_padding():
     return padding.PKCS7(64)
 
-def encrypt (s, key):
+def encrypt(s, key):
     enc = _new_cipher(key).encryptor()
     pad = _new_padding().padder()
     padded = pad.update(s) + pad.finalize()
     encrypted = enc.update(padded) + enc.finalize()
     return binascii.b2a_base64(encrypted)
 
-def decrypt (s, key):
+def decrypt(s, key):
     dec = _new_cipher(key).decryptor()
     unpad = _new_padding().unpadder()
     encrypted = binascii.a2b_base64(s)
@@ -45,26 +45,8 @@ def decrypt (s, key):
     return unpad.update(padded) + unpad.finalize()
 
 
-_READ_BUF_SIZE = 1024 * 1024     # Buffer size in bytes
-
-def digest_file(digest, file):
-    while 1:
-        buf = file.read(_READ_BUF_SIZE)
-        if not buf:
-            break;
-        digest.update(buf)
-    return digest.final()
-
-def crypt_file(cipher, in_file, out_file):
-    while 1:
-        buf = in_file.read(_READ_BUF_SIZE)
-        if not buf:
-            break
-        out_file.write(cipher.update(buf))
-    out_file.write(cipher.final())
-
-
-def _get_canonical_string (params={}):
+def _get_canonical_string (params=None):
+    params = params or {}
     s = ""
     for key, value in sorted(params.items()):
         s = s + str(key) + str(value)

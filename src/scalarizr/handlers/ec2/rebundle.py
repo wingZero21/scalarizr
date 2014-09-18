@@ -10,8 +10,7 @@ import platform
 import scalarizr
 from scalarizr.bus import bus
 from scalarizr.handlers import HandlerError, build_tags
-from scalarizr.util import system2, cryptotool,\
-        wait_until, firstmatched
+from scalarizr.util import system2, wait_until, firstmatched
 from scalarizr import linux
 from scalarizr.linux import mount
 
@@ -26,6 +25,8 @@ from scalarizr.storage2 import volume, filesystem
 from scalarizr.libs.metaconf import Configuration
 
 from M2Crypto import X509, EVP, RSA
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
@@ -54,6 +55,7 @@ BUNDLER_RELEASE = "672"
 
 DIGEST_ALGO = "sha1"
 CRYPTO_ALGO = "aes-128-cbc"
+READ_BUF_SIZE = 1024 * 1024  # Buffer size in bytes
 
 EPH_STORAGE_MAPPING = {
         'i386': {
@@ -487,8 +489,8 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             f = None
             try:
                 f = open(part_filename)
-                digest = EVP.MessageDigest(DIGEST_ALGO)
-                part_digests.append((part_name, hexlify(cryptotool.digest_file(digest, f))))
+                digest = hashes.Hash(hashes.SHA1(), backend=default_backend())
+                part_digests.append((part_name, hexlify(self._digest_file(digest, f))))
             except (Exception, BaseException):
                 LOG.error("Cannot generate digest for chunk '%s'", part_name)
                 raise
@@ -496,6 +498,15 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
                 if f is not None:
                     f.close()
         return part_digests
+
+
+    def _digest_file(self, digest, fp):
+        while 1:
+            buf = fp.read(READ_BUF_SIZE)
+            if not buf:
+                break;
+            digest.update(buf)
+        return digest.finalize()
 
 
     def _upload_image(self, bucket_name, manifest_path, manifest, region=None, acl="aws-exec-read"):
