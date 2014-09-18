@@ -114,7 +114,7 @@ class Handler(object):
             possible_behaviors = ('base', 'chef')
 
         msg = (
-                "Scalr built-in automation: checking for supported software "
+                "Scalr built-in automation: checking for supported software.\n "
                 "If installed software isn't detected, "
                 "review the Scalr Wiki: https://scalr-wiki.atlassian.net/wiki/x/IoB1")
         LOG.info(msg)

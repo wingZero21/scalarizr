@@ -961,7 +961,7 @@ class Service(object):
             raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
 
         optparser = bus.optparser
-        if optparser and optparser.values.import_server and linux.os['family'] != 'Windows':
+        if optparser and not optparser.values.import_server and linux.os['family'] != 'Windows':
             system_packages = pkgmgr.package_mgr().list()
             for behavior in node.__node__['behavior']:
                 if behavior == 'base' or behavior not in api.api_routes.keys():
