@@ -25,7 +25,7 @@ from scalarizr.storage2.cloudfs import FileTransfer
 from scalarizr.storage2 import volume, filesystem
 from scalarizr.libs.metaconf import Configuration
 
-from M2Crypto import X509, EVP, Rand, RSA
+from M2Crypto import X509, EVP, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
@@ -372,8 +372,8 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             except:
                 LOG.error("Cannot read EC2 certificate")
                 raise
-            key = key or hexlify(Rand.rand_bytes(16))
-            iv = iv or hexlify(Rand.rand_bytes(8))
+            key = key or hexlify(os.urandom(16))
+            iv = iv or hexlify(os.urandom(8))
             LOG.debug('Key: %s', key)
             LOG.debug('IV: %s', iv)
 

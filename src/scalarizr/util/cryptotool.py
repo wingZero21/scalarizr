@@ -6,11 +6,11 @@ Created on Apr 7, 2010
 '''
 
 from M2Crypto.EVP import Cipher
-from M2Crypto.Rand import rand_bytes
 import binascii
 import hmac
 import hashlib
 import re
+import os
 try:
     import timemodule as time
 except ImportError:
@@ -20,7 +20,7 @@ except ImportError:
 crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
 
 def keygen(length=40):
-    return binascii.b2a_base64(rand_bytes(length))
+    return binascii.b2a_base64(os.urandom(length))
 
 def _init_cipher(key, op_enc=1):
     skey = key[0:crypto_algo["key_size"]]   # Use first n bytes as crypto key
