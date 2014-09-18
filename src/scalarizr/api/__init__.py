@@ -51,18 +51,14 @@ class BehaviorAPI(object):
                 )
             installed = cls.do_check_software(system_packages=system_packages)
             cls.software_supported = True
-            msg = '{0}: Available. Installed version: {1}.'
-            msg = msg.format(cls._software_name, installed[1])
-            LOG.info(msg)
+            return installed
         except:
             cls.software_supported = False
             e = sys.exc_info()[1]
             if isinstance(e, exceptions.UnsupportedBehavior):
-                LOG.info(e.args[1])
                 raise
             elif isinstance(e, pkgmgr.NotInstalledError):
-                msg = '{0}: Unavailable. Not installed.'.format(cls._software_name)
-                LOG.info(msg)
+                msg = '{0}: Unavailable. Not installed.'.format(cls.behavior)
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, pkgmgr.VersionMismatchError):
                 msg = '{0}: Unavailable. Installed version {1} is not supported by Scalr on {2} {3}.'
@@ -72,8 +68,7 @@ class BehaviorAPI(object):
                         packages.append('{0}-{1}'.format(package[0], package[1]))
                     else:
                         packages.append(package[0])
-                msg = msg.format(cls._software_name, ','.join(packages), linux.os['name'], linux.os['version'])
-                LOG.info(msg)
+                msg = msg.format(cls.behavior, ','.join(packages), linux.os['name'], linux.os['version'])
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, DependencyError):
                 msg = '{0}: Unavailable. Installed, but missing additional dependencies: {1}.'
@@ -83,8 +78,7 @@ class BehaviorAPI(object):
                         packages.append('{0} {1}'.format(package[0], package[1]))
                     else:
                         packages.append(package[0])
-                msg = msg.format(cls._software_name, ','.join(packages))
-                LOG.info(msg)
+                msg = msg.format(cls.behavior, ','.join(packages))
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             else:
                 raise sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]

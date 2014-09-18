@@ -107,11 +107,17 @@ class Handler(object):
     def get_ready_behaviours(self):
         LOG.info('Detecting supported behaviors...')        
         if linux.os['family'] != 'Windows':
-            installed_packages = pkgmgr.package_mgr().list()
+            system_packages = pkgmgr.package_mgr().list()
             possible_behaviors = config.BuiltinBehaviours.values()
         else:
-            installed_packages = []
+            system_packages = []
             possible_behaviors = ('base', 'chef')
+
+        msg = (
+                "Scalr built-in automation: checking for supported software "
+                "If installed software isn't detected, "
+                "review the Scalr Wiki: https://scalr-wiki.atlassian.net/wiki/x/IoB1")
+        logger.info(msg)
 
         ready_behaviors = list()
         for behavior in possible_behaviors:
@@ -119,9 +125,9 @@ class Handler(object):
                 continue
             try:
                 api_cls = util.import_class(api.api_routes[behavior])
-                api_cls.check_software(installed_packages)
+                installed = api_cls.check_software(system_packages)
                 ready_behaviors.append(behavior)
-                LOG.info('%s: yes', behavior)
+                LOG.info('%s: Available. Installed version: %s', behavior, installed[1])
             except (exceptions.NotFound, exceptions.UnsupportedBehavior, ImportError), e:
                 if isinstance(e, exceptions.UnsupportedBehavior):
                     LOG.info('%s: %s', behavior, e.args[1])

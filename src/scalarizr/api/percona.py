@@ -28,13 +28,12 @@ class PerconaAPI(mysql.MySQLAPI):
     def do_check_software(cls, system_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
-        if os_name == 'ubuntu':
-            if os_vers >= '14':
-                requirements = [
-                    ['percona-server-server-5.1', 'percona-server-client-5.1' ],
-                    ['percona-server-server-5.5', 'percona-server-client-5.5' ],
-                    ['percona-server-server-5.6', 'percona-server-client-5.6' ],
-                ]
+        if os_name == 'ubuntu' and os_vers >= '14':
+            requirements = [
+                ['percona-server-server-5.1', 'percona-server-client-5.1' ],
+                ['percona-server-server-5.5', 'percona-server-client-5.5' ],
+                ['percona-server-server-5.6', 'percona-server-client-5.6' ],
+            ]
         elif linux.os.debian_family:
             requirements = [
                 ['percona-server-server-5.1', 'percona-server-client-5.1'],

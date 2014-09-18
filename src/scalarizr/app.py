@@ -960,12 +960,8 @@ class Service(object):
         except (BaseException, Exception):
             raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
 
-        if linux.os['family'] != 'Windows':
-            msg = (
-                    "Scalr built-in automation: checking for supported software "
-                    "If installed software software isn't detected, "
-                    "review the Scalr Wiki: https://scalr-wiki.atlassian.net/wiki/x/IoB1")
-            logger.info(msg)
+        optparser = bus.optparser
+        if optparser and optparser.values.import_server and linux.os['family'] != 'Windows':
             system_packages = pkgmgr.package_mgr().list()
             for behavior in node.__node__['behavior']:
                 if behavior == 'base' or behavior not in api.api_routes.keys():
