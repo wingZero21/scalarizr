@@ -5,16 +5,16 @@ Created on Apr 7, 2010
 @author: marat
 '''
 
-from M2Crypto.EVP import Cipher
 import binascii
 import hmac
 import hashlib
 import re
 import os
-try:
-    import timemodule as time
-except ImportError:
-    import time
+import time
+
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
 
 
 crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
@@ -22,24 +22,28 @@ crypto_algo = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
 def keygen(length=40):
     return binascii.b2a_base64(os.urandom(length))
 
-def _init_cipher(key, op_enc=1):
+def _new_cipher(key):
     skey = key[0:crypto_algo["key_size"]]   # Use first n bytes as crypto key
-    iv = key[-crypto_algo["iv_size"]:]              # Use last m bytes as IV
-    return Cipher(crypto_algo["name"], skey, iv, op_enc)
+    iv = key[-crypto_algo["iv_size"]:]      # Use last m bytes as IV
+    return Cipher(algorithms.TripleDES(skey), modes.CBC(iv), backend=default_backend())
+
+def _new_padding():
+    return padding.PKCS7(64)
 
 def encrypt (s, key):
-    c = _init_cipher(key, 1)
-    ret = c.update(s)
-    ret += c.final()
-    del c
-    return binascii.b2a_base64(ret)
+    enc = _new_cipher(key).encryptor()
+    pad = _new_padding().padder()
+    padded = pad.update(s) + pad.finalize()
+    encrypted = enc.update(padded) + enc.finalize()
+    return binascii.b2a_base64(encrypted)
 
 def decrypt (s, key):
-    c = _init_cipher(key, 0)
-    ret = c.update(binascii.a2b_base64(s))
-    ret += c.final()
-    del c
-    return ret
+    dec = _new_cipher(key).decryptor()
+    unpad = _new_padding().unpadder()
+    encrypted = binascii.a2b_base64(s)
+    padded = dec.update(encrypted) + dec.finalize()
+    return unpad.update(padded) + unpad.finalize()
+
 
 _READ_BUF_SIZE = 1024 * 1024     # Buffer size in bytes
 
