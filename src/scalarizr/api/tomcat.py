@@ -238,5 +238,5 @@ class TomcatAPI(BehaviorAPI):
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
-                    "tomcat: Not supported on {0} os family".format(linux.os['family']))
+                    "Not supported on {0} os family".format(linux.os['family']))
 

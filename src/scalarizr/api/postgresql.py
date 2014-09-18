@@ -381,11 +381,11 @@ class PostgreSQLAPI(BehaviorAPI):
                     ['postgresql>=9.0,<9.4', 'postgresql-client>=9.0,<9.4'],
                 ]
         elif os_name == 'debian':
-                requirements = [
-                    ['postgresql-9.2', 'postgresql-client-9.2'],
-                    ['postgresql-9.3', 'postgresql-client-9.3'],
-                    ['postgresql>=9.2,<9.4', 'postgresql-client>=9.2,<9.4'],
-                ]
+            requirements = [
+                ['postgresql-9.2', 'postgresql-client-9.2'],
+                ['postgresql-9.3', 'postgresql-client-9.3'],
+                ['postgresql>=9.2,<9.4', 'postgresql-client>=9.2,<9.4'],
+            ]
         elif linux.os.redhat_family:
             if os_vers >= '6':
                 requirements = [
@@ -410,7 +410,7 @@ class PostgreSQLAPI(BehaviorAPI):
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
-                    "postgresql: Not supported on {0} os family".format(linux.os['family']))
+                    "Not supported on {0} os family".format(linux.os['family']))
         errors = list()
         for requirement in requirements:
             try:

@@ -125,10 +125,10 @@ class RabbitMQAPI(BehaviorAPI):
             elif os_vers >= '5':
                 raise exceptions.UnsupportedBehavior(
                         cls.behavior,
-                        "rabbitmq: Not supported by Scalr on {0} {1}".format(linux.os['name'], linux.os['version']))
+                        "Not supported by Scalr on {0} {1}".format(linux.os['name'], linux.os['version']))
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
-                    "rabbitmq: Not supported on {0} os family".format(linux.os['family']))
+                    "Not supported on {0} os family".format(linux.os['family']))
         return pkgmgr.check_software(requirements, system_packages)[0]
 

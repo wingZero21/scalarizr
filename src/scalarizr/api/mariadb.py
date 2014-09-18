@@ -33,7 +33,7 @@ class MariaDBAPI(mysql.MySQLAPI):
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
-                    "mariadb: Not supported on {0} os family".format(linux.os['family']))
+                    "Not supported on {0} os family".format(linux.os['family']))
         installed = pkgmgr.check_software(requirements_main, system_packages)[0]
         try:
             pkgmgr.check_software(requirements_dependencies, system_packages)

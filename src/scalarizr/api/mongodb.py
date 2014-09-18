@@ -248,6 +248,6 @@ class MongoDBAPI(BehaviorAPI):
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
-                    "mongodb: Not supported on {0} os family".format(linux.os['family']))
+                    "Not supported on {0} os family".format(linux.os['family']))
         return pkgmgr.check_any_software(requirements, system_packages)[0]
 

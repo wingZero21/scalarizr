@@ -45,7 +45,7 @@ class PerconaAPI(mysql.MySQLAPI):
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
-                    "apache: Not supported on {0} os family".format(linux.os['family']))
+                    "Not supported on {0} os family".format(linux.os['family']))
         errors = list()
         for requirement in requirements:
             try:

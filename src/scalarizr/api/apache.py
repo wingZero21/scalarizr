@@ -863,7 +863,7 @@ class ApacheAPI(BehaviorAPI):
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
-                    "apache: Not supported on {0} os family".format(linux.os['family']))
+                    "Not supported on {0} os family".format(linux.os['family']))
         return pkgmgr.check_software(requirements, system_packages)[0]
 
     def fix_default_ssl_virtual_host(self):
