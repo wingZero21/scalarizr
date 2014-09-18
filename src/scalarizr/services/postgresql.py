@@ -13,8 +13,6 @@ import shutil
 import logging
 import subprocess
 
-from M2Crypto import RSA
-
 from scalarizr.util import firstmatched, wait_until
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, system2, PopenError, software, Singleton
@@ -389,9 +387,8 @@ class PgUser(object):
             self._store_key(pvt_key, private=True)
         
     def generate_private_ssh_key(self, key_length=1024):
-        public_exponent = 65337
-        key = RSA.gen_key(key_length, public_exponent)
-        key.save_key(self.private_key_path, cipher=None)
+        # TODO: rewrite with cryptography (current 0.5.4 doesn't support key serialization)  
+        linux.system('openssl genrsa -out {0} {1}'.format(self.private_key_path, key_length), shell=True)
         os.chmod(self.private_key_path, 0400)
         
     def extract_public_ssh_key(self):
