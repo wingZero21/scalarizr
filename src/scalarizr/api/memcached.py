@@ -19,8 +19,6 @@ class MemcachedAPI(BehaviorAPI):
 
     behavior = 'memcached'
 
-    _software_name = 'memcached'
-
     def __init__(self):
         self.service = MemcachedInitScript()
 

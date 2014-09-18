@@ -114,8 +114,6 @@ class MongoDBAPI(BehaviorAPI):
 
     behavior = 'mongodb'
 
-    _software_name = 'mongodb'
-
     @rpc.command_method
     def reset_password(self):
         """

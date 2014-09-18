@@ -19,8 +19,6 @@ class PerconaAPI(mysql.MySQLAPI):
 
     behavior = 'percona'
 
-    _software_name = 'precona'
-
     def __init__(self):
         super(PerconaAPI, self).__init__()
 

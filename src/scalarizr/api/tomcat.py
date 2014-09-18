@@ -83,8 +83,6 @@ class TomcatAPI(BehaviorAPI):
 
     behavior = 'tomcat'
 
-    _software_name = 'tomcat'
-
     @classmethod
     def catalina_home_dir(cls):
         return linux.system('echo $CATALINA_HOME', shell=True)[0].strip()

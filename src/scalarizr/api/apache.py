@@ -135,8 +135,6 @@ class ApacheAPI(BehaviorAPI):
 
     behavior = 'app'
 
-    _software_name = 'apache'
-
     service = None
     mod_ssl = None
     current_open_ports = None

@@ -290,8 +290,6 @@ class NginxAPI(BehaviorAPI):
 
     behavior = 'www'
 
-    _software_name = 'nginx'
-
     def __init__(self, app_inc_dir=None, proxies_inc_dir=None):
         """
         Basic API for configuring and managing Nginx service.

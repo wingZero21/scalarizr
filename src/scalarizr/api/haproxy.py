@@ -58,8 +58,6 @@ class HAProxyAPI(BehaviorAPI):
 
     behavior = 'haproxy'
 
-    _software_name = 'haproxy'
-
     def __init__(self, path=None):
         self.path_cfg = path
         self.cfg = haproxy.HAProxyCfg(path)

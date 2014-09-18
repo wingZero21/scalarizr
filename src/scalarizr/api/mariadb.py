@@ -19,8 +19,6 @@ class MariaDBAPI(mysql.MySQLAPI):
 
     behavior = 'mariadb'
 
-    _software_name = 'mariadb'
-
     def __init__(self):
         super(MariaDBAPI, self).__init__()
 

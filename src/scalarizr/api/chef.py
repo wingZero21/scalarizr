@@ -86,8 +86,6 @@ class ChefAPI(BehaviorAPI):
 
     behavior = 'chef'
 
-    _software_name = 'chef'
-
     def __init__(self):
         self.service = ChefInitScript()
 

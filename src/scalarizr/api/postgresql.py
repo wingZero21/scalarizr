@@ -56,8 +56,6 @@ class PostgreSQLAPI(BehaviorAPI):
 
     behavior = 'postgresql'
 
-    _software_name = 'postgresql'
-
     replication_status_query = '''SELECT
     CASE WHEN pg_last_xlog_receive_location() = pg_last_xlog_replay_location()
     THEN 0

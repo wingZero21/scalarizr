@@ -49,8 +49,6 @@ class RedisAPI(BehaviorAPI):
 
     behavior = 'redis'
 
-    _software_name = 'redis'
-
     _cnf = None
     _queryenv = None
 

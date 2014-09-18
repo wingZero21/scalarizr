@@ -39,8 +39,6 @@ class MySQLAPI(BehaviorAPI):
 
     behavior = ['mysql', 'mysql2']
 
-    _software_name = 'myslq'
-
     error_messages = {
         'empty': "'%s' can't be blank",
         'invalid': "'%s' is invalid, '%s' expected"

@@ -117,7 +117,7 @@ class Handler(object):
                 "Scalr built-in automation: checking for supported software "
                 "If installed software isn't detected, "
                 "review the Scalr Wiki: https://scalr-wiki.atlassian.net/wiki/x/IoB1")
-        logger.info(msg)
+        LOG.info(msg)
 
         ready_behaviors = list()
         for behavior in possible_behaviors:

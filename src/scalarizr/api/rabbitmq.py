@@ -21,8 +21,6 @@ class RabbitMQAPI(BehaviorAPI):
 
     behavior = 'rabbitmq'
 
-    _software_name = 'rabbitmq'
-
     def __init__(self):
         self.service = rabbitmq_module.RabbitMQInitScript()
         self.rabbitmq = rabbitmq_sgt

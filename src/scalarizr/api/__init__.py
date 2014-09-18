@@ -58,27 +58,27 @@ class BehaviorAPI(object):
             if isinstance(e, exceptions.UnsupportedBehavior):
                 raise
             elif isinstance(e, pkgmgr.NotInstalledError):
-                msg = '{0}: Unavailable. Not installed.'.format(cls.behavior)
+                msg = 'Unavailable. Not installed.'
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, pkgmgr.VersionMismatchError):
-                msg = '{0}: Unavailable. Installed version {1} is not supported by Scalr on {2} {3}.'
+                msg = 'Unavailable. Installed version {1} is not supported by Scalr on {2} {3}.'
                 packages = list()
                 for package in e.args[0]:
                     if package[1]:
                         packages.append('{0}-{1}'.format(package[0], package[1]))
                     else:
                         packages.append(package[0])
-                msg = msg.format(cls.behavior, ','.join(packages), linux.os['name'], linux.os['version'])
+                msg = msg.format(','.join(packages), linux.os['name'], linux.os['version'])
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, DependencyError):
-                msg = '{0}: Unavailable. Installed, but missing additional dependencies: {1}.'
+                msg = 'Unavailable. Installed, but missing additional dependencies: {1}.'
                 packages = list()
                 for package in e.args[0]:
                     if package[1]:
                         packages.append('{0} {1}'.format(package[0], package[1]))
                     else:
                         packages.append(package[0])
-                msg = msg.format(cls.behavior, ','.join(packages))
+                msg = msg.format(','.join(packages))
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             else:
                 raise sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]
