@@ -53,16 +53,16 @@ class BehaviorAPI(object):
             cls.software_supported = True
             msg = '{0}: Available. Installed version: {1}.'
             msg = msg.format(cls._software_name, installed[1])
-            LOG.debug(msg)
+            LOG.info(msg)
         except:
             cls.software_supported = False
             e = sys.exc_info()[1]
             if isinstance(e, exceptions.UnsupportedBehavior):
-                LOG.debug(e.args[1])
+                LOG.info(e.args[1])
                 raise
             elif isinstance(e, pkgmgr.NotInstalledError):
                 msg = '{0}: Unavailable. Not installed.'.format(cls._software_name)
-                LOG.debug(msg)
+                LOG.info(msg)
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, pkgmgr.VersionMismatchError):
                 msg = '{0}: Unavailable. Installed version {1} is not supported by Scalr on {2} {3}.'
@@ -73,7 +73,7 @@ class BehaviorAPI(object):
                     else:
                         packages.append(package[0])
                 msg = msg.format(cls._software_name, ','.join(packages), linux.os['name'], linux.os['version'])
-                LOG.debug(msg)
+                LOG.info(msg)
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, DependencyError):
                 msg = '{0}: Unavailable. Installed, but missing additional dependencies: {1}.'
@@ -84,7 +84,7 @@ class BehaviorAPI(object):
                     else:
                         packages.append(package[0])
                 msg = msg.format(cls._software_name, ','.join(packages))
-                LOG.debug(msg)
+                LOG.info(msg)
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             else:
                 raise sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]

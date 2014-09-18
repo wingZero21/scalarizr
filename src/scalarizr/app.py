@@ -965,7 +965,7 @@ class Service(object):
                     "Scalr built-in automation: checking for supported software "
                     "If installed software software isn't detected, "
                     "review the Scalr Wiki: https://scalr-wiki.atlassian.net/wiki/x/IoB1")
-            logger.debug(msg)
+            logger.info(msg)
             system_packages = pkgmgr.package_mgr().list()
             for behavior in node.__node__['behavior']:
                 if behavior == 'base' or behavior not in api.api_routes.keys():
