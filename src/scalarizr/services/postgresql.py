@@ -259,11 +259,12 @@ class PostgreSql(BaseService):
         self.cluster_dir.clean()
         
         if linux.os.redhat_family:
+            LOG.debug("Config dir before moving: %s" % self.postgresql_conf.path)
             self.config_dir.move_to(self.unified_etc_path)
             make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
             self.postgresql_conf = PostgresqlConf.find(self.config_dir)
             self.pg_hba_conf = PgHbaConf.find(self.config_dir)
-            
+            LOG.debug("Config dir after moving: %s" % self.postgresql_conf.path)
         self.pg_hba_conf.allow_local_connections()
         
 
@@ -1125,10 +1126,12 @@ class PgSQLPresetProvider(PresetProvider):
 
     def __init__(self):
         self.postgresql = PostgreSql()
-        config_object = self.postgresql.postgresql_conf
+        conf_path = os.path.join(self.postgresql.unified_etc_path, 'postgresql.conf')
+        config_object = PostgresqlConf(conf_path)
         service = initdv2.lookup(SERVICE_NAME)
-        config_mapping = {'postgresql.conf':config_object}
+        config_mapping = {'postgresql.conf': config_object}
         PresetProvider.__init__(self, service, config_mapping)
+        LOG.debug("Presets got config: %s" % conf_path)
 
 
 class PostgresqlSnapBackup(backup.SnapBackup):

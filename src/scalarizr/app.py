@@ -686,9 +686,9 @@ class Service(object):
                     # toughts that he's an old server and continue rebundling
                     time.sleep(30)
 
-                locs = ['/etc/.scalr-user-data', cnf.private_path('.user-data')]
-                wait_until(lambda: any(map(lambda x: os.path.exists(x), locs)),
-                        timeout=60, error_text="user-data file not found in the following locations: %s" % locs)
+                # locs = ['/etc/.scalr-user-data', cnf.private_path('.user-data')]
+                # wait_until(lambda: any(map(lambda x: os.path.exists(x), locs)),
+                #         timeout=60, error_text="user-data file not found in the following locations: %s" % locs)
             
             # When server bundled by Scalr, often new server are spawned in "importing" state
             # and its important to query user-data first, to override server-id that was bundled.

@@ -1,6 +1,7 @@
 from __future__ import with_statement
 
 import os
+import glob
 import shutil
 import logging
 import time
@@ -18,6 +19,7 @@ from scalarizr.util import initdv2
 from scalarizr.util import system2
 from scalarizr.util import PopenError
 from scalarizr.util import Singleton
+from scalarizr.util import firstmatched
 from scalarizr import linux
 from scalarizr.linux import iptables
 from scalarizr.linux import LinuxError
@@ -29,6 +31,23 @@ from scalarizr.api import BehaviorAPI
 
 
 __nginx__ = __node__['nginx']
+try:
+    # RedHat Software Collection
+    nginx_rhscl_root = glob.glob('/opt/rh/nginx*/root')[0]
+except IndexError:
+    nginx_rhscl_root = None
+if nginx_rhscl_root and linux.os.redhat:
+    __nginx__['nginx.conf'] = os.path.join(nginx_rhscl_root, 'etc/nginx/nginx.conf')
+    __nginx__['binary_path'] = os.path.join(nginx_rhscl_root, 'usr/sbin/nginx')
+    __nginx__['service_name'] = '{0}-nginx'.format(os.path.basename(os.path.dirname(nginx_rhscl_root)))
+else:
+    __nginx__['nginx.conf'] = '/etc/nginx/nginx.conf'
+    __nginx__['binary_path'] = firstmatched(lambda p: os.access(p, os.F_OK | os.X_OK),
+                                ('/usr/sbin/nginx', '/usr/local/nginx/sbin/nginx'), '/usr/sbin/nginx')
+    __nginx__['service_name'] = 'nginx'
+__nginx__['app_include_path'] = os.path.join(os.path.dirname(__nginx__['nginx.conf']), 'app-servers.include')
+__nginx__['https_include_path'] = os.path.join(os.path.dirname(__nginx__['nginx.conf']), 'https.include')
+
 
 
 _logger = logging.getLogger(__name__)
@@ -58,7 +77,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
         initdv2.ParametrizedInitScript.__init__(self,
                                                 'nginx',
-                                                '/etc/init.d/nginx',
+                                                os.path.join('/etc/init.d', __nginx__['service_name']),
                                                 pid_file=pid_file,
                                                 socks=[])
 
@@ -205,19 +224,25 @@ def _dump_config(obj):
     return output.getvalue()
 
 
-def get_role_servers(role_id=None, role_name=None):
+def _choose_host_ip(host, network=None):
+    this_server_location = __node__['cloud_location']
+    if network == None:
+        use_internal_ip = this_server_location == host.cloud_location
+    else:
+        use_internal_ip = network == 'private'
+    return host.internal_ip if use_internal_ip else host.external_ip
+
+
+def get_role_servers(role_id=None, role_name=None, network=None):
     """ Method is used to get role servers from scalr """
     if type(role_id) is int:
         role_id = str(role_id)
 
-    server_location = __node__['cloud_location']
     _queryenv = bus.queryenv_service
     roles = _queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
     servers = []
     for role in roles:
-        ips = [h.internal_ip if server_location == h.cloud_location else
-               h.external_ip
-               for h in role.hosts]
+        ips = [_choose_host_ip(h, network) for h in role.hosts]
         servers.extend(ips)
 
     return servers
@@ -781,7 +806,8 @@ class NginxAPI(BehaviorAPI):
             dest['servers'] = []
             if 'farm_role_id' in dest:
                 dest['id'] = str(dest['farm_role_id'])
-                dest['servers'].extend(get_role_servers(dest['id']))
+                role_servers = get_role_servers(dest['id'], network=dest.get('network'))
+                dest['servers'].extend(role_servers)
             if 'host' in dest:
                 dest['servers'].append(dest['host'])
 
@@ -1950,7 +1976,8 @@ class NginxAPI(BehaviorAPI):
 
     @classmethod
     def do_check_software(cls, installed_packages=None):
-        pkgmgr.check_dependency(['nginx'], installed_packages)
+        pkgmgr.check_any_dependency([['nginx'], ['nginx14']], installed_packages)
+
 
     @classmethod
     def do_handle_check_software_error(cls, e):
