@@ -36,8 +36,11 @@ class OpenStackWindowsImageTaker(object):
 class OpenStackLinuxImageTaker(object):
 
     def prepare(self):
-        if os.path.exists('/etc/udev/rules.d/70-persistent-net.rules'):
-            shutil.move('/etc/udev/rules.d/70-persistent-net.rules', '/tmp')
+        rulename = '70-persistent-net.rules'
+        if os.path.exists('/etc/udev/rules.d/'+rulename):
+            if os.path.exists('/tmp/'+rulename):
+                os.remove('/tmp/'+rulename)
+            shutil.move('/etc/udev/rules.d/'+rulename, '/tmp')
 
     def snapshot(self, role_name):
         image_name = role_name + "-" + time.strftime("%Y%m%d%H%M%S")
@@ -70,8 +73,9 @@ class OpenStackLinuxImageTaker(object):
         return image_id
 
     def finalize(self):
-        if os.path.exists('/tmp/70-persistent-net.rules'):
-            shutil.move('/tmp/70-persistent-net.rules', '/etc/udev/rules.d')
+        rulename = '70-persistent-net.rules'
+        if os.path.exists('/tmp/'+rulename):
+            shutil.move('/tmp/'+rulename, '/etc/udev/rules.d')
 
 
 class OpenStackImageAPIDelegate(ImageAPIDelegate):
