@@ -34,7 +34,7 @@ cfg = dict(
     package_dir = {"" : "src"},
     packages = find_packages("src"),
     include_package_data = True,
-    requires = ["m2crypto (>=0.20)", "boto"],
+    requires = ["boto"],
     data_files = data_files,
     entry_points = {
         'console_scripts': [

@@ -19,7 +19,6 @@ from urlparse import urlparse
 import boto
 from boto.ec2.regioninfo import RegionInfo
 from boto.s3.connection import OrdinaryCallingFormat
-from M2Crypto import SSL
 from scalarizr.util import firstmatched
 
 def get_platform():
