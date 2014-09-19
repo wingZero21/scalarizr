@@ -16,7 +16,9 @@ build_dir = os.environ['PWD']
 home_dir = os.environ.get('CI_HOME_DIR', '/var/lib/ci')
 omnibus_dir = os.path.join(build_dir, 'omnibus')
 project_dir = os.path.join(home_dir, project)
+repo_dir = '/var/www'
 aptly_conf = None
+gpg_key = '04B54A2A'
 build_number_file = os.path.join(project_dir, '.build_number')
 omnibus_md5sum_file = os.path.join(project_dir, '.omnibus.md5')
 permitted_artifacts_number = 2
@@ -300,7 +302,7 @@ def publish_deb():
         local('aptly repo add {0} {1}'.format(
             repo, ' '.join(glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch)))))
         local('aptly publish drop {0} || :'.format(repo))
-        local('aptly publish repo -gpg-key=04B54A2A {0} || :'.format(repo))
+        local('aptly publish repo -gpg-key={1} {0} || :'.format(repo, gpg_key))
         local('aptly db cleanup')
     finally:
         time_delta = time.time() - time0
@@ -312,7 +314,38 @@ def publish_deb():
 def publish_deb_plain():
     init()
 
+    with cd(aptly_conf['rootDir']):
+        release_file = 'public/dists/{1}'.format(repo)
+        arches = local('grep Architecture {0}'.format(release_file), 
+                        capture=True).split(':')[-1].strip().split()
+        repo_plain_dir = '{0}/apt-plain/{1}'.format(repo_dir, repo)
+        local('mkdir -p %s' % repo_plain_dir)
+        for arch in arches:
+            packages_file = 'public/dists/{0}/main/binary-{1}/Packages'.format(repo, arch)
+            # Copy packages
+            local(("grep Filename %s | "
+                    "awk '{ print $2 }' | "
+                    "xargs cp -I '{}' cp '{}' %s/") % (packages_file, repo_plain_dir))
 
+    with cd(os.path.dirname(repo_plain_dir)):
+        local('dpkg-scanpackages -m {0} > {0}/Packages'.format(repo))
+        local('dpkg-scansources {0} > {0}/Sources'.format(repo))
+        with cd(repo):
+            with open('Release' % repo) as fp:
+                fp.write((
+                    'Origin: scalr\n'
+                    'Label: {0}\n'
+                    'Codename: {0}\n'
+                    'Architectures: all {1}\n'
+                    'Description: Scalr packages\n'
+                ).format(repo, ' '.join(arches)))
+                fp.write(local('apt-ftparchive release .', capture=True))
+            local('cat Packages | gzip -9c > Packages.gz')
+            local('cat Sources | gzip -9c > Sources.gz')
+            local('gpg -v --clearsign -u {0} -o InRelease Release'.format(gpg_key))
+            local('gpg -v -abs -u {0} -o Release.gpg Release'.format(gpg_key))
+
+    print_green('publish plain deb repository')
 
 @task
 @runs_once
@@ -324,7 +357,7 @@ def publish_rpm():
     try:
         arch, pkg_arch = ('i386', 'i686') if env.host_string.endswith('32') else ('x86_64', 'x86_64')
         print_green('detected architecture: omnibus-naming - {0}, general-naming {1}'.format(pkg_arch, arch))
-        repo_path = '/var/www/rpm/%s/rhel' % repo
+        repo_path = '%s/rpm/%s/rhel' % (repo_dir, repo)
 
         # create directory structure
         local('mkdir -p %s/{5,6,7}/{x86_64,i386}' % repo_path, shell='/bin/bash')
@@ -390,6 +423,7 @@ def publish_binary():
         publish_rpm()
     else:
         publish_deb()
+        publish_deb_plain()
 
 
 @task
