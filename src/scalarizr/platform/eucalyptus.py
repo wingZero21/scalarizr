@@ -13,7 +13,7 @@ from scalarizr.platform.ec2 import Ec2ConnectionProxy, S3ConnectionProxy
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
 from scalarizr.util import NullPool
 
-import logging, os
+import logging, os, sys, ssl
 from urlparse import urlparse
 
 import boto
@@ -160,12 +160,8 @@ class EucaPlatform(Ec2Platform):
                 if url.schema == 'https':
                     # Open SSL connection and retrieve certificate
                     addr = (url.hostname, url.port if url.port else 443)
-                    ctx = SSL.Context()
-                    conn = SSL.Connection(ctx)
-                    conn.set_post_connection_check_callback(None)
-                    conn.connect(addr)
-                    cert = conn.get_peer_cert()
-                    cert.save_pem(cert_path)
+                    with open(cert_path, 'w+') as fp:
+                        fp.write(ssl.get_server_certificate(addr))
 
             self._ec2_cert = cnf.read_key(CLOUD_CERT, private=False)
         return self._ec2_cert
