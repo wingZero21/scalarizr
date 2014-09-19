@@ -61,7 +61,7 @@ class BehaviorAPI(object):
                 msg = 'Unavailable. Not installed.'
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, pkgmgr.VersionMismatchError):
-                msg = 'Unavailable. Installed version {1} is not supported by Scalr on {2} {3}.'
+                msg = 'Unavailable. Installed version {0} is not supported by Scalr on {1} {2}.'
                 packages = list()
                 for package in e.args[0]:
                     if package[1]:
@@ -71,7 +71,7 @@ class BehaviorAPI(object):
                 msg = msg.format(','.join(packages), linux.os['name'], linux.os['version'])
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, DependencyError):
-                msg = 'Unavailable. Installed, but missing additional dependencies: {1}.'
+                msg = 'Unavailable. Installed, but missing additional dependencies: {0}.'
                 packages = list()
                 for package in e.args[0]:
                     if package[1]:
