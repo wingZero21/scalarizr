@@ -1,6 +1,6 @@
-name "python-openssl"
-pypi_name = "pyOpenSSL"
-default_version "0.13.1"
+name "python-cryptography"
+pypi_name = "cryptography"
+default_version "0.5.4"
 
 dependency "python"
 
