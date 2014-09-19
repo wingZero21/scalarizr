@@ -4,6 +4,7 @@ import re
 import time
 import glob
 import json
+import shutil
 
 from fabric.api import *
 from fabric.decorators import runs_once
@@ -312,14 +313,19 @@ def publish_deb():
 @task
 @runs_once
 def publish_deb_plain():
+    '''
+    publish .deb packages into local repository as a plain debian repo (only for compatibility)
+    '''
     init()
 
     with cd(aptly_conf['rootDir']):
-        release_file = 'public/dists/{1}'.format(repo)
+        release_file = 'public/dists/{0}'.format(repo)
         arches = local('grep Architecture {0}'.format(release_file), 
                         capture=True).split(':')[-1].strip().split()
         repo_plain_dir = '{0}/apt-plain/{1}'.format(repo_dir, repo)
-        local('mkdir -p %s' % repo_plain_dir)
+        if os.path.exists(repo_plain_dir):
+            shutil.rmtree(repo_plain_dir)
+        os.makedirs(repo_plain_dir)
         for arch in arches:
             packages_file = 'public/dists/{0}/main/binary-{1}/Packages'.format(repo, arch)
             # Copy packages
