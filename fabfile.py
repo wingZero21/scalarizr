@@ -3,6 +3,7 @@ import os
 import re
 import time
 import glob
+import json
 
 from fabric.api import *
 from fabric.decorators import runs_once
@@ -15,6 +16,7 @@ build_dir = os.environ['PWD']
 home_dir = os.environ.get('CI_HOME_DIR', '/var/lib/ci')
 omnibus_dir = os.path.join(build_dir, 'omnibus')
 project_dir = os.path.join(home_dir, project)
+aptly_conf = None
 build_number_file = os.path.join(project_dir, '.build_number')
 omnibus_md5sum_file = os.path.join(project_dir, '.omnibus.md5')
 permitted_artifacts_number = 2
@@ -71,7 +73,7 @@ def init():
     '''
     Initialize current build.
     '''
-    global tag, branch, version, repo, build_number, artifacts_dir
+    global tag, branch, version, repo, build_number, artifacts_dir, aptly_conf
 
     build_number = read_build_number()
     print_green('build_number: {0}'.format(build_number))
@@ -101,6 +103,11 @@ def init():
         repo = branch
         print_green('branch: {0}'.format(branch))
         print_green('version: {0}'.format(version))
+    # Load aptly.conf
+    for aptly_conf_file in ('/etc/aptly.conf', os.path.expanduser('~/.aptly.conf')):
+        if os.path.exists(aptly_conf_file):
+            aptly_conf = json.load(open(aptly_conf_file))
+
 
     print_green('repo: {0}'.format(repo))
 
@@ -302,6 +309,13 @@ def publish_deb():
 
 @task
 @runs_once
+def publish_deb_plain():
+    init()
+
+
+
+@task
+@runs_once
 def publish_rpm():
     '''
     publish .rpm packages into local repository.
@@ -339,6 +353,8 @@ def publish_rpm():
     finally:
         time_delta = time.time() - time0
         print_green('publish rpm took {0}'.format(time_delta))
+
+
 
 
 def cleanup_artifacts():
