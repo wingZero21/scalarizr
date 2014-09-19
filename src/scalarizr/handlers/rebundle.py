@@ -471,5 +471,5 @@ class LinuxLoopbackImage(LinuxImage):
 
     def cleanup(self):
         LinuxImage.cleanup(self)
-        if self.devname:
+        if self.devname and os.path.exists(self.devname):
             loop.rmloop(self.devname)

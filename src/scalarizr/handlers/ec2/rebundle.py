@@ -9,6 +9,7 @@ import platform
 
 import scalarizr
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 from scalarizr.handlers import HandlerError, build_tags
 from scalarizr.util import system2, wait_until, firstmatched
 from scalarizr import linux
@@ -992,6 +993,11 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
         if self.ebs_volume:
             self.ebs_volume.destroy()
             self.ebs_volume = None
+
+        keys_dir = os.path.join(__node__['etc_dir'], 'private.d/keys')
+        coreutils.remove(os.path.join(keys_dir, 'aws-cert.pem'))
+        coreutils.remove(os.path.join(keys_dir, 'aws-pkey.pem'))
+        coreutils.remove(os.path.join(keys_dir, 'aws-cloud-cert.pem'))
 
 
 class AmiManifest:
