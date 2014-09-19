@@ -24,9 +24,6 @@ from scalarizr.storage2.cloudfs import FileTransfer
 from scalarizr.storage2 import volume, filesystem
 from scalarizr.libs.metaconf import Configuration
 
-from M2Crypto import X509, EVP, RSA
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
@@ -35,6 +32,8 @@ import string
 
 from boto.exception import BotoServerError
 from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
 
 
 # Workaround for python bug #5853
@@ -359,21 +358,25 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             name = os.path.basename(image_file)
             manifest_file = os.path.join(destination, name + '.manifest.xml')
             bundled_file_path = os.path.join(destination, name + '.tar.gz.enc')
-            try:
-                user_public_key = X509.load_cert_string(user_cert_string).get_pubkey()
-            except:
-                LOG.error("Cannot read user EC2 certificate")
-                raise
-            try:
-                user_private_key = RSA.load_key_string(user_private_key_string)
-            except:
-                LOG.error("Cannot read user EC2 private key")
-                raise
-            try:
-                ec2_public_key = X509.load_cert_string(ec2_cert_string).get_pubkey()
-            except:
-                LOG.error("Cannot read EC2 certificate")
-                raise
+            user_cert_path = bus.cnf.write_key('aws-cert.pem', user_cert_string)
+            user_private_key_path = bus.cnf.write_key('aws-pkey.pem', user_private_key_string)
+            ec2_cert_path = bus.cnf.write_key('aws-cloud-cert.pem', ec2_cert_string)
+
+            # try:
+            #     user_public_key = X509.load_cert_string(user_cert_string).get_pubkey()
+            # except:
+            #     LOG.error("Cannot read user EC2 certificate")
+            #     raise
+            # try:
+            #     user_private_key = RSA.load_key_string(user_private_key_string)
+            # except:
+            #     LOG.error("Cannot read user EC2 private key")
+            #     raise
+            # try:
+            #     ec2_public_key = X509.load_cert_string(ec2_cert_string).get_pubkey()
+            # except:
+            #     LOG.error("Cannot read EC2 certificate")
+            #     raise
             key = key or hexlify(os.urandom(16))
             iv = iv or hexlify(os.urandom(8))
             LOG.debug('Key: %s', key)
@@ -439,11 +442,21 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 
             # Encrypt key and iv.
             LOG.info("Encrypting keys")
-            padding = RSA.pkcs1_padding
-            user_encrypted_key = hexlify(user_public_key.get_rsa().public_encrypt(key, padding))
-            ec2_encrypted_key = hexlify(ec2_public_key.get_rsa().public_encrypt(key, padding))
-            user_encrypted_iv = hexlify(user_public_key.get_rsa().public_encrypt(iv, padding))
-            ec2_encrypted_iv = hexlify(ec2_public_key.get_rsa().public_encrypt(iv, padding))
+
+            # padding = RSA.pkcs1_padding
+            # user_encrypted_key = hexlify(user_public_key.get_rsa().public_encrypt(key, padding))
+            # ec2_encrypted_key = hexlify(ec2_public_key.get_rsa().public_encrypt(key, padding))
+            # user_encrypted_iv = hexlify(user_public_key.get_rsa().public_encrypt(iv, padding))
+            # ec2_encrypted_iv = hexlify(ec2_public_key.get_rsa().public_encrypt(iv, padding))
+            def public_encrypt(cert_path, data):
+                return hexlify(system2(
+                        'openssl rsautl -encrypt -inkey {0} -certin -pkcs'.format(cert_path), 
+                        stdin=data, shell=True)[0])
+
+            user_encrypted_key = public_encrypt(user_cert_path, key)
+            ec2_encrypted_key = public_encrypt(ec2_cert_path, key)
+            user_encrypted_iv = public_encrypt(user_cert_path, iv)
+            ec2_encrypted_iv = public_encrypt(ec2_cert_path, iv)
             LOG.debug("Keys encrypted")
 
             # Digest parts.
@@ -466,7 +479,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
                     user_encrypted_iv=user_encrypted_iv,
                     ec2_encrypted_iv=ec2_encrypted_iv,
                     image_digest=digest,
-                    user_private_key=user_private_key,
+                    user_private_key_path=user_private_key_path,
                     kernel_id=self._platform.get_kernel_id(),
                     ramdisk_id=self._platform.get_ramdisk_id(),
                     ancestor_ami_ids=self._platform.get_ancestor_ami_ids(),
@@ -973,7 +986,7 @@ class AmiManifest:
     image_digest = None
     digest_algo = None
     crypto_algo = None
-    user_private_key = None
+    user_private_key_path = None
     kernel_id = None
     ramdisk_id = None
     product_codes = None
@@ -986,7 +999,7 @@ class AmiManifest:
                             ec2_encrypted_key=None, user_encrypted_iv=None, ec2_encrypted_iv=None,
                             image_digest=None, digest_algo=DIGEST_ALGO, crypto_algo=CRYPTO_ALGO,
                             bundler_name=BUNDLER_NAME, bundler_version=BUNDLER_VERSION, bundler_release=BUNDLER_RELEASE,
-                            user_private_key=None, kernel_id=None, ramdisk_id=None, product_codes=None,
+                            user_private_key_path=None, kernel_id=None, ramdisk_id=None, product_codes=None,
                             ancestor_ami_ids=None, block_device_mapping=None):
         for key, value in locals().items():
             if key != "self" and hasattr(self, key):
@@ -1212,10 +1225,12 @@ class AmiManifest:
         # Get the XML for <machine_configuration> and <image> elements and sign them.
         string_to_sign = machine_config_elem.toxml() + image_elem.toxml()
 
-        digest = EVP.MessageDigest(self.digest_algo.lower())
+        digest = hashes.Hash(hashes.SHA1(), backend=default_backend())
         digest.update(string_to_sign)
-        sig = hexlify(self.user_private_key.sign(digest.final()))
-        del digest
+        dig = digest.finalize()
+
+        sig = hexlify(system2('openssl rsautl -sign -inkey {0}'.format(self.user_private_key_path), 
+                        shell=True, stdin=dig)[0])
 
         # /manifest/signature
         signature_elem = el("signature")
