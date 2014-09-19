@@ -429,7 +429,7 @@ def publish_binary():
         publish_rpm()
     else:
         publish_deb()
-        publish_deb_plain()
+        #publish_deb_plain()
 
 
 @task
