@@ -101,7 +101,10 @@ class ServiceAPI(object):
             reconfigure_argspecs.remove('self')
 
             queryenv_reconf_params = queryenv_behavior_params.get(behavior, {})
-            reconfigure_params = behavior_params.get(behavior, queryenv_reconf_params)
+
+            reconfigure_params = behavior_params.get(behavior, {})
+            if reconfigure_params == None:
+                reconfigure_params = queryenv_reconf_params
             reconfigure_params = dict((k, v)
                                       for k, v in reconfigure_params.items()
                                       if k in reconfigure_argspecs)
