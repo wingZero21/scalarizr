@@ -51,7 +51,7 @@ class UtcOffsetFormatter(logging.Formatter):
                  (datetime.fromtimestamp(record.created)))
         offset_seconds = delta.days * 86400 + delta.seconds
 
-        sign = '+' if offset_seconds < 0 else '-'
+        sign = '-' if offset_seconds > 0 else '+'
         utc_offset = time.strftime("%H:%M", time.gmtime(abs(offset_seconds)))
 
         return ''.join([original, sign, utc_offset])
