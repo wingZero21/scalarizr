@@ -106,7 +106,7 @@ class ServiceAPI(object):
 
             if hasattr(api, 'init_service'):
                 api.init_service()
-            api.do_reconfigure(**reconfigure_params)
+            api.do_reconfigure(op, **reconfigure_params)
 
     @rpc.query_method
     def reconfigure(self, behavior_params=None, async=True):
