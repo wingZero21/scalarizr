@@ -50,7 +50,7 @@ initdv2.explore('nginx', NginxInitScript)
 
 
 def get_handlers():
-    return [NginxHandler()] if NginxAPI.software_supported else []
+    return [NginxHandler()]
 
 
 class NginxCnfController(CnfController):
