@@ -43,8 +43,9 @@ class UtcOffsetFormatter(logging.Formatter):
     taking into account various edge cases:
 
     http://bz.selenic.com/show_bug.cgi?id=2511"""
-    def formatTime(self, record, datefmt):
-        original = super(UtcOffsetFormatter, self).formatTime(record, datefmt)
+    def formatTime(self, record, datefmt=None):
+        # logging.Formatter is old-style in python 2.6, cant use super
+        original = logging.Formatter.formatTime(self, record, datefmt)
 
         delta = (datetime.utcfromtimestamp(record.created) -
                  (datetime.fromtimestamp(record.created)))
