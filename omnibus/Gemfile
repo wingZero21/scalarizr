@@ -4,4 +4,4 @@ source 'https://rubygems.org'
 # TODO: get name of a tag which corresponds to a latest ver
 gem 'fpm'
 gem 'omnibus', :git => 'git://github.com/Scalr/omnibus.git', :branch => 'master'
-gem 'omnibus-software', :git => 'git://github.com/Scalr/omnibus-software.git', :branch => 'master'
+gem 'omnibus-software', :git => 'git://github.com/Scalr/omnibus-software.git', :ref => '7eb0998979dffb2c5cb5b7ff272d55ab9fdb8009'
