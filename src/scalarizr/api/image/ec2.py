@@ -342,6 +342,7 @@ class EBSImageMaker(object):
 class EC2ImageAPIDelegate(ImageAPIDelegate):
 
     _tools_dir = '/var/lib/scalr/ec2-tools'
+    _ruby_dir = '/var/lib/scalr/ruby-1.9.3'
     _ami_tools_name = 'ec2-ami-tools'
 
     def __init__(self):
@@ -370,22 +371,30 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 '-L', 'http://curl.haxx.se/ca/cacert.pem',
                 '-o', '/etc/pki/tls/certs/ca-bundle.crt'))
 
-        install_script = system2(('curl', '-sSL', 'https://get.rvm.io'),)[0]
+        system2(('wget',
+            '-P', '/tmp/',
+            'http://cache.ruby-lang.org/pub/ruby/1.9/ruby-1.9.3-p547.tar.gz'))
+        system2(('tar', '-xzvf', 'ruby-1.9.3-p547.tar.gz'), cwd='/tmp')
+        system2(('./configure', '-prefix=%s' % self._ruby_dir), cwd='/tmp/ruby-1.9.3-p547')
+        system2(('make',), cwd='/tmp/ruby-1.9.3-p547')
+        system2(('make', 'install'), cwd='/tmp/ruby-1.9.3-p547')
+        # install_script = system2(('curl', '-sSL', 'https://get.rvm.io'),)[0]
 
-        with open('/tmp/rvm_install.sh', 'w') as fp:
-            fp.write(install_script)
-        os.chmod('/tmp/rvm_install.sh', 0770)
-        system2(('/tmp/rvm_install.sh', 'stable'), shell=True)
-        system2(('/usr/local/rvm/bin/rvm install 1.9.3', '--auto-dotfiles'), shell=True)
-        system2(('chmod', '-R', '0755', '/usr/local/rvm'))
+        # with open('/tmp/rvm_install.sh', 'w') as fp:
+        #     fp.write(install_script)
+        # os.chmod('/tmp/rvm_install.sh', 0770)
+        # system2(('/tmp/rvm_install.sh', 'stable'), shell=True)
+        # system2(('/usr/local/rvm/bin/rvm install 1.9.3', '--auto-dotfiles'), shell=True)
+        # system2(('chmod', '-R', '0755', '/usr/local/rvm'))
 
-        ruby_path = None
-        for item in os.listdir('/usr/local/rvm/rubies/'):
-            if item.startswith('ruby-1.9.3'):
-                ruby_path = '/usr/local/rvm/rubies/' + item
-                break
-        self.environ['PATH'] = self.environ['PATH'] + (':%s/bin' % ruby_path)
-        self.environ['MY_RUBY_HOME'] = ruby_path
+
+        # ruby_path = None
+        # for item in os.listdir('/usr/local/rvm/rubies/'):
+        #     if item.startswith('ruby-1.9.3'):
+        #         ruby_path = '/usr/local/rvm/rubies/' + item
+        #         break
+        self.environ['PATH'] = self.environ['PATH'] + (':%s/bin' % self._ruby_dir)
+        self.environ['MY_RUBY_HOME'] = self._ruby_dir
 
     def _install_sg3_utils(self):
         # Installs sg3_utils package for fast sgp_dd command
@@ -434,6 +443,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             if not os.path.exists(os.path.dirname(self._tools_dir)):
                 os.mkdir(os.path.dirname(self._tools_dir))
             os.mkdir(self._tools_dir)
+        if not os.path.exists(self._ruby_dir):
+            os.mkdir(self._ruby_dir)
 
         self._remove_old_versions()
         self._install_ruby()
