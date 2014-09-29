@@ -924,10 +924,10 @@ def check_any_software(required_list, system_packages=None):
         try:
             return check_software(required, system_packages)
         except NotInstalledError:
-            not_installed += sys.exc_info()[1]
+            not_installed += sys.exc_info()[1][0]
             continue
         except VersionMismatchError:
-            vers_mismatched += sys.exc_info()[1]
+            vers_mismatched += sys.exc_info()[1][0]
             continue
     else:
         if vers_mismatched:

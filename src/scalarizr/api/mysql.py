@@ -23,7 +23,7 @@ from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
-from scalarizr.api import DependencyError
+from scalarizr.api import SoftwareDependencyError
 
 
 class MySQLAPI(BehaviorAPI):
@@ -333,11 +333,11 @@ class MySQLAPI(BehaviorAPI):
                     return installed
                 except pkgmgr.NotInstalledError:
                     e = sys.exc_info()[1]
-                    raise DependencyError(e.args[0])
+                    raise SoftwareDependencyError(e.args[0])
             except:
                 e = sys.exc_info()[1]
                 errors.append(e)
-        for cls in [pkgmgr.VersionMismatchError, DependencyError, pkgmgr.NotInstalledError]:
+        for cls in [pkgmgr.VersionMismatchError, SoftwareDependencyError, pkgmgr.NotInstalledError]:
             for error in errors:
                 if isinstance(error, cls):
                     raise error

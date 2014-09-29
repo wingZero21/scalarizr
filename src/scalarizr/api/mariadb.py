@@ -7,7 +7,7 @@ from scalarizr.api import mysql
 from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton
 from scalarizr import exceptions
-from scalarizr.api import DependencyError
+from scalarizr.api import SoftwareDependencyError
 
 
 LOG = logging.getLogger(__name__)
@@ -25,20 +25,33 @@ class MariaDBAPI(mysql.MySQLAPI):
     @classmethod
     def do_check_software(cls, system_packages=None):
         if linux.os.debian_family:
-            requirements_main = ['mariadb-server>=5.5,<5.6']
-            requirements_dependencies = ['mariadb-client>=5.5,<5.6']
+            requirements = [
+                ['mariadb-server>=5.5,<5.6', 'mariadb-client>=5.5,<5.6'],
+                ['mariadb-server>=5.5,<5.6', 'mariadb-client-5.5'],
+            ]
         elif linux.os.redhat_family or linux.os.oracle_family:
-            requirements_main = ['MariaDB-server>=5.5,<5.6']
-            requirements_dependencies = ['MariaDB-client>=5.5,<5.6', 'gpg']
+            requirements = [
+                ['MariaDB-server>=5.5,<5.6', 'MariaDB-client>=5.5,<5.6'],
+            ]
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))
-        installed = pkgmgr.check_software(requirements_main, system_packages)[0]
-        try:
-            pkgmgr.check_software(requirements_dependencies, system_packages)
-            return installed
-        except pkgmgr.NotInstalledError:
-            e = sys.exc_info()[1]
-            raise DependencyError(e.args[0])
+        errors = list()
+        for requirement in requirements:
+            try:
+                installed = pkgmgr.check_software(requirement[0], system_packages)[0]
+                try:
+                    pkgmgr.check_software(requirement[1:], system_packages)[0]
+                    return installed
+                except pkgmgr.NotInstalledError:
+                    e = sys.exc_info()[1]
+                    raise SoftwareDependencyError(e.args[0])
+            except:
+                e = sys.exc_info()[1]
+                errors.append(e)
+        for cls in [pkgmgr.VersionMismatchError, SoftwareDependencyError, pkgmgr.NotInstalledError]:
+            for error in errors:
+                if isinstance(error, cls):
+                    raise error
 

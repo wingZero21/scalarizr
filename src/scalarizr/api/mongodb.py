@@ -225,25 +225,25 @@ class MongoDBAPI(BehaviorAPI):
                 requirements = [
                     ['mongodb-org>=2.0,<2.7'],
                     ['mongo-10gen-server>=2.0,<2.7'],
-                    ['mongo-server>=2.0,<2.7']
+                    ['mongodb-server>=2.0,<2.7']
                 ]
             elif os_vers >= '5':
                 requirements = [
                     ['mongodb-org>=2.0,<2.1'],
                     ['mongo-10gen-server>=2.0,<2.1'],
-                    ['mongo-server>=2.0,<2.1']
+                    ['mongodb-server>=2.0,<2.1']
                 ]
         elif linux.os.redhat_family:
             requirements = [
                 ['mongodb-org>=2.4,<2.7'],
                 ['mongo-10gen-server>=2.4,<2.7'],
-                ['mongo-server>=2.4,<2.7']
+                ['mongodb-server>=2.4,<2.7']
             ]
         elif linux.os.oracle_family:
             requirements = [
                 ['mongodb-org>=2.0,<2.1'],
                 ['mongo-10gen-server>=2.0,<2.1'],
-                ['mongo-server>=2.0,<2.1']
+                ['mongodb-server>=2.0,<2.1']
             ]
         else:
             raise exceptions.UnsupportedBehavior(

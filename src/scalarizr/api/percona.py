@@ -7,7 +7,7 @@ from scalarizr.api import mysql
 from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton
 from scalarizr import exceptions
-from scalarizr.api import DependencyError
+from scalarizr.api import SoftwareDependencyError
 
 
 LOG = logging.getLogger(__name__)
@@ -55,11 +55,11 @@ class PerconaAPI(mysql.MySQLAPI):
                     return installed
                 except pkgmgr.NotInstalledError:
                     e = sys.exc_info()[1]
-                    raise DependencyError(e.args[0])
+                    raise SoftwareDependencyError(e.args[0])
             except:
                 e = sys.exc_info()[1]
                 errors.append(e)
-        for cls in [pkgmgr.VersionMismatchError, DependencyError, pkgmgr.NotInstalledError]:
+        for cls in [pkgmgr.VersionMismatchError, SoftwareDependencyError, pkgmgr.NotInstalledError]:
             for error in errors:
                 if isinstance(error, cls):
                     raise error

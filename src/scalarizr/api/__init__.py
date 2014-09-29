@@ -32,7 +32,7 @@ api_routes = {
 }
 
 
-class DependencyError(Exception):
+class SoftwareDependencyError(Exception):
     pass
 
 
@@ -61,23 +61,23 @@ class BehaviorAPI(object):
                 msg = 'Unavailable. Not installed.'
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             elif isinstance(e, pkgmgr.VersionMismatchError):
-                msg = 'Unavailable. Installed version {0} is not supported by Scalr on {1} {2}.'
                 packages = list()
                 for package in e.args[0]:
                     if package[1]:
                         packages.append('{0}-{1}'.format(package[0], package[1]))
                     else:
                         packages.append(package[0])
+                msg = 'Unavailable. Installed version {0} is not supported by Scalr on {1} {2}.'
                 msg = msg.format(','.join(packages), linux.os['name'], linux.os['version'])
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
-            elif isinstance(e, DependencyError):
-                msg = 'Unavailable. Installed, but missing additional dependencies: {0}.'
+            elif isinstance(e, SoftwareDependencyError):
                 packages = list()
                 for package in e.args[0]:
                     if package[1]:
                         packages.append('{0} {1}'.format(package[0], package[1]))
                     else:
                         packages.append(package[0])
+                msg = 'Unavailable. Installed, but missing additional dependencies: {0}.'
                 msg = msg.format(','.join(packages))
                 raise exceptions.UnsupportedBehavior(cls.behavior, msg)
             else:
