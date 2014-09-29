@@ -364,6 +364,11 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
     def _install_ruby(self):
         pkgmgr.installed('unzip')
+        pkgmgr.installed('build-essential')
+        pkgmgr.installed('zlib1g-dev')
+        pkgmgr.installed('libssl-dev')
+        pkgmgr.installed('libreadline6-dev')
+        pkgmgr.installed('libyaml-dev')
 
         # update curl certificate on centos 5
         if linux.os['name'] == 'CentOS':
