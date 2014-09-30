@@ -365,7 +365,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def _install_ruby(self):    
         packages = None
         if linux.os['family'] == 'RedHat':
-            packages = ['gcc-c++',
+            packages = ['unzip',
+                'gcc-c++',
                 'patch',
                 'readline',
                 'readline-devel',
