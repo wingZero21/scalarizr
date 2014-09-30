@@ -362,13 +362,36 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             if item.startswith(self._ami_tools_name):
                 os.removedirs(os.path.join(self._tools_dir, item))
 
-    def _install_ruby(self):
-        pkgmgr.installed('unzip')
-        pkgmgr.installed('build-essential')
-        pkgmgr.installed('zlib1g-dev')
-        pkgmgr.installed('libssl-dev')
-        pkgmgr.installed('libreadline6-dev')
-        pkgmgr.installed('libyaml-dev')
+    def _install_ruby(self):    
+        packages = None
+        if linux.os['family'] == 'RedHat':
+            packages = ['gcc-c++',
+                'patch',
+                'readline',
+                'readline-devel',
+                'zlib',
+                'zlib-devel',
+                'libyaml-devel',
+                'libffi-devel',
+                'openssl-devel',
+                'make',
+                'bzip2',
+                'autoconf',
+                'automake',
+                'libtool',
+                'bison']
+            if linux.os['name'] == 'CentOS' and linux.os['release'] < (6, 0):
+                packages.append('iconv-devel')
+        else:
+            packages = ['unzip',
+                'build-essential',
+                'zlib1g-dev',
+                'libssl-dev',
+                'libreadline6-dev',
+                'libyaml-dev']
+
+        for package in packages:
+            pkgmgr.installed(package)
 
         # update curl certificate on centos 5
         if linux.os['name'] == 'CentOS':
