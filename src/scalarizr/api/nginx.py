@@ -759,9 +759,6 @@ class NginxAPI(BehaviorAPI):
                          async=async,
                          exclusive=True)
 
-
-
-
     def _normalize_destinations(self, destinations):
         """
         Parses list of destinations. Dictionary example:
