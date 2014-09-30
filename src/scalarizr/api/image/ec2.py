@@ -380,7 +380,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 'automake',
                 'libtool',
                 'bison']
-            if linux.os['name'] == 'CentOS' and linux.os['release'] < (6, 0):
+            if linux.os['name'] == 'CentOS' and linux.os['release'] < (5, 4):
                 packages.append('iconv-devel')
         else:
             packages = ['unzip',
