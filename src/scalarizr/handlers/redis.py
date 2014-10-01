@@ -7,6 +7,7 @@ Created on Aug 12, 2011
 from __future__ import with_statement
 
 import os
+import re
 import time
 import logging
 
@@ -174,9 +175,23 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
-        if __node__['state'] == 'initializing':
-            LOG.debug('Setting vm.overcommit_memory to 1')
-            system2('sysctl vm.overcommit_memory=1', shell=True)
+        if __node__['state'] == 'bootstrapping':
+            proc_is_2 = system2('test `cat /proc/sys/vm/overcommit_memory` -eq 2',
+                                raise_exc=False)[2] == 0
+
+            with open('/etc/sysctl.conf', 'r') as f:
+                match = re.search(r'^\s*vm.overcommit_memory\s*=\s*(\d+)', f.read(), re.M)
+                sysctl = int(match.group(1)) if match else None
+
+            if not sysctl and not proc_is_2:
+                LOG.debug('Setting vm.overcommit_memory to 1')
+                system2('sysctl vm.overcommit_memory=1', shell=True)
+                system2('echo "vm.overcommit_memory=1" >> /etc/sysctl.conf')
+            elif proc_is_2 or sysctl in (0, 2):
+                value = 2 if proc_is_2 else sysctl
+                LOG.info('Kernel option vm.overcommit_memory is set to %s by user.\
+                         Consider changing it to 1 for optimal Redis functioning.\
+                         More information here: http://redis.io/topics/admin', value)
 
         if __node__['state'] == 'running':
             self._ensure_security()
@@ -361,9 +376,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         """terminating old redis instance managed by init scrit"""
         if self.default_service.running:
             self.default_service.stop('Treminating default redis instance')
-
-        LOG.debug('Setting vm.overcommit_memory to 1')
-        system2('sysctl vm.overcommit_memory=1', shell=True)
 
 
     def on_BeforeHostTerminate(self, message):
