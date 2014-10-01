@@ -106,13 +106,13 @@ def init():
         repo = branch
         print_green('branch: {0}'.format(branch))
         print_green('version: {0}'.format(version))
+    print_green('repo: {0}'.format(repo))
+
     # Load aptly.conf
     for aptly_conf_file in ('/etc/aptly.conf', os.path.expanduser('~/.aptly.conf')):
         if os.path.exists(aptly_conf_file):
             aptly_conf = json.load(open(aptly_conf_file))
-
-
-    print_green('repo: {0}'.format(repo))
+            print_green('aptly rootDir: {0}'.format(aptly_conf['rootDir']))
 
 
 def import_artifact(src):
@@ -318,8 +318,8 @@ def publish_deb_plain():
     '''
     init()
 
-    with cd(aptly_conf['rootDir']):
-        release_file = 'public/dists/{0}'.format(repo)
+    with lcd(aptly_conf['rootDir'] + '/public'):
+        release_file = 'dists/{0}/Release'.format(repo)
         arches = local('grep Architecture {0}'.format(release_file), 
                         capture=True).split(':')[-1].strip().split()
         repo_plain_dir = '{0}/apt-plain/{1}'.format(repo_dir, repo)
@@ -327,17 +327,17 @@ def publish_deb_plain():
             shutil.rmtree(repo_plain_dir)
         os.makedirs(repo_plain_dir)
         for arch in arches:
-            packages_file = 'public/dists/{0}/main/binary-{1}/Packages'.format(repo, arch)
+            packages_file = 'dists/{0}/main/binary-{1}/Packages'.format(repo, arch)
             # Copy packages
             local(("grep Filename %s | "
                     "awk '{ print $2 }' | "
-                    "xargs cp -I '{}' cp '{}' %s/") % (packages_file, repo_plain_dir))
+                    "xargs -I '{}' cp '{}' %s/") % (packages_file, repo_plain_dir))
 
-    with cd(os.path.dirname(repo_plain_dir)):
+    with lcd(os.path.dirname(repo_plain_dir)):
         local('dpkg-scanpackages -m {0} > {0}/Packages'.format(repo))
         local('dpkg-scansources {0} > {0}/Sources'.format(repo))
-        with cd(repo):
-            with open('Release' % repo) as fp:
+        with lcd(repo):
+            with open('{0}/Release'.format(repo_plain_dir), 'w+') as fp:
                 fp.write((
                     'Origin: scalr\n'
                     'Label: {0}\n'
@@ -429,7 +429,7 @@ def publish_binary():
         publish_rpm()
     else:
         publish_deb()
-        #publish_deb_plain()
+        publish_deb_plain()
 
 
 @task
