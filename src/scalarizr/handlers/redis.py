@@ -173,8 +173,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_host_up", self.on_before_host_up)
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
-        
-        LOG.debug("Redis on_init state: %s", __node__['state'])
+
         if __node__['state'] == 'initializing':
             LOG.debug('Setting vm.overcommit_memory to 1')
             system2('sysctl vm.overcommit_memory=1', shell=True)
