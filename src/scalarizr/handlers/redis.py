@@ -7,7 +7,7 @@ Created on Aug 12, 2011
 from __future__ import with_statement
 
 import os
-import re
+import sys
 import time
 import logging
 
@@ -167,6 +167,21 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         self.on_reload()
 
+    def _set_overcommit_option(self):
+        try:
+            with open('/proc/sys/vm/overcommit_memory', 'r') as f:
+                proc_is_2 = f.read().strip() == '2'
+
+            if proc_is_2:
+                LOG.info('Kernel option vm.overcommit_memory is set to 2 by user.\
+                         Consider changing it to 1 for optimal Redis functioning.\
+                         More information here: http://redis.io/topics/admin')
+            else:
+                LOG.debug('Setting vm.overcommit_memory to 1')
+                system2('sysctl vm.overcommit_memory=1', shell=True)
+        except:
+            LOG.debug("Failed to set vm.overcommit_memory option", exc_info=sys.exc_info())
+
 
     def on_init(self):
 
@@ -176,22 +191,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
         if __node__['state'] == 'bootstrapping':
-            proc_is_2 = system2('test `cat /proc/sys/vm/overcommit_memory` -eq 2',
-                                raise_exc=False)[2] == 0
-
-            with open('/etc/sysctl.conf', 'r') as f:
-                match = re.search(r'^\s*vm.overcommit_memory\s*=\s*(\d+)', f.read(), re.M)
-                sysctl = int(match.group(1)) if match else None
-
-            if not sysctl and not proc_is_2:
-                LOG.debug('Setting vm.overcommit_memory to 1')
-                system2('sysctl vm.overcommit_memory=1', shell=True)
-                system2('echo "vm.overcommit_memory=1" >> /etc/sysctl.conf')
-            elif proc_is_2 or sysctl in (0, 2):
-                value = 2 if proc_is_2 else sysctl
-                LOG.info('Kernel option vm.overcommit_memory is set to %s by user.\
-                         Consider changing it to 1 for optimal Redis functioning.\
-                         More information here: http://redis.io/topics/admin', value)
+            self._set_overcommit_option()
 
         if __node__['state'] == 'running':
             self._ensure_security()
@@ -376,6 +376,8 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         """terminating old redis instance managed by init scrit"""
         if self.default_service.running:
             self.default_service.stop('Treminating default redis instance')
+
+        self._set_overcommit_option()
 
 
     def on_BeforeHostTerminate(self, message):
