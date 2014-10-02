@@ -361,6 +361,7 @@ def publish_rpm():
     '''
     publish .rpm packages into local repository.
     '''
+    init()
     time0 = time.time()
     try:
         repo_path = '%s/rpm/%s/rhel' % (repo_dir, repo)
