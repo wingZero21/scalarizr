@@ -102,7 +102,7 @@ def init():
         version = '{version}.b{build_number}.{revision}'.format(
             version=pkg_version,
             build_number=build_number,
-            revision=revision[0:8])
+            revision=revision[0:7])
         repo = branch
         print_green('branch: {0}'.format(branch))
         print_green('version: {0}'.format(version))
@@ -353,6 +353,7 @@ def publish_deb_plain():
 
     print_green('publish plain deb repository')
 
+
 @task
 @runs_once
 def publish_rpm():
@@ -423,29 +424,17 @@ def release(repo='latest'):
 @runs_once
 def publish_binary():
     '''
-    Create .deb or .rpm binary according to current host name.
+    publish all packages into local repository
     '''
-    if 'centos' in env.host_string:
-        publish_rpm()
-    else:
-        publish_deb()
-        publish_deb_plain()
+    publish_rpm()
+    publish_deb()
+    publish_deb_plain()
 
 
 @task
-def build_and_publish_binary():
-    """
-    Build and publish an approptiate binary package.
-    """
-    time0 = time.time()
-    try:
-        build_binary()
-        publish_binary()
-    finally:
-        run('rm -rf /root/.strider/data/scalr-int-scalarizr-*')
-        run('find /tmp -mindepth 1 -maxdepth 1 ! -name "vagrant-chef-*" | xargs rm -rf')
-        time_delta = time.time() - time0
-        print_green('build_and_publish_binary took {0} minutes '.format(time_delta / 60))
+def cleanup():
+    run('rm -rf /root/.strider/data/scalr-int-scalarizr-*')
+    run('find /tmp -mindepth 1 -maxdepth 1 ! -name "vagrant-chef-*" | xargs rm -rf')
 
 
 def print_green(msg):
