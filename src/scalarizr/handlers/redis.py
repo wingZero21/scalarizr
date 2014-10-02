@@ -178,9 +178,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                 sysctl = match.group(1) if match else None
 
             if (proc == '2') or (proc == sysctl == '0'):
-                LOG.info('Kernel option vm.overcommit_memory is set to %s by user.\
-                         Consider changing it to 1 for optimal Redis functioning.\
-                         More information here: http://redis.io/topics/admin', proc)
+                LOG.info('Kernel option vm.overcommit_memory is set to %s by user. '
+                         'Consider changing it to 1 for optimal Redis functioning. '
+                         'More information here: http://redis.io/topics/admin', proc)
             else:
                 LOG.debug('Setting vm.overcommit_memory to 1')
                 system2((which('sysctl'), 'vm.overcommit_memory=1'))
