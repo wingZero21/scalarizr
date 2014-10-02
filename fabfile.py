@@ -17,6 +17,7 @@ build_dir = os.environ['PWD']
 home_dir = os.environ.get('CI_HOME_DIR', '/var/lib/ci')
 omnibus_dir = os.path.join(build_dir, 'omnibus')
 project_dir = os.path.join(home_dir, project)
+verbose = os.environ.get('CI_VERBOSE', 'no').lower() in ('1', 'yes', 'y')
 repo_dir = '/var/www'
 aptly_conf = None
 gpg_key = '04B54A2A'
@@ -189,8 +190,9 @@ def build_omnibus():
             'OMNIBUS_BUILD_VERSION': version,
         }
         with shell_env(**env):
-            run("bin/omnibus clean %s --log-level=warn" % project)
-            run("bin/omnibus build %s --log-level=info" % project)
+            log_level = 'debug' if verbose else 'info'
+            run("bin/omnibus clean %s --log-level=%s" % (project, log_level))
+            run("bin/omnibus build %s --log-level=%s" % (project, log_level))
 
     with open(omnibus_md5sum_file, 'w+') as fp:
         fp.write(omnibus_md5sum())
@@ -293,15 +295,14 @@ def publish_deb():
     time0 = time.time()
     try:
         init()
-        pkg_arch = 'i386' if env.host_string.endswith('32') else 'amd64'
-
         if repo not in local('aptly repo list', capture=True):
             local('aptly repo create -distribution {0} {0}'.format(repo))
-        # remove previous version
-        local('aptly repo remove {0} "Architecture ({1}), Name (~ {2}.*)"'.format(repo, pkg_arch, project))
-        # publish artifacts into repo
-        local('aptly repo add {0} {1}'.format(
-            repo, ' '.join(glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch)))))
+        for pkg_arch in ('i386', 'amd64'):
+            # remove previous version
+            local('aptly repo remove {0} "Architecture ({1}), Name (~ {2}.*)"'.format(repo, pkg_arch, project))
+            # publish artifacts into repo
+            local('aptly repo add {0} {1}'.format(
+                repo, ' '.join(glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch)))))
         local('aptly publish drop {0} || :'.format(repo))
         local('aptly publish repo -gpg-key={1} {0} || :'.format(repo, gpg_key))
         local('aptly db cleanup')
@@ -362,8 +363,6 @@ def publish_rpm():
     '''
     time0 = time.time()
     try:
-        arch, pkg_arch = ('i386', 'i686') if env.host_string.endswith('32') else ('x86_64', 'x86_64')
-        print_green('detected architecture: omnibus-naming - {0}, general-naming {1}'.format(pkg_arch, arch))
         repo_path = '%s/rpm/%s/rhel' % (repo_dir, repo)
 
         # create directory structure
@@ -383,13 +382,14 @@ def publish_rpm():
         os.chdir(cwd)
 
         # remove previous version
-        local('rm -f %s/*/%s/%s*.rpm' % (repo_path, arch, project))
+        local('rm -f %s/*/*/%s*.rpm' % (repo_path, project))
 
         # publish artifacts into repo
-        for ver in '5 6 7'.split():
-            dst = os.path.join(repo_path, ver, arch)
-            local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
-            local('createrepo %s' % dst)
+        for arch, pkg_arch in (('i386', 'i686'), ('x86_64', 'x86_64')):
+            for ver in '5 6 7'.split():
+                dst = os.path.join(repo_path, ver, arch)
+                local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
+                local('createrepo %s' % dst)
     finally:
         time_delta = time.time() - time0
         print_green('publish rpm took {0}'.format(time_delta))
