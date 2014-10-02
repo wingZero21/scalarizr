@@ -16,7 +16,7 @@ LOG = logging.getLogger(__name__)
 __tomcat__ = __node__['tomcat']
 
 def get_handlers():
-    return [TomcatHandler()] if tomcat_api.TomcatAPI.software_supported else []
+    return [TomcatHandler()]
 
 
 class KeytoolExec(execute.BaseExec):

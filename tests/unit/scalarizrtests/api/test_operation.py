@@ -83,7 +83,7 @@ class TestOperation(object):
 		if asserts:
 			asserts()
 
-	def test_cancel_error(self):
+	def _test_cancel_error(self):
 		msg = 'raised in operation function during cancelation'
 
 		def asserts():

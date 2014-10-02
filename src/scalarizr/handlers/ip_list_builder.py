@@ -50,6 +50,7 @@ class IpListBuilder(Handler):
     def accept(self, message, queue, behaviour=None, platform=None, os=None, dist=None):
         return message.name == Messages.HOST_UP \
                 or message.name == Messages.HOST_DOWN \
+                or message.name == Messages.BEFORE_HOST_TERMINATE \
                 or message.name == Messages.REBOOT_START \
                 or message.name == Messages.REBOOT_FINISH \
                 or message.name == 'Mysql_NewMasterUp'
@@ -103,6 +104,8 @@ class IpListBuilder(Handler):
             self._modify_tree(rolename, behaviour, ip,
                             modfn=self._remove_file,
                             replication_master='mysql' in behaviour and self._host_is_replication_master(ip, 'mysql'))
+
+    on_BeforeHostTerminate = on_HostDown
 
     def on_Mysql_NewMasterUp(self, message):
         ip = message.local_ip or message.remote_ip

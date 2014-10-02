@@ -167,7 +167,7 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
                 rv_template['size'] = vol_size or root_vol.size
 
             rv_template['volume_type'] = rv_template.get('volume_type', root_vol.type)
-            rv_template['iops'] = rv_template.get('iops', root_vol.iops)
+            rv_template['iops'] = rv_template.get('iops')
 
             self._validate_rv_template(rv_template)
 

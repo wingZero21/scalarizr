@@ -54,7 +54,7 @@ initdv2.explore(SERVICE_NAME, redis.RedisInitScript)
 
 
 def get_handlers():
-    return [RedisHandler()] if redis_api.RedisAPI.software_supported else []
+    return [RedisHandler()]
 
 
 class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):

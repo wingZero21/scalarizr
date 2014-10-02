@@ -21,7 +21,7 @@ import hashlib
 
 
 def get_handlers():
-    return [HAProxyHandler()] if haproxy_api.HAProxyAPI.software_supported else []
+    return [HAProxyHandler()]
 
 LOG = logging.getLogger(__name__)
 
