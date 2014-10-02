@@ -22,7 +22,7 @@ from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, cryptotool, software, initdv2
-from scalarizr.linux import iptables
+from scalarizr.linux import iptables, which
 from scalarizr.services import redis, backup
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
@@ -183,7 +183,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                          More information here: http://redis.io/topics/admin', proc)
             else:
                 LOG.debug('Setting vm.overcommit_memory to 1')
-                system2('sysctl vm.overcommit_memory=1', shell=True)
+                system2((which('sysctl'), 'vm.overcommit_memory=1'))
         except:
             LOG.debug("Failed to set vm.overcommit_memory option", exc_info=sys.exc_info())
 
