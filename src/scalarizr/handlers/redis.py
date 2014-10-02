@@ -7,6 +7,7 @@ Created on Aug 12, 2011
 from __future__ import with_statement
 
 import os
+import re
 import sys
 import time
 import logging
@@ -170,12 +171,16 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
     def _set_overcommit_option(self):
         try:
             with open('/proc/sys/vm/overcommit_memory', 'r') as f:
-                proc_is_2 = f.read().strip() == '2'
+                proc = f.read().strip()
 
-            if proc_is_2:
-                LOG.info('Kernel option vm.overcommit_memory is set to 2 by user.\
+            with open('/etc/sysctl.conf', 'r') as f:
+                match = re.search(r'^\s*vm.overcommit_memory\s*=\s*(\d+)', f.read(), re.M)
+                sysctl = match.group(1) if match else None
+
+            if (proc == '2') or (proc == sysctl == '0'):
+                LOG.info('Kernel option vm.overcommit_memory is set to %s by user.\
                          Consider changing it to 1 for optimal Redis functioning.\
-                         More information here: http://redis.io/topics/admin')
+                         More information here: http://redis.io/topics/admin', proc)
             else:
                 LOG.debug('Setting vm.overcommit_memory to 1')
                 system2('sysctl vm.overcommit_memory=1', shell=True)
