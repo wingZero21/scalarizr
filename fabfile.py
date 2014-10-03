@@ -111,7 +111,7 @@ def init():
     if is_tag:
         # it's a tag
         tag = version = ref
-        repo = 'stable' if int(tag.split('.')[1]) % 2 else 'latest'
+        repo = 'latest' if int(tag.split('.')[1]) % 2 else 'stable'
         print_green('tag & version: {0}'.format(tag))
     else:
         # it's a branch
@@ -356,13 +356,14 @@ def publish_deb_plain():
         local('dpkg-scansources {0} > {0}/Sources'.format(repo))
         with lcd(repo):
             with open('{0}/Release'.format(repo_plain_dir), 'w+') as fp:
+                distribution = 'scalr' if tag else repo
                 fp.write((
                     'Origin: scalr\n'
                     'Label: {0}\n'
                     'Codename: {0}\n'
                     'Architectures: all {1}\n'
                     'Description: Scalr packages\n'
-                ).format(repo, ' '.join(arches)))
+                ).format(distribution, ' '.join(arches)))
                 fp.write(local('apt-ftparchive release .', capture=True))
             local('cat Packages | gzip -9c > Packages.gz')
             local('cat Sources | gzip -9c > Sources.gz')
