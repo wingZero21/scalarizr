@@ -85,14 +85,28 @@ def init():
     build_number = read_build_number()
     print_green('build_number: {0}'.format(build_number))
     setup_artifacts_dir()
-    revision = local("git rev-parse HEAD", capture=True)
-    ref_head = open('.git/HEAD').read().strip()
-    if ref_head == revision:
-        ref = re.search(r'moving from ([^\s]+) to [0-9a-f]{8,40}',
-                        local('git reflog', capture=True), re.M).group(1)
+    
+    if os.path.exists('.git/FETCH_HEAD'):
+        with open('.git/FETCH_HEAD') as fp:
+            m = re.search(r"^([0-9a-f]{8,40})\s+tag '([^']+)'", fp.read())
+            revision = m.group(1)
+            ref = m.group(2)
+            is_tag = True
     else:
-        ref = ref_head.split('refs/heads/')[-1]
-    is_tag = 'refs/tags/' in local('git show-ref {0}'.format(ref), capture=True)
+        with open('.git/HEAD') as fp:
+            ref = re.search(r'ref: refs/heads/(.*)', fp.read()).group(1)
+            revision = local("git rev-parse HEAD", capture=True)
+            is_tag = False
+
+    # revision = local("git rev-parse HEAD", capture=True)
+    # ref_head = open('.git/HEAD').read().strip()
+    # if ref_head == revision:
+    #     ref = re.search(r'moving from ([^\s]+) to [0-9a-f]{8,40}',
+    #                     local('git reflog', capture=True), re.M).group(1)
+    # else:
+    #     ref = ref_head.split('refs/heads/')[-1]
+    # is_tag = 'refs/tags/' in local('git show-ref {0}'.format(ref), capture=True)
+
     pkg_version = local('python setup.py --version', capture=True)
     if is_tag:
         # it's a tag
