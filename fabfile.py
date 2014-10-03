@@ -21,6 +21,9 @@ verbose = os.environ.get('CI_VERBOSE', 'no').lower() in ('1', 'yes', 'y')
 repo_dir = '/var/www'
 aptly_conf = None
 gpg_key = '04B54A2A'
+remote_repo_host = 'sl6.scalr.net'
+remote_repo_port = 60022
+remote_repo_dir = '/var/www/repo'
 build_number_file = os.path.join(project_dir, '.build_number')
 omnibus_md5sum_file = os.path.join(project_dir, '.omnibus.md5')
 permitted_artifacts_number = 2
@@ -414,10 +417,14 @@ def cleanup_artifacts():
 
 @task
 @runs_once
-def release(repo='latest'):
+def release(repo=None):
     '''
     sync packages from local repository to Scalr.net
     '''
+    init()
+    repo = repo or globals()['repo']
+
+
     pass
 
 
