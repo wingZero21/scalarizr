@@ -94,8 +94,14 @@ def init():
             is_tag = True
     else:
         with open('.git/HEAD') as fp:
-            ref = re.search(r'ref: refs/heads/(.*)', fp.read()).group(1)
-            revision = local("git rev-parse HEAD", capture=True)
+            head = fp.read()
+            if re.search(r'^[0-9a-f]{8,40}$', head):
+                revision = head
+                ref = local("git branch -r --contains HEAD", capture=True).split()
+                ref = re.search(r'origin/(.*)', ref).group(1)
+            else:            
+                ref = re.search(r'ref: refs/heads/(.*)', head).group(1)
+                revision = local("git rev-parse HEAD", capture=True)
             is_tag = False
 
     # revision = local("git rev-parse HEAD", capture=True)
