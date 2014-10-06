@@ -134,7 +134,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}), 
-		python-google-api-client (= 1.2),
+		python-google-api-client,
 		python-openssl (>= 0.13)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
