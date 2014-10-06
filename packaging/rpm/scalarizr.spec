@@ -265,7 +265,7 @@ Summary:        Scalarizr Google Compute Engine edition
 Group:          Applications/Internet
 Requires:       scalarizr-base = %{version}-%{release}
 Requires:       pyOpenSSL >= 0.13 python-httplib2
-Requires:       python-google-api-client
+Requires:       python-google-api-client = 1.2
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
 Conflicts:      scalarizr-rackspace
