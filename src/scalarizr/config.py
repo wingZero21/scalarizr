@@ -1018,7 +1018,6 @@ class BuiltinPlatforms:
     VPS             = 'vps'
     EC2             = 'ec2'
     EUCA            = 'eucalyptus'
-    RACKSPACE       = 'rackspace'
     NIMBULA         = 'nimbula'
     CLOUDSTACK      = 'cloudstack'
     IDCF            = 'idcf'

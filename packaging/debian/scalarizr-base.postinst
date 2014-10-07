@@ -390,17 +390,6 @@ EOF
 fi
 
 
-if [ ! -f "$pub_cnf_dir/rackspace.ini" ]; then
-        cat <<EOF > "$pub_cnf_dir/rackspace.ini"
-[handlers]
-
-rackspace_lifecycle = scalarizr.handlers.rackspace.lifecycle
-
-rackspace_rebundle = scalarizr.handlers.rackspace.rebundle
-EOF
-fi
-
-
 if [ ! -f "$pub_cnf_dir/redis.ini" ]; then
         cat <<EOF > "$pub_cnf_dir/redis.ini"
 [redis]

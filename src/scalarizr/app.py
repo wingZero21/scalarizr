@@ -418,14 +418,6 @@ def _cleanup_after_rebundle():
     pl = bus.platform
     logger = logging.getLogger(__name__)
     
-    if 'volumes' not in pl.features:
-        # Destory mysql storages
-        if os.path.exists(cnf.private_path('storage/mysql.json')) and pl.name == 'rackspace':
-            logger.info('Cleanuping old MySQL storage')
-            mysql_bhv = firstmatched(lambda x: x in node.__node__['behavior'], ('mysql', 'mysql2', 'percona'))
-            vol = node.__node__[mysql_bhv]['volume']
-            vol.destroy(force=True)
-
     if os.path.exists('/etc/chef/client.pem'):
         os.remove('/etc/chef/client.pem')
     if os.path.exists('/etc/chef/client.rb'):
@@ -628,7 +620,7 @@ class Service(object):
 
             # XXX: nimbula's user-data is uploaded by ssh
             server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-            if pl.name in ('nimbula', 'rackspace', 'openstack') and cnf.state != ScalarizrState.IMPORTING:
+            if pl.name in ('nimbula', 'openstack') and cnf.state != ScalarizrState.IMPORTING:
                 if cnf.state == ScalarizrState.REBUNDLING:
                     # XXX: temporary workaround
                     # XXX: rackspace injects files and boots OS in a parallell. There were situations when

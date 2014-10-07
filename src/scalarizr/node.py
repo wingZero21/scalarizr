@@ -444,10 +444,6 @@ node['openstack'] = Compound({
         'connect_swift': Attr('scalarizr.bus', 'bus.platform.get_swift_conn'),
         'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
-node['rackspace'] = Compound({
-        'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
-        'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
-})
 
 node['gce'] = Compound({
         'connect_compute': Attr('scalarizr.bus', 'bus.platform.get_compute_conn'),

@@ -65,7 +65,6 @@ Requires:       python-boto >= 2.32.1
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Obsoletes:      scalarizr < 0.7
-Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-cloudstack
@@ -96,34 +95,6 @@ set -x
 
 sed -i 's/platform = ec2/platform = eucalyptus/i' /etc/scalr/public.d/config.ini
 
-%package -n scalarizr-rackspace
-Summary:        Scalarizr Rackspace edition
-Group:          Applications/Internet
-%if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-cloudfiles >= 1.5.1 python26-cloudservers >= 1.0
-Requires:       python26-swiftclient >= 1.2.0
-%else
-Requires:       python-cloudfiles >= 1.5.1 python-cloudservers >= 1.0 python-httplib2
-Requires:       python-swiftclient >= 1.2.0
-%endif
-Requires:       scalarizr-base = %{version}-%{release}
-Provides:       scalarizr
-Conflicts:      scalarizr-ec2
-Conflicts:		scalarizr-nimbula
-Conflicts:		scalarizr-openstack
-Conflicts:		scalarizr-cloudstack
-Conflicts:		scalarizr-gce
-Conflicts:		scalarizr-ucloud
-Conflicts:		scalarizr-idcf
-
-%description -n scalarizr-rackspace
-Scalarizr converts any server to Scalr-manageable node
-
-%post -n scalarizr-rackspace
-set -x
-
-sed -i 's/platform = ec2/platform = rackspace/i' /etc/scalr/public.d/config.ini
-
 
 %package -n scalarizr-openstack
 Summary:        Scalarizr OpenStack edition
@@ -144,7 +115,6 @@ Requires:       python-keystoneclient >= 0.3.2
 %endif
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-cloudstack
 Conflicts:		scalarizr-gce
@@ -171,7 +141,6 @@ Requires:       lsscsi
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-gce
@@ -197,7 +166,6 @@ Requires:       python-cloudstack
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-gce
@@ -222,7 +190,6 @@ Requires:       python-cloudstack
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-gce
@@ -242,7 +209,6 @@ Group:          Applications/Internet
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-cloudstack
 Conflicts:		scalarizr-gce
@@ -265,7 +231,6 @@ Requires:       pyOpenSSL >= 0.13 python-httplib2
 Requires:       python-google-api-client
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-cloudstack
 Conflicts:		scalarizr-gce
@@ -447,9 +412,6 @@ rm -rf "$RPM_BUILD_ROOT"
 %defattr(-,root,root)
 
 %files -n scalarizr-eucalyptus
-%defattr(-,root,root)
-
-%files -n scalarizr-rackspace
 %defattr(-,root,root)
 
 %files -n scalarizr-nimbula

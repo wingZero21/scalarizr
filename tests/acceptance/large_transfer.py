@@ -1,7 +1,7 @@
 """
 Essential environment variables:
 $AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY for s3
-$RS_USERNAME, $RS_API_KEY for swift (rackspace);
+$RS_USERNAME, $RS_API_KEY for swift;
 $ENTER_IT_USERNAME, $ENTER_IT_API_KEY for swift enter.it
 
 default storage to test is local; override with $LT_TEST_STORAGE
