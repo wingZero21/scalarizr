@@ -195,8 +195,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
-        if __node__['state'] == 'bootstrapping':
-            self._set_overcommit_option()
+        self._set_overcommit_option()
 
         if __node__['state'] == 'running':
             self._ensure_security()
@@ -381,8 +380,6 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         """terminating old redis instance managed by init scrit"""
         if self.default_service.running:
             self.default_service.stop('Treminating default redis instance')
-
-        self._set_overcommit_option()
 
 
     def on_BeforeHostTerminate(self, message):
