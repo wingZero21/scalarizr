@@ -66,11 +66,6 @@ producer_retries_progression = 1,2,5,10,20,30,60
 ; Local messaging endpoint. Will be used by Scalr to send messages to.
 consumer_url = http://0.0.0.0:8013
 
-[snmp]
-
-; SNMP listen port
-port = 8014
-
 [handlers]
 
 ; Life circle
@@ -142,18 +137,6 @@ if [ ! -f "$pub_cnf_dir/chef.ini" ]; then
 [handlers]
 
 chef = scalarizr.handlers.chef	
-EOF
-fi
-
-if [ ! -f "$pub_cnf_dir/cloudfoundry.ini" ]; then
-	cat <<EOF > "$pub_cnf_dir/cloudfoundry.ini"
-[cloudfoundry]
-
-vcap_home = /root/cloudfoundry/vcap
-
-[handlers]
-
-cloudfoundry = scalarizr.handlers.cloudfoundry
 EOF
 fi
 
@@ -485,12 +468,6 @@ fi
 
 pushd .
 cd $pub_cnf_dir
-if [ -f cloudfoundry.ini ]; then
-	for name in cf_router.ini cf_cloud_controller.ini \
-				cf_health_manager.ini cf_dea.ini cf_service.ini; do
-		[ ! -f $name ] && ln -s cloudfoundry.ini $name
-	done
-fi
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
 [ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini 
@@ -578,13 +555,6 @@ if [ -x $INIT_SCRIPT ]; then
 			update-rc.d scalarizr stop 99 0 1 6 .
 		fi
 		update-rc.d scalr-upd-client defaults 98 >/dev/null
-	fi
-
-
-	snmp_pid=$(netstat -anp | grep ^udp | grep 0\.0\.0\.0:8014 | awk '{ print $6 }' | cut -d/ -f1)
-
-	if [ ! -z "$snmp_pid" ] && [ $snmp_pid -gt 1 ]; then
-		kill -9 $snmp_pid 2>/dev/null
 	fi
 
 	zomby_pids=$(ps aux | grep 'bin/scalarizr' | awk '{ print $2 }')

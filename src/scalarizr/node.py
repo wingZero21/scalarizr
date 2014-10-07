@@ -415,9 +415,6 @@ node['apache'] = Compound({
         Ini('%s/%s.ini' % (public_dir, 'app'), 'app')
 })
 
-node['cloudfoundry'] = Compound({
-        'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'cloudfoundry'), 'scalarizr.storage2.volume')
-        })
 
 node['tomcat'] = {}
 

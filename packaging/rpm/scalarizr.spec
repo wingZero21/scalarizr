@@ -17,7 +17,6 @@ URL:            http://scalr.net
 
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:       python26 python26-openssl >= 0.13.1 python26-pexpect >= 2.3
-Requires:       python26-pysnmp >= 4.1 python26-pyasn1 >= 0.1.7 python26-pysnmp-mibs >= 0.0.8a 
 Requires:       python26-prettytable python26-PyYAML python26-docopt
 #Requires:		python26-pymongo
 Requires:		python26-pymysql
@@ -29,8 +28,6 @@ Requires:		yum-priorities
 # setuptools from pip used instead of rpm
 # BuildRequires:  python-setuptools
 Requires:       python >= 2.5 python-openssl >= 0.13.1 pexpect >= 2.3
-# snmp
-Requires:       pysnmp >= 4.2.4 python-pyasn1 >= 0.1.7 python-pysnmp-mibs >= 0.0.8a 
 # szradm
 Requires:       python-prettytable PyYAML python-docopt >= 0.6.2
 # mongodb behavior
@@ -369,12 +366,6 @@ cp /usr/share/scalr/szradm.bash_completion /etc/bash_completion.d/szradm
 
 pushd .
 cd $pub_cnf_dir
-if [ -f cloudfoundry.ini ]; then
-	for name in cf_router.ini cf_cloud_controller.ini \
-				cf_health_manager.ini cf_dea.ini cf_service.ini; do
-		[ ! -f $name ] && ln -s cloudfoundry.ini $name
-	done
-fi
 rm -f percona.ini  # Measly config in several builds 
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
 [ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
