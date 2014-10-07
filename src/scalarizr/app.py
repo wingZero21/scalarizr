@@ -26,8 +26,6 @@ from scalarizr.api.binding import jsonrpc_http
 from scalarizr.linux import pkgmgr
 if linux.os.windows:
     import _winreg as winreg
-else:
-    from scalarizr.snmp.agent import SnmpServer
 
 if linux.os.windows:
     import win32timezone as os_time
@@ -152,12 +150,6 @@ _pid = None
 Scalarizr main process PID
 '''
 
-
-_snmp_scheduled_start_time = None
-'''
-Next time when SNMP process should be forked
-'''
-
 _logging_configured = False
 
 _meta = None
@@ -213,26 +205,6 @@ def _init():
     # Registering in init.d
     initdv2.explore("scalarizr", ScalarizrInitScript)
 
-
-def prepare_snmp():
-    _init()
-    cnf = bus.cnf; ini = cnf.rawini
-    cnf.on('apply_user_data', _apply_user_data)
-    cnf.bootstrap()
-
-    server_id = ini.get('general', 'server_id')
-    queryenv_url = ini.get('general', 'queryenv_url')
-    queryenv = QueryEnvService(queryenv_url, server_id, cnf.key_path(cnf.DEFAULT_KEY))
-
-    bus.queryenv_service = queryenv
-
-    snmp_server = SnmpServer(
-        port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
-        security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
-        community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
-    )
-    return snmp_server
-    
 
 DB_NAME = 'db.sqlite'
 DB_SCRIPT = 'db.sql'
@@ -375,10 +347,6 @@ def _apply_user_data(from_scalr=True):
         messaging_p2p={
             'producer_url' : g(UserDataOptions.MESSAGE_SERVER_URL),
             'message_format': g(UserDataOptions.MESSAGE_FORMAT) or 'xml'
-        },
-        snmp={
-            'security_name' : 'notConfigUser',            
-            'community_name' : g(UserDataOptions.FARM_HASH)
         }
     )
     behaviour = g(UserDataOptions.BEHAVIOUR)
@@ -593,8 +561,6 @@ class Service(object):
     def __init__(self):
         self._logger = logging.getLogger(__name__)
         self._running  = False
-        self._snmp_process = None
-        self._snmp_pid = None
         self._msg_thread = None
 
 
@@ -765,7 +731,6 @@ class Service(object):
 
         # Install signal handlers
         if not linux.os.windows:
-            signal.signal(signal.SIGCHLD, self.onSIGCHILD)
             signal.signal(signal.SIGTERM, self.onSIGTERM)
             signal.signal(signal.SIGHUP, self.onSIGHUP)
 
@@ -787,9 +752,6 @@ class Service(object):
                         # Service stopped, stop main loop
                         break
                 else:
-                    if self._snmp_pid != -1:
-                        # Recover SNMP maybe
-                        self._check_snmp()
                     try:
                         select.select([], [], [], 30)
                     except select.error, e:
@@ -980,10 +942,6 @@ class Service(object):
             })
         producer.on('before_send', msg_meta)
 
-        if not linux.os.windows_family:
-            logger.debug('Schedule SNMP process')
-            self._snmp_scheduled_start_time = time.time()
-
         Storage.maintain_volume_table = True
 
         if not bus.api_server:
@@ -1015,65 +973,11 @@ class Service(object):
             msg_service.get_producer().send(Queues.CONTROL, msg)
 
 
-    def _check_snmp(self):
-        if self._running and linux.os['family'] != 'Windows' \
-                and not self._snmp_pid and time.time() >= _snmp_scheduled_start_time:
-            self._start_snmp_server()
-
-
-    def _stop_snmp_server(self):
-        # Shutdown SNMP
-        if self._snmp_pid > 0:
-            self._logger.debug('Send SIGTERM to SNMP process (pid: %d)', self._snmp_pid)
-            try:
-                os.kill(self._snmp_pid, signal.SIGTERM)
-            except (Exception, BaseException), e:
-                self._logger.debug("Can't kill SNMP process: %s" % e)
-            self._snmp_pid = None
-
-
-    def _start_snmp_server(self):
-        remove_snmp_since = (4, 5, 0)
-        if bus.scalr_version >= remove_snmp_since:
-            self._logger.debug('Skip SNMP process starting cause condition matched: Scalr version %s >= %s',
-                bus.scalr_version, remove_snmp_since)
-            self._snmp_pid = -1
-            return
-
-        # Start SNMP server in a separate process
-        pid = os.fork()
-        if pid == 0:
-            globals()['_pid'] = 0
-            cnf = bus.cnf; ini = cnf.rawini
-            snmp_server = SnmpServer(
-                port=int(ini.get(config.SECT_SNMP, config.OPT_PORT)),
-                security_name=ini.get(config.SECT_SNMP, config.OPT_SECURITY_NAME),
-                community_name=ini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
-            )
-            bus.snmp_server = snmp_server
-
-            try:
-                snmp_server.start()
-                self._logger.info('[pid: %d] SNMP process terminated', os.getpid())
-                sys.exit(0)
-            except SystemExit:
-                raise
-            except (BaseException, Exception), e:
-                self._logger.warn('Caught SNMP error: %s', str(e))
-                sys.exit(1)
-        else:
-            self._snmp_pid = pid
-
-
     def _start_services(self):
         # Create message server thread
         msg_service = bus.messaging_service
         consumer = msg_service.get_consumer()
         msg_thread = threading.Thread(target=consumer.start, name="Message server")
-
-        # Start SNMP
-        if linux.os['family'] != 'Windows':
-            self._start_snmp_server()
 
         # Start message server
         msg_thread.start()
@@ -1164,8 +1068,6 @@ class Service(object):
         api_server.shutdown()
         bus.api_server = None
 
-        # Shutdown snmp
-        self._stop_snmp_server()
 
         # Shutdown periodical executor
         self._logger.debug('Shutdowning periodical executor')
@@ -1182,35 +1084,6 @@ class Service(object):
             # Main process
             self._logger.debug('Shutdown main process (pid: %d)', pid)
             self._shutdown()
-        else:
-            # SNMP process
-            self._logger.debug('Shutdown SNMP server process (pid: %d)', pid)
-            snmp = bus.snmp_server
-            snmp.stop()
-
-
-    def onSIGCHILD(self, *args):
-        if self._running and self._snmp_pid > 0:
-            try:
-                # Restart SNMP process if it terminates unexpectedly
-                pid, sts = os.waitpid(self._snmp_pid, os.WNOHANG)
-                '''
-                logger.debug(
-                    'Child terminated (pid: %d, status: %s, WIFEXITED: %s, '
-                    'WEXITSTATUS: %s, WIFSIGNALED: %s, WTERMSIG: %s)',
-                    pid, sts, os.WIFEXITED(sts),
-                    os.WEXITSTATUS(sts), os.WIFSIGNALED(sts), os.WTERMSIG(sts)
-                )
-                '''
-                if pid == self._snmp_pid and not (os.WIFEXITED(sts) and os.WEXITSTATUS(sts) == 0):
-                    self._logger.warning(
-                        'SNMP process [pid: %d] died unexpectedly. Restarting it',
-                        self._snmp_pid
-                    )
-                    self._snmp_scheduled_start_time = time.time() + SNMP_RESTART_DELAY
-                    self._snmp_pid = None
-            except OSError:
-                pass
 
 
     def onSIGHUP(self, *args):
@@ -1220,13 +1093,11 @@ class Service(object):
             return
 
         self._logger.info('Reloading scalarizr')
-        signal.signal(signal.SIGCHLD, signal.SIG_IGN)
         self._running = False
         bus.fire('shutdown')
         self._shutdown_services()
 
         self._running = True
-        signal.signal(signal.SIGCHLD, self.onSIGCHILD)
         cnf = bus.cnf
         cnf.bootstrap(force_reload=True)
         self._init_services()

@@ -341,42 +341,44 @@ def publish_deb_plain():
     publish .deb packages into local repository as a plain debian repo (only for compatibility)
     '''
     init()
+    time0 = time.time()
+    try:
+        with lcd(aptly_conf['rootDir'] + '/public'):
+            release_file = 'dists/{0}/Release'.format(repo)
+            arches = local('grep Architecture {0}'.format(release_file), 
+                            capture=True).split(':')[-1].strip().split()
+            repo_plain_dir = '{0}/apt-plain/{1}'.format(repo_dir, repo)
+            if os.path.exists(repo_plain_dir):
+                shutil.rmtree(repo_plain_dir)
+            os.makedirs(repo_plain_dir)
+            for arch in arches:
+                packages_file = 'dists/{0}/main/binary-{1}/Packages'.format(repo, arch)
+                # Copy packages
+                local(("grep Filename %s | "
+                        "awk '{ print $2 }' | "
+                        "xargs -I '{}' cp '{}' %s/") % (packages_file, repo_plain_dir))
 
-    with lcd(aptly_conf['rootDir'] + '/public'):
-        release_file = 'dists/{0}/Release'.format(repo)
-        arches = local('grep Architecture {0}'.format(release_file), 
-                        capture=True).split(':')[-1].strip().split()
-        repo_plain_dir = '{0}/apt-plain/{1}'.format(repo_dir, repo)
-        if os.path.exists(repo_plain_dir):
-            shutil.rmtree(repo_plain_dir)
-        os.makedirs(repo_plain_dir)
-        for arch in arches:
-            packages_file = 'dists/{0}/main/binary-{1}/Packages'.format(repo, arch)
-            # Copy packages
-            local(("grep Filename %s | "
-                    "awk '{ print $2 }' | "
-                    "xargs -I '{}' cp '{}' %s/") % (packages_file, repo_plain_dir))
-
-    with lcd(os.path.dirname(repo_plain_dir)):
-        local('dpkg-scanpackages -m {0} > {0}/Packages'.format(repo))
-        local('dpkg-scansources {0} > {0}/Sources'.format(repo))
-        with lcd(repo):
-            with open('{0}/Release'.format(repo_plain_dir), 'w+') as fp:
-                distribution = 'scalr' if tag else repo
-                fp.write((
-                    'Origin: scalr\n'
-                    'Label: {0}\n'
-                    'Codename: {0}\n'
-                    'Architectures: all {1}\n'
-                    'Description: Scalr packages\n'
-                ).format(distribution, ' '.join(arches)))
-                fp.write(local('apt-ftparchive release .', capture=True))
-            local('cat Packages | gzip -9c > Packages.gz')
-            local('cat Sources | gzip -9c > Sources.gz')
-            local('gpg -v --clearsign -u {0} -o InRelease Release'.format(gpg_key))
-            local('gpg -v -abs -u {0} -o Release.gpg Release'.format(gpg_key))
-
-    print_green('publish plain deb repository')
+        with lcd(os.path.dirname(repo_plain_dir)):
+            local('dpkg-scanpackages -m {0} > {0}/Packages'.format(repo))
+            local('dpkg-scansources {0} > {0}/Sources'.format(repo))
+            with lcd(repo):
+                with open('{0}/Release'.format(repo_plain_dir), 'w+') as fp:
+                    distribution = 'scalr' if tag else repo
+                    fp.write((
+                        'Origin: scalr\n'
+                        'Label: {0}\n'
+                        'Codename: {0}\n'
+                        'Architectures: all {1}\n'
+                        'Description: Scalr packages\n'
+                    ).format(distribution, ' '.join(arches)))
+                    fp.write(local('apt-ftparchive release .', capture=True))
+                local('cat Packages | gzip -9c > Packages.gz')
+                local('cat Sources | gzip -9c > Sources.gz')
+                local('gpg -v --clearsign -u {0} -o InRelease Release'.format(gpg_key))
+                local('gpg -v -abs -u {0} -o Release.gpg Release'.format(gpg_key))
+    finally:
+        time_delta = time.time() - time0
+        print_green('publish plain deb repository took {0}'.format(time_delta))
 
 
 @task
