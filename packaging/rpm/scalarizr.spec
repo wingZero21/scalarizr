@@ -65,7 +65,6 @@ Requires:       python-boto >= 2.32.1
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Obsoletes:      scalarizr < 0.7
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-cloudstack
 Conflicts:		scalarizr-gce
@@ -115,7 +114,6 @@ Requires:       python-keystoneclient >= 0.3.2
 %endif
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-cloudstack
 Conflicts:		scalarizr-gce
 Conflicts:		scalarizr-ucloud
@@ -141,7 +139,6 @@ Requires:       lsscsi
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-gce
 Conflicts:		scalarizr-ucloud
@@ -166,7 +163,6 @@ Requires:       python-cloudstack
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-gce
 Conflicts:		scalarizr-idcf
@@ -190,7 +186,6 @@ Requires:       python-cloudstack
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-gce
 Conflicts:		scalarizr-ucloud
@@ -203,25 +198,6 @@ set -x
 
 sed -i 's/platform = ec2/platform = idcf/i' /etc/scalr/public.d/config.ini
 
-%package -n scalarizr-nimbula
-Summary:        Scalarizr Nimbula edition
-Group:          Applications/Internet
-Requires:       scalarizr-base = %{version}-%{release}
-Provides:       scalarizr
-Conflicts:      scalarizr-ec2
-Conflicts:		scalarizr-openstack
-Conflicts:		scalarizr-cloudstack
-Conflicts:		scalarizr-gce
-Conflicts:		scalarizr-ucloud
-Conflicts:		scalarizr-idcf
-
-%description -n scalarizr-nimbula
-Scalarizr converts any server to Scalr-manageable node
-
-%post -n scalarizr-nimbula
-set -x
-
-sed -i 's/platform = ec2/platform = nimbula/i' /etc/scalr/public.d/config.ini
 
 %package -n scalarizr-gce
 Summary:        Scalarizr Google Compute Engine edition
@@ -412,9 +388,6 @@ rm -rf "$RPM_BUILD_ROOT"
 %defattr(-,root,root)
 
 %files -n scalarizr-eucalyptus
-%defattr(-,root,root)
-
-%files -n scalarizr-nimbula
 %defattr(-,root,root)
 
 %files -n scalarizr-openstack

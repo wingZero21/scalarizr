@@ -342,20 +342,6 @@ EOF
 fi
 
 
-if [ ! -f "$pub_cnf_dir/nimbula.ini" ]; then
-        cat <<EOF > "$pub_cnf_dir/nimbula.ini"
-[nimbula]
-
-; userdata appearance timeout, in seconds
-wait_user_data_timeout = 600
-
-
-[handlers]
-
-nimbula_rebundle = scalarizr.handlers.nimbula.rebundle
-EOF
-fi
-
 cat <<EOF > "$pub_cnf_dir/openstack.ini"
 [openstack]
 

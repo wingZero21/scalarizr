@@ -618,9 +618,8 @@ class Service(object):
         if not optparser.values.import_server and \
             ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
 
-            # XXX: nimbula's user-data is uploaded by ssh
             server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-            if pl.name in ('nimbula', 'openstack') and cnf.state != ScalarizrState.IMPORTING:
+            if pl.name == 'openstack' and cnf.state != ScalarizrState.IMPORTING:
                 if cnf.state == ScalarizrState.REBUNDLING:
                     # XXX: temporary workaround
                     # XXX: rackspace injects files and boots OS in a parallell. There were situations when
