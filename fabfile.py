@@ -318,8 +318,9 @@ def publish_deb():
             # remove previous version
             local('aptly repo remove {0} "Architecture ({1}), Name (~ {2}.*)"'.format(repo, pkg_arch, project))
             # publish artifacts into repo
-            local('aptly repo add {0} {1}'.format(
-                repo, ' '.join(glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch)))))
+            packages = glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch))
+            if packages:
+                local('aptly repo add {0} {1}'.format(repo, ' '.join(packages)))
         local('aptly publish drop {0} || :'.format(repo))
         local('aptly publish repo -gpg-key={0} {1} {2} || :'.format(gpg_key, repo, aptly_prefix))
         local('aptly db cleanup')
@@ -425,6 +426,20 @@ def publish_rpm():
         print_green('publish rpm took {0}'.format(time_delta))
 
 
+@task
+@runs_once
+def publish_win():
+    '''
+    publish .msi packages into local repository.
+    '''
+    init()
+    time0 = time.time()
+    try:
+        repo_path = '%s/win/%s' % (repo_dir, repo)
+        local("mkdir -p %s" % repo_path)
+    finally:
+        time_delta = time.time() - time0
+        print_green('publish win took {0}'.format(time_delta))  
 
 
 def cleanup_artifacts():
@@ -484,6 +499,7 @@ def publish_binary():
     publish_rpm()
     publish_deb()
     publish_deb_plain()
+    publish_win()
     if tag:
         release()
 
