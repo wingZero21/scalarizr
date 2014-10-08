@@ -448,19 +448,31 @@ def release():
     sync packages from local repository to Scalr.net
     '''
     init()
-    repo = repo or globals()['repo']
-    if repo not in ('latest', 'stable'):
-        print_yellow("only tag build triggers release (repo: {0} doesn't match)".format(repo))
-        return
 
-    # rsync_cmd = "rsync -av --delete --rsh 'ssh -l {0} -p {1}' ".format(remote_repo_user, remote_repo_port)
-    # rsync_cmd += '{include} {exclude} {src} ' + '{0}'.format(remote_repo_host) + ':{dest}'
+    rsync_cmd = "rsync -av --delete --rsh 'ssh -l {0} -p {1}' ".format(remote_repo_user, remote_repo_port)
+    rsync_cmd += "{include} {exclude} {src} " + '{0}'.format(remote_repo_host) + ':{dest}'
 
-    # local(rsync_cmd.format(
-    #         exclude="--exclude '*'", 
-    #         include="--include 'latest/**' --include 'stable/**'",
-    #         src=repo_dir + '/rpm/',
-    #         dest=remote_repo_dir + '/rpm'))
+    # Sync rpm, apt(plain) and win repos
+    includes = ('rpm/', 'rpm/latest**', 'rpm/stable**',
+                'apt-plain/', 'apt-plain/latest**', 'apt-plain/stable**',
+                'win/', 'win/latest**', 'win/stable**')
+    includes_cmd = []
+    for include in includes:
+        includes_cmd.append('--include')
+        includes_cmd.append(repr(include))
+    includes_cmd = ' '.join(includes_cmd)
+    local(rsync_cmd.format(
+            include=includes_cmd,
+            exclude="--exclude '*'",
+            src=repo_dir + '/',
+            dest=remote_repo_dir))
+
+    # Sync apt(pool)
+    local(rsync_cmd.format(
+            include='',
+            exclude='',
+            src=repo_dir + '/apt/release/',
+            dest=remote_repo_dir + '/apt'))
 
 
 @task
@@ -472,6 +484,8 @@ def publish_binary():
     publish_rpm()
     publish_deb()
     publish_deb_plain()
+    if is_tag:
+        release()
 
 
 @task
