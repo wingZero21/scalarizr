@@ -106,15 +106,6 @@ def init():
                 revision = local("git rev-parse HEAD", capture=True)
             is_tag = False
 
-    # revision = local("git rev-parse HEAD", capture=True)
-    # ref_head = open('.git/HEAD').read().strip()
-    # if ref_head == revision:
-    #     ref = re.search(r'moving from ([^\s]+) to [0-9a-f]{8,40}',
-    #                     local('git reflog', capture=True), re.M).group(1)
-    # else:
-    #     ref = ref_head.split('refs/heads/')[-1]
-    # is_tag = 'refs/tags/' in local('git show-ref {0}'.format(ref), capture=True)
-
     pkg_version = local('python setup.py --version', capture=True)
     if is_tag:
         # it's a tag
@@ -396,7 +387,8 @@ def publish_rpm():
         repo_path = '%s/rpm/%s/rhel' % (repo_dir, repo)
 
         # create directory structure
-        local('mkdir -p %s/{5,6,7}/{x86_64,i386}' % repo_path, shell='/bin/bash')
+        local('mkdir -p %s/5/{x86_64,i386}' % repo_path, shell='/bin/bash')
+        local('mkdir -p %s/{6,7}' % repo_path, shell='/bin/bash')
         cwd = os.getcwd()
         os.chdir(repo_path)
 
