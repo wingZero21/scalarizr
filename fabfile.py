@@ -409,6 +409,11 @@ def publish_rpm():
             symlink('6', linkname)
         for linkname in '7Server 7.0 latest'.split():
             symlink('7', linkname)
+        # Symlink el6 and el7 package directories to el5 
+        for arch in ('i386', 'x86_64'):
+            for ver in '6 7'.split():
+                symlink('5/%s' % arch, '%s/%s' % (ver, arch))
+
         os.chdir(cwd)
 
         # remove previous version
@@ -416,10 +421,12 @@ def publish_rpm():
 
         # publish artifacts into repo
         for arch, pkg_arch in (('i386', 'i686'), ('x86_64', 'x86_64')):
-            for ver in '5 6 7'.split():
-                dst = os.path.join(repo_path, ver, arch)
-                local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
-                local('createrepo %s' % dst)
+            ver = '5'
+            dst = os.path.join(repo_path, ver, arch)
+            local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
+            local('createrepo %s' % dst)
+
+
     finally:
         time_delta = time.time() - time0
         print_green('publish rpm took {0}'.format(time_delta))
@@ -484,7 +491,7 @@ def publish_binary():
     publish_rpm()
     publish_deb()
     publish_deb_plain()
-    if is_tag:
+    if tag:
         release()
 
 
