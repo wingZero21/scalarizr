@@ -9,7 +9,7 @@ import shutil
 from fabric.api import *
 from fabric.decorators import runs_once
 from fabric.context_managers import shell_env
-from fabric.colors import green, red
+from fabric.colors import green, red, yellow
 
 env['use_ssh_config'] = True
 project = os.environ.get('CI_PROJECT', 'scalarizr')
@@ -20,6 +20,7 @@ project_dir = os.path.join(home_dir, project)
 verbose = os.environ.get('CI_VERBOSE', 'no').lower() in ('1', 'yes', 'y')
 repo_dir = '/var/www'
 aptly_conf = None
+aptly_prefix = None
 gpg_key = '04B54A2A'
 remote_repo_host = 'sl6.scalr.net'
 remote_repo_port = 60022
@@ -80,7 +81,8 @@ def init():
     '''
     Initialize current build.
     '''
-    global tag, branch, version, repo, build_number, artifacts_dir, aptly_conf
+    global tag, branch, version, repo, build_number, artifacts_dir, \
+            aptly_conf, aptly_prefix
 
     build_number = read_build_number()
     print_green('build_number: {0}'.format(build_number))
@@ -137,6 +139,7 @@ def init():
         if os.path.exists(aptly_conf_file):
             aptly_conf = json.load(open(aptly_conf_file))
             print_green('aptly rootDir: {0}'.format(aptly_conf['rootDir']))
+    aptly_prefix = 'release' if is_tag else 'develop'
 
 
 def import_artifact(src):
@@ -327,7 +330,7 @@ def publish_deb():
             local('aptly repo add {0} {1}'.format(
                 repo, ' '.join(glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch)))))
         local('aptly publish drop {0} || :'.format(repo))
-        local('aptly publish repo -gpg-key={1} {0} || :'.format(repo, gpg_key))
+        local('aptly publish repo -gpg-key={0} {1} {2} || :'.format(gpg_key, repo, aptly_prefix))
         local('aptly db cleanup')
     finally:
         time_delta = time.time() - time0
@@ -343,7 +346,7 @@ def publish_deb_plain():
     init()
     time0 = time.time()
     try:
-        with lcd(aptly_conf['rootDir'] + '/public'):
+        with lcd(aptly_conf['rootDir'] + '/public/' + aptly_prefix):
             release_file = 'dists/{0}/Release'.format(repo)
             arches = local('grep Architecture {0}'.format(release_file), 
                             capture=True).split(':')[-1].strip().split()
@@ -440,15 +443,24 @@ def cleanup_artifacts():
 
 @task
 @runs_once
-def release(repo=None):
+def release():
     '''
     sync packages from local repository to Scalr.net
     '''
     init()
     repo = repo or globals()['repo']
+    if repo not in ('latest', 'stable'):
+        print_yellow("only tag build triggers release (repo: {0} doesn't match)".format(repo))
+        return
 
+    # rsync_cmd = "rsync -av --delete --rsh 'ssh -l {0} -p {1}' ".format(remote_repo_user, remote_repo_port)
+    # rsync_cmd += '{include} {exclude} {src} ' + '{0}'.format(remote_repo_host) + ':{dest}'
 
-    pass
+    # local(rsync_cmd.format(
+    #         exclude="--exclude '*'", 
+    #         include="--include 'latest/**' --include 'stable/**'",
+    #         src=repo_dir + '/rpm/',
+    #         dest=remote_repo_dir + '/rpm'))
 
 
 @task
@@ -474,3 +486,7 @@ def print_green(msg):
 
 def print_red(msg):
     print red('[localhost] {0}'.format(msg))
+
+
+def print_yellow(msg):
+    print yellow('[localhost] {0}'.format(msg))
