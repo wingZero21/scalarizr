@@ -404,7 +404,7 @@ def publish_rpm():
         # Symlink el6 and el7 package directories to el5 
         for arch in ('i386', 'x86_64'):
             for ver in '6 7'.split():
-                symlink('5/%s' % arch, '%s/%s' % (ver, arch))
+                symlink('../5/%s' % arch, '%s/%s' % (ver, arch))
 
         os.chdir(cwd)
 
