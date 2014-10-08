@@ -399,7 +399,9 @@ def publish_rpm():
             symlink('5', linkname)
         for linkname in '6Server 6.0 6.1 6.2 6.3 6.4 6.5'.split():
             symlink('6', linkname)
-        for linkname in '7Server 7.0 latest'.split():
+        for linkname in '2013.03 2013.09 2014.03 2014.09 latest'.split():
+            symlink('6', linkname)
+        for linkname in '7Server 7.0'.split():
             symlink('7', linkname)
         # Symlink el6 and el7 package directories to el5 
         for arch in ('i386', 'x86_64'):
@@ -417,7 +419,6 @@ def publish_rpm():
             dst = os.path.join(repo_path, ver, arch)
             local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
             local('createrepo %s' % dst)
-
 
     finally:
         time_delta = time.time() - time0
