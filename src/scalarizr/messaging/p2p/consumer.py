@@ -221,6 +221,8 @@ class P2pMessageConsumer(MessageConsumer):
             for ln in list(self.listeners):
                 ln(message, queue)
         except (BaseException, Exception), e:
+            self._logger.warn('message.name: %s', message.name)
+            self._logger.warn('%s == %s', message.local_ip, __node__['private_ip'])
             if message.name == 'BeforeHostUp' \
                     and message.local_ip == __node__['private_ip']:
                 raise
