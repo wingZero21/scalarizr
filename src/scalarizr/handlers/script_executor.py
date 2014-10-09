@@ -223,11 +223,11 @@ class ScriptExecutor(Handler):
             LOG.debug('exc_info: %s', exc_info)
             LOG.debug("script_result['return_code']: %s", script_result['return_code'])
             LOG.debug('script.event_name: %s', script.event_name)
-            LOG.debug('abort_init_on_script_fail: %s', int(__node__['base'].get('abort_init_on_script_fail', False)))
+            LOG.debug('abort_init_on_script_fail: %s', int(__node__.get('abort_init_on_script_fail', False)))
             if not exc_info \
                     and script_result['return_code'] != 0 \
                     and script.event_name == 'BeforeHostUp' \
-                    and int(__node__['base'].get('abort_init_on_script_fail', False)):
+                    and int(__node__.get('abort_init_on_script_fail', False)):
                 msg = 'Script {0} exited with code {1}'.format(script.name, script_result['return_code'])
                 raise HandlerError(msg)
 
@@ -346,7 +346,7 @@ class ScriptExecutor(Handler):
             self.execute_scripts(scripts, event_name, scripts_qty)
         except:
             if event_name == 'BeforeHostUp' \
-                    and int(__node__['base'].get('abort_init_on_script_fail', False)):
+                    and int(__node__.get('abort_init_on_script_fail', False)):
                 raise
             else:
                 LOG.warn('Scripts execution failed', exc_info=sys.exc_info())
