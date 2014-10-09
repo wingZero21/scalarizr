@@ -221,6 +221,9 @@ class P2pMessageConsumer(MessageConsumer):
             for ln in list(self.listeners):
                 ln(message, queue)
         except (BaseException, Exception), e:
+            if message.name == 'BeforeHostUp' \
+                    and message.local_ip == __node__['private_ip']:
+                raise
             self._logger.exception(e)
         finally:
             self._logger.debug('Mark message (message_id: %s) as handled', message.id)
