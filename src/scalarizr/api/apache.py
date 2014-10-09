@@ -858,7 +858,7 @@ class ApacheAPI(BehaviorAPI):
         if linux.os.debian_family:
             pkgmgr.check_dependency(['apache2>=2.2,<2.5'], installed_packages)
         elif linux.os.redhat_family or linux.os.oracle_family:
-            pkgmgr.check_dependency(['httpd>=2.2,<2.5'], installed_packages)
+            pkgmgr.check_any_dependency([['httpd>=2.2,<2.5'], ['httpd24']], installed_packages)
         else:
             raise exceptions.UnsupportedBehavior(cls.behavior, (
                 "Unsupported operating system '{os}'").format(os=linux.os['name'])
