@@ -219,7 +219,9 @@ class P2pMessageConsumer(MessageConsumer):
             self._logger.debug('Notify message listeners (message_id: %s)', message.id)
             self.handing_message_id = message.id
             for ln in list(self.listeners):
+                self._logger.debug('before ln(message, queue): %s', message.name)
                 ln(message, queue)
+                self._logger.debug('after ln(message, queue): %s', message.name)
         except (BaseException, Exception), e:
             self._logger.warn('message.name: %s', message.name)
             self._logger.warn('%s == %s', message.local_ip, __node__['private_ip'])
