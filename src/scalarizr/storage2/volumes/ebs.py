@@ -408,7 +408,7 @@ class EbsVolume(base.Volume, EbsMixin):
 
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
         LOG.debug('Creating snapshot of EBS volume %s', volume)
-        if linux.os.family != 'Windows':
+        if not linux.os.windows:
             coreutils.sync()
 
         # conn.create_snapshot leaks snapshots when RequestLimitExceeded occured 
