@@ -49,6 +49,7 @@ class P2pMessageConsumer(MessageConsumer):
         else:
             self._handler_thread = None
         self.message_to_ack = None
+        self.subhandler_exc_info = None
         self.ack_event = threading.Event()
         #self._not_empty = threading.Event()
 
@@ -250,6 +251,11 @@ class P2pMessageConsumer(MessageConsumer):
         self._logger.debug('Waiting message subhandler thread: %s', thread.getName())
         thread.join()
         self._logger.debug('Completed message subhandler thread: %s', thread.getName())
+        if self.subhandler_exc_info:
+            self._logger.debug('Subhandler completed with exception')
+            exc_info = self.subhandler_exc_info
+            self.subhandler_exc_info = None
+            raise exc_info[0], exc_info[1], exc_info[2]
 
         if saved_access_data:
             pl.set_access_data(saved_access_data)
@@ -269,11 +275,16 @@ class P2pMessageConsumer(MessageConsumer):
                             if message.name == self.message_to_ack.name and \
                                             message.body.get('server_id', sid) == sid:
                                 self._logger.debug('Going to handle_one_message. Thread: %s', threading.currentThread().getName())
-                                self._handle_one_message(message, queue, store)
-                                self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
+                                try:
+                                    self._handle_one_message(message, queue, store)
+                                except:
+                                    self.subhandler_exc_info = sys.exc_info()
+                                    raise
+                                finally:
+                                    self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
+                                    self.message_to_ack = None
+                                    self.ack_event.set()
 
-                                self.message_to_ack = None
-                                self.ack_event.set()
                                 if self.return_on_ack:
                                     return
                                 break
