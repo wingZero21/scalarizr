@@ -232,22 +232,24 @@ class MessageListener:
                         fp.write('.'.join(map(str, ver)))
                     bus.scalr_version = ver
 
-            accepted = False
             for handler in self.get_handlers_chain():
                 hnd_name = handler.__class__.__name__
+                accepted = False
                 try:
-                    if handler.accept(message, queue, **self._accept_kwargs):
-                        accepted = True
-                        LOG.debug("Call handler %s" % hnd_name)
-                        try:
-                            handler(message)
-                        except (BaseException, Exception), e:
-                            LOG.exception(e)
+                    accepted = handler.accept(message, queue, **self._accept_kwargs)
                 except (BaseException, Exception), e:
                     LOG.error("%s accept() method failed with exception", hnd_name)
                     LOG.exception(e)
-
-            if not accepted:
+                if accepted:
+                    LOG.debug("Call handler %s" % hnd_name)
+                    try:
+                        handler(message)
+                    except (BaseException, Exception), e:
+                        if message.name == 'BeforeHostUp' and message.local_ip == __node__['private_ip']:
+                            raise
+                        else:
+                            LOG.exception(e)
+            else:
                 LOG.warning("No one could handle '%s'", message.name)
         finally:
             #if platform_access_data_on_me:
