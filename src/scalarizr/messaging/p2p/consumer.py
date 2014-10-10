@@ -288,12 +288,10 @@ class P2pMessageConsumer(MessageConsumer):
                                 except:
                                     self.subhandler_exc_info = sys.exc_info()
                                     self._logger.warn('Caught exception from _handle_one_message: thread: %s', threading.currentThread())
-                                    raise
-                                finally:
-                                    self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
-                                    self.message_to_ack = None
-                                    self.ack_event.set()
 
+                                self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
+                                self.message_to_ack = None
+                                self.ack_event.set()
                                 if self.return_on_ack:
                                     return
                                 break
