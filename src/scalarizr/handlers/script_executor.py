@@ -220,10 +220,6 @@ class ScriptExecutor(Handler):
             LOG.debug('sending exec script result message')
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
             self.in_progress.remove(script)
-            LOG.debug('exc_info: %s', exc_info)
-            LOG.debug("script_result['return_code']: %s", script_result['return_code'])
-            LOG.debug('script.event_name: %s', script.event_name)
-            LOG.debug('abort_init_on_script_fail: %s', int(__node__.get('abort_init_on_script_fail', False)))
             if not exc_info \
                     and script_result['return_code'] != 0 \
                     and script.event_name == 'BeforeHostUp' \

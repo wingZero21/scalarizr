@@ -232,6 +232,7 @@ class MessageListener:
                         fp.write('.'.join(map(str, ver)))
                     bus.scalr_version = ver
 
+            accepted_any = False
             for handler in self.get_handlers_chain():
                 hnd_name = handler.__class__.__name__
                 accepted = False
@@ -242,6 +243,7 @@ class MessageListener:
                     LOG.exception(e)
                 if accepted:
                     LOG.debug("Call handler %s" % hnd_name)
+                    accepted_any = True
                     try:
                         handler(message)
                     except (BaseException, Exception), e:
@@ -250,7 +252,7 @@ class MessageListener:
                             raise
                         else:
                             LOG.exception(e)
-            else:
+            if not accepted_any:
                 LOG.warning("No one could handle '%s'", message.name)
         finally:
             #if platform_access_data_on_me:

@@ -219,12 +219,8 @@ class P2pMessageConsumer(MessageConsumer):
             self._logger.debug('Notify message listeners (message_id: %s)', message.id)
             self.handing_message_id = message.id
             for ln in list(self.listeners):
-                self._logger.debug('before ln(message, queue): %s', message.name)
                 ln(message, queue)
-                self._logger.debug('after ln(message, queue): %s', message.name)
         except (BaseException, Exception), e:
-            self._logger.warn('message.name: %s', message.name)
-            self._logger.warn('%s == %s', message.local_ip, __node__['private_ip'])
             if message.name == 'BeforeHostUp' \
                     and message.local_ip == __node__['private_ip']:
                 raise
@@ -287,7 +283,7 @@ class P2pMessageConsumer(MessageConsumer):
                                     self._handle_one_message(message, queue, store)
                                 except:
                                     self.subhandler_exc_info = sys.exc_info()
-                                    self._logger.warn('Caught exception from _handle_one_message: thread: %s', threading.currentThread())
+                                    self._logger.debug('Caught exception from _handle_one_message: thread: %s', threading.currentThread())
 
                                 self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
                                 self.message_to_ack = None
