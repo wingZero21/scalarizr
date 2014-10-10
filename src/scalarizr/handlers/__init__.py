@@ -245,7 +245,8 @@ class MessageListener:
                     try:
                         handler(message)
                     except (BaseException, Exception), e:
-                        if message.name == 'BeforeHostUp' and message.local_ip == __node__['private_ip']:
+                        if message.name == 'BeforeHostUp' \
+                                and message.local_ip == __node__['private_ip']:
                             raise
                         else:
                             LOG.exception(e)
