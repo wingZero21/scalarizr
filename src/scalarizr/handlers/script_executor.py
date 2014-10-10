@@ -663,11 +663,11 @@ class BaseChefScript(Script):
                 'exec_timeout': self.exec_timeout,
                 'run_as': self.run_as}
 
-
     def _get_body(self):
         shebang = "#!%s" % ("cmd" if linux.os.windows_family else "/bin/bash")
-        return shebang + "\n" + " ".join(self.chef.get_cmd())
-
+        cmd = self.chef.get_cmd()
+        LOG.debug("Chef script cmd: {0}".format(cmd))
+        return shebang + "\n" + " ".join(cmd)
 
     def wait(self):
         try:
@@ -689,7 +689,8 @@ class ChefClientScript(BaseChefScript):
                                self.chef_params.get('validator_name'),
                                self.chef_params.get('validator_key'),
                                self.chef_params.get('environment'),
-                               kwds.get("environ"))
+                               kwds.get("environ"),
+                               override_runlist=True)
 
         self.body = self._get_body()
         super(ChefClientScript, self).__init__(**kwds)
