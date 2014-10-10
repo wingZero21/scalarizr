@@ -690,7 +690,7 @@ class ChefClientScript(BaseChefScript):
                                self.chef_params.get('validator_key'),
                                self.chef_params.get('environment'),
                                kwds.get("environ"),
-                               override_runlist=True)
+                               override_runlist=bool(self.with_json_attributes))
 
         self.body = self._get_body()
         super(ChefClientScript, self).__init__(**kwds)
