@@ -254,7 +254,6 @@ class P2pMessageConsumer(MessageConsumer):
         self._logger.debug('Waiting message subhandler thread: %s', thread.getName())
         thread.join()
         self._logger.debug('Completed message subhandler thread: %s', thread.getName())
-        self._logger.warn('Thread: %s', threading.currentThread())
         if self.subhandler_exc_info:
             self._logger.debug('Subhandler completed with exception')
             exc_info = self.subhandler_exc_info

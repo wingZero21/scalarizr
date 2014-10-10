@@ -340,11 +340,9 @@ class ScriptExecutor(Handler):
 
             LOG.debug('Fetched %d scripts', scripts_qty)
             self.execute_scripts(scripts, event_name, scripts_qty)
-            LOG.warn('after execute_scripts')
         except:
             if event_name == 'BeforeHostUp' \
                     and int(__node__.get('abort_init_on_script_fail', False)):
-                LOG.warn('re-raising error when event is BeforeHostUp')
                 raise
             else:
                 LOG.warn('Scripts execution failed', exc_info=sys.exc_info())
