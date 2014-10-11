@@ -33,7 +33,7 @@ def upload(step):
         gcs.bus.platform.get_access_data = lambda k: access_data[k]
 
         gsm = GoogleServiceManager(gcs.bus.platform,
-                "storage", "v1beta2", *STORAGE_FULL_SCOPE)
+                "storage", "v1", *STORAGE_FULL_SCOPE)
 
         gcs.bus.platform.get_numeric_project_id.return_value = '876103924605'
         gcs.bus.platform.new_storage_client = lambda: gsm.get_service()
