@@ -456,6 +456,11 @@ def enabled():
     if linux.os["name"] == "Amazon" and linux.os["release"] < (2013, 3):
         pkgmgr.installed("iptables-services")
 
+    if linux.os["name"] == "CentOS" and linux.os["release"] > (7, 0):
+        #iptabels on Centos7 are installed but seem to be broken
+        #we use firewalld instead.
+        return False
+
     if linux.os['family'] in ('RedHat', 'Oracle'):
         try:
             out = redhat.chkconfig(list="iptables")[0]
