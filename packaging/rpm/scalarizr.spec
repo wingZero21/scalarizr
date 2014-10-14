@@ -27,7 +27,7 @@ Requires:		yum-priorities
 %else
 # setuptools from pip used instead of rpm
 # BuildRequires:  python-setuptools
-Requires:       python >= 2.5 python-openssl >= 0.13.1 pexpect >= 2.3
+Requires:       python >= 2.5 pyOpenSSL >= 0.13.1 pexpect >= 2.3
 # szradm
 Requires:       python-prettytable PyYAML python-docopt >= 0.6.2
 # mongodb behavior
