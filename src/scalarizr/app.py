@@ -964,7 +964,7 @@ class Service(object):
         if optparser and not optparser.values.import_server and linux.os['family'] != 'Windows':
             system_packages = pkgmgr.package_mgr().list()
             for behavior in node.__node__['behavior']:
-                if behavior == 'base' or behavior not in api.api_routes.keys():
+                if behavior in ['base', 'mongodb'] or behavior not in api.api_routes.keys():
                     continue
                 try:
                     api_cls = util.import_class(api.api_routes[behavior])

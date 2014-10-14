@@ -24,6 +24,7 @@ class MariaDBAPI(mysql.MySQLAPI):
 
     @classmethod
     def do_check_software(cls, system_packages=None):
+        system_packages = system_packages or pkgmgr.package_mgr().list()
         if linux.os.debian_family:
             requirements = [
                 ['mariadb-server>=5.5,<5.6', 'mariadb-client>=5.5,<5.6'],
@@ -42,7 +43,7 @@ class MariaDBAPI(mysql.MySQLAPI):
             try:
                 installed = pkgmgr.check_software(requirement[0], system_packages)[0]
                 try:
-                    pkgmgr.check_software(requirement[1:], system_packages)[0]
+                    pkgmgr.check_software(requirement[1:], system_packages)
                     return installed
                 except pkgmgr.NotInstalledError:
                     e = sys.exc_info()[1]

@@ -897,6 +897,8 @@ def check_software(required, system_packages=None):
                 'python':'2.6.7-ubuntu1',
             }
     '''
+    if not required:
+        return
     system_packages = system_packages or package_mgr().list()
     installed, not_installed, vers_mismatched = list(), list(), list()
     for requirement in parse_requirements(required):

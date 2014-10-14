@@ -8,6 +8,7 @@ from __future__ import with_statement
 
 import os
 import re
+import sys
 import subprocess as subps
 
 from scalarizr import rpc
@@ -20,6 +21,7 @@ from scalarizr.linux import pkgmgr
 from scalarizr.services import mongodb as mongo_svc
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
+from scalarizr.api import SoftwareDependencyError
 
 
 class _MMSAgent(object):
@@ -186,37 +188,56 @@ class MongoDBAPI(BehaviorAPI):
         """
         Asserts MongoDB version.
         """
+        system_packages = system_packages or pkgmgr.package_mgr().list()
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         if os_name == 'ubuntu':
             if os_vers >= '14':
                 requirements = [
                     ['mongodb-org>=2.4,<2.7'],
+                    [
+                        'mongodb-org-server>=2.4,<2.7',
+                        'mongodb-org-mongos>=2.4,<2.7',
+                        'mongodb-org-shell>=2.4,<2.7',
+                        'mongodb-org-tools>=2.4,<2.7',
+                    ],
                     ['mongodb-10gen>=2.4,<2.7'],
                     ['mongodb>=2.4,<2.7']
                 ]
             elif os_vers >= '12':
                 requirements = [
                     ['mongodb-org>=2.0,<2.7'],
+                    [
+                        'mongodb-org-server>=2.0,<2.7',
+                        'mongodb-org-mongos>=2.0,<2.7',
+                        'mongodb-org-shell>=2.0,<2.7',
+                        'mongodb-org-tools>=2.0,<2.7',
+                    ],
                     ['mongodb-10gen>=2.0,<2.7'],
+                    ['mongodb20-10gen'],
                     ['mongodb>=2.0,<2.7']
                 ]
             elif os_vers >= '10':
                 requirements = [
-                    ['mongodb-org>=2.0,<2.1'],
                     ['mongodb-10gen>=2.0,<2.1'],
+                    ['mongodb20-10gen'],
                     ['mongodb>=2.0,<2.1']
                 ]
         elif os_name == 'debian':
             if os_vers >= '7':
                 requirements = [
                     ['mongodb-org>=2.4,<2.7'],
+                    [
+                        'mongodb-org-server>=2.4,<2.7',
+                        'mongodb-org-mongos>=2.4,<2.7',
+                        'mongodb-org-shell>=2.4,<2.7',
+                        'mongodb-org-tools>=2.4,<2.7',
+                    ],
                     ['mongodb-10gen>=2.4,<2.7'],
                     ['mongodb>=2.4,<2.7']
                 ]
             elif os_vers >= '6':
                 requirements = [
-                    ['mongodb-org>=2.4,<2.5'],
                     ['mongodb-10gen>=2.4,<2.5'],
                     ['mongodb>=2.4,<2.5']
                 ]
@@ -224,18 +245,31 @@ class MongoDBAPI(BehaviorAPI):
             if os_vers >= '6':
                 requirements = [
                     ['mongodb-org>=2.0,<2.7'],
+                    [
+                        'mongodb-org-server>=2.4,<2.7',
+                        'mongodb-org-mongos>=2.4,<2.7',
+                        'mongodb-org-shell>=2.4,<2.7',
+                        'mongodb-org-tools>=2.4,<2.7',
+                    ],
                     ['mongo-10gen-server>=2.0,<2.7'],
+                    ['mongo20-10gen-server>=2.0,<3'],
                     ['mongodb-server>=2.0,<2.7']
                 ]
             elif os_vers >= '5':
                 requirements = [
-                    ['mongodb-org>=2.0,<2.1'],
                     ['mongo-10gen-server>=2.0,<2.1'],
+                    ['mongo20-10gen-server>=2.0,<3'],
                     ['mongodb-server>=2.0,<2.1']
                 ]
         elif linux.os.redhat_family:
             requirements = [
                 ['mongodb-org>=2.4,<2.7'],
+                [
+                    'mongodb-org-server>=2.4,<2.7',
+                    'mongodb-org-mongos>=2.4,<2.7',
+                    'mongodb-org-shell>=2.4,<2.7',
+                    'mongodb-org-tools>=2.4,<2.7',
+                ],
                 ['mongo-10gen-server>=2.4,<2.7'],
                 ['mongodb-server>=2.4,<2.7']
             ]
@@ -243,11 +277,28 @@ class MongoDBAPI(BehaviorAPI):
             requirements = [
                 ['mongodb-org>=2.0,<2.1'],
                 ['mongo-10gen-server>=2.0,<2.1'],
+                ['mongo20-10gen-server>=2.0,<3'],
                 ['mongodb-server>=2.0,<2.1']
             ]
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))
-        return pkgmgr.check_any_software(requirements, system_packages)[0]
+        errors = list()
+        for requirement in requirements:
+            try:
+                installed = pkgmgr.check_software(requirement[0], system_packages)[0]
+                try:
+                    pkgmgr.check_software(requirement[1:], system_packages)
+                    return installed
+                except pkgmgr.NotInstalledError:
+                    e = sys.exc_info()[1]
+                    raise SoftwareDependencyError(e.args[0])
+            except:
+                e = sys.exc_info()[1]
+                errors.append(e)
+        for cls in [pkgmgr.VersionMismatchError, SoftwareDependencyError, pkgmgr.NotInstalledError]:
+            for error in errors:
+                if isinstance(error, cls):
+                    raise error
 
