@@ -1,6 +1,6 @@
 name "python-openssl"
 pypi_name = "pyOpenSSL"
-default_version "0.14"
+default_version "0.13"
 
 dependency "python"
 
