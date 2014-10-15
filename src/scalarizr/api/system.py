@@ -682,13 +682,17 @@ class SystemAPI(object):
         stdout_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-out.log' % exec_script_id))
         stderr_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-err.log' % exec_script_id))
 
+        err_rotated = ('Log file already rotatated and no more exists on server. '
+                    'You can increase "Rotate scripting logs" setting under "Advanced" tab'
+                    ' in Farm Designer')
+
         if not stdout_match:
-            stdout = binascii.b2a_base64('log file not found')
+            stdout = binascii.b2a_base64(err_rotated)
         else:
             stdout_path = stdout_match[0]
             stdout = binascii.b2a_base64(_get_log(stdout_path))
         if not stderr_match:
-            stderr = binascii.b2a_base64('errlog file not found')
+            stderr = binascii.b2a_base64(err_rotated)
         else:
             stderr_path = stderr_match[0]
             stderr = binascii.b2a_base64(_get_log(stderr_path))

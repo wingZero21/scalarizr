@@ -63,7 +63,7 @@ BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.MEMCACHED
 
 
 def get_handlers():
-    return [MemcachedHandler()] if memcached_api.MemcachedAPI.software_supported else []
+    return [MemcachedHandler()]
 
 class MemcachedHandler(ServiceCtlHandler, FarmSecurityMixin):
 

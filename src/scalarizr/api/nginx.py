@@ -224,19 +224,25 @@ def _dump_config(obj):
     return output.getvalue()
 
 
-def get_role_servers(role_id=None, role_name=None):
+def _choose_host_ip(host, network=None):
+    this_server_location = __node__['cloud_location']
+    if network == None:
+        use_internal_ip = this_server_location == host.cloud_location
+    else:
+        use_internal_ip = network == 'private'
+    return host.internal_ip if use_internal_ip else host.external_ip
+
+
+def get_role_servers(role_id=None, role_name=None, network=None):
     """ Method is used to get role servers from scalr """
     if type(role_id) is int:
         role_id = str(role_id)
 
-    server_location = __node__['cloud_location']
     _queryenv = bus.queryenv_service
     roles = _queryenv.list_roles(farm_role_id=role_id, role_name=role_name)
     servers = []
     for role in roles:
-        ips = [h.internal_ip if server_location == h.cloud_location else
-               h.external_ip
-               for h in role.hosts]
+        ips = [_choose_host_ip(h, network) for h in role.hosts]
         servers.extend(ips)
 
     return servers
@@ -753,9 +759,6 @@ class NginxAPI(BehaviorAPI):
                          async=async,
                          exclusive=True)
 
-
-
-
     def _normalize_destinations(self, destinations):
         """
         Parses list of destinations. Dictionary example:
@@ -800,7 +803,8 @@ class NginxAPI(BehaviorAPI):
             dest['servers'] = []
             if 'farm_role_id' in dest:
                 dest['id'] = str(dest['farm_role_id'])
-                dest['servers'].extend(get_role_servers(dest['id']))
+                role_servers = get_role_servers(dest['id'], network=dest.get('network'))
+                dest['servers'].extend(role_servers)
             if 'host' in dest:
                 dest['servers'].append(dest['host'])
 

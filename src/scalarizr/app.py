@@ -132,10 +132,11 @@ args=(r'LOG_DEBUG_PATH', 'a+', 5242880, 5, 0600)
 
 [formatter_debug]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
+class=scalarizr.util.log.DebugFormatter
 
 [formatter_user]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
-class=scalarizr.util.log.NoStacktraceFormatter
+class=scalarizr.util.log.UserFormatter
 '''
 LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_PATH', LOG_PATH)
 LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_DEBUG_PATH', LOG_DEBUG_PATH)

@@ -53,9 +53,13 @@ def get_free_name():
     available = set(string.ascii_lowercase[s:16])        
 
     conn = __node__['ec2'].connect_ec2()
-    # Ubuntu 14.04 failed to attach volumes on device names mentioned in block device mapping, 
-    # even if this instance type doesn't support them and OS has not such devices
-    ephemerals = set(device[-1] for device in __node__['platform'].get_block_device_mapping().values())
+    if not linux.os.windows:
+        # Ubuntu 14.04 failed to attach volumes on device names mentioned in block device mapping, 
+        # even if this instance type doesn't support them and OS has not such devices
+        ephemerals = set(device[-1] for device in __node__['platform'].get_block_device_mapping().values())
+    else:
+        # Windows returns ephemeral[0-25] for all possible devices a-z, and makes ephemeral check senseless
+        ephemerals = set()
     available = available - ephemerals
 
     filters = {
@@ -404,7 +408,8 @@ class EbsVolume(base.Volume, EbsMixin):
 
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
         LOG.debug('Creating snapshot of EBS volume %s', volume)
-        coreutils.sync()
+        if not linux.os.windows:
+            coreutils.sync()
 
         # conn.create_snapshot leaks snapshots when RequestLimitExceeded occured 
         params = {'VolumeId': volume}

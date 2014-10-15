@@ -25,6 +25,7 @@ from scalarizr.handlers import Handler, HandlerError
 if linux.os.windows_family:
     import win32service
     import win32serviceutil
+    import pywintypes
 
 
 def get_handlers():
@@ -266,7 +267,15 @@ class ChefHandler(Handler):
     def daemonize(self):
         if linux.os.windows_family:
             self._logger.info('Starting chef-client service')
-            win32serviceutil.StartService(WIN_SERVICE_NAME)
+            try:
+                win32serviceutil.StartService(WIN_SERVICE_NAME)
+            except pywintypes.error, e:
+                if e.args[0] == 1060:
+                    err = ("Can't daemonize Chef cause 'chef-client', "
+                            "cause 'chef-client' is not a registered Windows Service.\n"
+                            "Most likely you haven't selected Chef Service option in Chef installer.")
+                    raise HandlerError(err)
+
         else:
             self._init_script.start(env=self._environ_variables)
 

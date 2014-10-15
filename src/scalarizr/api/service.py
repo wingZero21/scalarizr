@@ -86,9 +86,10 @@ class ServiceAPI(object):
         behavior_params is dict where behavior names are keys and they
         reconfigure params are values (they are itself dicts)
         """
+        queryenv_answer = self.queryenv.list_farm_role_params(__node__['farm_role_id'])
+        queryenv_behavior_params = queryenv_answer['params']
         if not behavior_params:
-            queryenv_answer = self.queryenv.list_farm_role_params(__node__['farm_role_id'])
-            behavior_params = queryenv_answer['params']
+            behavior_params = queryenv_behavior_params
 
         behaviors = behavior_params.keys()
         for behavior in behaviors:
@@ -99,18 +100,26 @@ class ServiceAPI(object):
             reconfigure_argspecs = inspect.getargspec(api.reconfigure).args
             reconfigure_argspecs.remove('self')
 
+            queryenv_reconf_params = queryenv_behavior_params.get(behavior, {})
+
             reconfigure_params = behavior_params.get(behavior, {})
+            if reconfigure_params == None:
+                reconfigure_params = queryenv_reconf_params
             reconfigure_params = dict((k, v)
                                       for k, v in reconfigure_params.items()
                                       if k in reconfigure_argspecs)
 
             if hasattr(api, 'init_service'):
                 api.init_service()
-            api.do_reconfigure(**reconfigure_params)
+            api.do_reconfigure(op, **reconfigure_params)
 
     @rpc.query_method
     def reconfigure(self, behavior_params=None, async=True):
-        """ If behavior_params is None - reconfiguring all behaviors """
+        """
+        If behavior_params is None - reconfiguring all behaviors.
+        If behavior_params has behavior key and its value is None - taking its
+        params from queryenv.
+        """
         self._op_api.run('api.service.reconfigure',
                          func=self.do_reconfigure,
                          func_kwds={'behavior_params': behavior_params},

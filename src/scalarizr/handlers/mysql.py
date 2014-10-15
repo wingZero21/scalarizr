@@ -205,7 +205,7 @@ DEFAULT_DATADIR                 = "/var/lib/mysql"
 
 
 def get_handlers ():
-    return [MysqlHandler()] if mysql_api.MySQLAPI.software_supported else []
+    return [MysqlHandler()]
 
 
 
