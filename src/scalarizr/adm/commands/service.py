@@ -1,8 +1,15 @@
 import sys
+from xml.dom import minidom
+try:
+    import json as json_module
+except ImportError:
+    import simplejson as json_module
+import yaml
 
 from scalarizr.bus import bus
 from scalarizr.adm.command import Command
 from scalarizr.adm.command import CommandError
+from scalarizr.adm.command import TAB_SIZE
 from scalarizr.node import __node__
 from scalarizr.util import initdv2
 from scalarizr.api.apache import ApacheAPI
@@ -15,6 +22,7 @@ from scalarizr.api.postgresql import PostgreSQLAPI
 from scalarizr.api.rabbitmq import RabbitMQAPI
 from scalarizr.api.redis import RedisAPI
 from scalarizr.api.tomcat import TomcatAPI
+
 
 service_apis = {
     'apache': ApacheAPI,
@@ -33,6 +41,13 @@ service_apis = {
 }
 
 
+service_to_behavior = {
+    'nginx': 'www',
+    'mysql': 'mysql2',
+    'apache': 'app'
+}
+
+
 class ReturnCode:
     RUNNING = 0
     STOPPED = 3
@@ -45,17 +60,25 @@ class Service(Command):
     Scalarizr service control.
 
     Usage:
-        service redis (start | stop | status) [(<index> | --port=<port>)]
-        service <service> (start | stop | status)
+      service redis (start | stop) [(<index> | --port=<port>)]
+      service redis status [--format=(xml|json|yaml)] [(<index> | --port=<port>)]
+      service <service> (start | stop)
+      service <service> status [--format=(xml|json|yaml)]
 
     Options:
-      -p <port>, --port=<port>         
+      -p <port>, --port=<port>
+      -f <format>, --format=<format>
     """
     # TODO: add usage for mongo:
     # service mongodb (start | stop | status) [(mongos | mongod | 
     #        configsrv | configsrv-2 | configsrv-3 | arbiter)]
 
     aliases = ['s']
+
+    def help(self):
+        doc = super(Service, self).help()
+        services = [(' '*TAB_SIZE) + s for s in service_apis.keys()]
+        return doc + '\nSupported services:\n' + '\n'.join(services)
 
     def _start_service(self, service, **kwds):
         api = service_apis[service]()
@@ -81,7 +104,41 @@ class Service(Command):
             print 'Service stop failed.\n%s' % e
             return int(CommandError())
 
-    def _display_service_status(self, service, **kwds):
+    def _dict_to_xml(self, d, name):
+        doc = minidom.Document()
+        container = doc.createElement(name)
+        doc.appendChild(container)
+        for k, v in d.items():
+            el = doc.createElement(str(k))
+            text = doc.createTextNode(str(v))
+            el.appendChild(text)
+            container.appendChild(el)
+        return doc
+
+    def _dict_list_to_xml(self, list_of_dicts, list_name, element_name):
+        doc = minidom.Document()
+        container = doc.createElement(list_name)
+        doc.appendChild(container)
+        for element in list_of_dicts:
+            child_doc = self._dict_to_xml(element, element_name)
+            container.appendChild(child_doc.childNodes[0])
+        return doc
+
+    def _format_status(self, status_struct, format='xml'):
+        if format == 'xml':
+            if isinstance(status_struct, dict):
+                doc = self._dict_to_xml(status_struct, 'status')
+            else:
+                doc = self._dict_list_to_xml(status_struct, 'statuses', 'status')
+            return doc.toprettyxml(encoding='utf-8')
+        elif format == 'json':
+            return json_module.dumps(status_struct, indent=4, sort_keys=True, ensure_ascii=False)
+        elif format == 'yaml':
+            return yaml.dump(status_struct, default_flow_style=False, allow_unicode=True)
+        else:
+            raise CommandError('Unknown output format.\nAvailable formats: xml, json, yaml')
+
+    def _display_service_status(self, service, print_format='xml', **kwds):
         api = service_apis[service]()
         for key, value in kwds.items():
             if value == None:
@@ -89,29 +146,37 @@ class Service(Command):
         status = api.get_service_status(**kwds)
 
         if service == 'redis':
-            return self._print_redis_status(status)
-
-        status_string = ' is stopped'
+            return self._print_redis_status(status, print_format)
+        # TODO: make xml, json or yaml and dump it to out
+        status_message = '%s service is stopped' % service
         code = ReturnCode.STOPPED
         if status == initdv2.Status.RUNNING:
-            status_string = ' is running'
+            status_message = '%s service is running' % service
             code = ReturnCode.RUNNING
         elif status == initdv2.Status.UNKNOWN:
-            status_string = ' has unknown status'
+            status_message = '%s service has unknown status' % service
             code = ReturnCode.UNKNOWN
-        print service + status_string
+        # print service + status_message
+
+        status_dict = {'code': code, 'message': status_message}
+        print self._format_status(status_dict, print_format)
+
         return code
 
-    def _print_redis_status(self, statuses):
+    def _print_redis_status(self, statuses, print_format='xml'):
         if not statuses:
             print 'No redis configuration found.'
             return ReturnCode.STOPPED
 
-        for port, status in statuses.items():
-            status_string = 'stopped'
+        statuses_list = []
+        for i, (port, status) in enumerate(statuses.items()):
+            status_message = 'Redis process on port %s is stopped' % port
             if status == initdv2.Status.RUNNING:
-                status_string = 'running'
-            print '- port: %s\n  status: %s' % (port, status_string)
+                status_message = 'Redis process on port %s is running' % port
+            status_dict = {'port': port, 'code': status, 'message': status_message}
+            statuses_list.append(status_dict)
+            # print '- port: %s\n  status: %s' % (port, status_message)
+        print self._format_status(statuses_list, print_format)
 
         overall_status = set(statuses.values())
         if len(overall_status) > 1:
@@ -121,23 +186,24 @@ class Service(Command):
         return ReturnCode.STOPPED
 
     def __call__(self, 
-                 start=False,
-                 stop=False,
-                 status=False,
-                 service=None,
+        service=None,
+        start=False,
+        stop=False,
+        status=False,
+        format='xml',
 
-                 redis=False,
-                 index=None,
-                 port=None,
+        redis=False,
+        index=None,
+        port=None,
 
-                 mongodb=False,
-                 mongos=False,
-                 mongod=False,
-                 configsrv=False,
-                 configsrv_2=False,
-                 configsrv_3=False,
-                 arbiter=False,
-                 ):
+        mongodb=False,
+        mongos=False,
+        mongod=False,
+        configsrv=False,
+        configsrv_2=False,
+        configsrv_3=False,
+        arbiter=False,
+        ):
         if redis:
             service = 'redis'
             if index:
@@ -162,7 +228,8 @@ class Service(Command):
             print 'Unknown service/behavior.'
             return ReturnCode.UNKNOWN
 
-        if service not in __node__['behavior']:
+        if service not in __node__['behavior'] and \
+            service_to_behavior.get(service) not in __node__['behavior']:
             print 'Not installed service/behavior.'
             return ReturnCode.UNKNOWN
 
@@ -171,7 +238,10 @@ class Service(Command):
         elif stop:
             return self._stop_service(service, indexes=index, ports=port)
         elif status:
-            return self._display_service_status(service, indexes=index, ports=port)
+            return self._display_service_status(service,
+                indexes=index,
+                ports=port,
+                print_format=format)
 
 
 commands = [Service]

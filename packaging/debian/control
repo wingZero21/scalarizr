@@ -26,6 +26,7 @@ Depends: ${shlibs:Depends},
          python-prettytable,
          python-docopt (>= 0.6.2),
          python-yaml, 
+         python-httplib2,
          python (>= 2.6) | python-simplejson,
          python (<< 2.6) | python-pychef,
          python (<< 2.6) | python-pymysql,
@@ -41,7 +42,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-         python-boto (>= 2.13.0)
+         python-boto (>= 2.32.1)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Amazon EC2
@@ -89,7 +90,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack (>= 0.2.3)
+		python-cloudstack (>= 0.2.4)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for CloudStack (cloud.com) cloud
@@ -100,7 +101,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack (>= 0.2.3) 
+		python-cloudstack (>= 0.2.4) 
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for uCloud (Korea Telecom) cloud

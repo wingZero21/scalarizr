@@ -1,5 +1,3 @@
-from __future__ import with_statement
-
 __author__ = 'Nick Demyanchuk'
 
 import os
@@ -19,11 +17,12 @@ except ImportError:
 from oauth2client.client import SignedJwtAssertionCredentials
 from apiclient.discovery import build
 
+
 from scalarizr import node
 from scalarizr import platform
-from scalarizr.util import LocalPool
-from scalarizr.platform import PlatformError
 from scalarizr.platform import NoCredentialsError, InvalidCredentialsError, ConnectionError
+from scalarizr.util import LocalPool
+from scalarizr.config import BuiltinPlatforms
 
 
 COMPUTE_RW_SCOPE = ('https://www.googleapis.com/auth/compute', "https://www.googleapis.com/auth/compute.readonly")
@@ -97,7 +96,7 @@ class GoogleServiceManager(object):
 
     def __init__(self, pl, s_name, s_ver, *scope):
         self.pl = pl
-        self.s_name= s_name
+        self.s_name = s_name
         self.s_ver = s_ver
         self.scope = list(scope)
         self.map = {}
@@ -154,7 +153,7 @@ class GCEConnectionPool(LocalPool):
         try:
             email = platform.get_access_data('service_account_name')
             pk = base64.b64decode(platform.get_access_data('key'))
-        except PlatformError:
+        except platform.PlatformError:
             raise NoCredentialsError(sys.exc_info()[1])
         try:
             cred = SignedJwtAssertionCredentials(email, pk, scope=self.scope)
@@ -166,7 +165,7 @@ class GCEConnectionPool(LocalPool):
 
 class GCEConnectionProxy(platform.ConnectionProxy):
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwds):
         for retry in range(2):
             try:
                 return self.obj(*args, **kwds)
@@ -184,6 +183,7 @@ class GcePlatform(platform.Platform):
     compute_api_version = 'v1'
     metadata_url = 'http://metadata/computeMetadata/v1/'
     _metadata = None
+    name = BuiltinPlatforms.GCE
 
     def __init__(self):
         platform.Platform.__init__(self)
@@ -194,7 +194,7 @@ class GcePlatform(platform.Platform):
         self._compute_conn_pool = GCEConnectionPool(
                 'compute', 'v1', COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
         self._storage_conn_pool = GCEConnectionPool(
-                'storage', 'v1beta2', STORAGE_FULL_SCOPE)
+                'storage', 'v1', STORAGE_FULL_SCOPE)
 
     def get_user_data(self, key=None):
         if self._userdata is None:

@@ -16,7 +16,7 @@ LOG = logging.getLogger(__name__)
 __tomcat__ = __node__['tomcat']
 
 def get_handlers():
-    return [TomcatHandler()] if tomcat_api.TomcatAPI.software_supported else []
+    return [TomcatHandler()]
 
 
 class KeytoolExec(execute.BaseExec):
@@ -70,7 +70,7 @@ class TomcatHandler(handlers.Handler):
                 pkgmgr.installed(pkg)
         '''
 
-        pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas')
+        pkgmgr.installed('augeas-tools' if linux.os.debian_family else 'augeas', updatedb=True)
 
     '''
     def _aug_load_tomcat(self, aug):

@@ -42,7 +42,7 @@ class Repository(object):
 
     def ensure(self):
         assert self.filename and self.config
-        LOG.info('Creating repository configuration in: %s', self.filename)
+        LOG.info('Ensuring repository "%s" (file: %s)', self.name, self.filename)
         with open(self.filename, 'w+') as fp:
             fp.write(self.config)
 
@@ -168,7 +168,7 @@ class PackageMgr(object):
 
         installed = self.info(name)['installed']
         if not installed:
-            LOG.info('Installing %s=%s', name, version)
+            LOG.info('Installing %s=%s', name, version or 'latest')
             self.install(name, version, **kwds)
 
 
@@ -267,7 +267,11 @@ class AptPackageMgr(PackageMgr):
                     '-o Dir::Etc::sourceparts=- '
                     ).format(kwds['apt_repository'])
         cmd += 'update'
-        self.apt_get_command(cmd)
+        try:
+            self.apt_get_command(cmd)
+        except linux.LinuxError, e:
+            if e.returncode != 100:
+                raise
 
 
     def repos(self):
@@ -380,29 +384,26 @@ class AptPackageMgr(PackageMgr):
 
 
     def apt_get_command(self, command, **kwds):
-        kwds.update(env={'DEBIAN_FRONTEND': 'noninteractive',
-                        'DEBIAN_PRIORITY': 'critical',
-                        'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
-                        raise_exc=False
+        kwds.update(
+            env={'DEBIAN_FRONTEND': 'noninteractive',
+                'DEBIAN_PRIORITY': 'critical',
+                'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games'},
+            error_text='Package manager command failed'
         )
-        for _ in range(18):  # timeout approx 3 minutes
-            out, err, code = linux.system(('/usr/bin/apt-get',
-                                            '-q', '-y', '--force-yes',
-                                            '-o Dpkg::Options::=--force-confold') + \
-                                            tuple(filter(None, command.split())), **kwds)
-            if code:
-                if 'is another process using it?' in err \
-                    or 'Could not get lock' in err:
+        max_attempt = 17  
+        for attempt in range(max_attempt+1):  # timeout approx 3 minutes 
+            try:
+                return linux.system(('/usr/bin/apt-get',
+                                    '-q', '-y', '--force-yes',
+                                    '-o Dpkg::Options::=--force-confold') + \
+                                    tuple(filter(None, command.split())), **kwds)
+            except linux.LinuxError, e:
+                if attempt < max_attempt and 'is another process using it?' in e.err \
+                        or 'Could not get lock' in e.err:
                     LOG.debug('Could not get dpkg lock (perhaps, another process is using it.)')
                     time.sleep(10)
                     continue
-                else:
-                    raise linux.LinuxError('Apt-get command failed. Out: %s \nErrors: %s' % (out, err))
-
-            else:
-                return out, err, code
-
-        raise Exception('Apt-get command failed: dpkg is being used by another process')
+                raise
 
 
     def apt_cache_command(self, command, **kwds):
@@ -469,7 +470,7 @@ class RpmVersion(object):
 
 class YumPackageMgr(PackageMgr):
     def updatedb(self, **kwds):
-        self.yum_command('clean expire-cache')
+        self.yum_command('clean all')
 
 
     def remove(self, name, purge=False):
@@ -524,7 +525,13 @@ class YumPackageMgr(PackageMgr):
 
 
     def _installed_and_candidate(self, name):
-        out = self.yum_command('list --showduplicates %s' % name)[0].strip()
+        try:
+            out = self.yum_command('list --showduplicates %s' % name)[0].strip()
+        except linux.LinuxError, e:
+            if 'No matching Packages to list' in e.err:
+                return None, None
+            else:
+                raise
 
         version_re = re.compile(r'[^\s]+\s+([^\s]+)')
         lines = map(string.strip, out.splitlines())

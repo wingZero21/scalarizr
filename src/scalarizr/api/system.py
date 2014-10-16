@@ -682,13 +682,17 @@ class SystemAPI(object):
         stdout_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-out.log' % exec_script_id))
         stderr_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-err.log' % exec_script_id))
 
+        err_rotated = ('Log file already rotatated and no more exists on server. '
+                    'You can increase "Rotate scripting logs" setting under "Advanced" tab'
+                    ' in Farm Designer')
+
         if not stdout_match:
-            stdout = binascii.b2a_base64('log file not found')
+            stdout = binascii.b2a_base64(err_rotated)
         else:
             stdout_path = stdout_match[0]
             stdout = binascii.b2a_base64(_get_log(stdout_path))
         if not stderr_match:
-            stderr = binascii.b2a_base64('errlog file not found')
+            stderr = binascii.b2a_base64(err_rotated)
         else:
             stderr_path = stderr_match[0]
             stderr = binascii.b2a_base64(_get_log(stderr_path))
@@ -733,6 +737,8 @@ def _get_log(logfile, maxsize=max_log_size):
 if linux.os.windows_family:
     from win32com import client
     from scalarizr.util import coinitialized
+    import ctypes
+    from ctypes import wintypes
 
     class WindowsSystemAPI(SystemAPI):
 
@@ -816,25 +822,59 @@ if linux.os.windows_family:
         @coinitialized
         @rpc.query_method
         def net_stats(self):
+            class MIB_IFROW(ctypes.Structure):
+                _fields_ = [
+                    ('wszName', wintypes.WCHAR*256),
+                    ('dwIndex', wintypes.DWORD),
+                    ('dwType', wintypes.DWORD),
+                    ('dwMtu', wintypes.DWORD),
+                    ('dwSpeed', wintypes.DWORD),
+                    ('dwPhysAddrLen', wintypes.DWORD),
+                    ('bPhysAddr', wintypes.BYTE*8),
+                    ('dwAdminStatus', wintypes.DWORD),
+                    ('dwOperStatus', wintypes.DWORD),
+                    ('dwLastChange', wintypes.DWORD),
+                    ('dwInOctets', wintypes.DWORD),
+                    ('dwInUcastPkts', wintypes.DWORD),
+                    ('dwInNUcastPkts', wintypes.DWORD),
+                    ('dwInDiscards', wintypes.DWORD),
+                    ('dwInErrors', wintypes.DWORD),
+                    ('dwInUnknownProtos', wintypes.DWORD),
+                    ('dwOutOctets', wintypes.DWORD),
+                    ('dwOutUcastPkts', wintypes.DWORD),
+                    ('dwOutNUcastPkts', wintypes.DWORD),
+                    ('dwOutDiscards', wintypes.DWORD),
+                    ('dwOutErrors', wintypes.DWORD),
+                    ('dwOutQlen', wintypes.DWORD),
+                    ('dwDescrlen', wintypes.DWORD),
+                    ('bDescr', wintypes.BYTE*256),
+                ]
+
             wmi = client.GetObject('winmgmts:')
 
-            res = dict()
-            for iface in wmi.InstancesOf('Win32_PerfRawData_Tcpip_NetworkInterface'):
-                if iface.Name == '_Total':
-                    continue
+            adapters = [adapter for adapter in wmi.InstancesOf('win32_networkadapter')
+                    if adapter.PhysicalAdapter is True]
 
-                res[iface.Name] = dict(
-                    receive=dict(
-                        bytes=int(iface.Properties_['BytesReceivedPersec']),
-                        packets=int(iface.Properties_['PacketsReceivedPersec']),
-                        errors=int(iface.Properties_['PacketsReceivedErrors'])
-                    ),
-                    transmit=dict(
-                        bytes=int(iface.Properties_['BytesSentPersec']),
-                        packets=int(iface.Properties_['PacketsSentPersec']),
-                        errors=int(iface.Properties_['PacketsOutboundErrors'])
-                    )
-                )
+            iphlpapi = ctypes.windll.LoadLibrary('iphlpapi')
+
+            res = dict()
+            for adapter in adapters:
+                if_entry = MIB_IFROW()
+                if_entry.dwIndex = adapter.InterfaceIndex
+                iphlpapi.GetIfEntry(ctypes.pointer(if_entry))
+
+                res[adapter.Name] = {
+                    'receive': {
+                        'bytes': int(if_entry.dwInOctets),
+                        'packets': int(if_entry.dwInUcastPkts),
+                        'errors': int(if_entry.dwInErrors),
+                    },
+                    'transmit': {
+                        'bytes': int(if_entry.dwOutOctets),
+                        'packets': int(if_entry.dwOutUcastPkts),
+                        'errors': int(if_entry.dwOutErrors),
+                    },
+                }
             return res
 
         @rpc.query_method
@@ -851,16 +891,26 @@ if linux.os.windows_family:
         @coinitialized
         @rpc.query_method
         def cpu_stat(self):
-            wmi = client.GetObject('winmgmts:')
+            raw_idle = ctypes.c_uint64(0)
+            raw_kernel = ctypes.c_uint64(0)
+            raw_user = ctypes.c_uint64(0)
 
-            processors = wmi.InstancesOf('Win32_Processor')
-            avg_percentage = float(sum([cpu.LoadPercentage for cpu in processors])) / len(processors)
+            ctypes.windll.kernel32.GetSystemTimes(
+                    ctypes.byref(raw_idle), ctypes.byref(raw_kernel), ctypes.byref(raw_user))
+
+            # http://msdn.microsoft.com/en-us/library/windows/desktop/ms724284(v=vs.85).aspx
+            # man proc
+            idle = raw_idle.value * 1e-5
+            kernel = raw_kernel.value * 1e-5
+            user = raw_user.value * 1e-5
+            # kernel time includes idle time
+            system = kernel - idle
 
             return {
-                'user': avg_percentage,
-                'system': 0,
-                'idle': 100 - avg_percentage,
-                'nice': 0
+                'user': int(user),
+                'system': int(system),
+                'idle': int(idle),
+                'nice': 0,
             }
 
         @coinitialized

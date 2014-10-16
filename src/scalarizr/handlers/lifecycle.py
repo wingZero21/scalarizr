@@ -57,7 +57,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
         self._logger = logging.getLogger(__name__)
         self._op_api = operation.OperationAPI()
         self._system_api = system_api.SystemAPI()
-        
+
         bus.define_events(
             # Fires before HostInit message is sent
             # @param msg 
@@ -412,6 +412,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             self._check_control_ports()
 
             # FIXME: how about apply all HIR configuration here?
+            self._logger.debug('message.body.base: %s', message.body.get('base', {}))
             __node__.update(message.body.get('base', {}))  # update node with 'base' settings
             bus.fire("host_init_response", message)
 

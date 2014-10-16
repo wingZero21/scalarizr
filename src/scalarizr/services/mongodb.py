@@ -75,11 +75,9 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
         return obj
                 
     def __init__(self):
-        initd_script = None
-        if linux.os.ubuntu and linux.os['version'] >= (10, 4):
-            initd_script = ('/usr/sbin/service', 'mongodb')
-        else:
-            initd_script = firstmatched(os.path.exists, ('/etc/init.d/mongodb', '/etc/init.d/mongod'))
+        initd_script = firstmatched(os.path.exists, ('/etc/init.d/mongodb', '/etc/init.d/mongod'))
+        if linux.os.ubuntu and linux.os.release >= (10, 4):
+            initd_script = ('/usr/sbin/service', os.path.basename(initd_script))
         initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
                         initd_script=initd_script)
         
@@ -237,7 +235,7 @@ class MongoDB(BaseService):
         self.config_server.stop('Stopping mongo config server')
         
         
-    def start_router(self, verbose = 0):
+    def start_router(self, verbose=0):
         self.stop_default_init_script()
         Mongos.set_keyfile(self.keyfile.path)
         Mongos.verbose = verbose
@@ -676,7 +674,7 @@ def mongo_preexec_fn():
 
 
 class Mongod(object):   
-    def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=1):
+    def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=0):
         self._logger = logging.getLogger(__name__)
         self.configpath = configpath
         self.dbpath = dbpath

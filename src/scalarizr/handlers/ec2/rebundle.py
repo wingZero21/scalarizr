@@ -69,6 +69,10 @@ EPH_STORAGE_MAPPING = {
 
 NETWORK_FILESYSTEMS = ('nfs', 'glusterfs')
 
+MIN_IOPS_VALUE = 100
+MAX_IOPS_VALUE = 4000
+MAX_IOPS_TO_SIZE_RATIO = 30.0
+
 
 class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
     _ebs_strategy_cls = None
@@ -84,6 +88,23 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
         self._strategy = None
         bus.on(rebundle=self.on_rebundle)
 
+    def _validate_rv_template(self, rv_template):
+        # Throws exception if rv_template do not pass validation, returns True instead
+        if rv_template.get('volume_type') == 'io1':
+            iops = rv_template.get('iops')
+            if iops is None:
+                raise HandlerError('No disk iops given for io1 type of disks')
+
+            iops = float(iops)
+            if iops < MIN_IOPS_VALUE or iops > MAX_IOPS_VALUE:
+                raise HandlerError('IOPS must be between %s and %s' % 
+                    (MIN_IOPS_VALUE, MAX_IOPS_VALUE))
+
+            size = float(rv_template['size'])
+            if iops > MAX_IOPS_TO_SIZE_RATIO * size:
+                raise HandlerError('Maximum raito of %.0f:1 is permitted between iops '
+                    'and volume size' % MAX_IOPS_TO_SIZE_RATIO)
+        return True
 
     def before_rebundle(self):
         '''
@@ -104,8 +125,8 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
             instance = ec2_conn.get_all_instances([instance_id])[0].instances[0]
         except IndexError:
             msg = 'Failed to find instance %s. ' \
-                            'If you are importing this server, check that you are doing it from the ' \
-                            'right Scalr environment' % instance_id
+                'If you are importing this server, check that you are doing it from the ' \
+                'right Scalr environment' % instance_id
             raise HandlerError(msg)
         self._instance = instance
 
@@ -120,44 +141,48 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 
         if instance.root_device_type == 'ebs':
             # EBS-root device instance
-            """ detecting root device like rdev=`sda` """
-            rdev = None
-            for el in os.listdir('/sys/block'):
-                if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
-                    rdev = el
+            rv_template = self._rebundle_message.body.get('root_volume_template')
+            if not rv_template:
+                rv_template = {}
+
+            vol_filters = {'attachment.instance-id': pl.get_instance_id()}
+            attached_vols = ec2_conn.get_all_volumes(filters=vol_filters)
+            root_vol = None
+            for vol in attached_vols:
+                if instance.root_device_name == vol.attach_data.device:
+                    root_vol = vol
                     break
-            if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
-                rdev = root_disk.device
-
-            """ list partition of root device """
-            list_rdevparts = [dev.device for dev in list_device
-                                                    if dev.device.startswith('/dev/%s' % rdev)]
-
-            if len(list(set(list_rdevparts))) > 1:
-                """ size of volume in KByte"""
-                volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
-                """ size of volume in GByte"""
-                volume_size = int(volume_size[0].strip()) / 1024 / 1024
-                #TODO: need set flag, which be for few partitions
-                #copy_partition_table = True
             else:
-                """ if one partition we use old method """
-                volume_size = self._rebundle_message.body.get('volume_size')
-                if not volume_size:
-                    volume_size = int(root_disk.size / 1000 / 1000)
+                raise HandlerError("Failed to find root volume")
 
-            self._strategy = self._ebs_strategy_cls(
-                    self, self._role_name, image_name, self._excludes,
-                    volume_size=volume_size,  # in Gb
-                    volume_id=self._rebundle_message.body.get('volume_id')
-            )
+            LOG.debug('Searching for partitions on root device %s' % root_disk.device)
+            rdevparts = [dev.device for dev in list_device
+                if dev.device.startswith('/dev/%s' % root_disk.device)]
+            if len(set(rdevparts)) > 1 or rv_template != {}:
+                rv_template['size'] = rv_template.get('size', root_vol.size)
+            else:
+                vol_size = self._rebundle_message.body.get('volume_size')
+                rv_template['size'] = vol_size or root_vol.size
+
+            rv_template['volume_type'] = rv_template.get('volume_type', root_vol.type)
+            rv_template['iops'] = rv_template.get('iops')
+
+            self._validate_rv_template(rv_template)
+
+            LOG.debug('Making rebundle with root volume template: %s' % rv_template)
+
+            self._strategy = self._ebs_strategy_cls(self,
+                self._role_name,
+                image_name,
+                self._excludes,
+                volume_id=self._rebundle_message.body.get('volume_id'),
+                ebs_type_template=rv_template)
         else:
             # Instance store
             self._strategy = self._instance_store_strategy_cls(
-                    self, self._role_name, image_name, self._excludes,
-                    image_size = root_disk.size / 1000,  # in Mb
-                    s3_bucket_name = self._s3_bucket_name
-            )
+                self, self._role_name, image_name, self._excludes,
+                image_size = root_disk.size / 1000,  # in Mb
+                s3_bucket_name = self._s3_bucket_name)
 
 
     def rebundle(self):
@@ -246,9 +271,9 @@ class RebundleStratery:
         instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
 
         ebs_devs = list(vol.attach_data.device
-                                for vol in ec2_conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
-                                if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id()
-                                        and instance.root_device_name != vol.attach_data.device)
+            for vol in ec2_conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
+            if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id()
+                    and instance.root_device_name != vol.attach_data.device)
 
         for device in ebs_devs:
             device = ebsvolume.name2device(device)
@@ -543,7 +568,6 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
         manifest_path = os.path.join(self._platform.scalrfs.images(), os.path.basename(manifest_path))
         return manifest_path.split('s3://')[1]
 
-
     def _register_image(self, s3_manifest_path):
         try:
             LOG.info("Registering image '%s'", s3_manifest_path)
@@ -560,7 +584,6 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
         except (BaseException, Exception), e:
             LOG.error("Cannot register image on EC2. %s", e)
             raise
-
 
     def run(self):
         image_file = os.path.join(self._destination, self._image_name)
@@ -597,20 +620,24 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 
 
 class RebundleEbsStrategy(RebundleStratery):
-    _volsize = None
     _volume_id = None
     _platform = None
     _snap = None
 
     _succeed = None
 
-    def __init__(self, handler, role_name, image_name, excludes, volume='/',
-                            volume_id=None, volume_size=None):
+    def __init__(self,
+        handler,
+        role_name,
+        image_name,
+        excludes,
+        volume='/',
+        volume_id=None, 
+        ebs_type_template=None):
         RebundleStratery.__init__(self, handler, role_name, image_name, excludes, volume)
         self._volume_id = volume_id
-        self._volsize = volume_size
+        self._ebs_type_template = ebs_type_template.copy() if ebs_type_template else {}
         self._platform = bus.platform
-
 
     def _create_shapshot(self):
         self._image.umount()
@@ -632,7 +659,7 @@ class RebundleEbsStrategy(RebundleStratery):
     def _register_image(self):
         instance = self._ec2_conn.get_all_instances((self._platform.get_instance_id(), ))[0].instances[0]
 
-        root_device_type = EBSBlockDeviceType()
+        root_device_type = EBSBlockDeviceType(**self._ebs_type_template)
         root_device_type.snapshot_id = self._snap.id
         root_device_type.delete_on_termination = True
 
@@ -672,15 +699,18 @@ class RebundleEbsStrategy(RebundleStratery):
         LOG.info('Image registered and available for use!')
         return ami_id
 
-
     def run(self):
         self._succeed = False
 
         # Bundle image
         self._ec2_conn = self._platform.new_ec2_conn()
-        self._image = LinuxEbsImage(self._volume, self._ec2_conn,
-                                self._platform.get_avail_zone(), self._platform.get_instance_id(),
-                                self._volsize, self._volume_id, self._excludes)
+        self._image = LinuxEbsImage(self._volume,
+            self._ec2_conn,
+            self._platform.get_avail_zone(),
+            self._platform.get_instance_id(),
+            self._volume_id,
+            {'size': self._ebs_type_template['size']},
+            self._excludes)
 
         self._bundle_vol(self._image)
 
@@ -703,8 +733,6 @@ class RebundleEbsStrategy(RebundleStratery):
             self._snap.destroy()
 
 
-
-
 class LinuxEbsImage(rebundle_hdlr.LinuxImage):
     '''
     This class encapsulate functionality to create a EBS from a root volume
@@ -712,23 +740,27 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
     _ec2_conn = None
     _avail_zone = None
     _instance_id = None
-    _volume_size = None
     ebs_volume = None
 
     copy_partition_table = None
 
-    def __init__(self, volume, ec2_conn, avail_zone, instance_id,
-                            volume_size=None, volume_id=None, excludes=None):
+    def __init__(self,
+        volume,
+        ec2_conn,
+        avail_zone,
+        instance_id,
+        volume_id=None,
+        config_template=None,
+        excludes=None):
         rebundle_hdlr.LinuxImage.__init__(self, volume, excludes=excludes)
         self._ec2_conn = ec2_conn
         self._avail_zone = avail_zone
         self._instance_id = instance_id
-        self._ebs_config = dict(type='ebs')
+        self._ebs_config = config_template.copy() if config_template else {}
+        self._ebs_config['type'] = 'ebs'
 
         if volume_id:
             self._ebs_config['id'] = volume_id
-        else:
-            self._ebs_config['size'] = volume_size
 
 
     def _create_image(self):
@@ -824,7 +856,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
                     raise HandlerError("Can't create fs on device %s:\n%s" %
                                                     (to_dev, err))
 
-
         """ mounting and copy partitions """
         for from_dev in from_devs:
             num = os.path.basename(from_dev.device)[-1]
@@ -871,7 +902,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
         return self.mpoint
 
-
     def make(self):
         LOG.info("Make EBS volume (size: %sGb) from volume %s (excludes: %s)",
                         self._ebs_config['size'], self._volume, ":".join(self.excludes))
@@ -906,7 +936,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
         else:
             rebundle_hdlr.LinuxImage.make(self)
 
-
     def umount(self):
         if self.copy_partition_table:
             """ self.mpoint like `/mnt/img-mnt/sda2' root partition copy
@@ -920,7 +949,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
                     system2("umount -d " + mpt, shell=True, raise_exc=False)
         else:
             rebundle_hdlr.LinuxImage.umount(self)
-
 
     def cleanup(self):
         self.umount()

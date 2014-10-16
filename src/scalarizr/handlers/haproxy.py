@@ -21,7 +21,7 @@ import hashlib
 
 
 def get_handlers():
-    return [HAProxyHandler()] if haproxy_api.HAProxyAPI.software_supported else []
+    return [HAProxyHandler()]
 
 LOG = logging.getLogger(__name__)
 
@@ -175,14 +175,14 @@ class HAProxyHandler(Handler):
         # useful for on_hostup
         self.haproxy_params = self._fix_haproxy_data(haproxy_params)
 
-        # if we have a sample conf, recreate
-        with open(self.api.cfg.cnf_path) as f:
-            conf_md5 = hashlib.md5(f.read()).hexdigest()
-        LOG.debug("%s md5 sum: %s", self.api.cfg.cnf_path, conf_md5)
-        if conf_md5 == "c3bfb0c86138552475dea458e8ab36f3":  # TODO: remove actual sum
-            LOG.debug("Creating new haproxy conf")
-            self.api.recreate_conf()
+        # # if we have a sample conf, recreate
+        # with open(self.api.cfg.cnf_path) as f:
+        #     conf_md5 = hashlib.md5(f.read()).hexdigest()
+        # LOG.debug("%s md5 sum: %s", self.api.cfg.cnf_path, conf_md5)
+        # if conf_md5 == "c3bfb0c86138552475dea458e8ab36f3":  # TODO: remove actual sum
 
+        LOG.debug("Creating new haproxy conf")
+        self.api.recreate_conf()
         self._configure(haproxy_params["proxies"])
 
 
@@ -192,6 +192,9 @@ class HAProxyHandler(Handler):
             LOG.info('Updating file /etc/default/haproxy')
             with open('/etc/default/haproxy', 'w+') as fp:
                 fp.write('ENABLED=1\n')
+
+        LOG.debug("Creating new haproxy conf")
+        self.api.recreate_conf()
 
         self.haproxy_params = self._fix_haproxy_data(msg.body.get('haproxy', {}))
         self._configure(self.haproxy_params['proxies'])

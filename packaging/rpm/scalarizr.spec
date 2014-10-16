@@ -22,6 +22,7 @@ Requires:       python26-prettytable python26-PyYAML python26-docopt
 #Requires:		python26-pymongo
 Requires:		python26-pymysql
 Requires:		python26-pychef
+Requires:       python26-httplib2
 Requires:       yum-downloadonly
 Requires:		yum-priorities
 %else
@@ -38,6 +39,7 @@ Requires:       python-prettytable PyYAML python-docopt >= 0.6.2
 #Requires:		python-pymongo
 Requires:		python-pymysql
 Requires:		python-pychef
+Requires:       python-httplib2
 Requires:       yum-plugin-downloadonly
 Requires:       yum-plugin-priorities
 %endif
@@ -59,9 +61,9 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr EC2 edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-boto >= 2.13.0
+Requires:       python26-boto >= 2.32.1
 %else
-Requires:       python-boto >= 2.13.0
+Requires:       python-boto >= 2.32.1
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
@@ -164,9 +166,9 @@ sed -i 's/platform = ec2/platform = openstack/i' /etc/scalr/public.d/config.ini
 Summary:        Scalarizr CloudStack (cloud.com) edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-cloudstack >= 0.2.3
+Requires:       python26-cloudstack >= 0.2.4
 %else
-Requires:       python-cloudstack >= 0.2.3
+Requires:       python-cloudstack >= 0.2.4
 Requires:       lsscsi
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
@@ -379,6 +381,13 @@ rm -f percona.ini  # Measly config in several builds
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini
 popd
+
+rm -f /usr/local/bin/szradm
+if [ ! -d /usr/local/bin ]; then
+	mkdir -p /usr/local/bin
+	chmod 755 /usr/local/bin
+fi
+ln -s /usr/bin/szradm /usr/local/bin/szradm
 
 
 %posttrans

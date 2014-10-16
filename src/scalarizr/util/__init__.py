@@ -295,18 +295,14 @@ def system2(*popenargs, **kwargs):
     logger.debug('system: %s' % (popenargs[0],))
     p = subprocess.Popen(*popenargs, **kwargs)
     out, err = p.communicate(input=input)
+    if not silent:
+        if out:
+            logging.log(log_level, 'stdout: ' + out)
+        if err:
+            logger.log(logging.WARN if warn_stderr else log_level, 'stderr: ' + err)
 
     if p.returncode and raise_exc:
         raise ExcClass(error_text, out and out.strip() or '', err and err.strip() or '', p.returncode, popenargs[0])
-
-    if silent:
-        return out, err, p.returncode
-
-    if out:
-        logging.log(log_level, 'stdout: ' + out)
-    if err:
-        logger.log(logging.WARN if warn_stderr else log_level, 'stderr: ' + err)
-
     return out, err, p.returncode
 
 
@@ -637,21 +633,15 @@ def which(arg):
 
 def import_class(import_str):
     """Returns a class from a string including module and class"""
-    mod_str, _sep, class_str = import_str.rpartition('.')
+    mod_name = '.'.join(import_str.split('.')[:-1])
+    cls_name = import_str.split('.')[-1]
     try:
-        loader = pkgutil.find_loader(mod_str)
-        if not loader:
-            raise ImportError('No module named %s' % mod_str)
-    except ImportError:
-        pass
-    else:
-        m = loader.load_module(loader.fullname)
-        try:
-            return getattr(m, class_str)
-        except (ValueError, AttributeError):
-            pass
-    raise exceptions.NotFound('Class %s cannot be found' % import_str)
-    
+        if mod_name not in sys.modules:
+            __import__(mod_name)
+        return getattr(sys.modules[mod_name], cls_name)
+    except:
+        raise exceptions.NotFound('Class %s cannot be found' % import_str)
+
 
 def import_object(import_str, *args, **kwds):
     """Returns an object including a module or module and class"""

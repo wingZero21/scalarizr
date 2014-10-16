@@ -132,10 +132,11 @@ args=(r'LOG_DEBUG_PATH', 'a+', 5242880, 5, 0600)
 
 [formatter_debug]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
+class=scalarizr.util.log.DebugFormatter
 
 [formatter_user]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
-class=scalarizr.util.log.NoStacktraceFormatter
+class=scalarizr.util.log.UserFormatter
 '''
 LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_PATH', LOG_PATH)
 LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_DEBUG_PATH', LOG_DEBUG_PATH)
@@ -277,6 +278,7 @@ def _init_db(file=None):
         if not os.path.exists(db_file) or not os.stat(db_file).st_size:
             logger.debug("Database doesn't exist, creating new one from script")
             _create_db(file)
+        os.chmod(db_file, 0600)
 
         # XXX(marat) Added here cause postinst script sometimes failed and we get
         # OperationalError: table p2pmessage has no column named format
@@ -329,11 +331,11 @@ def _init_logging():
     globals()['_logging_configured'] = True
     logger = logging.getLogger(__name__)
     
-    # During server import user must see all scalarizr activity in his terminal
-    # Add console handler if it doesn't configured in logging.ini    
+    # During server import user must see all scalarizr general activity in his terminal
+    # Change console loggel level from DEBUG to INFO  
     if optparser and optparser.values.import_server:
         for hdlr in logging.getLogger('scalarizr').handlers:
-            if isinstance(hdlr, logging.StreamHandler):
+            if isinstance(hdlr, logging.StreamHandler) and hdlr.stream == sys.stderr:
                 hdlr.setLevel(logging.INFO)
 
 
@@ -484,8 +486,9 @@ def _cleanup_after_rebundle():
     # Reset private configuration
     priv_path = cnf.private_path()
     for file in os.listdir(priv_path):
-        if file in ('.user-data', '.update', 'keys'):
-             # keys/default maybe already refreshed by UpdateClient
+        if file in ('.user-data', 'update.status', 'keys'):
+            # protect user-data and UpdateClient status
+            # keys/default maybe already refreshed by UpdateClient
             continue
         path = os.path.join(priv_path, file)
         coreutils.chmod_r(path, 0700)
@@ -684,9 +687,9 @@ class Service(object):
                     # toughts that he's an old server and continue rebundling
                     time.sleep(30)
 
-                locs = ('/etc/.scalr-user-data', cnf.private_path('.user-data'))
-                wait_until(lambda: any(map(lambda x: os.path.exists(x), locs)),
-                        timeout=60, error_text="user-data file not found in the following locations: %s" % locs)
+                # locs = ['/etc/.scalr-user-data', cnf.private_path('.user-data')]
+                # wait_until(lambda: any(map(lambda x: os.path.exists(x), locs)),
+                #         timeout=60, error_text="user-data file not found in the following locations: %s" % locs)
             
             # When server bundled by Scalr, often new server are spawned in "importing" state
             # and its important to query user-data first, to override server-id that was bundled.
@@ -1116,6 +1119,8 @@ class Service(object):
                 try:
                     upd_state[0] = upd.status()['state']
                     return upd_state[0] != 'noop'
+                except (IOError, socket.error), exc:
+                    self._logger.debug('Failed to get UpdateClient status: %s', exc)
                 except:
                     exc = sys.exc_info()[1]
                     if 'Server-ID header not presented' in str(exc):
@@ -1123,8 +1128,6 @@ class Service(object):
                             'Looks like we are in a process of migration to new update sytem. '
                             'UpdateClient restart will handle this situation. Restarting'))
                         upd_svs.restart()
-                    elif type(exc) in (urllib2.HTTPError, socket.error, IOError):
-                        self._logger.debug('Failed to get UpdateClient status: %s', exc)
                     else:
                         raise
 

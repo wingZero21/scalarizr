@@ -4,29 +4,39 @@ Created on Dec 24, 2009
 @author: marat
 '''
 
-import binascii
-import ConfigParser
-import logging
-import os
-import Queue
-import random
-import shutil
-import signal
-import stat
-import subprocess
 import sys
-import threading
 import time
+import json
+import random
+import ConfigParser
+import subprocess
+import threading
+import os
+import shutil
+import stat
+import signal
+import logging
+import Queue
+import binascii
+from urlparse import urlparse
+from urllib2 import urlopen
+from urllib2 import HTTPError
+try:
+    import httplib2
+    with_httplib2 = True
+except ImportError:
+    with_httplib2 = False
 
 from scalarizr import config as szrconfig
 from scalarizr import linux
 import scalarizr.linux.execute
 from scalarizr.bus import bus
-from scalarizr.config import ScalarizrState
 from scalarizr.handlers import Handler, HandlerError
+from scalarizr.handlers.chef import ChefSolo, ChefClient, extract_json_attributes
 from scalarizr.messaging import Queues, Messages
 from scalarizr.node import __node__
 from scalarizr.util import parse_size, format_size, read_shebang, split_strip, wait_until
+from scalarizr.config import ScalarizrState
 
 
 def get_handlers():
@@ -144,7 +154,13 @@ class ScriptExecutor(Handler):
 
         # Restore in-progress scripts
         LOG.debug('STATE[script_executor.in_progress]: %s', szrconfig.STATE['script_executor.in_progress'])
-        scripts = [Script(**kwds) for kwds in szrconfig.STATE['script_executor.in_progress'] or []]
+        scripts = []
+        for kwds in szrconfig.STATE['script_executor.in_progress'] or []:
+            if "chef" in kwds:
+                script_class = ChefClientScript if "server_url" in kwds["chef"] else ChefSoloScript
+            else:
+                script_class = Script
+            scripts.append(script_class(**kwds))
         LOG.debug('Restoring %d in-progress scripts', len(scripts))
 
         for sc in scripts:
@@ -186,6 +202,7 @@ class ScriptExecutor(Handler):
             if not script.start_time:
                 script.start()
             script.wait()
+
         except:
             exc_info = sys.exc_info()
             if script.asynchronous:
@@ -203,6 +220,13 @@ class ScriptExecutor(Handler):
             LOG.debug('sending exec script result message')
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
             self.in_progress.remove(script)
+            if not exc_info \
+                    and script_result['return_code'] != 0 \
+                    and script.event_name == 'BeforeHostUp' \
+                    and int(__node__.get('abort_init_on_script_fail', False)):
+                msg = 'Script {0} exited with code {1}'.format(script.name, script_result['return_code'])
+                raise HandlerError(msg)
+
 
     def execute_scripts(self, scripts, event_name, scripts_qty):
         """
@@ -248,62 +272,80 @@ class ScriptExecutor(Handler):
         scripts = []
         scripts_qty = 0
 
-        if 'scripts' in message.body:
-            if not message.body['scripts']:
-                self._logger.debug('Empty scripts list. Breaking')
+        try:
+            if 'scripts' in message.body:
+                if not message.body['scripts']:
+                    self._logger.debug('Empty scripts list. Breaking')
+                    return
+
+                environ = os.environ.copy()
+
+                global_variables = message.body.get('global_variables') or []
+                global_variables = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables)
+                if linux.os.windows_family:
+                    global_variables = dict((k.encode('ascii'), v.encode('ascii')) for k, v in global_variables.items())
+                environ.update(global_variables)
+
+                LOG.debug('Fetching scripts from incoming message')
+                event_id = message.body.get('event_id')
+                event_server_id = message.body.get('server_id')
+
+                def _create_script(message_script_params):
+                    kwds = message_script_params.copy()
+
+                    if 'chef' in kwds:
+                        if 'asynchronous' in kwds:
+                            assert not int(kwds['asynchronous']), 'Chef script could only be executed in synchronous mode'
+                        script_class = ChefSoloScript if 'cookbook_url' in kwds['chef'] else ChefClientScript
+                    else:
+                        script_class = Script
+
+                    if 'timeout' in kwds:
+                        kwds['exec_timeout'] = kwds.pop('timeout')
+                    if 'asynchronous' in kwds:
+                        kwds['asynchronous'] = int(kwds['asynchronous'])
+                    kwds['role_name'] = role_name
+                    kwds['event_server_id'] = event_server_id
+                    kwds['event_id'] = event_id
+                    kwds['event_name'] = event_name
+                    kwds['environ'] = environ
+                    try:
+                        return script_class(**kwds)
+                    except (BaseException, Exception), e:
+                        message_body = {
+                                'stdout': '',
+                                'stderr': e.message,
+                                'return_code': 1,
+                                'time_elapsed': 0,
+                                'event_name': kwds['event_name'],
+                                'event_id': kwds['event_id'],
+                                'event_server_id': kwds['event_server_id'],
+                                'execution_id': kwds['execution_id'],
+                                'script_name': kwds.get('name'),
+                                'script_path': kwds.get('path'),
+                                'run_as': kwds.get('run_as')
+                            }
+                        if script_class is ChefSoloScript:
+                            message_body.update({'cookbook_url': kwds.get('cookbook_url')})
+                        else:
+                            message_body.update({'script_name': kwds.get('name'), 'script_path': kwds.get('path')})
+                        self.send_message(Messages.EXEC_SCRIPT_RESULT, message_body, queue=Queues.LOG)
+                        raise
+
+                scripts_qty = len(message.body['scripts'])
+                scripts = (_create_script(item) for item in message.body['scripts'])
+            else:
+                LOG.debug("No scripts embed into message '%s'", message.name)
                 return
 
-            environ = os.environ.copy()
-
-            global_variables = message.body.get('global_variables') or []
-            global_variables = dict((kv['name'], kv['value'].encode('utf-8') if kv['value'] else '') for kv in global_variables)
-            if linux.os.windows_family:
-                global_variables = dict((k.encode('ascii'), v.encode('ascii')) for k, v in global_variables.items())
-            environ.update(global_variables)
-
-            LOG.debug('Fetching scripts from incoming message')
-            event_id = message.body.get('event_id')
-            event_server_id = message.body.get('server_id')
-
-            def _create_script(message_script_params):
-                kwds = message_script_params.copy()
-                if 'timeout' in kwds:
-                    kwds['exec_timeout'] = kwds.pop('timeout')
-                if 'asynchronous' in kwds:
-                    kwds['asynchronous'] = int(kwds['asynchronous'])
-                kwds['role_name'] = role_name
-                kwds['event_server_id'] = event_server_id
-                kwds['event_id'] = event_id
-                kwds['event_name'] = event_name
-                kwds['environ'] = environ
-                try:
-                    return Script(**kwds)
-                except (BaseException, Exception), e:
-                    self.send_message(
-                        Messages.EXEC_SCRIPT_RESULT, {
-                            'stdout': '',
-                            'stderr': e.message,
-                            'return_code': 1,
-                            'time_elapsed': 0,
-                            'event_name': kwds['event_name'],
-                            'event_id': kwds['event_id'],
-                            'event_server_id': kwds['event_server_id'],
-                            'execution_id': kwds['execution_id'],
-                            'script_name': kwds.get('name'),
-                            'script_path': kwds.get('path'),
-                            'run_as': kwds.get('run_as')
-                        },
-                        queue=Queues.LOG)
-                    raise
-
-            scripts_qty = len(message.body['scripts'])
-            scripts = (_create_script(item) for item in message.body['scripts'])
-        else:
-            LOG.debug("No scripts embed into message '%s'", message.name)
-            return
-
-        LOG.debug('Fetched %d scripts', scripts_qty)
-        self.execute_scripts(scripts, event_name, scripts_qty)
+            LOG.debug('Fetched %d scripts', scripts_qty)
+            self.execute_scripts(scripts, event_name, scripts_qty)
+        except:
+            if event_name == 'BeforeHostUp' \
+                    and int(__node__.get('abort_init_on_script_fail', False)):
+                raise
+            else:
+                LOG.warn('Scripts execution failed', exc_info=sys.exc_info())
 
 
 class Script(object):
@@ -363,7 +405,7 @@ class Script(object):
                 self.interpreter = split_strip(self.interpreter)[0]
                 
         self.logger = logging.getLogger('%s.%s' % (__name__, self.id))
-        self.exec_path = self.path or os.path.join(exec_dir_prefix + self.id, self.name)
+        self.exec_path = self.path or self._generate_exec_path()
 
         if self.exec_timeout:
             self.exec_timeout = int(self.exec_timeout)
@@ -377,7 +419,27 @@ class Script(object):
             self.stdout_path = os.path.join(logs_dir, '%s.%s.%s.%s-out.log' % args)
             self.stderr_path = os.path.join(logs_dir, '%s.%s.%s.%s-err.log' % args)
 
+    def _generate_exec_path(self):
+        return os.path.join(exec_dir_prefix + self.id, self.name)
+
     def check_runability(self):
+        path_params = urlparse(self.path or '')
+        if path_params.scheme != '':
+            try:
+                if path_params.scheme == 'https' and with_httplib2:
+                    # we are using httplib2 for opening https url because it
+                    # makes ssl certificate validation and urlopen doesn't
+                    h = httplib2.Http()
+                    _, self.body = h.request(self.path)
+                else:
+                    response = urlopen(self.path)
+                    self.body = response.read()
+            except:
+                raise HandlerError("Can't download script from URL '%s'. Reason: "
+                    "%s" % (self.path, sys.exc_info()[1]))
+            self.path = None
+            self.exec_path = self._generate_exec_path()
+
         if self.body or self.path:
             self.interpreter = read_shebang(path=self.path, script=self.body)
             if linux.os['family'] == 'Windows' and self.body:
@@ -399,7 +461,7 @@ class Script(object):
                                "under user other than Administrator. " \
                                "Script '%s', given user: '%s'" % (self.name, self.run_as))
         if not self.interpreter:
-            raise HandlerError("Can't execute script '%s' cause it hasn't shebang.\n"
+            raise HandlerError("Can't execute script '%s' cause it has no shebang.\n"
                 "First line of the script should have the form of a shebang "
                 "interpreter directive is as follows:\n"
                 "#!interpreter [optional-arg]" % (self.name, ))
@@ -444,8 +506,6 @@ class Script(object):
             if self.run_as and self.run_as != 'root':
                 command = ['sudo', '-u', self.run_as]
             command += [self.exec_path]
-
-        print 'command: ', command
 
         # Start process
         self.logger.debug('Executing %s'
@@ -589,6 +649,98 @@ class Script(object):
                 os.fsync(self.proc.stderr.fileno())
             except:
                 pass
+
+
+class BaseChefScript(Script):
+    chef = None
+    chef_params = None
+    
+    def start(self):
+        self.chef.prepare()
+        super(BaseChefScript, self).start()
+
+    def state(self):
+        return {'id': self.id,
+                'name': self.name,
+                'pid': self.pid,
+                'chef': self.chef_params,
+                'start_time': self.start_time,
+                'asynchronous': False,
+                'event_name': self.event_name,
+                'role_name': self.role_name,
+                'exec_timeout': self.exec_timeout,
+                'run_as': self.run_as}
+
+
+    def _get_body(self):
+        shebang = "#!%s" % ("cmd" if linux.os.windows_family else "/bin/bash")
+        return shebang + "\n" + " ".join(self.chef.get_cmd())
+
+
+    def wait(self):
+        try:
+            super(BaseChefScript, self).wait()
+        finally:
+            self.chef.cleanup()
+
+
+class ChefClientScript(BaseChefScript):
+
+    def __init__(self, **kwds):
+        self.name = kwds.get("name") or "chef-client-script.%s.%s" % (kwds.get('event_name', ''), time.time())
+        self.chef_params = kwds.pop('chef')
+        self.with_json_attributes = extract_json_attributes(self.chef_params)
+
+        self.chef = ChefClient(self.chef_params.get('server_url'),
+                               self.with_json_attributes,
+                               self.chef_params.get('node_name'),
+                               self.chef_params.get('validator_name'),
+                               self.chef_params.get('validator_key'),
+                               self.chef_params.get('environment'),
+                               kwds.get("environ"))
+
+        self.body = self._get_body()
+        super(ChefClientScript, self).__init__(**kwds)
+
+
+    def state(self):
+        state = super(ChefClientScript, self).state()
+        return state
+
+
+class ChefSoloScript(BaseChefScript):
+
+    json_attributes = None
+    relative_path = None
+    ssh_private_key = None
+    run_list = None
+    role = None
+    chef = None
+    pid = None
+
+
+    def __init__(self, **kwds):
+        self.name = kwds.get("name") or "chef-solo-script.%s.%s" % (kwds.get('event_name', ''), time.time())
+        self.chef_params = kwds.pop("chef")
+        self.with_json_attributes = extract_json_attributes(self.chef_params)
+
+        self.chef = ChefSolo(self.chef_params.get("cookbook_url"),
+                             self.chef_params.get("cookbook_url_type"),
+                             self.with_json_attributes,
+                             self.chef_params.get("relative_path"),
+                             kwds.get("environ"),
+                             self.chef_params.get("ssh_private_key"),
+                             run_as=kwds.get("run_as"),
+                             temp_dir=kwds.get("temp_dir"))
+
+        self.chef_temp_dir = self.chef.temp_dir
+        self.body = self._get_body()
+        super(ChefSoloScript, self).__init__(**kwds)
+
+    def state(self):
+        state = super(ChefSoloScript, self).state()
+        state['temp_dir'] = self.chef_temp_dir
+        return state
 
 
 class LogRotateRunnable(object):

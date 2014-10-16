@@ -17,6 +17,7 @@ from scalarizr.handlers import HandlerError, ServiceCtlHandler
 from scalarizr.messaging import Messages
 from scalarizr.api import service as preset_service
 from scalarizr.node import __node__
+from scalarizr.api import nginx as nginx_api
 from scalarizr.api.nginx import NginxAPI
 from scalarizr.api.nginx import NginxInitScript
 from scalarizr.api.nginx import update_ssl_certificate
@@ -42,78 +43,19 @@ BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.WWW
 CNF_NAME = BEHAVIOUR
 CNF_SECTION = BEHAVIOUR
 
-__nginx__ = __node__['nginx']
+__nginx__ = nginx_api.__nginx__
 
 
 initdv2.explore('nginx', NginxInitScript)
 
 
-# Nginx behaviours configuration options
-class NginxOptions(Configurator.Container):
-    '''
-    www behaviour
-    '''
-    cnf_name = CNF_NAME
-
-    class binary_path(Configurator.Option):
-        '''
-        Path to nginx binary
-        '''
-        name = CNF_SECTION + '/binary_path'
-        required = True
-
-        @property
-        @cached
-        def default(self):
-            return firstmatched(lambda p: os.access(p, os.F_OK | os.X_OK),
-                                ('/usr/sbin/nginx', '/usr/local/nginx/sbin/nginx'), '')
-
-        @validators.validate(validators.executable)
-        def _set_value(self, v):
-            Configurator.Option._set_value(self, v)
-
-        value = property(Configurator.Option._get_value, _set_value)
-
-
-    class app_port(Configurator.Option):
-        '''
-        App role port
-        '''
-        name = CNF_SECTION + '/app_port'
-        default = '80'
-        required = True
-
-        @validators.validate(validators.portnumber())
-        def _set_value(self, v):
-            Configurator.Option._set_value(self, v)
-
-        value = property(Configurator.Option._get_value, _set_value)
-
-
-    class app_include_path(Configurator.Option):
-        '''
-        App upstreams configuration file path.
-        '''
-        name = CNF_SECTION + '/app_include_path'
-        default = '/etc/nginx/app-servers.include'
-        required = True
-
-    class https_include_path(Configurator.Option):
-        '''
-        HTTPS configuration file path.
-        '''
-        name = CNF_SECTION + '/https_include_path'
-        default = '/etc/nginx/https.include'
-        required = True
-
-
 def get_handlers():
-    return [NginxHandler()] if NginxAPI.software_supported else []
+    return [NginxHandler()]
 
 
 class NginxCnfController(CnfController):
     def __init__(self):
-        nginx_conf_path = os.path.join(os.path.dirname(__nginx__['app_include_path']), 'nginx.conf')
+        nginx_conf_path = __nginx__['nginx.conf']
         CnfController.__init__(self, BEHAVIOUR, nginx_conf_path, 'nginx', {"on":'1',"'off'":'0','off':'0'})
 
     @property
@@ -183,7 +125,8 @@ class NginxHandler(ServiceCtlHandler):
                              Messages.HOST_DOWN,
                              Messages.BEFORE_HOST_TERMINATE,
                              Messages.VHOST_RECONFIGURE,
-                             Messages.UPDATE_SERVICE_CONFIGURATION)
+                             Messages.UPDATE_SERVICE_CONFIGURATION,
+                             Messages.SSL_CERTIFICATE_UPDATE)
 
     def _set_nginx_v2_mode_flag(self, on):
         if on and not self._get_nginx_v2_mode_flag():
@@ -337,7 +280,7 @@ class NginxHandler(ServiceCtlHandler):
         else:
             # self._logger.info('removing server %s from role %s backend(s)', server, role_id)
             # self.api.remove_server_from_role(server, role_id)
-            self._logger.info('adding new app server %s to role %s backend(s)', server, role_id)
+            # self._logger.info('adding new app server %s to role %s backend(s)', server, role_id)
             # self.api.add_server_to_role(server, role_id)
             role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
             nginx_params = role_params.get(BEHAVIOUR)
@@ -390,7 +333,7 @@ class NginxHandler(ServiceCtlHandler):
             self._logger.debug('after vhost reconf backend table is %s' % self.api.backend_table)
 
     def on_SSLCertificateUpdate(self, message):
-        ssl_cert_id = message.id  # TODO: check datastructure
+        ssl_cert_id = message.body['id']
         private_key = message.private_key
         certificate = message.certificate
         cacertificate = message.cacertificate
@@ -466,7 +409,7 @@ class NginxPresetProvider(PresetProvider):
 
     def __init__(self):
 
-        nginx_conf_path = os.path.join(os.path.dirname(__nginx__['app_include_path']), 'nginx.conf')
+        nginx_conf_path = __nginx__['nginx.conf']
         config_mapping = {'nginx.conf':NginxConf(nginx_conf_path)}
         service = initdv2.lookup('nginx')
         PresetProvider.__init__(self, service, config_mapping)
