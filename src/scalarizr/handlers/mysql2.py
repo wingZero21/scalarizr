@@ -466,7 +466,7 @@ class MysqlHandler(DBMSRHandler):
             # Notify Scalr
             self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
                     status       = 'ok',
-                    pma_user         = __mysql__['pma_user'],
+                    pma_user     = __mysql__['pma_user'],
                     pma_password = pma_password,
                     farm_role_id = farm_role_id,
             ))
@@ -889,6 +889,7 @@ class MysqlHandler(DBMSRHandler):
                 __mysql__['volume'] = grown_volume
             else:
                 __mysql__['volume'].ensure(mount=True, mkfs=True)
+
             LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
 
         coreutils.clean_dir(__mysql__['defaults']['datadir'])
@@ -897,6 +898,10 @@ class MysqlHandler(DBMSRHandler):
         self._change_selinux_ctx()
 
         storage_valid = self._storage_valid()
+        if not storage_valid and 'backup' not in __mysql__:
+            __mysql__['backup'] = backup.backup(
+                            type='snap_mysql',
+                            volume=__mysql__['volume'])
         user_creds = self.get_user_creds()
         self._fix_percona_debian_cnf()
         #datadir = mysql2_svc.my_print_defaults('mysqld').get('datadir', __mysql__['defaults']['datadir'])
