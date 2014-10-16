@@ -194,7 +194,7 @@ class GcePlatform(platform.Platform):
         self._compute_conn_pool = GCEConnectionPool(
                 'compute', 'v1', COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
         self._storage_conn_pool = GCEConnectionPool(
-                'storage', 'v1beta2', STORAGE_FULL_SCOPE)
+                'storage', 'v1', STORAGE_FULL_SCOPE)
 
     def get_user_data(self, key=None):
         if self._userdata is None:
