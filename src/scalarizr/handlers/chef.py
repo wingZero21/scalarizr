@@ -73,10 +73,17 @@ def extract_json_attributes(chef_data):
     """
     Extract json attributes dictionary from scalr formatted structure
     """
-    json_attributes = json.loads(chef_data.get('json_attributes') or "{}")
+    try:
+        json_attributes = json.loads(chef_data.get('json_attributes') or "{}")
+    except ValueError, e:
+        raise HandlerError("Chef attributes is not a valid JSON: {0}".format(e))
 
     if chef_data.get('run_list'):
-        json_attributes['run_list'] = json.loads(chef_data['run_list'])
+        try:
+            json_attributes['run_list'] = json.loads(chef_data['run_list'])
+        except ValueError, e:
+            raise HandlerError("Chef runlist is not a valid JSON: {0}".format(e))
+
     elif chef_data.get('role'):
         json_attributes['run_list'] = ["role[%s]" % chef_data['role']]
 
@@ -90,11 +97,9 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
         self._env = None
         super(ChefInitScript, self).__init__('chef', None, PID_FILE)
 
-
     def start(self, env=None):
         self._env = env or os.environ
         super(ChefInitScript, self).start()
-
 
     # Uses only pid file, no init script involved
     def _start_stop_reload(self, action):
@@ -141,7 +146,9 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
         self._start_stop_reload("stop")
         self._start_stop_reload("start")
 
+
 initdv2.explore('chef', ChefInitScript)
+
 
 class ChefHandler(Handler):
     def __init__(self):
@@ -271,7 +278,7 @@ class ChefHandler(Handler):
                 win32serviceutil.StartService(WIN_SERVICE_NAME)
             except pywintypes.error, e:
                 if e.args[0] == 1060:
-                    err = ("Can't daemonize Chef cause 'chef-client', "
+                    err = ("Can't daemonize Chef "
                             "cause 'chef-client' is not a registered Windows Service.\n"
                             "Most likely you haven't selected Chef Service option in Chef installer.")
                     raise HandlerError(err)
