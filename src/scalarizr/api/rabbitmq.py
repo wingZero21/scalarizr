@@ -116,7 +116,7 @@ class RabbitMQAPI(BehaviorAPI):
             if os_vers >= '12':
                 pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.4'], installed_packages)
             elif os_vers >= '10':
-                pkgmgr.check_dependency(['rabbitmq-server>=2.6,<2.7'], installed_packages)
+                pkgmgr.check_dependency(['rabbitmq-server>=2.6,<3.4'], installed_packages)
         elif os_name == 'debian':
             pkgmgr.check_dependency(['rabbitmq-server>=3.0,<3.4'], installed_packages)
         elif linux.os.redhat_family:
