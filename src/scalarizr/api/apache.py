@@ -857,15 +857,14 @@ class ApacheAPI(BehaviorAPI):
     @classmethod
     def do_check_software(cls, system_packages=None):
         if linux.os.debian_family:
-            requirements = ['apache2>=2.2,<2.5']
-            return pkgmgr.check_software(requirements, system_packages)[0]
+            requirements = [['apache2>=2.2,<2.5'], ['apache2.2-common>=2.2,<2.3']]
         elif linux.os.redhat_family or linux.os.oracle_family:
             requirements = [['httpd>=2.2,<2.5'], ['httpd24']]
-            return pkgmgr.check_any_software(requirements, system_packages)[0]
         else:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))
+        return pkgmgr.check_any_software(requirements, system_packages)[0]
 
     def fix_default_ssl_virtual_host(self):
         self.mod_ssl.set_default_certificate(SSLCertificate())

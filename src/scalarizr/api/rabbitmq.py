@@ -116,7 +116,7 @@ class RabbitMQAPI(BehaviorAPI):
             if os_vers >= '12':
                 requirements = ['rabbitmq-server>=3.0,<3.4']
             elif os_vers >= '10':
-                requirements = ['rabbitmq-server>=2.6,<2.7']
+                requirements = ['rabbitmq-server>=2.6,<3.4']
         elif os_name == 'debian':
             requirements = ['rabbitmq-server>=3.0,<3.4']
         elif linux.os.redhat_family:
