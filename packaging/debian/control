@@ -46,15 +46,6 @@ Conflicts: scalarizr-agent
 Description: Scalarizr agent for Amazon EC2
  Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
 
-Package: scalarizr-eucalyptus
-Architecture: all
-Section: net
-Priority: extra
-Depends: scalarizr-ec2 (= ${binary:Version}),
-         euca2ools (>= 3.0.2)
-Description: Scalarizr agent for Eucalyptus
- Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
-
 
 Package: scalarizr-openstack
 Architecture: all

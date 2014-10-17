@@ -854,7 +854,7 @@ class Service(object):
         bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
         logger.debug("Got scalr url: '%s'" % bus.scalr_url)
 
-        if not linux.os.windows and node.__node__['platform'].name in ('eucalyptus', 'openstack'):
+        if not linux.os.windows and node.__node__['platform'].name == 'openstack':
             self._try_resolver(bus.scalr_url)
 
         # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)

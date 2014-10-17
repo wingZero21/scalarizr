@@ -76,25 +76,6 @@ Conflicts:		scalarizr-idcf
 Scalarizr converts any server to Scalr-manageable node
 
 
-%package -n scalarizr-eucalyptus
-Summary:        Scalarizr Eucalyptus edition
-Group:          Applications/Internet
-Requires:		scalarizr-ec2 = %{version}-%{release}
-%if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-euca2ools
-%else
-Requires:       euca2ools >= 3.0.2
-%endif
-
-%description -n scalarizr-eucalyptus
-Scalarizr converts any server to Scalr-manageable node
-
-%post -n scalarizr-eucalyptus
-set -x
-
-sed -i 's/platform = ec2/platform = eucalyptus/i' /etc/scalr/public.d/config.ini
-
-
 %package -n scalarizr-openstack
 Summary:        Scalarizr OpenStack edition
 Group:          Applications/Internet
@@ -385,9 +366,6 @@ rm -rf "$RPM_BUILD_ROOT"
 
 
 %files -n scalarizr-ec2
-%defattr(-,root,root)
-
-%files -n scalarizr-eucalyptus
 %defattr(-,root,root)
 
 %files -n scalarizr-openstack

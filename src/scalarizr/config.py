@@ -1017,7 +1017,6 @@ class BuiltinBehaviours:
 class BuiltinPlatforms:
     VPS             = 'vps'
     EC2             = 'ec2'
-    EUCA            = 'eucalyptus'
     CLOUDSTACK      = 'cloudstack'
     IDCF            = 'idcf'
     UCLOUD          = 'ucloud'
