@@ -30,11 +30,10 @@ from xml.dom.minidom import Document
 from datetime import datetime
 import time, os, re, shutil, glob
 import string
+import hashlib
 
 from boto.exception import BotoServerError
 from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
 
 
 # Workaround for python bug #5853
@@ -55,7 +54,7 @@ BUNDLER_RELEASE = "672"
 
 DIGEST_ALGO = "sha1"
 CRYPTO_ALGO = "aes-128-cbc"
-READ_BUF_SIZE = 1024 * 1024  # Buffer size in bytes
+READ_BUF_SIZE = 1024 * 1024
 
 EPH_STORAGE_MAPPING = {
         'i386': {
@@ -528,7 +527,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             f = None
             try:
                 f = open(part_filename)
-                digest = hashes.Hash(hashes.SHA1(), backend=default_backend())
+                digest = hashlib.sha1()
                 part_digests.append((part_name, hexlify(self._digest_file(digest, f))))
             except (Exception, BaseException):
                 LOG.error("Cannot generate digest for chunk '%s'", part_name)
@@ -545,7 +544,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             if not buf:
                 break;
             digest.update(buf)
-        return digest.finalize()
+        return digest.digest()
 
 
     def _upload_image(self, bucket_name, manifest_path, manifest, region=None, acl="aws-exec-read"):
@@ -1259,9 +1258,9 @@ class AmiManifest:
         # Get the XML for <machine_configuration> and <image> elements and sign them.
         string_to_sign = machine_config_elem.toxml() + image_elem.toxml()
 
-        digest = hashes.Hash(hashes.SHA1(), backend=default_backend())
+        digest = hashlib.sha1()
         digest.update(string_to_sign)
-        dig = digest.finalize()
+        dig = digest.digest()
 
         sig = hexlify(system2('openssl rsautl -sign -inkey {0}'.format(self.user_private_key_path), 
                         shell=True, stdin=dig)[0])
