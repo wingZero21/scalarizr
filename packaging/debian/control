@@ -19,7 +19,7 @@ Priority: extra
 Depends: ${shlibs:Depends}, 
          ${misc:Depends}, 
          ${python:Depends},
-         python-openssl (>= 0.13.1),
+         python-m2crypto (= 0.20.1-1ubuntu5) | python-m2crypto (>= 0.20),
          python-pexpect (>= 2.1),
          python-prettytable,
          python-docopt (>= 0.6.2),
@@ -44,15 +44,6 @@ Depends: scalarizr-base (= ${binary:Version}),
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Amazon EC2
- Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
-
-Package: scalarizr-eucalyptus
-Architecture: all
-Section: net
-Priority: extra
-Depends: scalarizr-ec2 (= ${binary:Version}),
-         euca2ools (>= 3.0.2)
-Description: Scalarizr agent for Eucalyptus
  Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
 
 

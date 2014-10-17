@@ -312,6 +312,7 @@ class MySQLAPI(BehaviorAPI):
             pkgmgr.check_any_dependency(
                 [
                     ['mysql-client>=5.0,<5.7'],
+                    ['mysql-client-5.1'],
                     ['mysql-client-5.5'],
                     ['mysql-client-5.6']
                 ],
@@ -320,6 +321,7 @@ class MySQLAPI(BehaviorAPI):
             pkgmgr.check_any_dependency(
                 [
                     ['mysql-server>=5.0,<5.7'],
+                    ['mysql-server-5.1'],
                     ['mysql-server-5.5'],
                     ['mysql-server-5.6']
                 ],

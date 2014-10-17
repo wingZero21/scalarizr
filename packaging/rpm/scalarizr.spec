@@ -16,7 +16,7 @@ License:        GPLv3
 URL:            http://scalr.net
 
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26 python26-openssl >= 0.13.1 python26-pexpect >= 2.3
+Requires:       python26 python26-m2crypto >= 0.20 python26-pexpect >= 2.3
 Requires:       python26-prettytable python26-PyYAML python26-docopt
 #Requires:		python26-pymongo
 Requires:		python26-pymysql
@@ -27,7 +27,7 @@ Requires:		yum-priorities
 %else
 # setuptools from pip used instead of rpm
 # BuildRequires:  python-setuptools
-Requires:       python >= 2.5 python-openssl >= 0.13.1 pexpect >= 2.3
+Requires:       python >= 2.5 m2crypto >= 0.20 pexpect >= 2.3
 # szradm
 Requires:       python-prettytable PyYAML python-docopt >= 0.6.2
 # mongodb behavior
@@ -74,25 +74,6 @@ Conflicts:		scalarizr-idcf
 
 %description -n scalarizr-ec2
 Scalarizr converts any server to Scalr-manageable node
-
-
-%package -n scalarizr-eucalyptus
-Summary:        Scalarizr Eucalyptus edition
-Group:          Applications/Internet
-Requires:		scalarizr-ec2 = %{version}-%{release}
-%if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-euca2ools
-%else
-Requires:       euca2ools >= 3.0.2
-%endif
-
-%description -n scalarizr-eucalyptus
-Scalarizr converts any server to Scalr-manageable node
-
-%post -n scalarizr-eucalyptus
-set -x
-
-sed -i 's/platform = ec2/platform = eucalyptus/i' /etc/scalr/public.d/config.ini
 
 
 %package -n scalarizr-openstack
@@ -385,9 +366,6 @@ rm -rf "$RPM_BUILD_ROOT"
 
 
 %files -n scalarizr-ec2
-%defattr(-,root,root)
-
-%files -n scalarizr-eucalyptus
 %defattr(-,root,root)
 
 %files -n scalarizr-openstack

@@ -218,7 +218,7 @@ def build_omnibus():
 def build_meta_packages():
     print_green('building meta packages')
     pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
-    for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud eucalyptus'.split():
+    for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud'.split():
         with cd('/var/cache/omnibus/pkg'):
             run(('fpm -t {pkg_type} -s empty '
                  '--name scalarizr-{platform} '
