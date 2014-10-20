@@ -461,13 +461,13 @@ def enabled():
 
     if linux.os["name"] == "CentOS" and linux.os["release"] > (7, 0):
         SYSTEMCTL = software.which("systemctl")
-        _, _, returncode = system2((SYSTEMCTL, "status", "firewalld"), raise_exc=False)
+        returncode = system2((SYSTEMCTL, "status", "firewalld"), raise_exc=False)[2]
         if returncode == 0:
             # Use firewalld if it's running
             return False
         pkgmgr.installed("iptables-services")
         system2((SYSTEMCTL, "enable", "iptables"))
-        _, _, returncode = system2((SYSTEMCTL, "status", "iptables"), raise_exc=False)
+        returncode = system2((SYSTEMCTL, "status", "iptables"), raise_exc=False)[2]
         return True if (returncode == 0) else False
 
     if linux.os['family'] in ('RedHat', 'Oracle'):
