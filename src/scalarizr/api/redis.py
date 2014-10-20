@@ -450,52 +450,31 @@ class RedisAPI(BehaviorAPI):
                                 exclusive=True)  #?
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         if os_name == 'ubuntu':
             if os_vers >= '14':
-                pkgmgr.check_dependency(['redis-server>=2.6,<2.9'], installed_packages)
+                requirements = ['redis-server>=2.6,<2.9']
             elif os_vers >= '12':
-                pkgmgr.check_dependency(['redis-server>=2.2,<2.9'], installed_packages)
+                requirements = ['redis-server>=2.2,<2.9']
             elif os_vers >= '10':
-                pkgmgr.check_dependency(['redis-server>=2.2,<2.3'], installed_packages)
+                requirements = ['redis-server>=2.2,<2.3']
         elif os_name == 'debian':
             if os_vers >= '7':
-                pkgmgr.check_dependency(['redis-server>=2.6,<2.9'], installed_packages)
+                requirements = ['redis-server>=2.6,<2.9']
             elif os_vers >= '6':
-                pkgmgr.check_dependency(['redis-server>=2.6,<2.7'], installed_packages)
+                requirements = ['redis-server>=2.6,<2.7']
         elif linux.os.oracle_family or os_name == 'redhat' or os_name == 'centos':
-            pkgmgr.check_dependency(['redis>=2.4,<2.9'], installed_packages, ['centalt-release'])
+            requirements = ['redis>=2.4,<2.9']
         elif os_name == 'amazon':
             if os_vers >= '2014':
-                pkgmgr.check_dependency(['redis>=2.8,<2.9'], installed_packages, ['centalt-release'])
+                requirements = ['redis>=2.8,<2.9']
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
-            )
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
-            msg = (
-                '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 10.04: >=2.2,<2.3\n'
-                '\tUbuntu 12.04: >=2.2,<2.9\n'
-                '\tUbuntu 14.04: >=2.6,<2.9\n'
-                '\tDebian 6: >=2.6,<2.7\n'
-                '\tDebian 7: >=2.6,<2.9\n'
-                '\tCentOS 5: >=2.4,<2.7\n'
-                '\tCentOS 6: >=2.4,<2.8\n'
-                '\tOracle 5: >=2.6,<2.7\n'
-                '\tRHEL 6: >=2.6,<2.9\n'
-                '\tAmazon 14.03: >=2.8,<2.9\n').format(
-                        pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
-            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
-
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior,
+                    "Not supported on {0} os family".format(linux.os['family']))
+        return pkgmgr.check_software(requirements, system_packages)[0]
 
     @rpc.command_method
     def grow_volume(self, volume, growth, async=False):
@@ -555,3 +534,4 @@ class RedisAPI(BehaviorAPI):
                 LOG.info("Grow process: Redis service has been started on ports %s." % str(ports))
 
         return self._op_api.run('redis.grow-volume', do_grow, exclusive=True, async=async)
+

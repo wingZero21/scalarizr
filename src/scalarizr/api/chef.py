@@ -156,16 +156,12 @@ class ChefAPI(BehaviorAPI):
         return self.service.status()
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         if linux.os.windows:
             if not linux.which('chef-client'):
                 msg = ("Can't find chef-client in %PATH%, "
                         "check that chef was properly installed")
                 raise Exception(msg)
-        else:
-            pkgmgr.check_dependency(['chef'], installed_packages)
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        raise exceptions.UnsupportedBehavior(cls.behavior, e)
+            return
+        return pkgmgr.check_software(['chef'], system_packages)[0]
 

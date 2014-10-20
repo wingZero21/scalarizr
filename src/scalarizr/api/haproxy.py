@@ -678,10 +678,6 @@ class HAProxyAPI(BehaviorAPI):
         return res
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
-        pkgmgr.check_dependency(['haproxy'], installed_packages)
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        raise exceptions.UnsupportedBehavior(cls.behavior, e)
+    def do_check_software(cls, system_packages=None):
+        return pkgmgr.check_software(['haproxy'], system_packages)[0]
 
