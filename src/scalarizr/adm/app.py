@@ -171,8 +171,9 @@ class Szradm(command_module.Command):
                     'with_initializing': with_initializing,
                     'https': https}
                 kwds.update(command_module.parse_command_line(args, self.help()))
+                kwds['args'] = args
                 try:
-                    return self.run_subcommand('queryenv', [command] + args, kwds)
+                    return self.run_subcommand('queryenv', [command], kwds)
                 except command_module.InvalidCall, e:
                     raise command_module.InvalidCall('Invalid call', usage=self.help())
 
