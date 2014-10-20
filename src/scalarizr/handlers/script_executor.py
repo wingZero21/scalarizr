@@ -224,7 +224,10 @@ class ScriptExecutor(Handler):
                     and script_result['return_code'] != 0 \
                     and script.event_name == 'BeforeHostUp' \
                     and int(__node__.get('abort_init_on_script_fail', False)):
-                msg = 'Script {0} exited with code {1}'.format(script.name, script_result['return_code'])
+                msg = ('Script {0} exited with code {1}, '
+                        'and the option to abort initialization when a Blocking BeforeHost Script fails was enabled. '
+                        'Update the script, or disable the option in the Advanced Tab.').format(
+                        script.name, script_result['return_code'])
                 raise HandlerError(msg)
 
 
