@@ -690,12 +690,12 @@ class SystemAPI(object):
             stdout = binascii.b2a_base64(err_rotated)
         else:
             stdout_path = stdout_match[0]
-            stdout = binascii.b2a_base64(_get_log(stdout_path))
+            stdout = binascii.b2a_base64(script_executor.get_truncated_log(stdout_path))
         if not stderr_match:
             stderr = binascii.b2a_base64(err_rotated)
         else:
             stderr_path = stderr_match[0]
-            stderr = binascii.b2a_base64(_get_log(stderr_path))
+            stderr = binascii.b2a_base64(script_executor.get_truncated_log(stderr_path))
 
         return dict(stdout=stdout, stderr=stderr)
 
