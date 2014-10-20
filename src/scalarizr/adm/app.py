@@ -170,11 +170,11 @@ class Szradm(command_module.Command):
                     'role_name': role_name,
                     'with_initializing': with_initializing,
                     'https': https}
+                kwds.update(command_module.parse_command_line(args, self.help()))
                 try:
                     return self.run_subcommand('queryenv', [command] + args, kwds)
                 except command_module.InvalidCall, e:
-                    message = '\n'.join(('Invalid call', self.help()))
-                    raise command_module.InvalidCall(message)
+                    raise command_module.InvalidCall('Invalid call', usage=self.help())
 
             # Standard command execution style
             return self.run_subcommand(command, args)
