@@ -23,6 +23,7 @@ import logging
 
 from scalarizr import linux
 from scalarizr.linux import redhat, pkgmgr
+from scalarizr.util import software, system2
 
 
 LOG = logging.getLogger(__name__)
@@ -134,8 +135,10 @@ def save():
             - iptables-save > /etc/iptables.rules
     '''
     if linux.os["family"] in ("RedHat", "Oracle"):
-        linux.system(linux.build_cmd_args(executable="service", short=['iptables',
-                                                                                                                                   'save']))
+        if linux.os["name"] == "CentOS" and linux.os["release"] > (7, 0):
+            system2(("/usr/libexec/iptables/iptables.init", "save"))
+        else:
+            linux.system(linux.build_cmd_args(executable="service", short=['iptables', 'save']))
     elif linux.os["family"] == "Debian":
         with open('/etc/network/if-pre-up.d/iptables.sh', 'w') as fp:
             fp.write('#!/bin/bash\n'
@@ -457,9 +460,15 @@ def enabled():
         pkgmgr.installed("iptables-services")
 
     if linux.os["name"] == "CentOS" and linux.os["release"] > (7, 0):
-        #iptabels on Centos7 are installed but seem to be broken
-        #we use firewalld instead.
-        return False
+        SYSTEMCTL = software.which("systemctl")
+        _, _, returncode = system2((SYSTEMCTL, "status", "firewalld"), raise_exc=False)
+        if returncode == 0:
+            # Use firewalld if it's running
+            return False
+        pkgmgr.installed("iptables-services")
+        system2((SYSTEMCTL, "enable", "iptables"))
+        _, _, returncode = system2((SYSTEMCTL, "status", "iptables"), raise_exc=False)
+        return True if (returncode == 0) else False
 
     if linux.os['family'] in ('RedHat', 'Oracle'):
         try:
