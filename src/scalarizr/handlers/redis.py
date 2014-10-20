@@ -127,6 +127,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def __init__(self):
+        self._hir_volume_growth = None
         self._redis_api = redis_api.RedisAPI()
         self.preset_provider = redis.RedisPresetProvider()
 
@@ -331,6 +332,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     snapshot=redis_data.pop('snapshot_config'),
                     volume=redis_data['volume'])
 
+        self._hir_volume_growth = redis_data.pop('volume_growth', None)
+
+
         # Update configs
         __redis__.update(redis_data)
         __redis__['volume'].mpoint = __redis__['storage_dir']
@@ -518,8 +522,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __redis__['volume'].snap = __redis__['volume'].snapshot()
 
-            __redis__['volume'].ensure(mount=True, mkfs=True)
-            LOG.debug('Redis volume config after ensure: %s', dict(__redis__['volume']))
+            if self._hir_volume_growth:
+                #Growing maser storage if HIR message contained "growth" data
+                LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
+                grown_volume = __redis__['volume'].grow(**self._hir_volume_growth)
+                grown_volume.mount()
+                __redis__['volume'] = grown_volume
+            else:
+                __redis__['volume'].ensure(mount=True, mkfs=True)
+                LOG.debug('Redis volume config after ensure: %s', dict(__redis__['volume']))
 
         log.info('Initialize Master')
         password = self.get_main_password()
@@ -534,6 +545,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         log.info('Collect HostUp data')
         # Update HostUp message
+
+        if self._hir_volume_growth:
+            msg_data['volume_template'] = dict(__redis__['volume'].clone())
 
         if msg_data:
             message.db_type = BEHAVIOUR

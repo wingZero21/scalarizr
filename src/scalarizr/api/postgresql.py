@@ -18,7 +18,7 @@ from scalarizr.node import __node__
 from scalarizr.util import PopenError, system2
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.services import postgresql as postgresql_svc
-from scalarizr import rpc
+from scalarizr import rpc, storage2
 from scalarizr import linux
 from scalarizr.services import backup
 from scalarizr.config import BuiltinBehaviours
@@ -80,7 +80,7 @@ class PostgreSQLAPI(BehaviorAPI):
         self.service.start()
 
     @rpc.command_method
-    def stop_service(self):
+    def stop_service(self, reason=None):
         """
         Stops PostgreSQL service.
 
@@ -88,7 +88,7 @@ class PostgreSQLAPI(BehaviorAPI):
 
             api.postgresql.stop_service()
         """
-        self.service.stop()
+        self.service.stop(reason)
 
     @rpc.command_method
     def reload_service(self):
@@ -429,4 +429,57 @@ class PostgreSQLAPI(BehaviorAPI):
             for error in errors:
                 if isinstance(error, cls):
                     raise error
+
+    @rpc.command_method
+    def grow_volume(self, volume, growth, async=False):
+        """
+        Stops PostgreSQL service, Extends volume capacity and starts PostgreSQL service again.
+        Depending on volume type growth parameter can be size in GB or number of disks (e.g. for RAID volumes)
+
+        :type volume: dict
+        :param volume: Volume configuration object
+
+        :type growth: dict
+        :param growth: size in GB for regular disks or number of volumes for RAID configuration.
+
+        Growth keys:
+
+            - size (Type: int, Availability: ebs, csvol, cinder, gce_persistent) -- A new size for persistent volume.
+            - iops (Type: int, Availability: ebs) -- A new IOPS value for EBS volume.
+            - volume_type (Type: string, Availability: ebs) -- A new volume type for EBS volume. Values: "standard" | "io1".
+            - disks (Type: Growth, Availability: raid) -- A growth dict for underlying RAID volumes.
+            - disks_count (Type: int, Availability: raid) - number of disks.
+
+        :type async: bool
+        :param async: Execute method in a separate thread and report status
+                        with Operation/Steps mechanism.
+
+        Example:
+
+        Grow EBS volume to 50Gb::
+
+            new_vol = api.postgresql.grow_volume(
+                volume={
+                    'id': 'vol-e13aa63ef',
+                },
+                growth={
+                    'size': 50
+                }
+            )
+        """
+
+        assert isinstance(volume, dict), "volume configuration is invalid, 'dict' type expected"
+        assert volume.get('id'), "volume.id can't be blank"
+
+        def do_grow(op):
+            vol = storage2.volume(volume)
+            self.stop_service(reason='Growing data volume')
+            try:
+                grown_vol = vol.grow(**growth)
+                postgresql_svc.__postgresql__['volume'] = dict(grown_vol)
+                return dict(grown_vol)
+            finally:
+                self.start_service()
+
+        return self._op_api.run('postgresql.grow-volume', do_grow, exclusive=True, async=async)
 
