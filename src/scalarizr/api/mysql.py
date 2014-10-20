@@ -23,6 +23,7 @@ from scalarizr import linux
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
+from scalarizr.api import SoftwareDependencyError
 
 
 class MySQLAPI(BehaviorAPI):
@@ -307,46 +308,39 @@ class MySQLAPI(BehaviorAPI):
                 async=async, exclusive=True)
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
+        system_packages = system_packages or pkgmgr.package_mgr().list()
         if linux.os.debian_family:
-            pkgmgr.check_any_dependency(
-                [
-                    ['mysql-client>=5.0,<5.7'],
-                    ['mysql-client-5.1'],
-                    ['mysql-client-5.5'],
-                    ['mysql-client-5.6']
-                ],
-                installed_packages
-            )
-            pkgmgr.check_any_dependency(
-                [
-                    ['mysql-server>=5.0,<5.7'],
-                    ['mysql-server-5.1'],
-                    ['mysql-server-5.5'],
-                    ['mysql-server-5.6']
-                ],
-                installed_packages
-            )
+            requirements = [
+                ['mysql-server>=5.0,<5.7', 'mysql-client>=5.0,<5.7'],
+                ['mysql-server-5.1', 'mysql-client-5.1'],
+                ['mysql-server-5.5', 'mysql-client-5.5'],
+                ['mysql-server-5.6', 'mysql-client-5.6'],
+            ]
         elif linux.os.redhat_family or linux.os.oracle_family:
-            pkgmgr.check_dependency('mysql-server>=5.0,<5.6', installed_packages)
-            pkgmgr.check_any_dependency([['mysql>=5.0,<5.6'], ['mysql55']], installed_packages)
+            requirements = [
+                ['mysql-server>=5.0,<5.6', 'mysql>=5.0,<5.6'],
+                ['mysql-server>=5.0,<5.6', 'mysql55'],
+            ]
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
-            )
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
-            msg = (
-                '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 10.04, CentOS 6, RedHat: >=5.1,<5,2\n'
-                '\tUbuntu 12.04, Debian 7, Amazon: >=5.5,<5.6\n'
-                '\tDebian 6: >=5.1,<5.6\n'
-                '\tCentOS 5: >=5.0,<5.1\n'
-                '\tOracle: >=5.0,<5.1').format(pkg=pkg, ver=ver, os=linux.os['name'])
-            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior,
+                    "Not supported on {0} os family".format(linux.os['family']))
+        errors = list()
+        for requirement in requirements:
+            try:
+                installed = pkgmgr.check_software(requirement[0], system_packages)[0]
+                try:
+                    pkgmgr.check_software(requirement[1:], system_packages)
+                    return installed
+                except pkgmgr.NotInstalledError:
+                    e = sys.exc_info()[1]
+                    raise SoftwareDependencyError(e.args[0])
+            except:
+                e = sys.exc_info()[1]
+                errors.append(e)
+        for cls in [pkgmgr.VersionMismatchError, SoftwareDependencyError, pkgmgr.NotInstalledError]:
+            for error in errors:
+                if isinstance(error, cls):
+                    raise error
 
