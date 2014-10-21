@@ -758,10 +758,10 @@ if linux.os.windows_family:
             else:
                 if dont_do_it:
                     raise Exception('Reboot not allowed, cause Scalarizr update is in-progress')
-            wmi = client.GetObject('winmgmts:')
-            wos = next(iter(wmi.InstancesOf('Win32_OperatingSystem')))
-            wos.reboot()
-                
+            op_sys_set = client.GetObject("winmgmts:{(Shutdown)}//./root/cimv2").ExecQuery("select * from Win32_OperatingSystem where Primary=true")
+            for op_sys in op_sys_set:
+                if callable(op_sys.Reboot):
+                    op_sys.Reboot()
 
         @coinitialized
         @rpc.command_method
