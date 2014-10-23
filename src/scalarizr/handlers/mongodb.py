@@ -262,7 +262,7 @@ class MongoDBHandler(ServiceCtlHandler):
             if self.rs_id in (0,1):
                 self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
                 self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-                self.mongodb.start_router(1)
+                self.mongodb.start_router(0)
 
 
     def on_start(self):
@@ -527,7 +527,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
             log.info('Start Router')
-            self.mongodb.start_router(1)
+            self.mongodb.start_router(0)
             hostup_msg.mongodb['router'] = 1
 
             if self.rs_id == 0 and self.shard_index == 0:
