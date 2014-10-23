@@ -322,7 +322,8 @@ class ChefClient(object):
                  environment=None,
                  environment_variables=None,
                  log_level='auto',
-                 run_as='root'):
+                 run_as='root',
+                 override_runlist=False):
 
         self.chef_server_url = chef_server_url
         self.validation_pem = validation_pem
@@ -335,6 +336,7 @@ class ChefClient(object):
         self.environment_variables = environment_variables or dict()
         self.log_level = log_level
         self.run_as = run_as
+        self.override_runlist = override_runlist
 
     def prepare(self):
         if os.path.exists(CLIENT_KEY_PATH) and os.path.exists(CLIENT_CONF_PATH):
@@ -394,6 +396,9 @@ class ChefClient(object):
 
     def get_cmd(self, validate=False):
         cmd = [CHEF_CLIENT_BIN]
+
+        if self.override_runlist:
+            cmd += ["-o", ",".join(self.json_attributes["run_list"])]
 
         if not validate and self.json_attributes:
             cmd += ['--json-attributes', JSON_ATTRIBUTES_PATH]
