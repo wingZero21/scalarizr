@@ -6,6 +6,7 @@
 
 PROGNAME='scalarizr'
 INSTALL_DIR='/opt/scalarizr'
+ETC_DIR='/etc/scalr'
 if which apt-get 2>&1 >/dev/null; then
     DIST='debian'
 else
@@ -64,7 +65,7 @@ function safe_restart {
             /etc/init.d/scalarizr start || exit $?
         fi
     else
-        if [ -f "/etc/scalr/private.d/.state" ]; then
+        if [ -f "$ETC_DIR/private.d/.state" ]; then
             /etc/init.d/scalarizr start || exit $?
         fi
     fi
@@ -76,9 +77,9 @@ function link_to {
 }
 
 # sync configuration files
-test -e /etc/scalr || mkdir -p /etc/scalr
-$INSTALL_DIR/embedded/bin/rsync -a /etc/scalr/ $INSTALL_DIR/etc
-$INSTALL_DIR/embedded/bin/rsync -av $INSTALL_DIR/etc/ /etc/scalr
+test -e $ETC_DIR || mkdir -p $ETC_DIR
+$INSTALL_DIR/embedded/bin/rsync -a $ETC_DIR/ $INSTALL_DIR/etc
+$INSTALL_DIR/embedded/bin/rsync -av $INSTALL_DIR/etc/ $ETC_DIR
 
 # update symlinks
 for name in $(ls $INSTALL_DIR/bin); do
@@ -88,6 +89,13 @@ for name in $(ls $INSTALL_DIR/init/$DIST); do
     link_to /etc/init.d/$name "$INSTALL_DIR/init/$DIST/$name"
     chmod +x /etc/init.d/$name
 done
+pushd .
+cd $ETC_DIR/public.d
+[ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
+[ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
+[ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini 
+[ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini 
+popd
 
 # update init scripts symlinks
 if [ "$DIST" = 'debian' ]; then
