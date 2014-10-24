@@ -5,8 +5,7 @@ Created on Jan 6, 2011
 @author: marat
 '''
 
-from scalarizr.storage2 import StorageError
-from scalarizr.linux import system
+from scalarizr.linux import system, LinuxError
 
 import os
 
@@ -46,7 +45,7 @@ def listloop():
 def rmloop(device):
     try:
         system((LOSETUP_EXEC, '-d', device))
-    except StorageError, e:
+    except LinuxError, e:
         if 'No such device or address' in e.err:
             ''' Silently pass non-existed loop removal '''
             pass
