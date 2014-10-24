@@ -373,20 +373,13 @@ class ChefClient(object):
                 with open(VALIDATOR_KEY_PATH, 'w+') as fp:
                     fp.write(self.validation_pem)
 
-                try:
-                    log = bus.init_op.logger if bus.init_op else LOG
-                    log.info('Registering Chef node %s', self.node_name)
-                    self._run_chef_client(validate=True)
-                finally:
-                    os.remove(VALIDATOR_KEY_PATH)
-
         if self.json_attributes:
             with open(JSON_ATTRIBUTES_PATH, 'w+') as fp:
                 json.dump(self.json_attributes, fp)
 
 
-    def _run_chef_client(self, validate=False):
-        system2(self.get_cmd(validate=validate),
+    def _run_chef_client(self):
+        system2(self.get_cmd(),
             close_fds=not linux.os.windows_family,
             log_level=logging.INFO,
             preexec_fn=not linux.os.windows_family and os.setsid or None,
@@ -394,13 +387,13 @@ class ChefClient(object):
         )
 
 
-    def get_cmd(self, validate=False):
+    def get_cmd(self):
         cmd = [CHEF_CLIENT_BIN]
 
-        if self.override_runlist:
+        if self.override_runlist and self.json_attributes.get("run_list"):
             cmd += ["-o", ",".join(self.json_attributes["run_list"])]
 
-        if not validate and self.json_attributes:
+        if self.json_attributes:
             cmd += ['--json-attributes', JSON_ATTRIBUTES_PATH]
 
         if self.run_as != 'root':
@@ -417,6 +410,9 @@ class ChefClient(object):
     def cleanup(self):
         if os.path.exists(JSON_ATTRIBUTES_PATH):
             os.remove(JSON_ATTRIBUTES_PATH)
+
+        if os.path.exists(VALIDATOR_KEY_PATH):
+            os.remove(VALIDATOR_KEY_PATH)
 
 
 class ChefSolo(object):
