@@ -414,7 +414,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         # os.chmod('/tmp/rvm_install.sh', 0770)
         # system2(('/tmp/rvm_install.sh', 'stable'), shell=True)
         # system2(('/usr/local/rvm/bin/rvm install 1.9.3', '--auto-dotfiles'), shell=True)
-        # system2(('chmod', '-R', '0755', '/usr/local/rvm'))
 
 
         # ruby_path = None
@@ -503,6 +502,8 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                     print '%s=%s' % (definition_part, fixed_regex)
                 else:
                     print line,
+
+        system2(('chmod', '-R', '0755', os.path.dirname(self._tools_dir)))
 
         system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
             shell=True)
