@@ -132,10 +132,11 @@ args=(r'LOG_DEBUG_PATH', 'a+', 5242880, 5, 0600)
 
 [formatter_debug]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
+class=scalarizr.util.log.DebugFormatter
 
 [formatter_user]
 format=%(asctime)s - %(levelname)s - %(name)s - %(message)s
-class=scalarizr.util.log.NoStacktraceFormatter
+class=scalarizr.util.log.UserFormatter
 '''
 LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_PATH', LOG_PATH)
 LOGGING_CONFIG = LOGGING_CONFIG.replace('LOG_DEBUG_PATH', LOG_DEBUG_PATH)
@@ -960,14 +961,15 @@ class Service(object):
         except (BaseException, Exception):
             raise ScalarizrError("Cannot create messaging service adapter '%s'" % (messaging_adp))
 
-        if linux.os['family'] != 'Windows':
-            installed_packages = pkgmgr.package_mgr().list()
+        optparser = bus.optparser
+        if optparser and not optparser.values.import_server and linux.os['family'] != 'Windows':
+            system_packages = pkgmgr.package_mgr().list()
             for behavior in node.__node__['behavior']:
-                if behavior == 'base' or behavior not in api.api_routes.keys():
+                if behavior in ['base', 'mongodb'] or behavior not in api.api_routes.keys():
                     continue
                 try:
                     api_cls = util.import_class(api.api_routes[behavior])
-                    api_cls.check_software(installed_packages)
+                    api_cls.check_software(system_packages)
                 except exceptions.NotFound as e:
                     logger.error(e)
                 except exceptions.UnsupportedBehavior as e:

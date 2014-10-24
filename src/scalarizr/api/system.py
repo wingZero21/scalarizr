@@ -682,16 +682,20 @@ class SystemAPI(object):
         stdout_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-out.log' % exec_script_id))
         stderr_match = glob.glob(os.path.join(script_executor.logs_dir, '*%s-err.log' % exec_script_id))
 
+        err_rotated = ('Log file already rotatated and no more exists on server. '
+                    'You can increase "Rotate scripting logs" setting under "Advanced" tab'
+                    ' in Farm Designer')
+
         if not stdout_match:
-            stdout = binascii.b2a_base64('log file not found')
+            stdout = binascii.b2a_base64(err_rotated)
         else:
             stdout_path = stdout_match[0]
-            stdout = binascii.b2a_base64(_get_log(stdout_path))
+            stdout = binascii.b2a_base64(script_executor.get_truncated_log(stdout_path))
         if not stderr_match:
-            stderr = binascii.b2a_base64('errlog file not found')
+            stderr = binascii.b2a_base64(err_rotated)
         else:
             stderr_path = stderr_match[0]
-            stderr = binascii.b2a_base64(_get_log(stderr_path))
+            stderr = binascii.b2a_base64(script_executor.get_truncated_log(stderr_path))
 
         return dict(stdout=stdout, stderr=stderr)
 
@@ -755,9 +759,17 @@ if linux.os.windows_family:
                 if dont_do_it:
                     raise Exception('Reboot not allowed, cause Scalarizr update is in-progress')
             wmi = client.GetObject('winmgmts:')
-            wos = next(iter(wmi.InstancesOf('Win32_OperatingSystem')))
-            wos.reboot()
-                
+            for wos in wmi.InstancesOf('Win32_OperatingSystem'):
+                if wos.Primary:
+                    # SCALARIZR-1609
+                    # XXX: Function call happens without () here for some reason,
+                    # as just `wos.Reboot`. Then it returns 0 and we try to call it.
+                    # Check if this strange behavior persists when we upgrade
+                    # to the latest pywin32 version (219).
+                    try:
+                        wos.Reboot()
+                    except TypeError:
+                        pass
 
         @coinitialized
         @rpc.command_method

@@ -759,9 +759,6 @@ class NginxAPI(BehaviorAPI):
                          async=async,
                          exclusive=True)
 
-
-
-
     def _normalize_destinations(self, destinations):
         """
         Parses list of destinations. Dictionary example:
@@ -1975,11 +1972,6 @@ class NginxAPI(BehaviorAPI):
                 self._reload_service()
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
-        pkgmgr.check_any_dependency([['nginx'], ['nginx14']], installed_packages)
-
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        raise exceptions.UnsupportedBehavior(cls.behavior, e)
+    def do_check_software(cls, system_packages=None):
+        return pkgmgr.check_any_software([['nginx'], ['nginx14']], system_packages)[0]
 

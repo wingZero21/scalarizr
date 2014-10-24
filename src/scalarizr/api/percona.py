@@ -1,11 +1,13 @@
 from __future__ import with_statement
 
+import sys
 import logging
 from scalarizr import linux
 from scalarizr.api import mysql
 from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton
 from scalarizr import exceptions
+from scalarizr.api import SoftwareDependencyError
 
 
 LOG = logging.getLogger(__name__)
@@ -21,52 +23,45 @@ class PerconaAPI(mysql.MySQLAPI):
         super(PerconaAPI, self).__init__()
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
+        system_packages = system_packages or pkgmgr.package_mgr().list()
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
-        if os_name == 'ubuntu':
-            if os_vers >= '14':
-                pkgmgr.check_any_dependency(
-                    [
-                        ['percona-server-client-5.1', 'percona-server-server-5.1'],
-                        ['percona-server-client-5.5', 'percona-server-server-5.5'],
-                        ['percona-server-client-5.6', 'percona-server-server-5.6'],
-                    ],
-                    installed_packages,
-                    ['mysql-server', 'mysql-client']
-                )
+        if os_name == 'ubuntu' and os_vers >= '14':
+            requirements = [
+                ['percona-server-server-5.1', 'percona-server-client-5.1' ],
+                ['percona-server-server-5.5', 'percona-server-client-5.5' ],
+                ['percona-server-server-5.6', 'percona-server-client-5.6' ],
+            ]
         elif linux.os.debian_family:
-            pkgmgr.check_any_dependency(
-                [
-                    ['percona-server-client-5.1', 'percona-server-server-5.1'],
-                    ['percona-server-client-5.5', 'percona-server-server-5.5'],
-                ],
-                installed_packages,
-                ['mysql-server', 'mysql-client']
-            )
+            requirements = [
+                ['percona-server-server-5.1', 'percona-server-client-5.1'],
+                ['percona-server-server-5.5', 'percona-server-client-5.5'],
+            ]
         elif linux.os.redhat_family or linux.os.oracle_family:
-            pkgmgr.check_any_dependency(
-                [
-                    ['Percona-Server-client-51', 'Percona-Server-server-51'],
-                    ['Percona-Server-client-55', 'Percona-Server-server-55'],
-                ],
-                installed_packages,
-                ['mysql']
-            )
+            requirements = [
+                ['Percona-Server-server-51', 'Percona-Server-client-51'],
+                ['Percona-Server-server-55', 'Percona-Server-client-55'],
+            ]
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
-            )
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior,
+                    "Not supported on {0} os family".format(linux.os['family']))
+        errors = list()
+        for requirement in requirements:
+            try:
+                installed = pkgmgr.check_software(requirement[0], system_packages)[0]
+                try:
+                    pkgmgr.check_software(requirement[1:], system_packages)
+                    return installed
+                except pkgmgr.NotInstalledError:
+                    e = sys.exc_info()[1]
+                    raise SoftwareDependencyError(e.args[0])
+            except:
+                e = sys.exc_info()[1]
+                errors.append(e)
+        for cls in [pkgmgr.VersionMismatchError, SoftwareDependencyError, pkgmgr.NotInstalledError]:
+            for error in errors:
+                if isinstance(error, cls):
+                    raise error
 
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
-            msg = (
-                '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 14.04: >=5.1,<5.7\n'
-                '\tUbuntu 10.04, Ubuntu 12.04, Debian, RedHat, Oracle: >=5.1,<5.6').format(
-                        pkg=pkg, ver=ver, os=linux.os['name'])
-            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)

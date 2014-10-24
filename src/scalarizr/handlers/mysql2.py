@@ -89,12 +89,6 @@ class MysqlMessages:
 
 def get_handlers():
     return [MysqlHandler()]
-    # if __node__['behavior'] == 'percona':
-    #     return [MysqlHandler()] if percona_api.PerconaAPI.software_supported else []
-    # elif __node__['behavior'] == 'mariadb':
-    #     return [MysqlHandler()] if mariadb_api.MariaDBAPI.software_supported else []
-    # else:
-    #     return [MysqlHandler()] if mysql_api.MySQLAPI.software_supported else []
 
 
 class DBMSRHandler(ServiceCtlHandler):
@@ -272,6 +266,7 @@ class MysqlHandler(DBMSRHandler):
         self._op_api = operation_api.OperationAPI()
         self._backup_id = None
         self._data_bundle_id = None
+        self._hir_volume_growth = None
         self.on_reload()
 
 
@@ -366,7 +361,7 @@ class MysqlHandler(DBMSRHandler):
             # Initialized persistent disk have latest data.
             # Next statement prevents restore from snapshot
             if md['volume'].device and \
-                                    md['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+                                    md['volume'].type in ('gce_persistent', 'ebs', 'csvol', 'cinder', 'raid'):
                 md.pop('snapshot_config', None)
 
             if md.get('snapshot_config'):
@@ -381,6 +376,8 @@ class MysqlHandler(DBMSRHandler):
                 md['backup'] = backup.backup(
                                 type='snap_mysql',
                                 volume=md['volume'])
+
+        self._hir_volume_growth = md.pop('volume_growth', None)
 
         __mysql__.update(md)
 
@@ -471,7 +468,7 @@ class MysqlHandler(DBMSRHandler):
             # Notify Scalr
             self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
                     status       = 'ok',
-                    pma_user         = __mysql__['pma_user'],
+                    pma_user     = __mysql__['pma_user'],
                     pma_password = pma_password,
                     farm_role_id = farm_role_id,
             ))
@@ -703,8 +700,6 @@ class MysqlHandler(DBMSRHandler):
             self.mysql.service.start()
 
 
-
-
     def on_DbMsr_NewMasterUp(self, message):
         try:
             assert message.body.has_key("db_type")
@@ -910,6 +905,7 @@ class MysqlHandler(DBMSRHandler):
         log.info('Create storage')
         if 'restore' in __mysql__ and \
                         __mysql__['restore'].type == 'snap_mysql':
+            LOG.debug("Starting restore process")
             __mysql__['restore'].run()
         else:
             if __node__['platform'].name == 'idcf':
@@ -917,7 +913,15 @@ class MysqlHandler(DBMSRHandler):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __mysql__['volume'].snap = __mysql__['volume'].snapshot()
 
-            __mysql__['volume'].ensure(mount=True, mkfs=True)
+            if self._hir_volume_growth:
+                #Growing maser storage if HIR message contained "growth" data
+                LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
+                grown_volume = __mysql__['volume'].grow(**self._hir_volume_growth)
+                grown_volume.mount()
+                __mysql__['volume'] = grown_volume
+            else:
+                __mysql__['volume'].ensure(mount=True, mkfs=True)
+
             LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
 
         coreutils.clean_dir(__mysql__['defaults']['datadir'])
@@ -926,6 +930,10 @@ class MysqlHandler(DBMSRHandler):
         self._change_selinux_ctx()
 
         storage_valid = self._storage_valid()
+        if not storage_valid and 'backup' not in __mysql__:
+            __mysql__['backup'] = backup.backup(
+                            type='snap_mysql',
+                            volume=__mysql__['volume'])
         user_creds = self.get_user_creds()
         self._fix_percona_debian_cnf()
 
@@ -1000,6 +1008,10 @@ class MysqlHandler(DBMSRHandler):
                 stat_password=__mysql__['stat_password'],
                 master_password=__mysql__['master_password']
         )
+
+        if self._hir_volume_growth:
+            md['volume_template'] = dict(__mysql__['volume'].clone())
+
         if __mysql__['compat_prior_backup_restore']:
             if 'restore' in __mysql__:
                 md.update(dict(

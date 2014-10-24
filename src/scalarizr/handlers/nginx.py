@@ -50,7 +50,7 @@ initdv2.explore('nginx', NginxInitScript)
 
 
 def get_handlers():
-    return [NginxHandler()] if NginxAPI.software_supported else []
+    return [NginxHandler()]
 
 
 class NginxCnfController(CnfController):
@@ -280,7 +280,7 @@ class NginxHandler(ServiceCtlHandler):
         else:
             # self._logger.info('removing server %s from role %s backend(s)', server, role_id)
             # self.api.remove_server_from_role(server, role_id)
-            self._logger.info('adding new app server %s to role %s backend(s)', server, role_id)
+            # self._logger.info('adding new app server %s to role %s backend(s)', server, role_id)
             # self.api.add_server_to_role(server, role_id)
             role_params = self._queryenv.list_farm_role_params(__node__['farm_role_id'])['params']
             nginx_params = role_params.get(BEHAVIOUR)

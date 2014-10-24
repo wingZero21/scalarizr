@@ -12,6 +12,7 @@ from __future__ import with_statement
 
 import os
 import re
+import sys
 import pwd
 import time
 import uuid
@@ -854,27 +855,16 @@ class ApacheAPI(BehaviorAPI):
             LOG.warning("Cannot open ports %s: IPtables disabled" % str(ports))
 
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
         if linux.os.debian_family:
-            pkgmgr.check_dependency(['apache2>=2.2,<2.5'], installed_packages)
+            requirements = [['apache2>=2.2,<2.5'], ['apache2.2-common>=2.2,<2.3']]
         elif linux.os.redhat_family or linux.os.oracle_family:
-            pkgmgr.check_dependency(['httpd>=2.2,<2.5'], installed_packages)
+            requirements = [['httpd>=2.2,<2.5'], ['httpd24']]
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
-            )
-
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
-            msg = (
-                '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu, Debian, CentOS, OEL, RHEL, Amazon: {req_ver}').format(
-                    pkg=pkg, ver=ver, os=linux.os['name'], req_ver=req_ver)
-            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior,
+                    "Not supported on {0} os family".format(linux.os['family']))
+        return pkgmgr.check_any_software(requirements, system_packages)[0]
 
     def fix_default_ssl_virtual_host(self):
         self.mod_ssl.set_default_certificate(SSLCertificate())

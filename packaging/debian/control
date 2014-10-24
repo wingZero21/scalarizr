@@ -42,7 +42,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-         python-boto (>= 2.32.1)
+         python-boto (>= 2.34.0)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Amazon EC2
