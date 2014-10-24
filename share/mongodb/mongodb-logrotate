@@ -1,4 +1,5 @@
 /var/log/mongodb/mongodb.*.log {
+    maxsize 10M
     daily
     rotate 7
     nodelaycompress

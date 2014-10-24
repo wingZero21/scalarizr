@@ -107,21 +107,27 @@ class Handler(object):
     def get_ready_behaviours(self):
         LOG.info('Detecting supported behaviors...')        
         if linux.os['family'] != 'Windows':
-            installed_packages = pkgmgr.package_mgr().list()
+            system_packages = pkgmgr.package_mgr().list()
             possible_behaviors = config.BuiltinBehaviours.values()
         else:
-            installed_packages = []
+            system_packages = []
             possible_behaviors = ('base', 'chef')
+
+        msg = (
+                "Scalr built-in automation: checking for supported software.\n"
+                "If installed software isn't detected, "
+                "review the Scalr Wiki: https://scalr-wiki.atlassian.net/wiki/x/IoB1")
+        LOG.info(msg)
 
         ready_behaviors = list()
         for behavior in possible_behaviors:
-            if behavior == 'base' or behavior not in api.api_routes.keys():
+            if behavior in ['base', 'mongodb'] or behavior not in api.api_routes.keys():
                 continue
             try:
                 api_cls = util.import_class(api.api_routes[behavior])
-                api_cls.check_software(installed_packages)
+                installed = api_cls.check_software(system_packages)
                 ready_behaviors.append(behavior)
-                LOG.info('%s: yes', behavior)
+                LOG.info('%s: Available. Installed version: %s', behavior, installed[1])
             except (exceptions.NotFound, exceptions.UnsupportedBehavior, ImportError), e:
                 if isinstance(e, exceptions.UnsupportedBehavior):
                     LOG.info('%s: %s', behavior, e.args[1])
@@ -232,22 +238,27 @@ class MessageListener:
                         fp.write('.'.join(map(str, ver)))
                     bus.scalr_version = ver
 
-            accepted = False
+            accepted_any = False
             for handler in self.get_handlers_chain():
                 hnd_name = handler.__class__.__name__
+                accepted = False
                 try:
-                    if handler.accept(message, queue, **self._accept_kwargs):
-                        accepted = True
-                        LOG.debug("Call handler %s" % hnd_name)
-                        try:
-                            handler(message)
-                        except (BaseException, Exception), e:
-                            LOG.exception(e)
+                    accepted = handler.accept(message, queue, **self._accept_kwargs)
                 except (BaseException, Exception), e:
                     LOG.error("%s accept() method failed with exception", hnd_name)
                     LOG.exception(e)
-
-            if not accepted:
+                if accepted:
+                    LOG.debug("Call handler %s" % hnd_name)
+                    accepted_any = True
+                    try:
+                        handler(message)
+                    except (BaseException, Exception), e:
+                        if message.name == 'BeforeHostUp' \
+                                and message.local_ip == __node__['private_ip']:
+                            raise
+                        else:
+                            LOG.exception(e)
+            if not accepted_any:
                 LOG.warning("No one could handle '%s'", message.name)
         finally:
             #if platform_access_data_on_me:

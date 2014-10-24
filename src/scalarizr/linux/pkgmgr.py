@@ -873,23 +873,19 @@ def removed(name, purge=False):
     return package_mgr().removed(name, purge)
 
 
-class DependencyError(Exception):
+class SoftwareError(Exception):
     pass
 
 
-class NotInstalledError(DependencyError):
+class NotInstalledError(SoftwareError):
     pass
 
 
-class ConflictError(DependencyError):
+class VersionMismatchError(SoftwareError):
     pass
 
 
-class VersionMismatchError(DependencyError):
-    pass
-
-
-def check_dependency(required, installed_packages=None, conflicted_packages=None):
+def check_software(required, system_packages=None):
     '''
     :param required: list
         The syntax of a requirement specifier can be defined in EBNF as follows:
@@ -906,39 +902,50 @@ def check_dependency(required, installed_packages=None, conflicted_packages=None
             ['FooProject >= 1.2', 'BarProject <= 1.2']
             ['PickyThing<1.6,>1.9,!=1.9.6,<2.0a0,==2.4c1']
             ['SomethingWhoseVersionIDontCareAbout']
-    :param installed_packages: dict
+    :param system_packages: dict
         Example:
             {
                 'python':'2.6.7-ubuntu1',
             }
-    :param conflicted_packages: list
-        Same as required
     '''
-    installed_packages = installed_packages or package_mgr().list()
-    conflicted_packages = conflicted_packages or list()
-    for conflict in parse_requirements(conflicted_packages):
-        name = conflict.project_name
-        if name in installed_packages:
-            vers = installed_packages[name]
-            if vers in conflict:
-                raise ConflictError(name, vers)
+    if not required:
+        return
+    system_packages = system_packages or package_mgr().list()
+    installed, not_installed, vers_mismatched = list(), list(), list()
     for requirement in parse_requirements(required):
         name = requirement.project_name
         required_vers = ','.join([''.join(_) for _ in requirement.specs])
-        if name not in installed_packages:
-            raise NotInstalledError(name, required_vers)
-        vers = installed_packages[name]
+        if name not in system_packages:
+            not_installed.append((name, required_vers))
+            continue
+        vers = system_packages[name]
         if vers not in requirement:
-            raise VersionMismatchError(name, vers, required_vers)
+            vers_mismatched.append((name, vers))
+            continue
+        installed.append((name, vers))
+    if not_installed:
+        raise NotInstalledError(not_installed)
+    if vers_mismatched:
+        raise VersionMismatchError(vers_mismatched)
+    return installed
 
 
-def check_any_dependency(required_list, installed_packages=None, conflicted_packages=None):
+def check_any_software(required_list, system_packages=None):
+    not_installed = list()
+    vers_mismatched = list()
     for required in required_list:
         try:
-            check_dependency(required, installed_packages, conflicted_packages)
-            break
-        except:
+            return check_software(required, system_packages)
+        except NotInstalledError:
+            not_installed += sys.exc_info()[1][0]
+            continue
+        except VersionMismatchError:
+            vers_mismatched += sys.exc_info()[1][0]
             continue
     else:
+        if vers_mismatched:
+            raise VersionMismatchError(vers_mismatched)
+        if not_installed:
+            raise NotInstalledError(not_installed)
         raise
 

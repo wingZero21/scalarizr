@@ -4,7 +4,7 @@ import json
 import os
 import re
 import sys
-from time import sleep
+import time
 
 
 import novaclient
@@ -119,6 +119,7 @@ class NovaConnectionProxy(platform.ConnectionProxy):
                         novaclient.exceptions.Forbidden)):
                     self.conn_pool.dispose_local()
                     raise InvalidCredentialsError(e)
+                time.sleep(1)
                 continue
         self.conn_pool.dispose_local()
         raise ConnectionError(e)
@@ -137,6 +138,7 @@ class CinderConnectionProxy(platform.ConnectionProxy):
                         cinderclient.exceptions.Forbidden)):
                     self.conn_pool.dispose_local()
                     raise InvalidCredentialsError(e)
+                time.sleep(1)
                 continue
         self.conn_pool.dispose_local()
         raise ConnectionError(e)
@@ -155,6 +157,7 @@ class SwiftConnectionProxy(platform.ConnectionProxy):
                         re.search(r'.*Authorization Failure.*', e.msg)):
                     self.conn_pool.dispose_local()
                     raise InvalidCredentialsError(e)
+                time.sleep(1)
                 continue
         self.conn_pool.dispose_local()
         raise ConnectionError(e)
