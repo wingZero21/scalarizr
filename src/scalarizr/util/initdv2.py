@@ -173,7 +173,7 @@ class ParametrizedInitScript(InitScript):
                             else list(self.initd_script)
             if "systemctl" in args[0]:
                 #XXX [SCALARIZR-1546]
-                args = args[0] + [action, ] + args[1:]
+                args = [args[0], action, ] + args[1:]
             else:
                 args.append(action)
             out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
