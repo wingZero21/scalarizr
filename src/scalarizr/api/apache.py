@@ -100,7 +100,6 @@ else:
         "crt_path_default": "/etc/pki/tls/certs/localhost.crt",
         "apachectl":        "/usr/sbin/apachectl",
         "bin_path": "/usr/sbin/httpd",
-        "initd_script":     "/etc/init.d/httpd",
         "group":            "apache",
 
         "logrotate_conf":   """/var/log/http-*.log {
@@ -113,6 +112,14 @@ else:
          endscript
         }
         """})
+
+    if "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
+        initd_script = {"initd_script": ("systemctl", "httpd.service")}
+    else:
+        initd_script = {"initd_script": "/etc/init.d/httpd"}
+    apache.update(initd_script)
+
+
 
 __apache__ = __node__["apache"]
 __apache__.update(apache)

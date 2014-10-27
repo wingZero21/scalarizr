@@ -155,6 +155,7 @@ class ApacheHandler(Handler):
                 self.api.reload_service("Applying new RPAF proxy IPs list")
 
     def _reconfigure_mod_rpaf(self):
+        #configure_ip_forwarding
         mod_rpaf_path = __apache__["mod_rpaf_path"]
         if os.path.exists(mod_rpaf_path):
             lb_hosts = []
