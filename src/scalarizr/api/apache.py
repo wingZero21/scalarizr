@@ -1058,7 +1058,7 @@ class ModRemoteIP(ModRPAF):
     proxy_section = ".//RemoteIPInternalProxy"
 
     def set_remote_header(self, header=None):
-        self._cnf.set(".//RemoteIPHeader", header or "X-Real-IP")
+        self._cnf.set(".//RemoteIPHeader", header or "X-Forwarded-For")
 
     def fix_module(self):
         pass
