@@ -1066,7 +1066,7 @@ class ModRemoteIP(ModRPAF):
     @staticmethod
     def ensure_permissions(path=None):
         path = path or __apache__["mod_remoteip_so_path"]
-        ModRemoteIP.ensure_permissions(path)
+        ModRPAF.ensure_permissions(path)
 
 
 def IPForwarding(*args, **kwds):
