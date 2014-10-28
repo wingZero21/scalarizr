@@ -256,9 +256,10 @@ class HAProxyAPI(BehaviorAPI):
         if not self.cfg.backend or not backend_name in self.cfg.backend:
             self.cfg['backend'][backend_name] = backend
 
-        iptables.FIREWALL.ensure(
-            [{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}]
-        )
+        if iptables.enabled():
+            iptables.FIREWALL.ensure(
+                [{"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}]
+            )
 
         self.cfg.save()
         if self.svc.status() == 0:
@@ -471,9 +472,10 @@ class HAProxyAPI(BehaviorAPI):
             if not self.cfg.backend or not bnd in self.cfg.backend:
                 self.cfg['backend'][bnd] = backend
             try:
-                iptables.FIREWALL.ensure(
-                    {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
-                )
+                if iptables.enabled():
+                    iptables.FIREWALL.ensure(
+                        {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port}
+                    )
             except Exception, e:
                 raise exceptions.Duplicate(e)
 
@@ -589,9 +591,10 @@ class HAProxyAPI(BehaviorAPI):
                 del self.cfg.backends[default_backend]
 
         try:
-            iptables.FIREWALL.remove({
-                    "jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port
-            })
+            if iptables.enabled():
+                iptables.FIREWALL.remove({
+                        "jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": port
+                })
         except Exception, e:
             raise exceptions.NotFound(e)
 

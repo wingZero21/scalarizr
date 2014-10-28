@@ -866,11 +866,14 @@ class Service(object):
         defaults = node.__node__['defaults']['base']
 
         if node.__node__['state'] != 'importing':
-            lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
-            api_port = int(lfrp.get('base', {}).get('api_port', defaults['api_port']) \
-                            or defaults['api_port'])
-            messaging_port = int(lfrp.get('base', {}).get('messaging_port', defaults['messaging_port']) \
-                                    or defaults['messaging_port'])
+            try:
+                api_port = int(node.__node__['base']['api_port'])
+            except KeyError, ValueError:
+                api_port = defaults['api_port']
+            try:
+                messaging_port = int(node.__node__['base']['messaging_port'])
+            except KeyError, ValueError:
+                messaging_port = defaults['messaging_port']
 
             if messaging_port == defaults['messaging_port'] and self._port_busy(messaging_port):
                 messaging_port = 8011
@@ -942,6 +945,8 @@ class Service(object):
         bus.queryenv_service = queryenv
         bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 
+        lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
+        node.__node__['base'].update(lfrp.get('base', {}))
         ports_non_default = self._select_control_ports()
 
         logger.debug("Initialize messaging")

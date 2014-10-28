@@ -449,6 +449,10 @@ def ensure(chain_rules, append=False):
 
 
 def enabled():
+    from scalarizr.node import __node__
+    if int(__node__['base'].get('disable_firewall_management', 0)):
+        LOG.info('base.disable_firewall_management: 1')
+        return False
     # amazon linux doesn't have iptables service installed by default,
     # which makes "chkconfig --list iptables" fail
     # update: amzn >= 6.4 doesn't allow installing iptables-services;

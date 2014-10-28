@@ -645,10 +645,8 @@ class FarmSecurityMixin(object):
             )
             self.__on_reload()
             self.__insert_iptables_rules()
-            self.__enabled = True  
-        else:
-            LOG.warn("iptables is not enabled. ports %s won't be protected by firewall" %  (ports, ))   
-
+            self.__enabled = True 
+    
 
     def __on_reload(self):
         self._queryenv = bus.queryenv_service
