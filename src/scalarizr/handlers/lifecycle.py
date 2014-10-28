@@ -178,9 +178,9 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
     def _assign_hostname(self):
         if not __node__['base'].get('hostname'):
             return
-        __node__['hostname'] = __node__['hostname'].replace(' ', '')
+        __node__['base']['hostname'] = __node__['base']['hostname'].replace(' ', '')
         try:
-            self._system_api.set_hostname(__node__['hostname'])
+            self._system_api.set_hostname(__node__['base']['hostname'])
         except NotImplementedError, e:
             self._logger.debug(e)
 
