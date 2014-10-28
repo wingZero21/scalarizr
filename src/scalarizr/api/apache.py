@@ -1044,9 +1044,9 @@ class ModRPAF(BasicApacheConfiguration):
                 LOG.info("Patched IfModule value in rpaf.conf")
 
     @staticmethod
-    def ensure_permissions():
+    def ensure_permissions(path=None):
         httpd_conf_path = __apache__["httpd.conf"]
-        mod_rpaf_path = __apache__["mod_rpaf_path"]
+        mod_rpaf_path = path or __apache__["mod_rpaf_path"]
 
         if os.path.exists(httpd_conf_path) and os.path.exists(mod_rpaf_path):
             st = os.stat(httpd_conf_path)
@@ -1057,18 +1057,22 @@ class ModRemoteIP(ModRPAF):
 
     proxy_section = ".//RemoteIPInternalProxy"
 
+    def set_remote_header(self, header=None):
+        self._cnf.set(".//RemoteIPHeader", header or "X-Real-IP")
+
     def fix_module(self):
-        self._cnf.set(".//RemoteIPHeader", "X-Real-IP")
+        pass
 
     @staticmethod
-    def ensure_permissions():
-        pass
+    def ensure_permissions(path=None):
+        path = path or __apache__["mod_remoteip_so_path"]
+        ModRemoteIP.ensure_permissions(path)
 
 
 def IPForwarding(*args, **kwds):
     if os.path.exists(__apache__["mod_rpaf_path"]):
         return ModRPAF(*args, **kwds)
-    elif True:
+    elif os.path.exists(__apache__["mod_remoteip_so_path"]):
         return ModRemoteIP(*args, **kwds)
 
 
