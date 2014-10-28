@@ -62,6 +62,8 @@ if linux.os.debian_family:
         "ports_conf_deb":   "/etc/apache2/ports.conf",
         "ssl_load_deb":     "/etc/apache2/mods-enabled/ssl.load",
         "mod_rpaf_path":    "/etc/apache2/mods-available/rpaf.conf",
+        "mod_remoteip_conf": "/etc/apache2/mods-available/remoteip.conf",
+        "mod_remoteip_so_path": "/etc/apache2/mods-available/mod_remoteip.so",
         "default-ssl_path": "/etc/apache2/sites-enabled/default-ssl",
         "key_path_default": "/etc/ssl/private/ssl-cert-snakeoil.key",
         "crt_path_default": "/etc/ssl/certs/ssl-cert-snakeoil.pem",
@@ -96,6 +98,8 @@ else:
         "default_vhost":    "/etc/httpd/sites-enabled/000-default",  # Not used
         "mod_ssl_file":     "/etc/httpd/modules/mod_ssl.so",
         "mod_rpaf_path":    "/etc/httpd/conf.d/mod_rpaf.conf",
+        "mod_remoteip_conf": "/etc/httpd/conf.d/remoteip.conf",
+        "mod_remoteip_so_path": "/etc/httpd/modules/mod_remoteip.so",
         "key_path_default": "/etc/pki/tls/private/localhost.key",
         "crt_path_default": "/etc/pki/tls/certs/localhost.crt",
         "apachectl":        "/usr/sbin/apachectl",
@@ -114,7 +118,7 @@ else:
         """})
 
     if "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
-        initd_script = {"initd_script": ("systemctl", "httpd.service")}
+        initd_script = {"initd_script": ("service", "httpd")}
     else:
         initd_script = {"initd_script": "/etc/init.d/httpd"}
     apache.update(initd_script)
@@ -887,7 +891,7 @@ class BasicApacheConfiguration(object):
         try:
             config.reads(str(body))
         except ParseError, e:
-            LOG.error("MetaConf failed to parse Apache VirtualHost body: \n%s" % body)
+            LOG.error("MetaConf failed to parse Apache configuration: \n%s" % body)
             e._err = body + "\n" + e._err
             raise
         self._cnf = config
@@ -1005,24 +1009,26 @@ class VirtualHost(BasicApacheConfiguration):
 
 class ModRPAF(BasicApacheConfiguration):
 
+    proxy_section = ".//RPAFproxy_ips"
+
     def list_proxy_ips(self):
-        raw_value = self._cnf.get(".//RPAFproxy_ips")
+        raw_value = self._cnf.get(self.proxy_section)
         ips = set(re.split(r"\s+", raw_value))
         return ips
 
     def add(self, ips):
         proxy_ips = self.list_proxy_ips()
         proxy_ips |= set(ips)
-        self._cnf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+        self._cnf.set(self.proxy_section, " ".join(proxy_ips))
 
     def remove(self, ips):
         proxy_ips = self.list_proxy_ips()
         proxy_ips -= set(ips)
-        self._cnf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+        self._cnf.set(self.proxy_section, " ".join(proxy_ips))
 
     def update(self, ips):
         proxy_ips = set(ips)
-        self._cnf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+        self._cnf.set(self.proxy_section, " ".join(proxy_ips))
 
     def fix_module(self):
         """
@@ -1045,6 +1051,25 @@ class ModRPAF(BasicApacheConfiguration):
         if os.path.exists(httpd_conf_path) and os.path.exists(mod_rpaf_path):
             st = os.stat(httpd_conf_path)
             os.chown(mod_rpaf_path, st.st_uid, st.st_gid)
+
+
+class ModRemoteIP(ModRPAF):
+
+    proxy_section = ".//RemoteIPInternalProxy"
+
+    def fix_module(self):
+        self._cnf.set(".//RemoteIPHeader", "X-Real-IP")
+
+    @staticmethod
+    def ensure_permissions():
+        pass
+
+
+def IPForwarding(*args, **kwds):
+    if os.path.exists(__apache__["mod_rpaf_path"]):
+        return ModRPAF(*args, **kwds)
+    elif True:
+        return ModRemoteIP(*args, **kwds)
 
 
 class ApacheConfigManager(object):
