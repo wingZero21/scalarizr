@@ -118,7 +118,7 @@ else:
         """})
 
     if "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
-        initd_script = {"initd_script": ("service", "httpd")}
+        initd_script = {"initd_script": ("/usr/sbin/service", "httpd")}
     else:
         initd_script = {"initd_script": "/etc/init.d/httpd"}
     apache.update(initd_script)
