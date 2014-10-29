@@ -109,7 +109,7 @@ def _create_swift_connection():
 class NovaConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwds):
-        for retry in range(2):
+        for retry in range(5):
             try:
                 return self.obj(*args, **kwds)
             except:
@@ -128,7 +128,7 @@ class NovaConnectionProxy(platform.ConnectionProxy):
 class CinderConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwds):
-        for retry in range(2):
+        for retry in range(5):
             try:
                 return self.obj(*args, **kwds)
             except:
@@ -147,7 +147,7 @@ class CinderConnectionProxy(platform.ConnectionProxy):
 class SwiftConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwds):
-        for retry in range(2):
+        for retry in range(5):
             try:
                 return self.obj(*args, **kwds)
             except:
