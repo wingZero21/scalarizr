@@ -32,6 +32,7 @@ class MariaDBAPI(mysql.MySQLAPI):
             ]
         elif linux.os.redhat_family or linux.os.oracle_family:
             requirements = [
+                ['mariadb-server>=5.5,<5.6'],
                 ['MariaDB-server>=5.5,<5.6', 'MariaDB-client>=5.5,<5.6'],
             ]
         else:
