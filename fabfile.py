@@ -316,7 +316,7 @@ def publish_deb():
             local('aptly repo create -distribution {0} {0}'.format(repo))
         for pkg_arch in ('i386', 'amd64'):
             # remove previous version
-            local('aptly repo remove {0} "Architecture ({1}), Name (~ {2}.*)"'.format(repo, pkg_arch, project))
+            local('aptly repo remove {0} "Architecture ({1}), Name (~ {2}.*)" || :'.format(repo, pkg_arch, project))
             # publish artifacts into repo
             packages = glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch))
             if packages:
