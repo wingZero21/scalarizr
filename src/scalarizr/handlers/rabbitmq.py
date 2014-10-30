@@ -18,7 +18,7 @@ from scalarizr.handlers import HandlerError, ServiceCtlHandler, build_tags
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.util import initdv2, software, dns, cryptotool
 from scalarizr.node import __node__
-from scalarizr.linux import iptables
+from scalarizr.linux import iptables, system, os as os_mod
 import scalarizr.services.rabbitmq as rabbitmq_svc
 import scalarizr.api.rabbitmq as rabbitmq_api
 
@@ -89,6 +89,13 @@ class RabbitMQHandler(ServiceCtlHandler):
 
     def on_start(self):
         self._insert_iptables_rules()
+        if os_mod.redhat_family:
+            try:
+                self._patch_selinux()
+            except:
+                e = sys.exc_info()[1]
+                self._logger.warning('Setting selinux boolean for rabbitmq-server failed: {0}'.format(e))
+
 
         if 'running' == __node__['state']:
             self._prepare_env_config()
@@ -245,6 +252,11 @@ class RabbitMQHandler(ServiceCtlHandler):
             f.write('RABBITMQ_NODENAME=%s\n' % node_name)
             f.write('RABBITMQ_SERVER_ERL_ARGS="-kernel inet_dist_listen_min {0}'
                     ' -kernel inet_dist_listen_max {0}"\n'.format(RABBITMQ_CLUSTERING_PORT))
+
+
+    def _patch_selinux(self):
+        system(['setsebool', '-P', 'nis_enabled', '1'], shell=True)
+        self._logger.debug('Selinux boolean nis_enabled has been set to "enabled"')
 
 
     def on_host_init_response(self, message):
