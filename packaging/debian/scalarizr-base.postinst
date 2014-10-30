@@ -539,6 +539,7 @@ fi
 
 chown -R root:root /etc/scalr
 chmod 755 /etc/scalr
+mkdir -p /etc/scalr/private.d
 chmod 775 /etc/scalr/private.d
 sync
 
