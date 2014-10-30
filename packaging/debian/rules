@@ -14,6 +14,6 @@ DEB_DESTDIR=debian/scalarizr-base
 binary-post-install/scalarizr-base::
 
 	find $(DEB_DESTDIR)/etc/scalr/public.d -type f -maxdepth 1 -print | xargs rm -f 
-    find $(DEB_DESTDIR)/etc/scalr/private.d -type f -maxdepth 1 -print | xargs rm -f 
+    find $(DEB_DESTDIR)/etc/scalr/private.d -type f -maxdepth 1 -print | xargs rm -f
 	dh_installinit --name=scalarizr
 	dh_installinit --name=scalr-upd-client
