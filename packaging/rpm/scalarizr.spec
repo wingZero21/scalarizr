@@ -427,7 +427,7 @@ rm -f $szr_version_file
 
 %install
 %{__python} setup.py install --root="$RPM_BUILD_ROOT"
-mkdir -p %{buildroot}/etc/scalr/private.d
+rm -f %{buildroot}/etc/scalr/private.d/*
 chmod 775 %{buildroot}/etc/scalr/private.d
 mkdir -p "%{buildroot}%{_initrddir}"
 cp "%{_sourcedir}/scalarizr.init" "%{buildroot}%{_initrddir}/scalarizr"
