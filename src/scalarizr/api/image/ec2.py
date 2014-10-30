@@ -198,9 +198,12 @@ class EBSImageMaker(object):
         config['type'] = 'ebs'
 
         LOG.debug('Creating ebs volume')
-        # TODO: take fstype from original volume
-        # https://github.com/Scalr/int-scalarizr/blob/master/src/scalarizr/handlers/rebundle.py#L326
-        volume = create_volume(config, fstype='ext4')
+        fstype = None
+        for v in mount.mounts('/etc/mtab'):
+            if v.device.startswith('/dev'):
+                fstype = v.fstype
+                break
+        volume = create_volume(config, fstype=filesystem(fstype))
         volume.mpoint = mpoint
         volume.ensure(mount=True, mkfs=True)
         if not mount:
