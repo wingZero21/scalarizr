@@ -203,7 +203,9 @@ class MessageListener:
             # Scalarizr assign access data to platform object and clears it when handlers processing finished
             if message.body.has_key("platform_access_data"):
                 platform_access_data_on_me = True
+                LOG.debug('Temporary! Access Data is: {0}'.format(message.platform_access_data))
                 pl.set_access_data(message.platform_access_data)
+
 
             if message.body.get('global_variables'):    
                 global_variables = message.body.get('global_variables') or []
