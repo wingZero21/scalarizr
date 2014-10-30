@@ -5,11 +5,9 @@ Created on Sep 7, 2011
 '''
 
 import os
-import re
 import sys
 import pwd
 import logging
-
 
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
@@ -20,12 +18,10 @@ from scalarizr.util import initdv2, software, dns, cryptotool
 from scalarizr.node import __node__
 from scalarizr.linux import iptables, system, os as os_mod
 import scalarizr.services.rabbitmq as rabbitmq_svc
-import scalarizr.api.rabbitmq as rabbitmq_api
-
-
 
 __rabbitmq__ = __node__['rabbitmq']
 
+log = logging.getLogger(__name__)
 
 BEHAVIOUR = SERVICE_NAME = BuiltinBehaviours.RABBITMQ
 OPT_VOLUME_CNF = 'volume_config'
@@ -39,6 +35,15 @@ RABBITMQ_ENV_CFG_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
 RABBITMQ_CLUSTERING_PORT = 25672
 
 
+def get_handlers():
+    return [RabbitMQHandler()]
+
+
+class RabbitNode(object):
+
+    def __init__(self, hostname, ip):
+        self.ip = ip
+        self.hostname = hostname
 
 
 class RabbitMQMessages:
@@ -50,18 +55,9 @@ class RabbitMQMessages:
     INT_RABBITMQ_HOST_INIT = 'RabbitMq_IntHostInit'
 
 
-def get_handlers():
-    return [RabbitMQHandler()]
-
-
 class RabbitMQHandler(ServiceCtlHandler):
 
     def __init__(self):
-        try:
-            software.which('rabbitmqctl')
-        except LookupError:
-            raise HandlerError("Rabbitmqctl binary was not found. Check your installation.")
-
         bus.on("init", self.on_init)
 
         self._logger = logging.getLogger(__name__)
@@ -75,7 +71,6 @@ class RabbitMQHandler(ServiceCtlHandler):
             __ec2__ = __node__['ec2']
             __ec2__['hostname_as_pubdns'] = 0
 
-
     def on_init(self):
         bus.on("host_init_response", self.on_host_init_response)
         bus.on("before_host_up", self.on_before_host_up)
@@ -86,7 +81,6 @@ class RabbitMQHandler(ServiceCtlHandler):
             bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
         bus.on("before_host_down", self.on_before_host_down)
 
-
     def on_start(self):
         self._insert_iptables_rules()
         if os_mod.redhat_family:
@@ -95,7 +89,6 @@ class RabbitMQHandler(ServiceCtlHandler):
             except:
                 e = sys.exc_info()[1]
                 self._logger.warning('Setting selinux boolean for rabbitmq-server failed: {0}'.format(e))
-
 
         if 'running' == __node__['state']:
             self._prepare_env_config()
@@ -107,7 +100,6 @@ class RabbitMQHandler(ServiceCtlHandler):
             self.service.start()
 
             __rabbitmq__['volume'] = rabbitmq_vol
-
 
     def on_reload(self):
         self.queryenv = bus.queryenv_service
@@ -122,7 +114,6 @@ class RabbitMQHandler(ServiceCtlHandler):
                                                            RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL,
                                                            RabbitMQMessages.INT_RABBITMQ_HOST_INIT)
 
-
     def _insert_iptables_rules(self):
         if iptables.enabled():
             iptables.FIREWALL.ensure([
@@ -132,7 +123,6 @@ class RabbitMQHandler(ServiceCtlHandler):
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": '4369'},
                 {"jump": "ACCEPT", "protocol": "tcp", "match": "tcp", "dport": str(RABBITMQ_CLUSTERING_PORT)}
             ])
-
 
     def cleanup_hosts_file(self, rootdir):
         """ Clean /etc/hosts file """
@@ -156,7 +146,6 @@ class RabbitMQHandler(ServiceCtlHandler):
                                             '.'.join(rabbit_version.version))
             sys.exit(1)
 
-
     def on_RabbitMq_SetupControlPanel(self, message):
         try:
             if not 'running' == __node__['state']:
@@ -176,7 +165,6 @@ class RabbitMQHandler(ServiceCtlHandler):
             msg_body = dict(status='error', last_error=error)
         finally:
             self.send_message(RabbitMQMessages.RABBITMQ_SETUP_CONTROL_PANEL_RESULT, msg_body)
-
 
     def on_RabbitMq_Reconfigure(self, message):
         try:
@@ -215,7 +203,6 @@ class RabbitMQHandler(ServiceCtlHandler):
         finally:
             self.send_message(RabbitMQMessages.RABBITMQ_RECONFIGURE_RESULT, msg_body)
 
-
     def on_HostInit(self, message):
         if not BuiltinBehaviours.RABBITMQ in message.behaviour:
             return
@@ -225,25 +212,20 @@ class RabbitMQHandler(ServiceCtlHandler):
             self._logger.info("Adding %s as %s to hosts file", message.local_ip, hostname)
             dns.ScalrHosts.set(message.local_ip, hostname)
 
-
     on_RabbitMq_IntHostInit = on_HostInit
-
 
     def on_HostDown(self, message):
         if not BuiltinBehaviours.RABBITMQ in message.behaviour:
             return
         dns.ScalrHosts.delete(message.local_ip)
 
-
     def on_before_host_down(self, msg):
         self.service.stop()
-
 
     def on_BeforeHostTerminate(self, msg):
         if msg.remote_ip == self.platform.get_public_ip() and \
                                 int(__rabbitmq__['server_index']) != 1:
             self.service.stop()
-
 
     def _prepare_env_config(self):
         node_name = rabbitmq_svc.NODE_HOSTNAME_TPL % __rabbitmq__['hostname']
@@ -253,11 +235,9 @@ class RabbitMQHandler(ServiceCtlHandler):
             f.write('RABBITMQ_SERVER_ERL_ARGS="-kernel inet_dist_listen_min {0}'
                     ' -kernel inet_dist_listen_max {0}"\n'.format(RABBITMQ_CLUSTERING_PORT))
 
-
     def _patch_selinux(self):
         system(['setsebool', '-P', 'nis_enabled', '1'])
         self._logger.debug('Selinux boolean nis_enabled has been set to "enabled"')
-
 
     def on_host_init_response(self, message):
         log = bus.init_op.logger
@@ -308,13 +288,11 @@ class RabbitMQHandler(ServiceCtlHandler):
 
         __rabbitmq__.update(rabbitmq_data)
 
-
     def _is_storage_empty(self, storage_path):
         for subdir in os.listdir(storage_path):
             if subdir.startswith('rabbit'):
                 return False
         return True
-
 
     def on_before_host_up(self, message):
         log = bus.init_op.logger
@@ -396,11 +374,9 @@ class RabbitMQHandler(ServiceCtlHandler):
         self._logger.debug('Updating HostUp message with %s' % msg_data)
         message.rabbitmq = msg_data
 
-
     @property
     def rabbitmq_tags(self):
         return build_tags(BEHAVIOUR, 'active')
-
 
     def _get_cluster_nodes(self):
         nodes = []
@@ -408,6 +384,6 @@ class RabbitMQHandler(ServiceCtlHandler):
         for host in role.hosts:
             ip = host.internal_ip
             hostname = rabbitmq_svc.RABBIT_HOSTNAME_TPL % host.index
-            nodes.append((hostname, ip))
+            node = RabbitNode(hostname, ip)
+            nodes.append(node)
         return nodes
-

@@ -18,8 +18,9 @@ from scalarizr.util import initdv2, system2, run_detached, software, wait_until
 from scalarizr.config import BuiltinBehaviours
 
 
-__rabbitmq__ = __node__['rabbitmq']
+log = logging.getLogger(__name__)
 
+__rabbitmq__ = __node__['rabbitmq']
 
 SERVICE_NAME = BuiltinBehaviours.RABBITMQ
 RABBIT_CFG_PATH = '/etc/rabbitmq/rabbitmq.config'
@@ -29,18 +30,15 @@ SCALR_USERNAME = 'scalr'
 NODE_HOSTNAME_TPL = 'rabbit@%s'
 RABBIT_HOSTNAME_TPL = 'rabbit-%s'
 
+RABBITMQCTL = software.which('rabbitmqctl')
+RABBITMQ_SERVER = software.which('rabbitmq-server')
+
 class NodeTypes:
     RAM = 'ram'
     DISK = 'disk'
 
-
-RABBITMQCTL = software.which('rabbitmqctl')
-RABBITMQ_SERVER = software.which('rabbitmq-server')
-
-
 # RabbitMQ from ubuntu repo puts rabbitmq-plugins
 # binary in non-obvious place
-
 RABBITMQ_PLUGINS = software.which('rabbitmq-plugins', '/usr/lib/rabbitmq/bin/')
 
 try:
@@ -67,17 +65,19 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
                         )
 
     def stop(self, reason=None):
+        log.debug('Stopping RabbitMQ service ({0})'.format(reason or 'Reason unspecified'))
         system2((RABBITMQCTL, 'stop'))
-        wait_until(lambda: not self._running, sleep=2)
-
+        wait_until(lambda: self.status() == initdv2.Status.NOT_RUNNING, sleep=2)
 
     def restart(self, reason=None):
-        self.stop()
-        self.start()
+        log.debug('Restarting RabbitMQ service ({0})'.format(reason or 'Reason unspecified'))
+        self.stop('restart')
+        self.start('restart')
 
     reload = restart
 
-    def start(self):
+    def start(self, reason=None):
+        log.debug('Starting RabbitMQ service ({0})'.format(reason or 'Reason unspecified'))
         hostname = RABBIT_HOSTNAME_TPL % __node__['server_index']
         nodename = NODE_HOSTNAME_TPL % hostname
 
@@ -89,19 +89,15 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
         initdv2.wait_sock(self.socks[0])
 
     def status(self):
-        if self._running:
+        rcode = system2((RABBITMQCTL, 'status'), raise_exc=False)[2]
+        _running = False if rcode else True
+
+        if _running:
             return initdv2.Status.RUNNING
         else:
             return initdv2.Status.NOT_RUNNING
 
-    @property
-    def _running(self):
-        rcode = system2((RABBITMQCTL, 'status'), raise_exc=False)[2]
-        return False if rcode else True
-
-
 initdv2.explore(SERVICE_NAME, RabbitMQInitScript)
-
 
 
 class RabbitMQ(object):
@@ -124,6 +120,10 @@ class RabbitMQ(object):
 
         self.service = initdv2.lookup(SERVICE_NAME)
 
+    @property
+    def node_type(self):
+        return __rabbitmq__['node_type']
+
     def set_cookie(self, cookie):
         with open(COOKIE_PATH, 'w') as f:
             f.write(cookie)
@@ -131,19 +131,15 @@ class RabbitMQ(object):
         os.chmod(COOKIE_PATH, 0600)
         os.chown(COOKIE_PATH, rabbitmq_user.pw_uid, rabbitmq_user.pw_gid)
 
-
     def enable_plugin(self, plugin_name):
         system2((RABBITMQ_PLUGINS, 'enable', plugin_name),
                                 env={'HOME': '/root/'}, logger=self._logger)
 
-
     def reset(self):
         system2((RABBITMQCTL, 'reset'), logger=self._logger)
 
-
     def stop_app(self):
         system2((RABBITMQCTL, 'stop_app'), logger=self._logger)
-
 
     def start_app(self):
         system2((RABBITMQCTL, 'start_app'), logger=self._logger)
@@ -168,37 +164,27 @@ class RabbitMQ(object):
         if is_admin:
             self.set_user_tags(username, 'administrator')
 
-
     def delete_user(self, username):
         if username in self.list_users():
             system2((RABBITMQCTL, 'delete_user', username), logger=self._logger)
-
 
     def set_user_tags(self, username, tags):
         if type(tags) == str:
             tags = (tags,)
         system2((RABBITMQCTL, 'set_user_tags', username) + tags , logger=self._logger)
 
-
     def set_user_password(self, username, password):
         system2((RABBITMQCTL, 'change_password', username, password), logger=self._logger)
-
 
     def set_full_permissions(self, username):
         """ Set full permissions on '/' virtual host """
         permissions = ('.*', ) * 3
         system2((RABBITMQCTL, 'set_permissions', username) + permissions, logger=self._logger)
 
-
     def list_users(self):
         out = system2((RABBITMQCTL, 'list_users'), logger=self._logger)[0]
         users_strings = out.splitlines()[1:-1]
         return [user_str.split()[0] for user_str in users_strings]
-
-    @property
-    def node_type(self):
-        return __rabbitmq__['node_type']
-
 
     def change_node_type(self, self_hostname, hostnames, disk_node):
         if RABBITMQ_VERSION >= (3, 0, 0):
@@ -207,7 +193,6 @@ class RabbitMQ(object):
             system2(cmd, logger=self._logger)
         else:
             self.cluster_with(self_hostname, hostnames, disk_node, do_reset=False)
-
 
     def cluster_with(self, self_hostname, hostnames, disk_node=True, do_reset=True):
         if RABBITMQ_VERSION >= (3, 0, 0):
@@ -244,7 +229,6 @@ class RabbitMQ(object):
             else:
                 p.kill()
                 self.service.restart(force=True)
-
 
     def cluster_nodes(self):
         out = system2((RABBITMQCTL, 'cluster_status'),logger=self._logger)[0]
