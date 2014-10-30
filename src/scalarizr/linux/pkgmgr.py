@@ -297,7 +297,7 @@ class AptPackageMgr(PackageMgr):
         if err:
             raise Exception("'dpkg-query -W' command failed. Out: %s \nErrors: %s" % (out, err))
         pkgs = dict([(line.split('|')[1], line.split('|')[2].split(':')[-1]) \
-                for line in out.split('\n') if line.split('|')[0]=='install ok installed'])
+                for line in out.split('\n') if line.split('|')[0] in ('install ok installed', 'hold ok installed')])
         return pkgs
 
 
