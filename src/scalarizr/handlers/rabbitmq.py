@@ -255,7 +255,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 
 
     def _patch_selinux(self):
-        system(['setsebool', '-P', 'nis_enabled', '1'], shell=True)
+        system(['setsebool', '-P', 'nis_enabled', '1'])
         self._logger.debug('Selinux boolean nis_enabled has been set to "enabled"')
 
 
