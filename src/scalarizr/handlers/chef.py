@@ -97,9 +97,11 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
         self._env = None
         super(ChefInitScript, self).__init__('chef', None, PID_FILE)
 
+
     def start(self, env=None):
         self._env = env or os.environ
         super(ChefInitScript, self).start()
+
 
     # Uses only pid file, no init script involved
     def _start_stop_reload(self, action):
@@ -146,9 +148,7 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
         self._start_stop_reload("stop")
         self._start_stop_reload("start")
 
-
 initdv2.explore('chef', ChefInitScript)
-
 
 class ChefHandler(Handler):
     def __init__(self):
@@ -231,13 +231,14 @@ class ChefHandler(Handler):
                 if os.path.exists(CLIENT_KEY_PATH):
                     os.remove(CLIENT_KEY_PATH)
 
-                chef_client = ChefClient(self._chef_data['server_url'],
-                                         self._with_json_attributes,
-                                         self._chef_data['node_name'],
-                                         self._chef_data['validator_name'],
-                                         self._chef_data['validator_key'],
-                                         self._chef_data['environment'],
-                                         self._environ_variables)
+                chef_client = ChefClient(chef_server_url=self._chef_data['server_url'],
+                                         json_attributes=self._with_json_attributes,
+                                         node_name=self._chef_data['node_name'],
+                                         validator_name=self._chef_data['validator_name'],
+                                         validation_pem=self._chef_data['validator_key'],
+                                         environment=self._chef_data['environment'],
+                                         environment_variables=self._environ_variables,
+                                         log_level=self._chef_data['log_level'])
                 try:
                     chef_client.prepare()
                     self.send_message('HostUpdate', dict(chef=self._chef_data))
@@ -251,9 +252,9 @@ class ChefHandler(Handler):
                     self.daemonize()
 
             elif self._chef_data.get('cookbook_url'):
-                solo = ChefSolo(self._chef_data['cookbook_url'],
-                                self._chef_data['cookbook_url_type'],
-                                self._with_json_attributes,
+                solo = ChefSolo(cookbook_url=self._chef_data['cookbook_url'],
+                                cookbook_url_type=self._chef_data['cookbook_url_type'],
+                                json_attributes=self._with_json_attributes,
                                 relative_path=self._chef_data.get('relative_path'),
                                 environment=self._environ_variables,
                                 ssh_private_key=self._chef_data.get('ssh_private_key'),
@@ -278,7 +279,7 @@ class ChefHandler(Handler):
                 win32serviceutil.StartService(WIN_SERVICE_NAME)
             except pywintypes.error, e:
                 if e.args[0] == 1060:
-                    err = ("Can't daemonize Chef "
+                    err = ("Can't daemonize Chef cause 'chef-client', "
                             "cause 'chef-client' is not a registered Windows Service.\n"
                             "Most likely you haven't selected Chef Service option in Chef installer.")
                     raise HandlerError(err)
@@ -305,7 +306,7 @@ class ChefHandler(Handler):
         return environ
 
     def get_node_name(self):
-        return __node__['base'].get('hostname') or \
+        return __node__.get('hostname') or \
                 '{0}-{1}-{2}'.format(
                     self._platform.name, 
                     self._platform.get_public_ip(), 
@@ -329,6 +330,7 @@ class ChefClient(object):
         self.validation_pem = validation_pem
 
         self.json_attributes = json_attributes or dict()
+        self.run_list = self.json_attributes.get("run_list", list())
 
         self.node_name = node_name
         self.validator_name = validator_name
@@ -336,7 +338,11 @@ class ChefClient(object):
         self.environment_variables = environment_variables or dict()
         self.log_level = log_level
         self.run_as = run_as
+
         self.override_runlist = override_runlist
+        # Remove runlist from attributes to preserve node's run list
+        if self.override_runlist:
+            self.json_attributes.pop("run_list", None)
 
     def prepare(self):
         if os.path.exists(CLIENT_KEY_PATH) and os.path.exists(CLIENT_CONF_PATH):
@@ -367,7 +373,7 @@ class ChefClient(object):
             os.chmod(CLIENT_CONF_PATH, 0644)
 
             if not os.path.exists(CLIENT_KEY_PATH):
-                assert  self.validation_pem
+                assert self.validation_pem
                 assert self.validator_name
                 # Write validation cert
                 with open(VALIDATOR_KEY_PATH, 'w+') as fp:
@@ -386,12 +392,11 @@ class ChefClient(object):
             env=self.environment_variables
         )
 
-
     def get_cmd(self):
         cmd = [CHEF_CLIENT_BIN]
 
-        if self.override_runlist and self.json_attributes.get("run_list"):
-            cmd += ["-o", ",".join(self.json_attributes["run_list"])]
+        if self.override_runlist and self.run_list:
+            cmd += ["-o", ",".join(self.run_list)]
 
         if self.json_attributes:
             cmd += ['--json-attributes', JSON_ATTRIBUTES_PATH]
@@ -403,7 +408,7 @@ class ChefClient(object):
 
 
     def run(self):
-        LOG.info('Applying Chef run list %s' % self.json_attributes.get('run_list', list()))
+        LOG.info('Starting chef-client. Run list: {0}'.format(self.run_list))
         self._run_chef_client()
 
 
