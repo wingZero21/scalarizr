@@ -60,6 +60,7 @@ import SocketServer
 from scalarizr import exceptions
 
 if not linux.os.windows:
+    import pwd
     import ctypes
     libc = ctypes.CDLL('libc.so.6')
 
@@ -337,6 +338,14 @@ def _init_logging():
         for hdlr in logging.getLogger('scalarizr').handlers:
             if isinstance(hdlr, logging.StreamHandler) and hdlr.stream == sys.stderr:
                 hdlr.setLevel(logging.INFO)
+
+
+def _init_environ():
+    if linux.os.windows:
+        return
+    pwr = pwd.getpwuid(os.getuid())
+    os.environ['USER'] = pwr.pw_name
+    os.environ['HOME'] = pwr.pw_dir
 
 
 def _init_platform():
@@ -621,6 +630,7 @@ class Service(object):
     def start(self):
         self._logger.debug("Initialize scalarizr...")
         _init()
+        _init_environ()
 
         # Starting scalarizr daemon initialization
         globals()['_pid'] = pid = os.getpid()
