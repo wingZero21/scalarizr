@@ -324,7 +324,6 @@ class EBSImageMaker(object):
             LOG.debug('Preparing data for snapshot')
             self.prepare_image()
             volume_config = {'size': self.root_disk.size,
-                'iops': self.root_disk.iops,
                 'tags': {'scalr-status': 'temporary'}}
             LOG.debug('Creating volume for snapshot')
             volume = self.make_volume(volume_config, '/mnt/img-mnt')
