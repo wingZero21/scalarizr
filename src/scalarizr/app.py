@@ -955,8 +955,9 @@ class Service(object):
         bus.queryenv_service = queryenv
         bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 
-        lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
-        node.__node__['base'].update(lfrp.get('base', {}))
+        if node.__node__['state'] != 'importing':
+            lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
+            node.__node__['base'].update(lfrp.get('base', {}))
         ports_non_default = self._select_control_ports()
 
         logger.debug("Initialize messaging")
