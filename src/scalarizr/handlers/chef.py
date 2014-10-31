@@ -305,7 +305,7 @@ class ChefHandler(Handler):
         return environ
 
     def get_node_name(self):
-        return __node__.get('hostname') or \
+        return __node__['base'].get('hostname') or \
                 '{0}-{1}-{2}'.format(
                     self._platform.name, 
                     self._platform.get_public_ip(), 
