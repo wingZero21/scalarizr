@@ -167,7 +167,7 @@ class EBSImageMaker(object):
             self.temp_vol = self.make_volume({'size': self.image_size, 
                 'tags': {'scalr-status': 'temporary'}},
                 '/mnt/temp-vol',
-                mount=True)
+                mount_vol=True)
             self.destination = '/mnt/temp-vol'
 
     def prepare_image(self):
@@ -194,7 +194,7 @@ class EBSImageMaker(object):
             stderr=subprocess.STDOUT)[0]
         LOG.debug('Image prepare command out: %s' % out)
 
-    def make_volume(self, config, mpoint, mount=False):
+    def make_volume(self, config, mpoint, mount_vol=False):
         config['type'] = 'ebs'
 
         LOG.debug('Creating ebs volume')
@@ -206,7 +206,7 @@ class EBSImageMaker(object):
         volume = create_volume(config, fstype=filesystem(fstype))
         volume.mpoint = mpoint
         volume.ensure(mount=True, mkfs=True)
-        if not mount:
+        if not mount_vol:
             volume.umount()
         LOG.debug('Volume created %s' % volume.device)
         return volume
