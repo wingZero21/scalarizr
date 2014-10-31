@@ -203,7 +203,7 @@ class EBSImageMaker(object):
             if v.device.startswith('/dev'):
                 fstype = v.fstype
                 break
-        volume = create_volume(config, fstype='ext4')#filesystem(fstype))
+        volume = create_volume(config, fstype=filesystem(fstype))
         volume.mpoint = mpoint
         volume.ensure(mount=True, mkfs=True)
         if not mount_vol:
