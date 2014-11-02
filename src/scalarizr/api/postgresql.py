@@ -328,9 +328,16 @@ class PostgreSQLAPI(BehaviorAPI):
                 trn = LargeTransfer(dumps, cloud_storage_path, tags=backup_tags)
                 manifest = trn.run()
                 LOG.info("Postgresql backup uploaded to cloud storage under %s", cloud_storage_path)
-                
-                result = list(dict(path=os.path.join(os.path.dirname(manifest.cloudfs_path), c[0]), size=c[2]) for c in
-                                manifest['files'][0]['chunks'])
+
+                result = []
+                for entry in manifest["files"]:
+                    for chunk in entry["chunks"]:
+                        chunk_size = chunk[2]
+                        chunk_fname = chunk[0]
+                        cloud_dir = os.path.dirname(manifest.cloudfs_path)
+                        chunk_path = os.path.join(cloud_dir, chunk_fname)
+                        pair = dict(path=chunk_path, size=chunk_size)
+                        result.append(pair)
                     
                 # Notify Scalr
                 __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT,
