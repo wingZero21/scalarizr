@@ -23,6 +23,7 @@ from scalarizr import linux
 from scalarizr.services import backup
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.handlers import DbMsrMessages, HandlerError
+from scalarizr.handlers import transfer_result_to_backup_result
 from scalarizr.api import operation
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services.postgresql import PSQL, PG_DUMP, SU_EXEC
@@ -328,18 +329,9 @@ class PostgreSQLAPI(BehaviorAPI):
                 trn = LargeTransfer(dumps, cloud_storage_path, tags=backup_tags)
                 manifest = trn.run()
                 LOG.info("Postgresql backup uploaded to cloud storage under %s", cloud_storage_path)
-
-                result = []
-                for entry in manifest["files"]:
-                    for chunk in entry["chunks"]:
-                        chunk_size = chunk[2]
-                        chunk_fname = chunk[0]
-                        cloud_dir = os.path.dirname(manifest.cloudfs_path)
-                        chunk_path = os.path.join(cloud_dir, chunk_fname)
-                        pair = dict(path=chunk_path, size=chunk_size)
-                        result.append(pair)
                     
                 # Notify Scalr
+                result = transfer_result_to_backup_result(manifest)
                 __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT,
                                         dict(db_type=BEHAVIOUR,
                                              status='ok',
