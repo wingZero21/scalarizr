@@ -1061,7 +1061,8 @@ class ModRemoteIP(ModRPAF):
         self._cnf.set(".//RemoteIPHeader", header or "X-Forwarded-For")
 
     def fix_module(self):
-        pass
+        self.set_remote_header("X-Forwarded-For")
+        self.add("127.0.0.1")
 
     @staticmethod
     def ensure_permissions(path=None):
