@@ -265,7 +265,7 @@ class AptPackageMgr(PackageMgr):
         cmd = ''
         if kwds.get('apt_repository'):
             cmd += ('--no-list-cleanup '
-                    '-c {0}/updclient/apt-preserve-update-success-stamp.conf'
+                    '-c {0}/updclient/apt-preserve-update-success-stamp.conf '
                     '-o Dir::Etc::sourcelist=sources.list.d/{1}.list '
                     '-o Dir::Etc::sourceparts=- '
                     ).format(bus.share_path, kwds['apt_repository'])
