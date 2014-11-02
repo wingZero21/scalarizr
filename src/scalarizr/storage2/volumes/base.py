@@ -95,12 +95,13 @@ class Volume(Base):
         if mount:
             if not self.is_fs_created() and mkfs:
                 LOG.debug('Creating %s filesystem: %s', self.fstype, self.id)
-                self.mkfs()                
-            LOG.debug('Mounting: %s', self.id)
-            self.mount()
-        if fstab and self.mpoint and self.device not in mod_mount.fstab():
-            LOG.debug('Adding to fstab: %s', self.id)
-            mod_mount.fstab().add(self.device, self.mpoint, self.fstype)
+                self.mkfs()
+            in_fstab = self.device not in mod_mount.fstab()
+            if not in_fstab:
+                self.mount()
+            if fstab and not in_fstab:
+                LOG.debug('Adding to fstab: %s', self.id)
+                mod_mount.fstab().add(self.device, self.mpoint, self.fstype)
         return self.config()
 
 
@@ -138,9 +139,11 @@ class Volume(Base):
         if mounted_to == self.mpoint:
             return
         elif mounted_to:
+            LOG.debug('Umounting %s from %s', self.id, mounted_to)
             self.umount()
         if not os.path.exists(self.mpoint):
             os.makedirs(self.mpoint)
+        LOG.debug('Mounting %s to %s', self.id, self.mpoint)
         mod_mount.mount(self.device, self.mpoint)
         bus.fire("block_device_mounted", volume=self)
 
