@@ -696,16 +696,15 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
     def _start_stop_reload(self, action):
         ''' XXX: Temporary ugly hack (Ubuntu 1004 upstart problem - Job is already running)'''
-        try:
-            args = [self.initd_script] \
-                            if isinstance(self.initd_script, basestring) \
-                            else list(self.initd_script)
-            args.append(action)
-            out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid)
-        except PopenError, e:
-            if 'Job is already running' not in str(e) and \
-                'percona' not in node.__node__['behavior']:
-                raise InitdError("Popen failed with error %s" % (e,))
+        args = [self.initd_script] \
+                        if isinstance(self.initd_script, basestring) \
+                        else list(self.initd_script)
+        args.append(action)
+        out, err, returncode = system2(args, close_fds=True, preexec_fn=os.setsid, raise_exc=False)
+        if returncode and ( \
+                'Job is already running' not in err and \
+                'percona' not in node.__node__['behavior']):
+            raise InitdError("Popen failed with error: %s" % (err,))
 
         if action == 'restart':
             if err and 'stop: Job has already been stopped: mysql' in err:
@@ -785,7 +784,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                 LOG.info("Starting mysql")
                 initdv2.ParametrizedInitScript.start(self)
                 LOG.debug("mysql started")
-            except Exception as e:
+            except:
                 if self._is_sgt_process_exists():
                     LOG.warning('MySQL service is running with skip-grant-tables mode.')
                 elif not self.running:
@@ -793,7 +792,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                     if error:
                         raise Exception('%s' % error)
                     else:
-                        raise e
+                        raise
 
 
     def stop(self, reason=None):
