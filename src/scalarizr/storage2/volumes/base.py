@@ -64,7 +64,7 @@ class Volume(Base):
         self.features.update({'restore': True, 'grow': False, 'detach': True})
 
 
-    def ensure(self, mount=False, mkfs=False, fstab=False, **updates):
+    def ensure(self, mount=False, mkfs=False, fstab=True, **updates):
         """
         Make sure that volume is attached and ready for use.
 
@@ -98,9 +98,9 @@ class Volume(Base):
                 self.mkfs()                
             LOG.debug('Mounting: %s', self.id)
             self.mount()
-            if fstab and self.device not in mod_mount.fstab():
-                LOG.debug('Adding to fstab: %s', self.id)
-                mod_mount.fstab().add(self.device, self.mpoint, self.fstype)
+        if fstab and self.mpoint and self.device not in mod_mount.fstab():
+            LOG.debug('Adding to fstab: %s', self.id)
+            mod_mount.fstab().add(self.device, self.mpoint, self.fstype)
         return self.config()
 
 
@@ -123,6 +123,9 @@ class Volume(Base):
             LOG.debug('Volume %s has no device, nothing to detach', self.id)
             return
         self.umount()
+        fstab = mod_mount.fstab()
+        if self.device in fstab:
+            fstab.remove(self.device)
         self._detach(force, **kwds)
         if self.features['detach']:
             self.device = None

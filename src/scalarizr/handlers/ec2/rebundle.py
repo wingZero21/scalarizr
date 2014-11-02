@@ -766,7 +766,7 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
     def _create_image(self):
         self._ebs_config['tags'] = build_tags(state='temporary')
         self.ebs_volume = volume(self._ebs_config)
-        self.ebs_volume.ensure()
+        self.ebs_volume.ensure(fstab=False)
         return self.ebs_volume.device
 
 
