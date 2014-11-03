@@ -4,6 +4,9 @@
 # after package is uninstalled.
 #
 
+unlink /etc/init.d/scalarizr 
+unlink /etc/init.d/scalr-upd-client
+
 echo "scalarizr has been uninstalled!"
 
 exit 0

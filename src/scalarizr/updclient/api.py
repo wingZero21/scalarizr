@@ -470,19 +470,11 @@ class UpdClientAPI(object):
         try:
             self.pkgmgr.removed(self.package)
             if not linux.os.windows:
-                self.pkgmgr.removed('scalarizr-base', purge=True)
+                self.pkgmgr.removed('scalarizr', purge=True)
                 if self.pkgmgr.info('scalr-upd-client')['installed']:
                     # Only latest package don't stop scalr-upd-client in postrm script
                     self.pkgmgr.latest('scalr-upd-client')
                     self.pkgmgr.removed('scalr-upd-client', purge=True)
-                if linux.os.redhat_family:
-                    installed_ver = self.pkgmgr.info('scalarizr')['installed']
-                    if installed_ver and distutils.version.LooseVersion(installed_ver) < '0.7':      
-                        # On CentOS 5 there is a case when scalarizr-0.6.24-5 has error 
-                        # in preun scriplet and cannot be uninstalled
-                        linux.system('rpm -e scalarizr --noscripts', shell=True, raise_exc=False)
-            if linux.os.debian_family:
-                self.pkgmgr.apt_get_command('autoremove')
         finally:
             if pid:
                 with open(pid_file, 'w+') as fp:
@@ -560,6 +552,9 @@ class UpdClientAPI(object):
         # pylint: disable=R0912
         if bootstrap:
             force = True
+            downgrades_enabled = self.downgrades_enabled
+        else:
+            downgrades_enabled = False
         notifies = not bootstrap
         reports = self.is_client_mode and not bootstrap
 
@@ -666,7 +661,7 @@ class UpdClientAPI(object):
                     LOG.info('No new version available ({0})'.format(self.package))
                     return
                 if self.pkgmgr.version_cmp(pkginfo['candidate'], pkginfo['installed']) == -1 \
-                        and not self.downgrades_enabled:
+                        and not downgrades_enabled:
                     self.state = 'completed'
                     LOG.info('New version {0!r} less then installed {1!r}, but downgrades disabled'.format(
                         pkginfo['candidate'], pkginfo['installed']))

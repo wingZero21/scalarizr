@@ -1,6 +1,6 @@
 name "python-boto"
 pypi_name = "boto"
-default_version "2.32.1"
+default_version "2.34.0"
 
 dependency "pip"
 

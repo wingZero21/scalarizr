@@ -312,7 +312,7 @@ def publish_deb():
     time0 = time.time()
     try:
         init()
-        if repo not in local('aptly repo list', capture=True):
+        if '* [%s]' % repo not in local('aptly repo list', capture=True):
             local('aptly repo create -distribution {0} {0}'.format(repo))
         for pkg_arch in ('i386', 'amd64'):
             # remove previous version
@@ -321,7 +321,7 @@ def publish_deb():
             packages = glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch))
             if packages:
                 local('aptly repo add {0} {1}'.format(repo, ' '.join(packages)))
-        local('aptly publish drop {0} || :'.format(repo))
+        local('aptly publish drop {0} {1} || :'.format(repo, aptly_prefix))
         local('aptly publish repo -gpg-key={0} {1} {2} || :'.format(gpg_key, repo, aptly_prefix))
         local('aptly db cleanup')
     finally:
