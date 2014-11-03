@@ -759,9 +759,17 @@ if linux.os.windows_family:
                 if dont_do_it:
                     raise Exception('Reboot not allowed, cause Scalarizr update is in-progress')
             wmi = client.GetObject('winmgmts:')
-            wos = next(iter(wmi.InstancesOf('Win32_OperatingSystem')))
-            wos.reboot()
-                
+            for wos in wmi.InstancesOf('Win32_OperatingSystem'):
+                if wos.Primary:
+                    # SCALARIZR-1609
+                    # XXX: Function call happens without () here for some reason,
+                    # as just `wos.Reboot`. Then it returns 0 and we try to call it.
+                    # Check if this strange behavior persists when we upgrade
+                    # to the latest pywin32 version (219).
+                    try:
+                        wos.Reboot()
+                    except TypeError:
+                        pass
 
         @coinitialized
         @rpc.command_method

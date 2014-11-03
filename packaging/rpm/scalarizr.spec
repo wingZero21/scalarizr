@@ -58,9 +58,9 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr EC2 edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-boto >= 2.32.1
+Requires:       python26-boto >= 2.34.0
 %else
-Requires:       python-boto >= 2.32.1
+Requires:       python-boto >= 2.34.0
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
@@ -185,7 +185,7 @@ Summary:        Scalarizr Google Compute Engine edition
 Group:          Applications/Internet
 Requires:       scalarizr-base = %{version}-%{release}
 Requires:       pyOpenSSL >= 0.13 python-httplib2
-Requires:       python-google-api-client
+Requires:       python-google-api-client >= 1.2
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
 Conflicts:		scalarizr-openstack

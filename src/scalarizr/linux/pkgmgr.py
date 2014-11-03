@@ -19,6 +19,7 @@ import distutils.version
 
 from scalarizr import linux, util
 from scalarizr.linux import coreutils
+from scalarizr.bus import bus
 from urlparse import urlparse
 
 from pkg_resources import parse_requirements
@@ -273,9 +274,10 @@ class AptPackageMgr(PackageMgr):
         cmd = ''
         if kwds.get('apt_repository'):
             cmd += ('--no-list-cleanup '
-                    '-o Dir::Etc::sourcelist=sources.list.d/{0}.list '
+                    '-c {0}/updclient/apt-preserve-update-success-stamp.conf '
+                    '-o Dir::Etc::sourcelist=sources.list.d/{1}.list '
                     '-o Dir::Etc::sourceparts=- '
-                    ).format(kwds['apt_repository'])
+                    ).format(bus.share_path, kwds['apt_repository'])
         cmd += 'update'
         try:
             self.apt_get_command(cmd)
@@ -306,7 +308,7 @@ class AptPackageMgr(PackageMgr):
         if err:
             raise Exception("'dpkg-query -W' command failed. Out: %s \nErrors: %s" % (out, err))
         pkgs = dict([(line.split('|')[1], line.split('|')[2].split(':')[-1]) \
-                for line in out.split('\n') if line.split('|')[0]=='install ok installed'])
+                for line in out.split('\n') if line.split('|')[0] in ('install ok installed', 'hold ok installed')])
         return pkgs
 
 

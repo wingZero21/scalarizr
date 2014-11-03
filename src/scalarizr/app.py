@@ -59,6 +59,7 @@ import SocketServer
 from scalarizr import exceptions
 
 if not linux.os.windows:
+    import pwd
     import ctypes
     libc = ctypes.CDLL('libc.so.6')
 
@@ -290,6 +291,14 @@ def _init_logging():
         for hdlr in logging.getLogger('scalarizr').handlers:
             if isinstance(hdlr, logging.StreamHandler) and hdlr.stream == sys.stderr:
                 hdlr.setLevel(logging.INFO)
+
+
+def _init_environ():
+    if linux.os.windows:
+        return
+    pwr = pwd.getpwuid(os.getuid())
+    os.environ['USER'] = pwr.pw_name
+    os.environ['HOME'] = pwr.pw_dir
 
 
 def _init_platform():
@@ -559,6 +568,7 @@ class Service(object):
     def start(self):
         self._logger.debug("Initialize scalarizr...")
         _init()
+        _init_environ()
 
         # Starting scalarizr daemon initialization
         globals()['_pid'] = pid = os.getpid()
@@ -800,11 +810,14 @@ class Service(object):
         defaults = node.__node__['defaults']['base']
 
         if node.__node__['state'] != 'importing':
-            lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
-            api_port = int(lfrp.get('base', {}).get('api_port', defaults['api_port']) \
-                            or defaults['api_port'])
-            messaging_port = int(lfrp.get('base', {}).get('messaging_port', defaults['messaging_port']) \
-                                    or defaults['messaging_port'])
+            try:
+                api_port = int(node.__node__['base']['api_port'])
+            except KeyError, ValueError:
+                api_port = defaults['api_port']
+            try:
+                messaging_port = int(node.__node__['base']['messaging_port'])
+            except KeyError, ValueError:
+                messaging_port = defaults['messaging_port']
 
             if messaging_port == defaults['messaging_port'] and self._port_busy(messaging_port):
                 messaging_port = 8011
@@ -876,6 +889,9 @@ class Service(object):
         bus.queryenv_service = queryenv
         bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 
+        if node.__node__['state'] != 'importing':
+            lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
+            node.__node__['base'].update(lfrp.get('base', {}))
         ports_non_default = self._select_control_ports()
 
         logger.debug("Initialize messaging")

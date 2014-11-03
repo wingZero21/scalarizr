@@ -133,7 +133,7 @@ class UpdClientAPI(object):
     system_matches = False
 
     etc_path = __node__['etc_dir']
-    share_path = __node__['share_dir']
+    share_path = bus.share_path = __node__['share_dir']
     log_file = os.path.join(__node__['log_dir'], 'scalarizr_update.log')
 
     _private_path = os.path.join(etc_path, 'private.d')
