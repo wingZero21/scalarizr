@@ -139,6 +139,7 @@ class UpdClientAPI(object):
         etc_path = '/etc/scalr'
         share_path = '/usr/share/scalr'
         log_file = '/var/log/scalarizr_update.log'
+    bus.share_path = share_path
 
     _private_path = os.path.join(etc_path, 'private.d')
     status_file = os.path.join(_private_path, 'update.status')
