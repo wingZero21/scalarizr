@@ -321,7 +321,7 @@ def publish_deb():
             packages = glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch))
             if packages:
                 local('aptly repo add {0} {1}'.format(repo, ' '.join(packages)))
-        local('aptly publish drop {0} || :'.format(repo))
+        local('aptly publish drop {0} {1} || :'.format(repo, aptly_prefix))
         local('aptly publish repo -gpg-key={0} {1} {2} || :'.format(gpg_key, repo, aptly_prefix))
         local('aptly db cleanup')
     finally:
