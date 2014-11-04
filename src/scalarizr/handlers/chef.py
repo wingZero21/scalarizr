@@ -151,6 +151,7 @@ initdv2.explore('chef', ChefInitScript)
 
 
 class ChefHandler(Handler):
+
     def __init__(self):
         super(ChefHandler, self).__init__()
         bus.on(init=self.on_init)
@@ -178,7 +179,6 @@ class ChefHandler(Handler):
                 daemonize = int(params_dict.get('daemonize', False))
                 if daemonize:
                     self.daemonize()
-
 
     def on_host_init_response(self, message):
         global_variables = message.body.get('global_variables') or []
@@ -213,11 +213,9 @@ class ChefHandler(Handler):
                         win32service.CloseServiceHandle(hscm)
 
                     win32serviceutil.StopService(WIN_SERVICE_NAME)
-
                 except:
                     e = sys.exc_info()[1]
                     self._logger.warning('Could not stop chef service: %s' % e)
-
 
     def on_before_host_up(self, msg):
         if not self._chef_data:
@@ -231,13 +229,14 @@ class ChefHandler(Handler):
                 if os.path.exists(CLIENT_KEY_PATH):
                     os.remove(CLIENT_KEY_PATH)
 
-                chef_client = ChefClient(self._chef_data['server_url'],
-                                         self._with_json_attributes,
-                                         self._chef_data['node_name'],
-                                         self._chef_data['validator_name'],
-                                         self._chef_data['validator_key'],
-                                         self._chef_data['environment'],
-                                         self._environ_variables)
+                chef_client = ChefClient(chef_server_url=self._chef_data['server_url'],
+                                         json_attributes=self._with_json_attributes,
+                                         node_name=self._chef_data['node_name'],
+                                         validator_name=self._chef_data['validator_name'],
+                                         validation_pem=self._chef_data['validator_key'],
+                                         environment=self._chef_data['environment'],
+                                         environment_variables=self._environ_variables,
+                                         log_level=self._chef_data['log_level'])
                 try:
                     chef_client.prepare()
                     self.send_message('HostUpdate', dict(chef=self._chef_data))
@@ -251,9 +250,9 @@ class ChefHandler(Handler):
                     self.daemonize()
 
             elif self._chef_data.get('cookbook_url'):
-                solo = ChefSolo(self._chef_data['cookbook_url'],
-                                self._chef_data['cookbook_url_type'],
-                                self._with_json_attributes,
+                solo = ChefSolo(cookbook_url=self._chef_data['cookbook_url'],
+                                cookbook_url_type=self._chef_data['cookbook_url_type'],
+                                json_attributes=self._with_json_attributes,
                                 relative_path=self._chef_data.get('relative_path'),
                                 environment=self._environ_variables,
                                 ssh_private_key=self._chef_data.get('ssh_private_key'),
@@ -270,7 +269,6 @@ class ChefHandler(Handler):
         finally:
             self._chef_data = None
 
-
     def daemonize(self):
         if linux.os.windows_family:
             self._logger.info('Starting chef-client service')
@@ -282,7 +280,6 @@ class ChefHandler(Handler):
                             "cause 'chef-client' is not a registered Windows Service.\n"
                             "Most likely you haven't selected Chef Service option in Chef installer.")
                     raise HandlerError(err)
-
         else:
             self._init_script.start(env=self._environ_variables)
 
