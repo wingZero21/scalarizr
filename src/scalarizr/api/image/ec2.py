@@ -152,9 +152,7 @@ class EBSImageMaker(object):
         self.platform = __node__['platform']
         self.destination = destination
         self.temp_vol = None
-        self.excludes = [
-                # self.destination,
-                ]
+        self.excludes = ['/dev', '/media', '/mnt', '/proc', '/sys']
 
     def _assure_space(self):
         """
@@ -183,7 +181,7 @@ class EBSImageMaker(object):
             '--arch', linux.os['arch'],
             '--size', str(self.image_size*1024),
             '--destination', self.destination,
-            '--exclude', self.destination,
+            '--exclude', ','.join([self.destination] + self.excludes),
             '--prefix', self.image_name,
             '--volume', '/',
             '--debug')
