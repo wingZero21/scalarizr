@@ -401,26 +401,14 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                 '-o', '/etc/pki/tls/certs/ca-bundle.crt'))
 
         system2(('wget',
-            '-P', '/tmp/',
+            '-P', '/tmp',
             'http://cache.ruby-lang.org/pub/ruby/1.9/ruby-1.9.3-p547.tar.gz'))
         system2(('tar', '-xzvf', 'ruby-1.9.3-p547.tar.gz'), cwd='/tmp')
-        system2(('./configure', '-prefix=%s' % self._ruby_dir), cwd='/tmp/ruby-1.9.3-p547')
-        system2(('make',), cwd='/tmp/ruby-1.9.3-p547')
-        system2(('make', 'install'), cwd='/tmp/ruby-1.9.3-p547')
-        # install_script = system2(('curl', '-sSL', 'https://get.rvm.io'),)[0]
+        sources_dir = '/tmp/ruby-1.9.3-p547'
+        system2(('./configure', '-prefix=%s' % self._ruby_dir), cwd=sources_dir)
+        system2(('make',), cwd=sources_dir)
+        system2(('make', 'install'), cwd=sources_dir)
 
-        # with open('/tmp/rvm_install.sh', 'w') as fp:
-        #     fp.write(install_script)
-        # os.chmod('/tmp/rvm_install.sh', 0770)
-        # system2(('/tmp/rvm_install.sh', 'stable'), shell=True)
-        # system2(('/usr/local/rvm/bin/rvm install 1.9.3', '--auto-dotfiles'), shell=True)
-
-
-        # ruby_path = None
-        # for item in os.listdir('/usr/local/rvm/rubies/'):
-        #     if item.startswith('ruby-1.9.3'):
-        #         ruby_path = '/usr/local/rvm/rubies/' + item
-        #         break
         self.environ['PATH'] = self.environ['PATH'] + (':%s/bin' % self._ruby_dir)
         self.environ['MY_RUBY_HOME'] = self._ruby_dir
 
@@ -502,6 +490,22 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
                     print '%s=%s' % (definition_part, fixed_regex)
                 else:
                     print line,
+
+            # updating mkfs cause of filesystem option setting bug
+            pkgmgr.installed('texinfo')
+            system2(('wget',
+                'https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/'
+                    'v1.42.5/e2fsprogs-1.42.5.tar.gz',
+                '-P',
+                '/tmp'),)
+
+            e2fs_dir = '/tmp/e2fsprogs-1.42.5'
+            system2(('tar', '-xzvf', 'e2fsprogs-1.42.5.tar.gz'), cwd='/tmp')
+            build_dir = os.path.join(e2fs_dir, 'build')
+            os.mkdir(build_dir)
+            system2(('../configure'), cwd=build_dir)
+            system2(('make'), cwd=build_dir)
+            system2(('make', 'install'), cwd=build_dir)
 
         system2(('chmod', '-R', '0755', os.path.dirname(self._tools_dir)))
 
