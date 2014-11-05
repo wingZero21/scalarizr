@@ -288,6 +288,10 @@ def build_rpm_deps():
     run('rm -f /var/cache/omnibus/pkg/yum-*')
     build_meta_package('rpm', 'yum-downloadonly', '0.0.1', 'yum-plugin-downloadonly')
     build_meta_package('rpm', 'yum-plugin-downloadonly', '0.0.1')
+    local('curl -o %s/scalr-upd-client-0.4.17-1.el5.noarch.rpm '
+            'http://rpm.scalr.net/rpm/rhel/5/x86_64/scalr-upd-client-0.4.17-1.el5.noarch.rpm' % rpm_deps_dir)
+    local('curl -o %s/scalr-upd-client-0.4.17-1.el6.noarch.rpm '
+            'http://rpm.scalr.net/rpm/rhel/6/x86_64/scalr-upd-client-0.4.17-1.el6.noarch.rpm' % rpm_deps_dir)
     import_artifact('/var/cache/omnibus/pkg/yum-*', rpm_deps_dir)
 
 
