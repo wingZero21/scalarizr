@@ -41,7 +41,7 @@ class CloudStackConnectionProxy(platform.ConnectionProxy):
     def __call__(self, *args, **kwargs):
         for retry in range(2):
             try:
-                return self.obj(*args, **kwds)
+                return self.obj(*args, **kwargs)
             except:
                 e = sys.exc_info()[1]
                 if isinstance(e, ConnectionError):
@@ -56,25 +56,33 @@ class CloudStackPlatform(Platform):
     name = 'cloudstack'
 
     features = [PlatformFeatures.SNAPSHOTS, PlatformFeatures.VOLUMES]
+    _dhcp_leases_mtime = None
+    _dhcp_leases_path = None
+    _router_addr = None
 
     def __init__(self):
         Platform.__init__(self)
-        
-        leases_pattern = '/var/lib/dhc*/dhclient*.leases'
-        try:
-            eth_leases = glob.glob(leases_pattern)[0]
-        except IndexError:
-            raise PlatformError("Can't find virtual router. No file matching pattern: %s", leases_pattern)
-
-        router = None
-        for line in open(eth_leases):
-            if 'dhcp-server-identifier' in line:
-                router = filter(None, line.split(';')[0].split(' '))[2]
-        LOG.debug('Meta-data server: %s', router)
-        self._router = router
-
         self._metadata = {}
         self._conn_pool = LocalPool(_create_connection)
+        self.refresh_virtual_router_addr()
+
+    def refresh_virtual_router_addr(self):
+        leases_pattern = '/var/lib/dhc*/dhclient*.leases'
+        if not self._dhcp_leases_path:
+            LOG.debug('Lookuping DHCP leases file')
+            try:
+                self._dhcp_leases_path = glob.glob(leases_pattern)[0]
+            except IndexError:
+                raise PlatformError("Can't find virtual router. No file matching pattern: %s", leases_pattern)
+        if os.stat(self._dhcp_leases_path).st_mtime == self._dhcp_leases_mtime:
+            return
+
+        LOG.debug('Lookuping meta-data server address')
+        for line in open(self._dhcp_leases_path):
+            if 'dhcp-server-identifier' in line:
+                self._router_addr = filter(None, line.split(';')[0].split(' '))[2]
+        LOG.debug('Meta-data server: %s', self._router_addr)
+        self._dhcp_leases_mtime = os.stat(self._dhcp_leases_path).st_mtime
 
     def get_private_ip(self):
         return self.get_meta_data('local-ipv4')
@@ -94,9 +102,10 @@ class CloudStackPlatform(Platform):
         return Platform.get_user_data(self, key)
 
     def get_meta_data(self, key):
+        self.refresh_virtual_router_addr()
         if not key in self._metadata:
             try:
-                url = 'http://%s/latest/%s' % (self._router, key)
+                url = 'http://%s/latest/%s' % (self._router_addr, key)
                 self._metadata[key] = urllib2.urlopen(url).read().strip()
             except IOError:
                 exc_info = sys.exc_info()
