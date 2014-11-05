@@ -287,7 +287,6 @@ def build_rpm_deps():
         return
     build_meta_package('rpm', 'yum-downloadonly', '0.0.1', 'yum-plugin-downloadonly')
     build_meta_package('rpm', 'yum-plugin-downloadonly', '0.0.1')
-    build_meta_package('rpm', 'yum-priorities', '0.0.1', 'yum-plugin-priorities')
     import_artifact('/var/cache/omnibus/pkg/yum-*', rpm_deps_dir)
 
 
