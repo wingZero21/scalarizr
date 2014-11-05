@@ -7,8 +7,6 @@
 # rpm: http://fedoraproject.org/wiki/Packaging:ScriptletSnippets
 # deb: https://www.debian.org/doc/debian-policy/ch-maintainerscripts.html
 
-set -x
-
 PROGNAME='scalarizr'
 INSTALL_DIR='/opt/scalarizr'
 ETC_DIR='/etc/scalr'
