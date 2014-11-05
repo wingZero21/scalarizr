@@ -285,6 +285,7 @@ def build_binary():
 def build_rpm_deps():
     if os.listdir(rpm_deps_dir):
         return
+    run('rm -f /var/cache/omnibus/pkg/yum-*')
     build_meta_package('rpm', 'yum-downloadonly', '0.0.1', 'yum-plugin-downloadonly')
     build_meta_package('rpm', 'yum-plugin-downloadonly', '0.0.1')
     import_artifact('/var/cache/omnibus/pkg/yum-*', rpm_deps_dir)
