@@ -121,7 +121,7 @@ class InstanceStoreImageMaker(object):
             image_location=s3_manifest_path,
             kernel_id=instance.kernel,
             virtualization_type=instance.virtualization_type,
-            ramdisk_id=self._platform.get_ramdisk_id(),
+            ramdisk_id=self.platform.get_ramdisk_id(),
             architecture=instance.architecture)
 
         LOG.debug("Image is registered.")
