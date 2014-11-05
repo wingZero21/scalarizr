@@ -69,6 +69,8 @@ class InstanceStoreImageMaker(object):
 
     def prepare_image(self):
         # prepares image with ec2-bundle-vol command
+        if not os.path.exists(self.destination):
+            os.mkdir(self.destination)
         cmd = (
             os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
             '--cert', self.credentials['cert'],
