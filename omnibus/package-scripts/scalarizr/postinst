@@ -3,6 +3,11 @@
 # Perform necessary scalarizr setup steps
 # after package is installed.
 #
+# Scripts order
+# rpm: http://fedoraproject.org/wiki/Packaging:ScriptletSnippets
+# deb: https://www.debian.org/doc/debian-policy/ch-maintainerscripts.html
+
+set -x
 
 PROGNAME='scalarizr'
 INSTALL_DIR='/opt/scalarizr'
@@ -78,8 +83,8 @@ function link_to {
 
 # sync configuration files
 test -e $ETC_DIR || mkdir -p $ETC_DIR
-$INSTALL_DIR/embedded/bin/rsync -a $ETC_DIR/ $INSTALL_DIR/etc
-$INSTALL_DIR/embedded/bin/rsync -av $INSTALL_DIR/etc/ $ETC_DIR
+$INSTALL_DIR/embedded/bin/rsync -aq $ETC_DIR/ $INSTALL_DIR/etc
+$INSTALL_DIR/embedded/bin/rsync -avq $INSTALL_DIR/etc/ $ETC_DIR
 
 # update symlinks
 for name in $(ls $INSTALL_DIR/bin); do
