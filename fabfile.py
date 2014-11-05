@@ -17,6 +17,7 @@ build_dir = os.environ['PWD']
 home_dir = os.environ.get('CI_HOME_DIR', '/var/lib/ci')
 omnibus_dir = os.path.join(build_dir, 'omnibus')
 project_dir = os.path.join(home_dir, project)
+rpm_deps_dir = os.path.join(project_dir, 'rpm-deps')
 verbose = os.environ.get('CI_VERBOSE', 'no').lower() in ('1', 'yes', 'y')
 repo_dir = '/var/www'
 aptly_conf = None
@@ -72,6 +73,10 @@ def prepare():
     if not os.path.exists(artifacts_dir):
         os.makedirs(artifacts_dir)
     cleanup_artifacts()
+    if not os.path.exists(rpm_deps_dir):
+        os.makedirs(rpm_deps_dir)
+    if not os.listdir(rpm_deps_dir):
+        execute(build_rpm_deps, hosts=['centos-5', 'centos-5-32'])
     print_green('build_number: {0}'.format(build_number))
     print_green('artifacts_dir: {0}'.format(artifacts_dir))
 
@@ -133,7 +138,7 @@ def init():
     aptly_prefix = 'release' if is_tag else 'develop'
 
 
-def import_artifact(src):
+def import_artifact(src, dst=None):
     '''
     Utility function to import artifacts from Slave
     Example:
@@ -144,7 +149,7 @@ def import_artifact(src):
     '''
     print_green('importing artifacts from {0} to {1}'.format(src, artifacts_dir))
 
-    files = get(src, artifacts_dir)
+    files = get(src, dst or artifacts_dir)
     print_green('imported artifacts:')
     for f in files:
         print_green(os.path.basename(f))
@@ -215,21 +220,29 @@ def build_omnibus():
         fp.write(omnibus_md5sum())
 
 
+def build_meta_package(pkg_type, name, version, depends=None):
+    with cd('/var/cache/omnibus/pkg'):
+        cmd = ('fpm -t {pkg_type} -s empty '
+                '--name {name} '
+                '--version {version} '
+                '--iteration 1 '
+                '--maintainer "Scalr Inc. <packages@scalr.net>" '
+                '--url "http://scalr.net"').format(
+                pkg_type=pkg_type, name=name, version=version)
+        if depends:
+            cmd += ' --depends "{depends}"'.format(depends)
+        run(cmd)
+
+
 def build_meta_packages():
     print_green('building meta packages')
     pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
     for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud'.split():
-        with cd('/var/cache/omnibus/pkg'):
-            run(('fpm -t {pkg_type} -s empty '
-                 '--name scalarizr-{platform} '
-                 '--version {version} '
-                 '--iteration 1 '
-                 '--depends "scalarizr = {version}-1" '
-                 '--maintainer "Scalr Inc. <packages@scalr.net>" '
-                 '--url "http://scalr.net"').format(
-                pkg_type=pkg_type, version=version,
-                platform=platform))
-
+        build_meta_package(
+                pkg_type, 
+                'scalarizr-%s' % platform, 
+                version, 
+                'scalarizr = %s-1' % version)
 
 @task
 def build_source():
@@ -268,6 +281,15 @@ def build_binary():
     import_artifact('/var/cache/omnibus/pkg/{0}*'.format(project))
     time_delta = time.time() - time0
     print_green('build binary took {0}'.format(time_delta))
+
+
+@task
+def build_rpm_deps():
+    build_meta_package('rpm', 'yum-downloadonly', '0.0.1', 'yum-plugin-downloadonly')
+    build_meta_package('rpm', 'yum-plugin-downloadonly', '0.0.1')
+    build_meta_package('rpm', 'yum-priorities', '0.0.1', 'yum-plugin-priorities')
+    import_artifact('/var/cache/omnibus/pkg/yum-*', rpm_deps_dir)
+
 
 
 def omnibus_md5sum_changed():
