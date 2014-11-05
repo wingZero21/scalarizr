@@ -230,7 +230,7 @@ def build_meta_package(pkg_type, name, version, depends=None):
                 '--url "http://scalr.net"').format(
                 pkg_type=pkg_type, name=name, version=version)
         if depends:
-            cmd += ' --depends "{depends}"'.format(depends)
+            cmd += ' --depends "{0}"'.format(depends)
         run(cmd)
 
 
