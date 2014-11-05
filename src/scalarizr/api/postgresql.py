@@ -23,6 +23,7 @@ from scalarizr import linux
 from scalarizr.services import backup
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.handlers import DbMsrMessages, HandlerError
+from scalarizr.handlers import transfer_result_to_backup_result
 from scalarizr.api import operation
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services.postgresql import PSQL, PG_DUMP, SU_EXEC
@@ -177,7 +178,7 @@ class PostgreSQLAPI(BehaviorAPI):
             result['error'] = error_match.group()
             return result
 
-        diff_match = re.search(r'xlog_delay.+-\n *\d+', out, re.DOTALL)
+        diff_match = re.search(r'xlog_delay.+-\n -*\d+', out, re.DOTALL)  # [SCALARIZR-1642]
         if not diff_match:
             #if no error and query returns nothing
             return result
@@ -328,11 +329,9 @@ class PostgreSQLAPI(BehaviorAPI):
                 trn = LargeTransfer(dumps, cloud_storage_path, tags=backup_tags)
                 manifest = trn.run()
                 LOG.info("Postgresql backup uploaded to cloud storage under %s", cloud_storage_path)
-                
-                result = list(dict(path=os.path.join(os.path.dirname(manifest.cloudfs_path), c[0]), size=c[2]) for c in
-                                manifest['files'][0]['chunks'])
                     
                 # Notify Scalr
+                result = transfer_result_to_backup_result(manifest)
                 __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT,
                                         dict(db_type=BEHAVIOUR,
                                              status='ok',
