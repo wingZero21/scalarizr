@@ -151,6 +151,7 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
 initdv2.explore('chef', ChefInitScript)
 
 class ChefHandler(Handler):
+
     def __init__(self):
         super(ChefHandler, self).__init__()
         bus.on(init=self.on_init)
@@ -178,7 +179,6 @@ class ChefHandler(Handler):
                 daemonize = int(params_dict.get('daemonize', False))
                 if daemonize:
                     self.daemonize()
-
 
     def on_host_init_response(self, message):
         global_variables = message.body.get('global_variables') or []
@@ -213,11 +213,9 @@ class ChefHandler(Handler):
                         win32service.CloseServiceHandle(hscm)
 
                     win32serviceutil.StopService(WIN_SERVICE_NAME)
-
                 except:
                     e = sys.exc_info()[1]
                     self._logger.warning('Could not stop chef service: %s' % e)
-
 
     def on_before_host_up(self, msg):
         if not self._chef_data:
@@ -271,7 +269,6 @@ class ChefHandler(Handler):
         finally:
             self._chef_data = None
 
-
     def daemonize(self):
         if linux.os.windows_family:
             self._logger.info('Starting chef-client service')
@@ -283,7 +280,6 @@ class ChefHandler(Handler):
                             "cause 'chef-client' is not a registered Windows Service.\n"
                             "Most likely you haven't selected Chef Service option in Chef installer.")
                     raise HandlerError(err)
-
         else:
             self._init_script.start(env=self._environ_variables)
 
