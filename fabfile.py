@@ -75,8 +75,6 @@ def prepare():
     cleanup_artifacts()
     if not os.path.exists(rpm_deps_dir):
         os.makedirs(rpm_deps_dir)
-    if not os.listdir(rpm_deps_dir):
-        execute(build_rpm_deps, hosts=['centos-5', 'centos-5-32'])
     print_green('build_number: {0}'.format(build_number))
     print_green('artifacts_dir: {0}'.format(artifacts_dir))
 
@@ -285,6 +283,8 @@ def build_binary():
 
 @task
 def build_rpm_deps():
+    if os.listdir(rpm_deps_dir):
+        return
     build_meta_package('rpm', 'yum-downloadonly', '0.0.1', 'yum-plugin-downloadonly')
     build_meta_package('rpm', 'yum-plugin-downloadonly', '0.0.1')
     build_meta_package('rpm', 'yum-priorities', '0.0.1', 'yum-plugin-priorities')
