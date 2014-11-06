@@ -457,7 +457,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def _install_ami_tools(self):
         if linux.os['name'] == 'Amazon':
             pkgmgr.installed('aws-amitools-ec2-1.5.3')
-            self.bundle_vol_cmd = 'ec2-bundle-vol'
+            self.bundle_vol_cmd = '/opt/aws/bin/ec2-bundle-vol'
             return
 
         system2(('wget',
