@@ -208,7 +208,7 @@ class UpdClient(util.Server):
 
     
     def _start_api(self):
-        LOG.debug('Starting API on port %s', self.api.api_port)
+        LOG.info('Starting API on port %s', self.api.api_port)
         try:
             wsgi_app = jsonrpc_http.WsgiApplication(
                         rpc.RequestHandler(self.api), 
