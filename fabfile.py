@@ -90,7 +90,7 @@ def init():
     build_number = read_build_number()
     print_green('build_number: {0}'.format(build_number))
     setup_artifacts_dir()
-    
+
     if os.path.exists('.git/FETCH_HEAD'):
         with open('.git/FETCH_HEAD') as fp:
             m = re.search(r"^([0-9a-f]{8,40})\s+tag '([^']+)'", fp.read())
@@ -104,7 +104,7 @@ def init():
                 revision = head
                 ref = local("git branch -r --contains HEAD", capture=True).strip()
                 ref = re.search(r'origin/(.*)', ref).group(1)
-            else:            
+            else:
                 ref = re.search(r'ref: refs/heads/(.*)', head).group(1)
                 revision = local("git rev-parse HEAD", capture=True)
             is_tag = False
@@ -237,9 +237,9 @@ def build_meta_packages():
     pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
     for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud'.split():
         build_meta_package(
-                pkg_type, 
-                'scalarizr-%s' % platform, 
-                version, 
+                pkg_type,
+                'scalarizr-%s' % platform,
+                version,
                 'scalarizr = %s-1' % version)
 
 @task
@@ -364,7 +364,7 @@ def publish_deb_plain():
     try:
         with lcd(aptly_conf['rootDir'] + '/public/' + aptly_prefix):
             release_file = 'dists/{0}/Release'.format(repo)
-            arches = local('grep Architecture {0}'.format(release_file), 
+            arches = local('grep Architecture {0}'.format(release_file),
                             capture=True).split(':')[-1].strip().split()
             repo_plain_dir = '{0}/apt-plain/{1}'.format(repo_dir, repo)
             if os.path.exists(repo_plain_dir):
@@ -428,7 +428,7 @@ def publish_rpm():
             symlink('6', linkname)
         for linkname in '7Server 7.0'.split():
             symlink('7', linkname)
-        # Symlink el6 and el7 package directories to el5 
+        # Symlink el6 and el7 package directories to el5
         for arch in ('i386', 'x86_64'):
             for ver in '6 7'.split():
                 symlink('../5/%s' % arch, '%s/%s' % (ver, arch))
@@ -465,7 +465,7 @@ def publish_win():
         local("mkdir -p %s" % repo_path)
     finally:
         time_delta = time.time() - time0
-        print_green('publish win took {0}'.format(time_delta))  
+        print_green('publish win took {0}'.format(time_delta))
 
 
 def cleanup_artifacts():
@@ -533,6 +533,8 @@ def publish_binary():
 @task
 def cleanup():
     run('rm -rf /root/.strider/data/scalr-int-scalarizr-*')
+    # additional cleanup for cases when user was previously defined incorrectly
+    run('rm -rf /.strider/data/scalr-int-scalarizr-*')
     run('find /tmp -mindepth 1 -maxdepth 1 ! -name "vagrant-chef-*" | xargs rm -rf')
 
 
