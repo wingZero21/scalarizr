@@ -3,7 +3,6 @@ import os
 import sys
 import time
 import shutil
-import socket
 
 
 from scalarizr.node import __node__
@@ -69,30 +68,36 @@ class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
         LOG.info('Server image %s created', image_id)
 
         result = [None]
-        max_socket_errors = 10
         def image_completed():
             try:
                 result[0] = nova.images.get(image_id)
                 return result[0].status in ('ACTIVE', 'FAILED', 'DELETED')
             except:
                 e = sys.exc_info()[1]
-                if isinstance(e, socket.error) or isinstance(e.args[0], socket.error):
-                    image_completed.socket_errors += 1
-                    if image_completed.socket_errors > max_socket_errors:
-                        raise
-                    else:
-                        return
                 if 'Unhandled exception occurred during processing' in str(e):
                     return
                 raise
-        image_completed.socket_errors = 0
-        wait_until(image_completed, start_text='Polling image status', sleep=30)
+        def delete_image():
+            if not result[0]:
+                return
+            image_id = result[0].id
+            try:
+                LOG.info('Cleanup: deleting image %s', image_id)
+                nova.images.delete(image_id)
+            except:
+                LOG.warn('Cleanup failed: %s', exc_info=sys.exc_info())
 
-        image = result[0]
-        if image.status != 'ACTIVE':
-            raise handlers.HandlerError('Image %s becomes %s', image.id, image.status)
-        LOG.info('Image %s completed and available for use!', image.id)
-        return image.id
+        try:
+            wait_until(image_completed, start_text='Polling image status', sleep=30)
+            image = result[0]
+            if image.status != 'ACTIVE':
+                raise handlers.HandlerError('Image %s becomes %s', image.id, image.status)
+            LOG.info('Image %s completed and available for use!', image.id)
+            return image.id
+        except:
+            exc = sys.exc_info()
+            delete_image()
+            raise exc[0], exc[1], exc[2]
 
 
     def before_rebundle(self):
