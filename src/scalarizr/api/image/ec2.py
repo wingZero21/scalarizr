@@ -57,6 +57,7 @@ class InstanceStoreImageMaker(object):
         self.environ = delegate.environ
         self.credentials = delegate.credentials
         self.ami_bin_dir = delegate.ami_bin_dir
+        self.bundle_vol_cmd = delegate.bundle_vol_cmd
         self.excludes = excludes
         self.bucket_name = bucket_name
         self.destination = destination
@@ -72,7 +73,7 @@ class InstanceStoreImageMaker(object):
         if not os.path.exists(self.destination):
             os.mkdir(self.destination)
         cmd = (
-            os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
+            self.bundle_vol_cmd,
             '--cert', self.credentials['cert'],
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
@@ -151,6 +152,7 @@ class EBSImageMaker(object):
         self.environ = delegate.environ
         self.credentials = delegate.credentials
         self.ami_bin_dir = delegate.ami_bin_dir
+        self.bundle_vol_cmd = delegate.bundle_vol_cmd
         self.platform = __node__['platform']
         self.destination = destination
         self.temp_vol = None
@@ -176,7 +178,7 @@ class EBSImageMaker(object):
             os.mkdir(self.destination)
         self._assure_space()
         cmd = (
-            os.path.join(self.ami_bin_dir, 'ec2-bundle-vol'),
+            self.bundle_vol_cmd,
             '--cert', self.credentials['cert'],
             '--privatekey', self.credentials['key'],
             '--user', self.credentials['user'],
@@ -352,6 +354,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         self.environ = os.environ.copy()
         self.excludes = None
         self.ami_bin_dir = None
+        self.bundle_vol_cmd = None
         self._prepare_software()
 
     def _get_version(self, tools_folder_name):
@@ -454,6 +457,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
     def _install_ami_tools(self):
         if linux.os['name'] == 'Amazon':
             pkgmgr.installed('aws-amitools-ec2-1.5.3')
+            self.bundle_vol_cmd = 'ec2-bundle-vol'
             return
 
         system2(('wget',
@@ -512,6 +516,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
             system2(('make'), cwd=build_dir)
             system2(('make', 'install'), cwd=build_dir)
 
+        self.bundle_vol_cmd = os.path.join(self.ami_bin_dir, 'ec2-bundle-vol')
         system2(('chmod', '-R', '0755', os.path.dirname(self._tools_dir)))
 
         system2(('export', 'EC2_AMITOOL_HOME=%s' % os.path.dirname(self.ami_bin_dir)),
