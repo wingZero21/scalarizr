@@ -237,10 +237,14 @@ class RabbitMQHandler(ServiceCtlHandler):
                     ' -kernel inet_dist_listen_max {0}"\n'.format(RABBITMQ_CLUSTERING_PORT))
 
     def _patch_selinux(self):
+        # Temporary
+        system(['setenforce', '0'])
+        """
         enabled = 'on' in system(['getsebool', 'nis_enabled'], raise_exc=False)[1]
         if not enabled:
             system(['setsebool', '-P', 'nis_enabled', '1'])
             self._logger.debug('Selinux boolean nis_enabled has been set to "enabled"')
+        """
 
     def on_host_init_response(self, message):
         log = bus.init_op.logger
