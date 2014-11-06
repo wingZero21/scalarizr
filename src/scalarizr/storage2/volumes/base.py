@@ -96,7 +96,7 @@ class Volume(Base):
             if not self.is_fs_created() and mkfs:
                 LOG.debug('Creating %s filesystem: %s', self.fstype, self.id)
                 self.mkfs()
-            in_fstab = self.device not in mod_mount.fstab()
+            in_fstab = self.device in mod_mount.fstab()
             if not in_fstab:
                 self.mount()
             if fstab and not in_fstab:
