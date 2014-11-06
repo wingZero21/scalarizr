@@ -161,7 +161,6 @@ class UpdClient(util.Server):
         LOG.info('Starting UpdateClient (pid: %s)', os.getpid())
         self._check_singleton()
         try:
-            self._start_api()
             self._write_pid_file()
 
             self.running = True  
@@ -170,6 +169,7 @@ class UpdClient(util.Server):
             # checks for self.running is True to perform graceful shutdown
 
             self.api.bootstrap()
+            self._start_api()
         except:
             self.do_stop()
             LOG.exception('Detailed exception information below:')
