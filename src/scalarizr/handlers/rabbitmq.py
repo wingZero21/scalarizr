@@ -81,14 +81,15 @@ class RabbitMQHandler(ServiceCtlHandler):
             bus.on("rebundle_cleanup_image", self.cleanup_hosts_file)
         bus.on("before_host_down", self.on_before_host_down)
 
-    def on_start(self):
-        self._insert_iptables_rules()
         if os_mod.redhat_family:
             try:
                 self._patch_selinux()
             except:
                 e = sys.exc_info()[1]
                 self._logger.warning('Setting selinux boolean for rabbitmq-server failed: {0}'.format(e))
+
+    def on_start(self):
+        self._insert_iptables_rules()
 
         if 'running' == __node__['state']:
             self._prepare_env_config()
@@ -236,8 +237,10 @@ class RabbitMQHandler(ServiceCtlHandler):
                     ' -kernel inet_dist_listen_max {0}"\n'.format(RABBITMQ_CLUSTERING_PORT))
 
     def _patch_selinux(self):
-        system(['setsebool', '-P', 'nis_enabled', '1'])
-        self._logger.debug('Selinux boolean nis_enabled has been set to "enabled"')
+        enabled = 'on' in system(['getsebool', 'nis_enabled'], raise_exc=False)[1]
+        if not enabled:
+            system(['setsebool', '-P', 'nis_enabled', '1'])
+            self._logger.debug('Selinux boolean nis_enabled has been set to "enabled"')
 
     def on_host_init_response(self, message):
         log = bus.init_op.logger
