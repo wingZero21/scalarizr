@@ -452,6 +452,10 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         os.remove('/tmp/'+utils_package)
 
     def _install_ami_tools(self):
+        if linux.os['name'] == 'Amazon':
+            pkgmgr.installed('aws-amitools-ec2-1.5.3')
+            return
+
         system2(('wget',
             'http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip',
             '-P',
@@ -466,7 +470,6 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
 
         self._remove_old_versions()
         self._install_ruby()
-        self._install_sg3_utils()
 
         system2(('unzip', '/tmp/ec2-ami-tools.zip', '-d', self._tools_dir))
 
@@ -518,6 +521,7 @@ class EC2ImageAPIDelegate(ImageAPIDelegate):
         # windows has no ami tools. Bundle is made by scalr
         if linux.os['family'] != 'Windows':
             pkgmgr.updatedb()
+            self._install_sg3_utils()
             self._install_ami_tools()
             if linux.os['family'] == 'RedHat':
                 pkgmgr.installed('parted')
