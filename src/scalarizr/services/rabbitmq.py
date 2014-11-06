@@ -24,7 +24,8 @@ __rabbitmq__ = __node__['rabbitmq']
 
 SERVICE_NAME = BuiltinBehaviours.RABBITMQ
 RABBIT_CFG_PATH = '/etc/rabbitmq/rabbitmq.config'
-COOKIE_PATH = '/var/lib/rabbitmq/.erlang.cookie'
+RABBIT_HOME = '/var/lib/rabbitmq/'
+COOKIE_PATH = os.path.join(RABBIT_HOME, '.erlang.cookie')
 RABBITMQ_ENV_CNF_PATH = '/etc/rabbitmq/rabbitmq-env.conf'
 SCALR_USERNAME = 'scalr'
 NODE_HOSTNAME_TPL = 'rabbit@%s'
@@ -133,7 +134,7 @@ class RabbitMQ(object):
 
     def enable_plugin(self, plugin_name):
         system2((RABBITMQ_PLUGINS, 'enable', plugin_name),
-                                env={'HOME': '/root/'}, logger=self._logger)
+                                env={'HOME': RABBIT_HOME}, logger=self._logger)
 
     def reset(self):
         system2((RABBITMQCTL, 'reset'), logger=self._logger)
