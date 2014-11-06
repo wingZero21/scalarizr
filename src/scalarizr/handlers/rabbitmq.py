@@ -238,7 +238,7 @@ class RabbitMQHandler(ServiceCtlHandler):
 
     def _patch_selinux(self):
         # Temporary
-        system(['setenforce', '0'])
+        system(['semanage', 'permissive', '-a', 'rabbitmq_beam_t'])
         """
         enabled = 'on' in system(['getsebool', 'nis_enabled'], raise_exc=False)[1]
         if not enabled:
