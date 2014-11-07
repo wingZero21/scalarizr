@@ -312,7 +312,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         msg_body = dict(server_index=server_index)
 
         for node in cluster_nodes:
-            nodes_to_cluster_with.append(hostname)
+            nodes_to_cluster_with.append(node.hostname)
             dns.ScalrHosts.set(node.ip, node.hostname)
             try:
                 self.send_int_message(node.ip, 
