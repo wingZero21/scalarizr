@@ -19,6 +19,7 @@ from scalarizr.node import __node__
 from scalarizr.linux import iptables, system, os as os_mod
 import scalarizr.services.rabbitmq as rabbitmq_svc
 
+
 __rabbitmq__ = __node__['rabbitmq']
 
 log = logging.getLogger(__name__)
@@ -96,9 +97,9 @@ class RabbitMQHandler(ServiceCtlHandler):
             rabbitmq_vol = __rabbitmq__['volume']
 
             if not __rabbitmq__['volume'].mounted_to():
-                self.service.stop()
+                self.service.stop('Making sure volume is mounted')
                 rabbitmq_vol.ensure()
-            self.service.start()
+            self.service.start('Scalarizr just started and server status is "RUNNING"')
 
             __rabbitmq__['volume'] = rabbitmq_vol
 
@@ -152,7 +153,7 @@ class RabbitMQHandler(ServiceCtlHandler):
             if not 'running' == __node__['state']:
                 raise HandlerError('Server is not in RUNNING state yet')
             try:
-                self.service.stop()
+                self.service.stop('enable plugin')
                 self.rabbitmq.enable_plugin(RABBITMQ_MGMT_PLUGIN_NAME)
             finally:
                 self.service.start()
@@ -177,12 +178,12 @@ class RabbitMQHandler(ServiceCtlHandler):
 
                 disk_node = message.node_type == rabbitmq_svc.NodeTypes.DISK
 
-                hostname_ip_pairs = self._get_cluster_nodes()
+                cluster_nodes = self._get_cluster_nodes()
                 nodes_to_cluster_with = []
 
-                for hostname, ip in hostname_ip_pairs:
-                    nodes_to_cluster_with.append(hostname)
-                    dns.ScalrHosts.set(ip, hostname)
+                for node in cluster_nodes:
+                    nodes_to_cluster_with.append(node.hostname)
+                    dns.ScalrHosts.set(node.ip, node.hostname)
 
                 if nodes_to_cluster_with or disk_node:
                     self_hostname = __rabbitmq__['hostname']
@@ -221,7 +222,7 @@ class RabbitMQHandler(ServiceCtlHandler):
         dns.ScalrHosts.delete(message.local_ip)
 
     def on_before_host_down(self, msg):
-        self.service.stop()
+        self.service.stop('Before host down')
 
     def on_BeforeHostTerminate(self, msg):
         if msg.remote_ip == self.platform.get_public_ip() and \
@@ -305,23 +306,23 @@ class RabbitMQHandler(ServiceCtlHandler):
         log = bus.init_op.logger
 
         log.info('Create storage')
-        hostname_ip_pairs = self._get_cluster_nodes()
+        cluster_nodes = self._get_cluster_nodes()
         nodes_to_cluster_with = []
         server_index = __node__['server_index']
         msg_body = dict(server_index=server_index)
 
-        for hostname, ip in hostname_ip_pairs:
+        for node in cluster_nodes:
             nodes_to_cluster_with.append(hostname)
-            dns.ScalrHosts.set(ip, hostname)
+            dns.ScalrHosts.set(node.ip, node.hostname)
             try:
-                self.send_int_message(ip, 
+                self.send_int_message(node.ip, 
                     RabbitMQMessages.INT_RABBITMQ_HOST_INIT,
                     msg_body, 
                     broadcast=True)
             except:
                 e = sys.exc_info()[1]
                 self._logger.warning("Can't deliver internal message"
-                                " to server %s: %s" % (ip, e))
+                                " to server %s: %s" % (node.ip, e))
 
         rabbitmq_volume = __rabbitmq__['volume']
         rabbitmq_volume.ensure(mkfs=True, mount=True)
