@@ -1012,14 +1012,18 @@ class ModRPAF(BasicApacheConfiguration):
     proxy_section = ".//RPAFproxy_ips"
 
     def list_proxy_ips(self):
-        raw_value = self._cnf.get(self.proxy_section)
-        ips = set(re.split(r"\s+", raw_value))
+        try:
+            raw_value = self._cnf.get(self.proxy_section)
+        except NoPathError:
+            ips = set()
+        else:
+            ips = set(re.split(r"\s+", raw_value))
         return ips
 
     def add(self, ips):
         proxy_ips = self.list_proxy_ips()
         proxy_ips |= set(ips)
-        self._cnf.set(self.proxy_section, " ".join(proxy_ips))
+        self._cnf.set(self.proxy_section, " ".join(proxy_ips), force=True)
 
     def remove(self, ips):
         proxy_ips = self.list_proxy_ips()
@@ -1058,11 +1062,11 @@ class ModRemoteIP(ModRPAF):
     proxy_section = ".//RemoteIPInternalProxy"
 
     def set_remote_header(self, header=None):
-        self._cnf.set(".//RemoteIPHeader", header or "X-Forwarded-For")
+        self._cnf.set(".//RemoteIPHeader", header or "X-Forwarded-For", force=True)
 
     def fix_module(self):
         self.set_remote_header("X-Forwarded-For")
-        self.add("127.0.0.1")
+        self.add(["127.0.0.1", ])
 
     @staticmethod
     def ensure_permissions(path=None):
