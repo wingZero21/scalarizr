@@ -92,7 +92,7 @@ class ApacheHandler(Handler):
         op_log = bus.init_op.logger
         self.api.stop_service("Configuring Apache Web Server")
         self.api.init_service()
-        self._reconfigure_mod_rpaf()
+        self.configure_ip_forwarding()
 
         if self._initial_v_hosts:
             op_log.info("Configuring VirtualHosts.")
@@ -117,8 +117,8 @@ class ApacheHandler(Handler):
 
     def on_start(self):
         if __node__["state"] == ScalarizrState.RUNNING:
-            self._reconfigure_mod_rpaf()
-            self.api.reload_service()
+            self.configure_ip_forwarding()
+            self.api.reload_service("Applying new proxy list")
 
 
     def on_before_reboot_finish(self, *args, **kwargs):
@@ -126,38 +126,59 @@ class ApacheHandler(Handler):
 
     def on_HostUp(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
-            mod_rpaf_path = __apache__["mod_rpaf_path"]
-            if os.path.exists(mod_rpaf_path):
-                with open(mod_rpaf_path, "r") as fp:
-                    mod_praf_body = fp.read()
+            proxy_conf_path = None
+            if os.path.exists(__apache__["mod_rpaf_path"]):
+                proxy_conf_path = __apache__["mod_rpaf_path"]
+                module_cls = apache_api.ModRPAF
+            elif os.path.exists(__apache__["mod_remoteip_conf"]):
+                proxy_conf_path = __apache__["mod_remoteip_conf"]
+                module_cls = apache_api.ModRemoteIP
 
-                mod_rpaf = apache_api.ModRPAF(mod_praf_body)
-                mod_rpaf.add([message.local_ip])
+            if proxy_conf_path:
+                with open(proxy_conf_path, "r") as fp:
+                    body = fp.read()
 
-                with open(mod_rpaf_path, "w") as fp:
-                    fp.write(mod_rpaf.body)
+                proxy_module = module_cls(body)
+                proxy_module.add([message.local_ip])
 
-                self.api.reload_service("Applying new RPAF proxy IPs list")
+                with open(proxy_conf_path, "w") as fp:
+                    fp.write(proxy_module.body)
+
+                self.api.reload_service("Applying new proxy list")
 
     def on_HostDown(self, message):
         if message.local_ip and message.behaviour and BuiltinBehaviours.WWW in message.behaviour:
-            mod_rpaf_path = __apache__["mod_rpaf_path"]
-            if os.path.exists(mod_rpaf_path):
-                with open(mod_rpaf_path, "r") as fp:
-                    mod_praf_body = fp.read()
 
-                mod_rpaf = apache_api.ModRPAF(mod_praf_body)
-                mod_rpaf.remove([message.local_ip])
+            proxy_conf_path = None
+            if os.path.exists(__apache__["mod_rpaf_path"]):
+                proxy_conf_path = __apache__["mod_rpaf_path"]
+                module_cls = apache_api.ModRPAF
+            elif os.path.exists(__apache__["mod_remoteip_conf"]):
+                proxy_conf_path = __apache__["mod_remoteip_conf"]
+                module_cls = apache_api.ModRemoteIP
 
-                with open(mod_rpaf_path, "w") as fp:
-                    fp.write(mod_rpaf.body)
+            if proxy_conf_path:
+                with open(proxy_conf_path, "r") as fp:
+                    body = fp.read()
 
-                self.api.reload_service("Applying new RPAF proxy IPs list")
+                proxy_module = module_cls(body)
+                proxy_module.remove([message.local_ip])
 
-    def _reconfigure_mod_rpaf(self):
-        #configure_ip_forwarding
-        mod_rpaf_path = __apache__["mod_rpaf_path"]
-        if os.path.exists(mod_rpaf_path):
+                with open(proxy_conf_path, "w") as fp:
+                    fp.write(proxy_module.body)
+
+                self.api.reload_service("Applying new proxy list")
+
+    def configure_ip_forwarding(self):
+        proxy_conf_path = None
+        if os.path.exists(__apache__["mod_rpaf_path"]):
+            proxy_conf_path = __apache__["mod_rpaf_path"]
+            module_cls = apache_api.ModRPAF
+        elif os.path.exists(__apache__["mod_remoteip_conf"]):
+            proxy_conf_path = __apache__["mod_remoteip_conf"]
+            module_cls = apache_api.ModRemoteIP
+
+        if proxy_conf_path:
             lb_hosts = []
 
             for role in self._queryenv.list_roles(behaviour=BuiltinBehaviours.WWW):
@@ -166,14 +187,14 @@ class ApacheHandler(Handler):
 
             lb_hosts = lb_hosts or ['127.0.0.1', ]
 
-            with open(mod_rpaf_path, "r") as fp:
-                mod_praf_body = fp.read()
+            with open(proxy_conf_path, "r") as fp:
+                body = fp.read()
 
-            mod_rpaf = apache_api.ModRPAF(mod_praf_body)
-            mod_rpaf.update(lb_hosts)
+            proxy_module = module_cls(body)
+            proxy_module.update(lb_hosts)
 
-            with open(mod_rpaf_path, "w") as fp:
-                fp.write(mod_rpaf.body)
+            with open(proxy_conf_path, "w") as fp:
+                fp.write(proxy_module.body)
 
     on_BeforeHostTerminate = on_HostDown
 

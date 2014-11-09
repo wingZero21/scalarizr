@@ -739,10 +739,10 @@ class ApacheAPI(BehaviorAPI):
 
         # self.mod_ssl.ensure()  # [SCALARIZR-1381]
 
-        if linux.os.debian_family:
-            mod_rpaf_path = __apache__["mod_rpaf_path"]
-            if os.path.exists(mod_rpaf_path):
+        mod_rpaf_path = __apache__["mod_rpaf_path"]
 
+        if ModRPAF.is_installed():
+            if linux.os.debian_family:
                 with open(mod_rpaf_path, "r") as fp:
                     body = fp.read()
 
@@ -752,7 +752,22 @@ class ApacheAPI(BehaviorAPI):
                 with open(mod_rpaf_path, "w") as fp:
                     fp.write(mod_rpaf.body)
 
-        ModRPAF.ensure_permissions()
+            ModRPAF.ensure_permissions()
+
+        #  [SCALARIZR-1610]
+        elif ModRemoteIP.is_installed():
+            body = ""
+            remoteip_conf_path = __apache__["mod_remoteip_conf"]
+            if os.path.exists(remoteip_conf_path):
+                with open(remoteip_conf_path, "r") as fp:
+                    body = fp.read()
+
+                mod_remoteip = ModRemoteIP(body)
+                mod_remoteip.fix_module()
+
+                with open(remoteip_conf_path, "w") as fp:
+                    fp.write(remoteip_conf_path.body)
+
 
     def enable_virtual_hosts_directory(self):
         if not os.path.exists(__apache__["vhosts_dir"]):
@@ -1056,6 +1071,10 @@ class ModRPAF(BasicApacheConfiguration):
             st = os.stat(httpd_conf_path)
             os.chown(mod_rpaf_path, st.st_uid, st.st_gid)
 
+    @staticmethod
+    def is_installed():
+        return os.path.exists(__apache__["mod_rpaf_path"])
+
 
 class ModRemoteIP(ModRPAF):
 
@@ -1072,6 +1091,10 @@ class ModRemoteIP(ModRPAF):
     def ensure_permissions(path=None):
         path = path or __apache__["mod_remoteip_so_path"]
         ModRPAF.ensure_permissions(path)
+
+    @staticmethod
+    def is_installed():
+        return os.path.exists(__apache__["mod_remoteip_so_path"])
 
 
 def IPForwarding(*args, **kwds):
