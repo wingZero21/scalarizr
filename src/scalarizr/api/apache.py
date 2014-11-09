@@ -766,7 +766,7 @@ class ApacheAPI(BehaviorAPI):
             mod_remoteip.fix_module()
 
             with open(remoteip_conf_path, "w") as fp:
-                fp.write(remoteip_conf_path.body)
+                fp.write(mod_remoteip.body)
 
 
     def enable_virtual_hosts_directory(self):
