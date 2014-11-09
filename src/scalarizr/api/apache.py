@@ -762,11 +762,11 @@ class ApacheAPI(BehaviorAPI):
                 with open(remoteip_conf_path, "r") as fp:
                     body = fp.read()
 
-                mod_remoteip = ModRemoteIP(body)
-                mod_remoteip.fix_module()
+            mod_remoteip = ModRemoteIP(body)
+            mod_remoteip.fix_module()
 
-                with open(remoteip_conf_path, "w") as fp:
-                    fp.write(remoteip_conf_path.body)
+            with open(remoteip_conf_path, "w") as fp:
+                fp.write(remoteip_conf_path.body)
 
 
     def enable_virtual_hosts_directory(self):
