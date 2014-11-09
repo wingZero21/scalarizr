@@ -1407,6 +1407,8 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         if linux.os.redhat_family:
             if linux.os["name"] == 'Amazon' or linux.os["release"].version[0] == 6:
                 pid_file = "/var/run/httpd/httpd.pid"
+            elif "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
+                pid_file = "/var/run/httpd/httpd.pid"
             else:
                 pid_file = "/var/run/httpd.pid"
         elif linux.os.debian_family:
