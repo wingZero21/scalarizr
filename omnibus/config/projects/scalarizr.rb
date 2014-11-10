@@ -22,14 +22,9 @@ dependency "preparation"
 dependency "scalarizr"
 dependency "version-manifest"
 
-if ohai['platform_family'] == 'redhat'
-    if ohai['platform_version'].to_i == 5
-        runtime_dependency "yum-downloadonly"
-        runtime_dependency "yum-priorities"
-    else
-        runtime_dependency "yum-plugin-downloadonly"
-        runtime_dependency "yum-plugin-priorities"
-    end
+if ohai['platform_family'] == 'rhel'
+    runtime_dependency "yum-downloadonly"
+    runtime_dependency "yum-priorities"
     runtime_dependency "which"
     runtime_dependency "e2fsprogs"
     runtime_dependency "tar"

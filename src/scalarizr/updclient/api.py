@@ -493,6 +493,8 @@ class UpdClientAPI(object):
             self._configure_devel_repo(repo)
         elif linux.os.debian_family:
             self._apt_pin_release('scalr')  # make downgrades possible
+        elif linux.os.redhat_family or linux.os.oracle_family:
+            self._yum_prioritize(repo)
         # Ensure new repository
         repo.ensure()
         if updatedb:
@@ -501,13 +503,9 @@ class UpdClientAPI(object):
 
 
     def _configure_devel_repo(self, repo):
-        # Pin repository
+        # Pin devel repository
         if linux.os.redhat_family or linux.os.oracle_family:
-            # pkg = 'yum-priorities' \
-            #        if linux.os['release'] < (6, 0) else \
-            #        'yum-plugin-priorities'
-            # self.pkgmgr.installed(pkg)
-            repo.config += 'priority=10\n'
+            self._yum_prioritize(repo)
         else:
             self._apt_pin_release(self.repository)
 
@@ -527,6 +525,9 @@ class UpdClientAPI(object):
                 'Pin: release a={0}\n'
                 'Pin-Priority: 1001\n'
             ).format(release))
+
+    def _yum_prioritize(self, repo, priority=1):
+        repo.config += 'priority=%s\n' % priority
 
     def _ensure_daemon(self):
         if not self.daemon.running:

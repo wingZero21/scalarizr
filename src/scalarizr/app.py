@@ -1021,6 +1021,10 @@ class Service(object):
                             'Looks like we are in a process of migration to new update sytem. '
                             'UpdateClient restart will handle this situation. Restarting'))
                         upd_svs.restart()
+                    elif 'No module named' in str(exc):
+                        self._logger.info(('Scalarizr was downgraded to previous installer version. '
+                            'UpdateClient restart required. Restarting'))
+                        upd_svs.restart()
                     else:
                         raise
 

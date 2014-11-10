@@ -178,7 +178,7 @@ class PostgreSQLAPI(BehaviorAPI):
             result['error'] = error_match.group()
             return result
 
-        diff_match = re.search(r'xlog_delay.+-\n *\d+', out, re.DOTALL)
+        diff_match = re.search(r'xlog_delay.+-\n -*\d+', out, re.DOTALL)  # [SCALARIZR-1642]
         if not diff_match:
             #if no error and query returns nothing
             return result
