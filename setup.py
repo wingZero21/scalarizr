@@ -43,5 +43,3 @@ cfg = dict(
         }
 )
 setup(**cfg)
-
-
