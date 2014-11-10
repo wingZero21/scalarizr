@@ -58,7 +58,7 @@ class P2pMessageService(MessageService):
         return self._default_consumer
 
     def new_consumer(self, **params):
-        import consumer
+        from scalarizr.messaging.p2p import consumer
         c = consumer.P2pMessageConsumer(**params)
         c.filters['protocol'].append(self._security.in_protocol_filter)
         return c
@@ -72,7 +72,7 @@ class P2pMessageService(MessageService):
         return self._default_producer
 
     def new_producer(self, **params):
-        import producer
+        from scalarizr.messaging.p2p import producer
         p = producer.P2pMessageProducer(**params)
         p.filters['protocol'].append(self._security.out_protocol_filter)
         return p

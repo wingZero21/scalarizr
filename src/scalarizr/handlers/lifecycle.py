@@ -275,9 +275,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             seconds_since_start=float('%.2f' % (time.time() - __node__['start_time'], )),
             seconds_since_boot=float('%.2f' % (time.time() - metadata.boot_time(), )),
             operation_id = bus.init_op.operation_id,
-            crypto_key = new_crypto_key,
-            snmp_port = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_PORT),
-            snmp_community_name = self._cnf.rawini.get(config.SECT_SNMP, config.OPT_COMMUNITY_NAME)
+            crypto_key = new_crypto_key
         ), broadcast=True)
         bus.fire("before_host_init", msg)
 
@@ -375,8 +373,7 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
             # @deprecated. expires 2014/04
             self.send_message(Messages.UPDATE_CONTROL_PORTS, {
                 'api': __node__['base']['api_port'],
-                'messaging': __node__['base']['messaging_port'],
-                'snmp': 8014
+                'messaging': __node__['base']['messaging_port']
             })
 
 
