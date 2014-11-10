@@ -178,12 +178,14 @@ class PostgreSQLAPI(BehaviorAPI):
             result['error'] = error_match.group()
             return result
 
-        diff_match = re.search(r'xlog_delay.+-\n -*\d+', out, re.DOTALL)  # [SCALARIZR-1642]
-        if not diff_match:
-            #if no error and query returns nothing
-            return result
+        split = out.split()  # [SCALARIZR-1642]
+        if split and "xlog_delay" in split[0] and len(split) > 2:
+            lag = split[2]
+            try:
+                result['xlog_delay'] = int(float(lag))
+            except ValueError:
+                pass
 
-        result['xlog_delay'] = diff_match.group().splitlines()[-1].strip()
         return result
 
     @rpc.query_method
@@ -221,7 +223,7 @@ class PostgreSQLAPI(BehaviorAPI):
 
         is_master = int(__postgresql__[OPT_REPLICATION_MASTER])
 
-        if not query_result['xlog_delay']:
+        if query_result['xlog_delay'] is None:
             if is_master:
                 return {'master': {'status': 'up'}}
             return {'slave': {'status': 'down',
