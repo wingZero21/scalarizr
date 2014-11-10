@@ -162,6 +162,10 @@ class UpdClient(util.Server):
         self._check_singleton()
         try:
             self._write_pid_file()
+            self._start_api()  
+            # Starting API before bootstrap is important for situation, when 
+            # Scalarizr daemon is started in a parallel and required to know that 
+            # update is in-progress to shutdown
 
             self.running = True  
             # It should be here, cause self.api.bootstrap() on Windows
@@ -169,7 +173,6 @@ class UpdClient(util.Server):
             # checks for self.running is True to perform graceful shutdown
 
             self.api.bootstrap()
-            self._start_api()
         except:
             self.do_stop()
             LOG.exception('Detailed exception information below:')
