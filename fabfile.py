@@ -337,8 +337,9 @@ def publish_deb():
     time0 = time.time()
     try:
         init()
-        if '* [%s]' % repo not in local('aptly repo list', capture=True):
+        if '[%s]' % repo not in local('aptly repo list', capture=True):
             local('aptly repo create -distribution {0} {0}'.format(repo))
+        if '[%s]' % repo not in local('aptly publish list', capture=True):
             local(('aptly publish repo -gpg-key={0} '
                     '-architectures i386,amd64 {1} {2}').format(gpg_key, repo, aptly_prefix))
         for pkg_arch in ('i386', 'amd64'):
