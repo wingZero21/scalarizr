@@ -104,7 +104,7 @@ def init():
             if re.search(r'^[0-9a-f]{8,40}$', head):
                 revision = head
                 ref = local("git branch -r --contains HEAD", capture=True).strip()
-                ref = re.search(r'origin/(.*)', ref).group(1)
+                ref = re.search(r'origin/(.*)$', ref).group(1)
             else:
                 ref = re.search(r'ref: refs/heads/(.*)', head).group(1)
                 revision = local("git rev-parse HEAD", capture=True)
