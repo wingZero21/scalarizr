@@ -66,11 +66,6 @@ producer_retries_progression = 1,2,5,10,20,30,60
 ; Local messaging endpoint. Will be used by Scalr to send messages to.
 consumer_url = http://0.0.0.0:8013
 
-[snmp]
-
-; SNMP listen port
-port = 8014
-
 [handlers]
 
 ; Life circle
@@ -145,18 +140,6 @@ chef = scalarizr.handlers.chef
 EOF
 fi
 
-if [ ! -f "$pub_cnf_dir/cloudfoundry.ini" ]; then
-	cat <<EOF > "$pub_cnf_dir/cloudfoundry.ini"
-[cloudfoundry]
-
-vcap_home = /root/cloudfoundry/vcap
-
-[handlers]
-
-cloudfoundry = scalarizr.handlers.cloudfoundry
-EOF
-fi
-
 
 if [ ! -f "$pub_cnf_dir/cloudstack.ini" ]; then
 	cat <<EOF > "$pub_cnf_dir/cloudstack.ini"
@@ -205,20 +188,6 @@ rebundle = scalarizr.handlers.ec2.rebundle
 ; @required
 ; EBS attach/detach operations handler.
 ebs = scalarizr.handlers.ec2.ebs	
-EOF
-fi
-
-if [ ! -f "$pub_cnf_dir/eucalyptus.ini" ]; then
-        cat <<EOF > "$pub_cnf_dir/eucalyptus.ini"
-[eucalyptus]
-
-; Eucalyptus cloud certificate path
-cloud_cert_path = public.d/keys/euca_cloud_cert.pem
-
-[handlers]
-ec2_lifecycle = scalarizr.handlers.ec2.lifecycle
-rebundle = scalarizr.handlers.euca.rebundle
-ebs = scalarizr.handlers.ec2.ebs
 EOF
 fi
 
@@ -359,20 +328,6 @@ EOF
 fi
 
 
-if [ ! -f "$pub_cnf_dir/nimbula.ini" ]; then
-        cat <<EOF > "$pub_cnf_dir/nimbula.ini"
-[nimbula]
-
-; userdata appearance timeout, in seconds
-wait_user_data_timeout = 600
-
-
-[handlers]
-
-nimbula_rebundle = scalarizr.handlers.nimbula.rebundle
-EOF
-fi
-
 cat <<EOF > "$pub_cnf_dir/openstack.ini"
 [openstack]
 
@@ -403,17 +358,6 @@ if [ ! -f "$pub_cnf_dir/rabbitmq.ini" ]; then
 [handlers]
 
 rabbitmq = scalarizr.handlers.rabbitmq
-EOF
-fi
-
-
-if [ ! -f "$pub_cnf_dir/rackspace.ini" ]; then
-        cat <<EOF > "$pub_cnf_dir/rackspace.ini"
-[handlers]
-
-rackspace_lifecycle = scalarizr.handlers.rackspace.lifecycle
-
-rackspace_rebundle = scalarizr.handlers.rackspace.rebundle
 EOF
 fi
 
@@ -485,12 +429,6 @@ fi
 
 pushd .
 cd $pub_cnf_dir
-if [ -f cloudfoundry.ini ]; then
-	for name in cf_router.ini cf_cloud_controller.ini \
-				cf_health_manager.ini cf_dea.ini cf_service.ini; do
-		[ ! -f $name ] && ln -s cloudfoundry.ini $name
-	done
-fi
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
 [ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini 
@@ -580,13 +518,6 @@ if [ -x $INIT_SCRIPT ]; then
 		update-rc.d scalr-upd-client defaults 98 >/dev/null
 	fi
 
-
-	snmp_pid=$(netstat -anp | grep ^udp | grep 0\.0\.0\.0:8014 | awk '{ print $6 }' | cut -d/ -f1)
-
-	if [ ! -z "$snmp_pid" ] && [ $snmp_pid -gt 1 ]; then
-		kill -9 $snmp_pid 2>/dev/null
-	fi
-
 	zomby_pids=$(ps aux | grep 'bin/scalarizr' | awk '{ print $2 }')
 	if [ "$zomby_pids" ]; then
 		for zomby_pid in $zomby_pids; do
@@ -606,4 +537,3 @@ if [ -x $INIT_SCRIPT ]; then
 		fi
 	fi
 fi
-

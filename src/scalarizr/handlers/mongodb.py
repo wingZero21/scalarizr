@@ -22,24 +22,6 @@ import threading
 
 mgr = pkgmgr.package_mgr()
 
-if linux.os.redhat_family:
-    version = map(int, str(linux.os['release']).split('.'))
-    if version[0] >= 6:
-        if mgr.info('python-pymongo').get('installed'):
-            system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo',
-                             'python-bson'))
-        if not mgr.info('pymongo').get('installed'):
-            mgr.install('pymongo', mgr.info('pymongo')['candidate'])
-    elif version[0] == 5:
-        if not mgr.info('python26-pymongo').get('installed'):
-            mgr.install('python26-pymongo', mgr.info('python26-pymongo')['candidate'])
-else:
-    if not mgr.info('python-pymongo').get('installed'):
-        # without python-bson explicit version won't work
-        ver = mgr.info('python-pymongo')['candidate']
-        mgr.install('python-pymongo', ver)
-        mgr.install('python-bson', ver)
-
 import pymongo
 
 from scalarizr.bus import bus

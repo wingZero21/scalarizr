@@ -123,6 +123,7 @@ class ApacheError(BaseException):
 
 
 class ApacheAPI(BehaviorAPI):
+
     """
     Basic API for configuring Apache VirtualHosts, querying statistics and controlling service status.
 
@@ -200,7 +201,7 @@ class ApacheAPI(BehaviorAPI):
 
         Please Note that VirtualHosts on custom ports feature requires testing.
         """
-        #TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
+        # TODO: add Listen and NameVirtualHost directives to httpd.conf or ports.conf if needed
 
         name = "%s:%s" % (hostname, port)
         LOG.info("Creating Apache VirtualHost %s" % name)
@@ -225,7 +226,7 @@ class ApacheAPI(BehaviorAPI):
 
             LOG.info("Certificate %s is set to VirtualHost %s" % (ssl_certificate_id, name))
 
-            #Compatibility with old apache handler
+            # Compatibility with old apache handler
             if not self.mod_ssl.has_valid_certificate() or self.mod_ssl.is_system_certificate_used():
                 self.mod_ssl.set_default_certificate(ssl_certificate)
 
@@ -371,9 +372,9 @@ class ApacheAPI(BehaviorAPI):
             if not ssl_certificate.exists():
                 ssl_certificate.ensure()
             v_host.use_certificate(
-                    ssl_certificate.cert_path, 
-                    ssl_certificate.key_path,
-                    ssl_certificate.chain_path)
+                ssl_certificate.cert_path,
+                ssl_certificate.key_path,
+                ssl_certificate.chain_path)
 
         path = get_virtual_host_path(hostname or old_hostname, port or old_port)
 
@@ -436,7 +437,7 @@ class ApacheAPI(BehaviorAPI):
     def do_reconfigure(self, op, vhosts=None, reload=True, rollback_on_error=True):
         ports = []
         applied_vhosts = []
-        if vhosts == None:
+        if vhosts is None:
             vhosts = self._fetch_virtual_hosts()
         old_files = []
         LOG.info("Started reconfiguring Apache VirtualHosts.")
@@ -460,7 +461,7 @@ class ApacheAPI(BehaviorAPI):
                 applied_vhosts.append(path)
                 ports.append(port)
 
-            #cleanup
+            # cleanup
             for fname in os.listdir(__apache__["vhosts_dir"]):
                 old_vhost_path = os.path.join(__apache__["vhosts_dir"], fname)
                 if old_vhost_path not in applied_vhosts:
@@ -725,7 +726,7 @@ class ApacheAPI(BehaviorAPI):
 
         self.update_log_rotate_config()
 
-        #self.mod_ssl.ensure()  # [SCALARIZR-1381]
+        # self.mod_ssl.ensure()  # [SCALARIZR-1381]
 
         if linux.os.debian_family:
             mod_rpaf_path = __apache__["mod_rpaf_path"]
@@ -750,7 +751,7 @@ class ApacheAPI(BehaviorAPI):
         with ApacheConfigManager(__apache__["httpd.conf"]) as apache_config:
             inc_mask = __apache__["vhosts_dir"] + "/*" + __apache__["vhost_extension"]
 
-            opt_include = "Include" if self.version < (2,4) else "IncludeOptional"
+            opt_include = "Include" if self.version < (2, 4) else "IncludeOptional"
             if not inc_mask in apache_config.get_list(opt_include):
                 apache_config.add(opt_include, inc_mask)
                 LOG.info("VirtualHosts directory included in %s" % __apache__["httpd.conf"])
@@ -1275,7 +1276,6 @@ class RedHatBasedModSSL(ModSSL):
             LOG.info("%s does not exist. Trying to install mod_ssl." % __apache__["mod_ssl_file"])
             pkgmgr.installed("mod_ssl")
 
-
     def _ensure_ssl_conf(self):
         ssl_conf_path = __apache__["ssl_conf_path"]
         if not os.path.exists(ssl_conf_path):
@@ -1332,7 +1332,7 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         )
 
     def _get_pid_file_path(self):
-        #TODO: fix assertion when platform becomes an object (commit 58921b6303a96c8975e417fd37d70ddc7be9b0b5)
+        # TODO: fix assertion when platform becomes an object (commit 58921b6303a96c8975e417fd37d70ddc7be9b0b5)
 
         if "gce" == __node__["platform"]:
             gce_pid_dir = "/var/run/httpd"
@@ -1385,7 +1385,8 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
             initdv2.ParametrizedInitScript.start(self)
             if self.pid_file:
                 try:
-                    wait_until(lambda: os.path.exists(self.pid_file) or self._main_process_started(), sleep=0.2, timeout=30)
+                    wait_until(lambda: os.path.exists(self.pid_file)
+                               or self._main_process_started(), sleep=0.2, timeout=30)
                 except (Exception, BaseException), e:
                     raise initdv2.InitdError("Cannot start Apache (%s)" % str(e))
             time.sleep(0.5)

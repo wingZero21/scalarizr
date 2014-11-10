@@ -26,8 +26,7 @@ import StringIO
 
 # Libs
 from scalarizr.libs.metaconf import Configuration, NoPathError
-from scalarizr.util import cached, firstmatched,\
-        validators, software, initdv2
+from scalarizr.util import cached, firstmatched, validators, software, initdv2
 from scalarizr.linux import iptables
 from scalarizr.services import BaseConfig, PresetProvider
 
@@ -344,7 +343,7 @@ class NginxHandler(ServiceCtlHandler):
         self.api._reload_service()
 
     def _copy_error_pages(self):
-        pages_source = '/usr/share/scalr/nginx/html/'
+        pages_source = __node__['share_dir'] + '/nginx/html/'
         pages_destination = '/usr/share/nginx/html/'
 
         current_dir = ''

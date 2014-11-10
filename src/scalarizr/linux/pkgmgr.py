@@ -115,11 +115,11 @@ class PackageMgr(object):
             download_dir = tempfile.mkdtemp()
             try:
                 self._install_download_only(name_version, download_dir, **kwds)
-                self._install_package(name_version, **kwds)
-
-                # create backup
                 files = (os.path.join(download_dir, name) 
                         for name in os.listdir(download_dir))
+                self._install_file(*files)                
+
+                # create backup
                 if not version:
                     version = self._installed_and_candidate(name)[0]
                 self._create_backup(name, version, files)
@@ -215,6 +215,9 @@ class PackageMgr(object):
         raise NotImplementedError()
 
 
+    def _install_file(self, *files):
+        raise NotImplementedError()
+
     def _install_download_only(self, name_version, download_dir, **kwds):
         raise NotImplementedError()
 
@@ -248,7 +251,13 @@ class PackageMgr(object):
 
 
     def restore_backup(self, name, backup_id):
-        raise NotImplementedError()
+        backup_dir = os.path.join(self.backup_dir, name, backup_id)
+        msg = 'Failed to restore package {0} from backup {1}'.format(name, backup_id)
+        try:
+            files = [os.path.join(backup_dir, f) for f in os.listdir(backup_dir)]
+            self._install_file(*files)
+        except:
+            raise Exception('%s. %s' % (msg, sys.exc_info()[1]))
 
 
 class AptPackageMgr(PackageMgr):
@@ -327,10 +336,7 @@ class AptPackageMgr(PackageMgr):
 
         dpkg_configure(raise_exc=True)
 
-        # forcefully install backuped packages
-        backup_dir = os.path.join(self.backup_dir, name, backup_id)
-        cmd = ['dpkg', '-i', '--force-downgrade'] + os.listdir(backup_dir)
-        linux.system(cmd, cwd=backup_dir, raise_exc=True)
+        return super(AptPackageMgr, self).restore_backup(name, backup_id)
 
 
     def version_cmp(self, name_1, name_2):
@@ -384,6 +390,11 @@ class AptPackageMgr(PackageMgr):
     def _install_package(self, name_version, **kwds):
         cmd = 'install {0}'.format(name_version)
         self.apt_get_command(cmd, raise_exc=True) 
+
+
+    def _install_file(self, *files):
+        cmd = ['dpkg', '-i', '--force-downgrade'] + list(files)
+        linux.system(cmd, raise_exc=True)
 
 
     def apt_get_command(self, command, **kwds):
@@ -510,11 +521,7 @@ class YumPackageMgr(PackageMgr):
         return pkgs
 
 
-    def restore_backup(self, name, backup_id):
-        backup_dir = os.path.join(self.backup_dir, name, backup_id)
-        msg = 'Failed to restore package {0} from backup {1}'.format(name, backup_id)
-        linux.system(['/usr/bin/rpm', '-i', '--force', '--nodeps'] + os.listdir(backup_dir), 
-                cwd=backup_dir, error_text=msg)
+
 
 
     def version_cmp(self, name_1, name_2):
@@ -559,6 +566,10 @@ class YumPackageMgr(PackageMgr):
         if kwds.get('rpm_raise_scriptlet_errors') \
             and re.search(r'(Non-fatal|Error in) (PREIN|PRERM|POSTIN|POSTRM) scriptlet', err):
             raise Exception(out)
+
+
+    def _install_file(self, *files):
+        linux.system(['/usr/bin/rpm', '-i', '--force', '--nodeps'] + list(files))
 
 
     def _install_download_only(self, name_version, download_dir, version=None, **kwds):
