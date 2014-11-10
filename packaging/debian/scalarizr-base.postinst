@@ -66,6 +66,13 @@ producer_retries_progression = 1,2,5,10,20,30,60
 ; Local messaging endpoint. Will be used by Scalr to send messages to.
 consumer_url = http://0.0.0.0:8013
 
+
+[snmp]
+
+; SNMP listen port
+port = 8014
+
+
 [handlers]
 
 ; Life circle
@@ -88,7 +95,7 @@ script_executor = scalarizr.handlers.script_executor
 ; Hooks
 ; @optional
 ; @requires scalarizr.handlers.script_executor
-; Executes scripts on scalarizr events in a POSIX manner. Scripts are located in 'hooks' directory, 
+; Executes scripts on scalarizr events in a POSIX manner. Scripts are located in `hooks` directory, 
 ; must be named exactly as a Scalarizr event with a numeric prefix which defines the execution order,
 ; and must have #! in a first line.
 ; Example:
