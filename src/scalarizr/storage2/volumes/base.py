@@ -164,7 +164,10 @@ class Volume(Base):
             return False
 
         try:
-            return mod_mount.mounts()[self.device].mpoint
+            # mounts() resolve symlinks in MountEntry (e.g. /dev/group/lvol becomes /dev/md-N)
+            # we need to do the same to prevent KeyError for mounted device
+            device = os.path.realpath(self.device)
+            return mod_mount.mounts()[device].mpoint
         except KeyError:
             return False
 
