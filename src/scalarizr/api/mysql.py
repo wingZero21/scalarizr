@@ -316,6 +316,7 @@ class MySQLAPI(BehaviorAPI):
                 ['mysql-server-5.1', 'mysql-client-5.1'],
                 ['mysql-server-5.5', 'mysql-client-5.5'],
                 ['mysql-server-5.6', 'mysql-client-5.6'],
+                ['percona-server-server-5.1', 'percona-server-client-5.1']
             ]
         elif linux.os.redhat_family or linux.os.oracle_family:
             requirements = [
