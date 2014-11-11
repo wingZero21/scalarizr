@@ -257,7 +257,7 @@ class BoolFile(Store):
 class StateFile(File):
     def __getitem__(self, key):
         try:
-            super(StateFile, self).__getitem__(key)
+            return super(StateFile, self).__getitem__(key)
         except KeyError:
             return 'unknown'
 
