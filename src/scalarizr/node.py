@@ -254,6 +254,14 @@ class BoolFile(Store):
                 os.remove(self.filename)
 
 
+class StateFile(File):
+    def __getitem__(self, key):
+        try:
+            super(StateFile, self).__getitem__(key)
+        except KeyError:
+            return 'unknown'
+
+
 class State(Store):
     def __init__(self, key):
         self.key = key
@@ -326,7 +334,7 @@ node = {
                               lambda val: ','.join(val)),
         'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),
         'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
-        'state': File(private_dir + '/.state'),
+        'state': StateFile(private_dir + '/.state'),
         'rebooted': BoolFile(private_dir + '/.reboot'),
         'halted': BoolFile(private_dir + '/.halt'),
         'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region'),
