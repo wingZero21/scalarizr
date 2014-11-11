@@ -612,7 +612,11 @@ class Service(object):
             self._logger.info('Configuring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
-        if optparser and not optparser.values.import_server and __node__['server_id'] \
+        try:
+            server_id = __node__['server_id']
+        except KeyError:
+            server_id = None
+        if optparser and not optparser.values.import_server and server_id \
                 and __node__['state'] in ('importing', 'rebundling'):
             # This role was bundled with Cloud API call (i.e. CreateImage)
             # Now we're starting with a new server and should reset it's state
