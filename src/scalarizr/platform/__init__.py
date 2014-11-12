@@ -67,8 +67,8 @@ class ConnectionProxy(object):
     _logger = logging.getLogger(__name__)
     max_retries = 2
 
-    def __init__(self, conn_pool):
-        self.obj = conn_pool.get()
+    def __init__(self, conn_pool, obj=None):
+        self.obj = obj or conn_pool.get()
         self.conn_pool = conn_pool
 
     def __getattribute__(self, name):
@@ -78,7 +78,9 @@ class ConnectionProxy(object):
             return object.__getattribute__(self, name)
         except AttributeError:
             connProxyCls = object.__getattribute__(self, '__class__')
-            return connProxyCls(self.conn_pool)
+            return connProxyCls(
+                    self.conn_pool,
+                    obj=getattr(object.__getattribute__(self, 'obj'), name))
 
     def __call__(self, *args, **kwds):
         for retry in range(self.max_retries):
