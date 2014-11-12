@@ -78,35 +78,31 @@ def _create_s3_connection():
 
 
 class Ec2ConnectionProxy(platform.ConnectionProxy):
+    max_retries = 3
 
-    def __call__(self, *args, **kwds):
-        for retry in range(2):
-            try:
-                return self.obj(*args, **kwds)
-            except:
-                e = sys.exc_info()[1]
-                if isinstance(e, boto.exception.EC2ResponseError) and e.args[0] == 401:
-                    self.conn_pool.dispose_local()
-                    raise InvalidCredentialsError(e)
-                continue
-        self.conn_pool.dispose_local()
-        raise ConnectionError(e)
+    def invoke(self, *args, **kwds):
+        try:
+            return super(Ec2ConnectionProxy, self).invoke(*args, **kwds)
+        except:
+            e = sys.exc_info()[1]
+            if isinstance(e, boto.exception.EC2ResponseError) and e.args[0] == 401:
+                raise InvalidCredentialsError(e)
+            else:
+                raise
 
 
 class S3ConnectionProxy(platform.ConnectionProxy):
+    max_retries = 3
 
-    def __call__(self, *args, **kwds):
-        for retry in range(2):
-            try:
-                return self.obj(*args, **kwds)
-            except:
-                e = sys.exc_info()[1]
-                if isinstance(e, boto.exception.S3ResponseError) and e.args[0] == 401:
-                    self.conn_pool.dispose_local()
-                    raise InvalidCredentialsError(e)
-                continue
-        self.conn_pool.dispose_local()
-        raise ConnectionError(e)
+    def invoke(self, *args, **kwds):
+        try:
+            return super(S3ConnectionProxy, self).invoke(*args, **kwds)
+        except:
+            e = sys.exc_info()[1]
+            if isinstance(e, boto.exception.S3ResponseError) and e.args[0] == 401:
+                raise InvalidCredentialsError(e)
+            else:
+                raise
 
 
 class Ec2Platform(Ec2LikePlatform):
@@ -150,12 +146,10 @@ class Ec2Platform(Ec2LikePlatform):
         return self._ec2_cert
 
     def get_ec2_conn(self):
-        conn = self._ec2_conn_pool.get()
-        return Ec2ConnectionProxy(conn, self._ec2_conn_pool)
+        return Ec2ConnectionProxy(self._ec2_conn_pool)
 
     def get_s3_conn(self):
-        conn = self._s3_conn_pool.get()
-        return S3ConnectionProxy(conn, self._s3_conn_pool)
+        return S3ConnectionProxy(self._s3_conn_pool)
 
     def new_ec2_conn(self):
         """ @rtype: boto.ec2.connection.EC2Connection """
