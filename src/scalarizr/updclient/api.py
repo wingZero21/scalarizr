@@ -471,6 +471,7 @@ class UpdClientAPI(object):
             self.pkgmgr.removed(self.package)
             if not linux.os.windows:
                 self.pkgmgr.removed('scalarizr', purge=True)
+                self.pkgmgr.removed('scalarizr-base', purge=True)
                 if self.pkgmgr.info('scalr-upd-client')['installed']:
                     # Only latest package don't stop scalr-upd-client in postrm script
                     self.pkgmgr.latest('scalr-upd-client')
