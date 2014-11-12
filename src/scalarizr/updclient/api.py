@@ -470,12 +470,22 @@ class UpdClientAPI(object):
         try:
             self.pkgmgr.removed(self.package)
             if not linux.os.windows:
-                self.pkgmgr.removed('scalarizr', purge=True)
-                self.pkgmgr.removed('scalarizr-base', purge=True)
+                if linux.os.redhat_family:
+                    installed_ver = self.pkgmgr.info('scalarizr')['installed']
+                    cmd = 'rpm -e scalarizr'
+                    if installed_ver and distutils.version.LooseVersion(installed_ver) < '0.7':      
+                        # On CentOS 5 there is a case when scalarizr-0.6.24-5 has error 
+                        # in preun scriplet and cannot be uninstalled
+                        cmd += ' --noscripts'
+                    linux.system(cmd, shell=True, raise_exc=False)
+                else:
+                    self.pkgmgr.removed('scalarizr', purge=True)
+                self.pkgmgr.removed('scalarizr-base', purge=True)  # Compatibility with BuildBot packaging
                 if self.pkgmgr.info('scalr-upd-client')['installed']:
                     # Only latest package don't stop scalr-upd-client in postrm script
                     self.pkgmgr.latest('scalr-upd-client')
                     self.pkgmgr.removed('scalr-upd-client', purge=True)
+
         finally:
             if pid:
                 with open(pid_file, 'w+') as fp:
