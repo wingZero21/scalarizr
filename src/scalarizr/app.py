@@ -620,7 +620,7 @@ class Service(object):
                 and __node__['state'] in ('importing', 'rebundling'):
             # This role was bundled with Cloud API call (i.e. CreateImage)
             # Now we're starting with a new server and should reset it's state
-            LOG.info(('This image was bundled with cloud API call. '
+            self._logger.info(('This image was bundled with cloud API call. '
                     'Cleauping ancestor server data'))
             _cleanup_after_rebundle()
             __node__['state'] = 'bootstrapping'
