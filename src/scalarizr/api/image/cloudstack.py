@@ -61,9 +61,13 @@ class CloudStackImageAPIDelegate(ImageAPIDelegate):
         return image.id
 
     def prepare(self, op, name=None):
-        if os.path.exists('/etc/udev/rules.d/70-persistent-net.rules'):
-            shutil.move('/etc/udev/rules.d/70-persistent-net.rules', '/tmp')
+        rulename = '70-persistent-net.rules'
+        if os.path.exists('/etc/udev/rules.d/'+rulename):
+            if os.path.exists('/tmp/'+rulename):
+                os.remove('/tmp/'+rulename)
+            shutil.move('/etc/udev/rules.d/'+rulename, '/tmp')
 
-    def after_rebundle(self, op, name=None):
-        if os.path.exists('/tmp/70-persistent-net.rules'):
-            shutil.move('/tmp/70-persistent-net.rules', '/etc/udev/rules.d')
+    def finalize(self, op, name=None):
+        rulename = '70-persistent-net.rules'
+        if os.path.exists('/tmp/'+rulename):
+            shutil.move('/tmp/'+rulename, '/etc/udev/rules.d')
