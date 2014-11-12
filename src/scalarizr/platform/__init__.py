@@ -16,6 +16,7 @@ import struct
 import array
 import threading
 import ConfigParser
+import time
 
 from scalarizr import node
 from scalarizr.bus import bus
