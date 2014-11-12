@@ -58,7 +58,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def __init__(self):
         self._nginx_binary = __nginx__['binary_path']
-        service_call = ('service', 'nginx') if __nginx__['service_name'] == 'nginx' \
+        service_call = ['service', 'nginx'] if __nginx__['service_name'] == 'nginx' \
             else __nginx__['service_name']
         initdv2.ParametrizedInitScript.__init__(self,
                                                 'nginx',
