@@ -164,7 +164,7 @@ class GCEConnectionPool(LocalPool):
 
 
 class GCEConnectionProxy(platform.ConnectionProxy):
-    max_retries = 3
+    pass
 
 
 class GcePlatform(platform.Platform):

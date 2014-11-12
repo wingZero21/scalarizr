@@ -65,7 +65,7 @@ class InvalidCredentialsError(ConnectionError):
 class ConnectionProxy(object):
 
     _logger = logging.getLogger(__name__)
-    max_retries = 2
+    max_retries = 3
 
     def __init__(self, conn_pool, obj=None):
         self.obj = obj or conn_pool.get()

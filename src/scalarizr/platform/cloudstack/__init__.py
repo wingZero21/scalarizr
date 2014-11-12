@@ -37,7 +37,7 @@ def _create_connection():
 
 
 class CloudStackConnectionProxy(platform.ConnectionProxy):
-    max_retries = 3
+    pass
 
 
 class CloudStackPlatform(Platform):

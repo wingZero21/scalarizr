@@ -78,7 +78,6 @@ def _create_s3_connection():
 
 
 class Ec2ConnectionProxy(platform.ConnectionProxy):
-    max_retries = 3
 
     def invoke(self, *args, **kwds):
         try:
@@ -92,7 +91,6 @@ class Ec2ConnectionProxy(platform.ConnectionProxy):
 
 
 class S3ConnectionProxy(platform.ConnectionProxy):
-    max_retries = 3
 
     def invoke(self, *args, **kwds):
         try:
