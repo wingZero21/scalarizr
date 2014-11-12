@@ -73,10 +73,17 @@ def extract_json_attributes(chef_data):
     """
     Extract json attributes dictionary from scalr formatted structure
     """
-    json_attributes = json.loads(chef_data.get('json_attributes') or "{}")
+    try:
+        json_attributes = json.loads(chef_data.get('json_attributes') or "{}")
+    except ValueError, e:
+        raise HandlerError("Chef attributes is not a valid JSON: {0}".format(e))
 
     if chef_data.get('run_list'):
-        json_attributes['run_list'] = json.loads(chef_data['run_list'])
+        try:
+            json_attributes['run_list'] = json.loads(chef_data['run_list'])
+        except ValueError, e:
+            raise HandlerError("Chef runlist is not a valid JSON: {0}".format(e))
+
     elif chef_data.get('role'):
         json_attributes['run_list'] = ["role[%s]" % chef_data['role']]
 
@@ -144,6 +151,7 @@ class ChefInitScript(initdv2.ParametrizedInitScript):
 initdv2.explore('chef', ChefInitScript)
 
 class ChefHandler(Handler):
+
     def __init__(self):
         super(ChefHandler, self).__init__()
         bus.on(init=self.on_init)
@@ -171,7 +179,6 @@ class ChefHandler(Handler):
                 daemonize = int(params_dict.get('daemonize', False))
                 if daemonize:
                     self.daemonize()
-
 
     def on_host_init_response(self, message):
         global_variables = message.body.get('global_variables') or []
@@ -206,11 +213,9 @@ class ChefHandler(Handler):
                         win32service.CloseServiceHandle(hscm)
 
                     win32serviceutil.StopService(WIN_SERVICE_NAME)
-
                 except:
                     e = sys.exc_info()[1]
                     self._logger.warning('Could not stop chef service: %s' % e)
-
 
     def on_before_host_up(self, msg):
         if not self._chef_data:
@@ -224,13 +229,14 @@ class ChefHandler(Handler):
                 if os.path.exists(CLIENT_KEY_PATH):
                     os.remove(CLIENT_KEY_PATH)
 
-                chef_client = ChefClient(self._chef_data['server_url'],
-                                         self._with_json_attributes,
-                                         self._chef_data['node_name'],
-                                         self._chef_data['validator_name'],
-                                         self._chef_data['validator_key'],
-                                         self._chef_data['environment'],
-                                         self._environ_variables)
+                chef_client = ChefClient(chef_server_url=self._chef_data['server_url'],
+                                         json_attributes=self._with_json_attributes,
+                                         node_name=self._chef_data['node_name'],
+                                         validator_name=self._chef_data['validator_name'],
+                                         validation_pem=self._chef_data['validator_key'],
+                                         environment=self._chef_data['environment'],
+                                         environment_variables=self._environ_variables,
+                                         log_level=self._chef_data['log_level'])
                 try:
                     chef_client.prepare()
                     self.send_message('HostUpdate', dict(chef=self._chef_data))
@@ -244,9 +250,9 @@ class ChefHandler(Handler):
                     self.daemonize()
 
             elif self._chef_data.get('cookbook_url'):
-                solo = ChefSolo(self._chef_data['cookbook_url'],
-                                self._chef_data['cookbook_url_type'],
-                                self._with_json_attributes,
+                solo = ChefSolo(cookbook_url=self._chef_data['cookbook_url'],
+                                cookbook_url_type=self._chef_data['cookbook_url_type'],
+                                json_attributes=self._with_json_attributes,
                                 relative_path=self._chef_data.get('relative_path'),
                                 environment=self._environ_variables,
                                 ssh_private_key=self._chef_data.get('ssh_private_key'),
@@ -263,7 +269,6 @@ class ChefHandler(Handler):
         finally:
             self._chef_data = None
 
-
     def daemonize(self):
         if linux.os.windows_family:
             self._logger.info('Starting chef-client service')
@@ -275,7 +280,6 @@ class ChefHandler(Handler):
                             "cause 'chef-client' is not a registered Windows Service.\n"
                             "Most likely you haven't selected Chef Service option in Chef installer.")
                     raise HandlerError(err)
-
         else:
             self._init_script.start(env=self._environ_variables)
 
@@ -298,7 +302,7 @@ class ChefHandler(Handler):
         return environ
 
     def get_node_name(self):
-        return __node__.get('hostname') or \
+        return __node__['base'].get('hostname') or \
                 '{0}-{1}-{2}'.format(
                     self._platform.name, 
                     self._platform.get_public_ip(), 
@@ -315,12 +319,14 @@ class ChefClient(object):
                  environment=None,
                  environment_variables=None,
                  log_level='auto',
-                 run_as='root'):
+                 run_as='root',
+                 override_runlist=False):
 
         self.chef_server_url = chef_server_url
         self.validation_pem = validation_pem
 
         self.json_attributes = json_attributes or dict()
+        self.run_list = self.json_attributes.get("run_list", list())
 
         self.node_name = node_name
         self.validator_name = validator_name
@@ -328,6 +334,11 @@ class ChefClient(object):
         self.environment_variables = environment_variables or dict()
         self.log_level = log_level
         self.run_as = run_as
+
+        self.override_runlist = override_runlist
+        # Remove runlist from attributes to preserve node's run list
+        if self.override_runlist:
+            self.json_attributes.pop("run_list", None)
 
     def prepare(self):
         if os.path.exists(CLIENT_KEY_PATH) and os.path.exists(CLIENT_CONF_PATH):
@@ -358,37 +369,32 @@ class ChefClient(object):
             os.chmod(CLIENT_CONF_PATH, 0644)
 
             if not os.path.exists(CLIENT_KEY_PATH):
-                assert  self.validation_pem
+                assert self.validation_pem
                 assert self.validator_name
                 # Write validation cert
                 with open(VALIDATOR_KEY_PATH, 'w+') as fp:
                     fp.write(self.validation_pem)
-
-                try:
-                    log = bus.init_op.logger if bus.init_op else LOG
-                    log.info('Registering Chef node %s', self.node_name)
-                    self._run_chef_client(validate=True)
-                finally:
-                    os.remove(VALIDATOR_KEY_PATH)
 
         if self.json_attributes:
             with open(JSON_ATTRIBUTES_PATH, 'w+') as fp:
                 json.dump(self.json_attributes, fp)
 
 
-    def _run_chef_client(self, validate=False):
-        system2(self.get_cmd(validate=validate),
+    def _run_chef_client(self):
+        system2(self.get_cmd(),
             close_fds=not linux.os.windows_family,
             log_level=logging.INFO,
             preexec_fn=not linux.os.windows_family and os.setsid or None,
             env=self.environment_variables
         )
 
-
-    def get_cmd(self, validate=False):
+    def get_cmd(self):
         cmd = [CHEF_CLIENT_BIN]
 
-        if not validate and self.json_attributes:
+        if self.override_runlist and self.run_list:
+            cmd += ["-o", ",".join(self.run_list)]
+
+        if self.json_attributes:
             cmd += ['--json-attributes', JSON_ATTRIBUTES_PATH]
 
         if self.run_as != 'root':
@@ -398,13 +404,16 @@ class ChefClient(object):
 
 
     def run(self):
-        LOG.info('Applying Chef run list %s' % self.json_attributes.get('run_list', list()))
+        LOG.info('Starting chef-client. Run list: {0}'.format(self.run_list))
         self._run_chef_client()
 
 
     def cleanup(self):
         if os.path.exists(JSON_ATTRIBUTES_PATH):
             os.remove(JSON_ATTRIBUTES_PATH)
+
+        if os.path.exists(VALIDATOR_KEY_PATH):
+            os.remove(VALIDATOR_KEY_PATH)
 
 
 class ChefSolo(object):

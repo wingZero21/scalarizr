@@ -161,8 +161,11 @@ class UpdClient(util.Server):
         LOG.info('Starting UpdateClient (pid: %s)', os.getpid())
         self._check_singleton()
         try:
-            self._start_api()
             self._write_pid_file()
+            self._start_api()  
+            # Starting API before bootstrap is important for situation, when 
+            # Scalarizr daemon is started in a parallel and required to know that 
+            # update is in-progress to shutdown
 
             self.running = True  
             # It should be here, cause self.api.bootstrap() on Windows
@@ -208,7 +211,7 @@ class UpdClient(util.Server):
 
     
     def _start_api(self):
-        LOG.debug('Starting API on port %s', self.api.api_port)
+        LOG.info('Starting API on port %s', self.api.api_port)
         try:
             wsgi_app = jsonrpc_http.WsgiApplication(
                         rpc.RequestHandler(self.api), 

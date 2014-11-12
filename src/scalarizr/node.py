@@ -11,6 +11,7 @@ except ImportError:
     import simplejson as json 
 
 from scalarizr import linux
+from scalarizr import util
 
 
 if linux.os.windows_family:
@@ -328,8 +329,27 @@ node = {
         'state': File(private_dir + '/.state'),
         'rebooted': BoolFile(private_dir + '/.reboot'),
         'halted': BoolFile(private_dir + '/.halt'),
-        'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
+        'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region'),
 }
+if linux.os.windows_family:
+    node['install_dir'] = r'C:\Program Files\Scalarizr' 
+    node['etc_dir'] = os.path.join(node['install_dir'], 'etc')
+    node['log_dir'] = os.path.join(node['install_dir'], r'var\log')
+else:
+    node['install_dir'] = '/opt/scalarizr'
+    node['etc_dir'] = '/etc/scalr'
+    node['log_dir'] = '/var/log'
+node['embedded_bin_dir'] = os.path.join(node['install_dir'], 'embedded', 'bin')
+
+node['share_dir'] = util.firstmatched(
+    lambda p: os.access(p, os.F_OK), [
+        os.path.join(node['install_dir'], 'share'),
+        '/usr/share/scalr',
+        '/usr/local/share/scalr'
+    ], 
+    os.path.join(node['install_dir'], 'share')
+)
+
 
 node['defaults'] = {
     'base': {
@@ -395,9 +415,6 @@ node['apache'] = Compound({
         Ini('%s/%s.ini' % (public_dir, 'app'), 'app')
 })
 
-node['cloudfoundry'] = Compound({
-        'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'cloudfoundry'), 'scalarizr.storage2.volume')
-        })
 
 node['tomcat'] = {}
 
@@ -425,10 +442,6 @@ node['openstack'] = Compound({
         'connect_nova': Attr('scalarizr.bus', 'bus.platform.get_nova_conn'),
         'connect_cinder': Attr('scalarizr.bus', 'bus.platform.get_cinder_conn'),
         'connect_swift': Attr('scalarizr.bus', 'bus.platform.get_swift_conn'),
-        'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
-})
-node['rackspace'] = Compound({
-        'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
         'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
 

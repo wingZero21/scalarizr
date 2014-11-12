@@ -4,7 +4,7 @@ import json
 import os
 import re
 import sys
-from time import sleep
+import time
 
 
 import novaclient
@@ -109,7 +109,7 @@ def _create_swift_connection():
 class NovaConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwds):
-        for retry in range(2):
+        for retry in range(3):
             try:
                 return self.obj(*args, **kwds)
             except:
@@ -119,6 +119,7 @@ class NovaConnectionProxy(platform.ConnectionProxy):
                         novaclient.exceptions.Forbidden)):
                     self.conn_pool.dispose_local()
                     raise InvalidCredentialsError(e)
+                time.sleep(1)
                 continue
         self.conn_pool.dispose_local()
         raise ConnectionError(e)
@@ -127,7 +128,7 @@ class NovaConnectionProxy(platform.ConnectionProxy):
 class CinderConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwds):
-        for retry in range(2):
+        for retry in range(3):
             try:
                 return self.obj(*args, **kwds)
             except:
@@ -137,6 +138,7 @@ class CinderConnectionProxy(platform.ConnectionProxy):
                         cinderclient.exceptions.Forbidden)):
                     self.conn_pool.dispose_local()
                     raise InvalidCredentialsError(e)
+                time.sleep(1)
                 continue
         self.conn_pool.dispose_local()
         raise ConnectionError(e)
@@ -145,7 +147,7 @@ class CinderConnectionProxy(platform.ConnectionProxy):
 class SwiftConnectionProxy(platform.ConnectionProxy):
 
     def __call__(self, *args, **kwds):
-        for retry in range(2):
+        for retry in range(3):
             try:
                 return self.obj(*args, **kwds)
             except:
@@ -155,6 +157,7 @@ class SwiftConnectionProxy(platform.ConnectionProxy):
                         re.search(r'.*Authorization Failure.*', e.msg)):
                     self.conn_pool.dispose_local()
                     raise InvalidCredentialsError(e)
+                time.sleep(1)
                 continue
         self.conn_pool.dispose_local()
         raise ConnectionError(e)

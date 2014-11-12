@@ -188,11 +188,11 @@ class FileTransfer(BaseTransfer):
                 Download both generators
                         def src():
                                 yield 's3://backups/mysql/daily.tar.gz'
-                                yield 'rackspace-cloudfiles://backups/mysql/daily.tar.gz'
+                                yield 'swift://backups/mysql/daily.tar.gz'
 
                         def dst():
                                 yield '/backups/daily-from-s3.tar.gz'
-                                yield '/backups/daily-from-cloudfiles.tar.gz'
+                                yield '/backups/daily-from-swift.tar.gz'
 
 
         Usage:

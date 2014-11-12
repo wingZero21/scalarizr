@@ -17,7 +17,6 @@ URL:            http://scalr.net
 
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
 Requires:       python26 python26-m2crypto >= 0.20 python26-pexpect >= 2.3
-Requires:       python26-pysnmp >= 4.1 python26-pyasn1 >= 0.1.7 python26-pysnmp-mibs >= 0.0.8a 
 Requires:       python26-prettytable python26-PyYAML python26-docopt
 #Requires:		python26-pymongo
 Requires:		python26-pymysql
@@ -29,8 +28,6 @@ Requires:		yum-priorities
 # setuptools from pip used instead of rpm
 # BuildRequires:  python-setuptools
 Requires:       python >= 2.5 m2crypto >= 0.20 pexpect >= 2.3
-# snmp
-Requires:       pysnmp >= 4.2.4 python-pyasn1 >= 0.1.7 python-pysnmp-mibs >= 0.0.8a 
 # szradm
 Requires:       python-prettytable PyYAML python-docopt >= 0.6.2
 # mongodb behavior
@@ -61,15 +58,13 @@ Scalarizr converts any server to Scalr-manageable node
 Summary:        Scalarizr EC2 edition
 Group:          Applications/Internet
 %if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-boto >= 2.32.1
+Requires:       python26-boto >= 2.34.0
 %else
-Requires:       python-boto >= 2.32.1
+Requires:       python-boto >= 2.34.0
 %endif
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Obsoletes:      scalarizr < 0.7
-Conflicts:      scalarizr-rackspace
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-cloudstack
 Conflicts:		scalarizr-gce
@@ -79,53 +74,6 @@ Conflicts:		scalarizr-idcf
 
 %description -n scalarizr-ec2
 Scalarizr converts any server to Scalr-manageable node
-
-
-%package -n scalarizr-eucalyptus
-Summary:        Scalarizr Eucalyptus edition
-Group:          Applications/Internet
-Requires:		scalarizr-ec2 = %{version}-%{release}
-%if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-euca2ools
-%else
-Requires:       euca2ools >= 3.0.2
-%endif
-
-%description -n scalarizr-eucalyptus
-Scalarizr converts any server to Scalr-manageable node
-
-%post -n scalarizr-eucalyptus
-set -x
-
-sed -i 's/platform = ec2/platform = eucalyptus/i' /etc/scalr/public.d/config.ini
-
-%package -n scalarizr-rackspace
-Summary:        Scalarizr Rackspace edition
-Group:          Applications/Internet
-%if 0%{?rhel} >= 4 && 0%{?rhel} <= 5
-Requires:       python26-cloudfiles >= 1.5.1 python26-cloudservers >= 1.0
-Requires:       python26-swiftclient >= 1.2.0
-%else
-Requires:       python-cloudfiles >= 1.5.1 python-cloudservers >= 1.0 python-httplib2
-Requires:       python-swiftclient >= 1.2.0
-%endif
-Requires:       scalarizr-base = %{version}-%{release}
-Provides:       scalarizr
-Conflicts:      scalarizr-ec2
-Conflicts:		scalarizr-nimbula
-Conflicts:		scalarizr-openstack
-Conflicts:		scalarizr-cloudstack
-Conflicts:		scalarizr-gce
-Conflicts:		scalarizr-ucloud
-Conflicts:		scalarizr-idcf
-
-%description -n scalarizr-rackspace
-Scalarizr converts any server to Scalr-manageable node
-
-%post -n scalarizr-rackspace
-set -x
-
-sed -i 's/platform = ec2/platform = rackspace/i' /etc/scalr/public.d/config.ini
 
 
 %package -n scalarizr-openstack
@@ -147,8 +95,6 @@ Requires:       python-keystoneclient >= 0.3.2
 %endif
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-cloudstack
 Conflicts:		scalarizr-gce
 Conflicts:		scalarizr-ucloud
@@ -174,8 +120,6 @@ Requires:       lsscsi
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-gce
 Conflicts:		scalarizr-ucloud
@@ -200,8 +144,6 @@ Requires:       python-cloudstack
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-gce
 Conflicts:		scalarizr-idcf
@@ -225,8 +167,6 @@ Requires:       python-cloudstack
 Requires:       scalarizr-base = %{version}-%{release}
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
-Conflicts:		scalarizr-nimbula
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-gce
 Conflicts:		scalarizr-ucloud
@@ -239,36 +179,15 @@ set -x
 
 sed -i 's/platform = ec2/platform = idcf/i' /etc/scalr/public.d/config.ini
 
-%package -n scalarizr-nimbula
-Summary:        Scalarizr Nimbula edition
-Group:          Applications/Internet
-Requires:       scalarizr-base = %{version}-%{release}
-Provides:       scalarizr
-Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
-Conflicts:		scalarizr-openstack
-Conflicts:		scalarizr-cloudstack
-Conflicts:		scalarizr-gce
-Conflicts:		scalarizr-ucloud
-Conflicts:		scalarizr-idcf
-
-%description -n scalarizr-nimbula
-Scalarizr converts any server to Scalr-manageable node
-
-%post -n scalarizr-nimbula
-set -x
-
-sed -i 's/platform = ec2/platform = nimbula/i' /etc/scalr/public.d/config.ini
 
 %package -n scalarizr-gce
 Summary:        Scalarizr Google Compute Engine edition
 Group:          Applications/Internet
 Requires:       scalarizr-base = %{version}-%{release}
 Requires:       pyOpenSSL >= 0.13 python-httplib2
-Requires:       python-google-api-client
+Requires:       python-google-api-client >= 1.2
 Provides:       scalarizr
 Conflicts:      scalarizr-ec2
-Conflicts:      scalarizr-rackspace
 Conflicts:		scalarizr-openstack
 Conflicts:		scalarizr-cloudstack
 Conflicts:		scalarizr-gce
@@ -369,12 +288,6 @@ cp /usr/share/scalr/szradm.bash_completion /etc/bash_completion.d/szradm
 
 pushd .
 cd $pub_cnf_dir
-if [ -f cloudfoundry.ini ]; then
-	for name in cf_router.ini cf_cloud_controller.ini \
-				cf_health_manager.ini cf_dea.ini cf_service.ini; do
-		[ ! -f $name ] && ln -s cloudfoundry.ini $name
-	done
-fi
 rm -f percona.ini  # Measly config in several builds 
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
 [ ! -f mariadb.ini ] && ln -s mysql2.ini mariadb.ini
@@ -455,15 +368,6 @@ rm -rf "$RPM_BUILD_ROOT"
 %files -n scalarizr-ec2
 %defattr(-,root,root)
 
-%files -n scalarizr-eucalyptus
-%defattr(-,root,root)
-
-%files -n scalarizr-rackspace
-%defattr(-,root,root)
-
-%files -n scalarizr-nimbula
-%defattr(-,root,root)
-
 %files -n scalarizr-openstack
 %defattr(-,root,root)
 
@@ -480,4 +384,3 @@ rm -rf "$RPM_BUILD_ROOT"
 %defattr(-,root,root)
 
 %changelog
-

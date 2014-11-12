@@ -51,6 +51,10 @@ class Volume(Base):
         # Get rid of fscreated flag
         kwds.pop('fscreated', None)
 
+        #Backwards compatibility with block_device handler
+        from_template_if_missing = kwds.pop('from_template_if_missing', False)
+        kwds['recreate_if_missing'] = kwds.get('recreate_if_missing', False) or from_template_if_missing
+
         super(Volume, self).__init__(
                         device=device,
                         fstype=fstype,
@@ -72,7 +76,19 @@ class Volume(Base):
             self._check_restore_unsupported()
         if self.snap and isinstance(self.snap, Snapshot):
             self.snap = self.snap.config()
-        self._ensure()
+        try:
+            self._ensure()
+        except storage2.VolumeNotExistsError, e:
+            LOG.debug("recreate_if_missing: %s" % self.recreate_if_missing)
+            if self.recreate_if_missing:
+                LOG.warning(e)
+                LOG.info('Volume %s not exists, re-creating %s from template', self.id, self.type)
+                template = self.clone()
+                vol = storage2.volume(**dict(template))
+                vol.ensure(mount=bool(vol.mpoint), mkfs=True)
+                self._config = vol.config()
+            else:
+                raise
         self._check_attr('device')
         if not self.id:
             self.id = self._genid('vol-')
@@ -211,6 +227,8 @@ class Volume(Base):
 
         new_vol = None
         try:
+            LOG.info("Marking current volume archived")
+            self.apply_tags({"scalr-status": "archived"})
             LOG.info('Detaching volume %s', self.id)
             self.detach()
             new_vol = self.clone()
@@ -248,12 +266,16 @@ class Volume(Base):
                         LOG.error('Enlarged volume destruction failed: %s' % destr_err)
 
                 self.ensure(mount=bool(was_mounted))
+                LOG.info("Marking old volume active again.")
+                self.apply_tags({"scalr-status": "active"})
             except:
                 e = sys.exc_info()[1]
                 err_val = str(err_val) + '\nFailed to restore old volume: %s' % e
 
             err_val = 'Volume growth failed: %s' % err_val
             raise storage2.StorageError, err_val, trace
+        else:
+            LOG.info("The process of growing the storage volume completed.")
 
         return new_vol
 
@@ -269,7 +291,6 @@ class Volume(Base):
         :rtype: Volume
         """
         pass
-
 
 
     def _check(self, fstype=True, device=True, **kwds):
@@ -323,6 +344,9 @@ class Volume(Base):
         pass
 
     def _clone(self, config):
+        pass
+
+    def apply_tags(self, tags, async=True):
         pass
 
 

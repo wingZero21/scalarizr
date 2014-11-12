@@ -7,6 +7,8 @@ Created on Aug 12, 2011
 from __future__ import with_statement
 
 import os
+import re
+import sys
 import time
 import logging
 
@@ -20,7 +22,7 @@ from scalarizr.storage2.cloudfs import LargeTransfer
 from scalarizr.bus import bus
 from scalarizr.messaging import Messages
 from scalarizr.util import system2, cryptotool, software, initdv2
-from scalarizr.linux import iptables
+from scalarizr.linux import iptables, which
 from scalarizr.services import redis, backup
 from scalarizr.service import CnfController
 from scalarizr.config import BuiltinBehaviours, ScalarizrState
@@ -125,6 +127,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
 
     def __init__(self):
+        self._hir_volume_growth = None
         self._redis_api = redis_api.RedisAPI()
         self.preset_provider = redis.RedisPresetProvider()
 
@@ -166,6 +169,25 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         self.on_reload()
 
+    def _set_overcommit_option(self):
+        try:
+            with open('/proc/sys/vm/overcommit_memory', 'r') as f:
+                proc = f.read().strip()
+
+            with open('/etc/sysctl.conf', 'r') as f:
+                match = re.search(r'^\s*vm.overcommit_memory\s*=\s*(\d+)', f.read(), re.M)
+                sysctl = match.group(1) if match else None
+
+            if (proc == '2') or (proc == sysctl == '0'):
+                LOG.info('Kernel option vm.overcommit_memory is set to %s by user. '
+                         'Consider changing it to 1 for optimal Redis functioning. '
+                         'More information here: http://redis.io/topics/admin', proc)
+            else:
+                LOG.debug('Setting vm.overcommit_memory to 1')
+                system2((which('sysctl'), 'vm.overcommit_memory=1'))
+        except:
+            LOG.debug("Failed to set vm.overcommit_memory option", exc_info=sys.exc_info())
+
 
     def on_init(self):
 
@@ -174,6 +196,7 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
         bus.on("before_reboot_start", self.on_before_reboot_start)
         bus.on("before_reboot_finish", self.on_before_reboot_finish)
 
+        self._set_overcommit_option()
 
         if __node__['state'] == 'running':
             self._ensure_security()
@@ -308,6 +331,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     type='snap_redis',
                     snapshot=redis_data.pop('snapshot_config'),
                     volume=redis_data['volume'])
+
+        self._hir_volume_growth = redis_data.pop('volume_growth', None)
+
 
         # Update configs
         __redis__.update(redis_data)
@@ -496,8 +522,15 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __redis__['volume'].snap = __redis__['volume'].snapshot()
 
-            __redis__['volume'].ensure(mount=True, mkfs=True)
-            LOG.debug('Redis volume config after ensure: %s', dict(__redis__['volume']))
+            if self._hir_volume_growth:
+                #Growing maser storage if HIR message contained "growth" data
+                LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
+                grown_volume = __redis__['volume'].grow(**self._hir_volume_growth)
+                grown_volume.mount()
+                __redis__['volume'] = grown_volume
+            else:
+                __redis__['volume'].ensure(mount=True, mkfs=True)
+                LOG.debug('Redis volume config after ensure: %s', dict(__redis__['volume']))
 
         log.info('Initialize Master')
         password = self.get_main_password()
@@ -512,6 +545,9 @@ class RedisHandler(ServiceCtlHandler, handlers.FarmSecurityMixin):
 
         log.info('Collect HostUp data')
         # Update HostUp message
+
+        if self._hir_volume_growth:
+            msg_data['volume_template'] = dict(__redis__['volume'].clone())
 
         if msg_data:
             message.db_type = BEHAVIOUR

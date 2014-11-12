@@ -348,32 +348,6 @@ def rails_software_info():
 
 explore('rails', rails_software_info)
 
-def cassandra_software_info():
-    cassandra_path = '/usr/share/cassandra/apache-cassandra.jar'
-
-    if not os.path.exists(cassandra_path):
-        raise SoftwareError("Can't find apache-cassandra.jar file with Cassandra version info")
-
-    cassandra = zipfile.ZipFile(cassandra_path)
-
-    try:
-        properties_path = 'META-INF/MANIFEST.MF'
-
-        if not properties_path in cassandra.namelist():
-            raise SoftwareError("MANIFEST.MF file isn't in apache-cassandra.jar")
-
-        properties = cassandra.read(properties_path)
-
-        res = re.search('^Implementation-Version:\s*([\d\.]+)', properties, re.M)
-        if res:
-            version = res.group(1)
-            return SoftwareInfo('cassandra', version, '')
-        raise SoftwareError()
-    finally:
-        cassandra.close()
-
-explore('cassandra', cassandra_software_info)
-
 
 def rabbitmq_software_info():
     if linux.os.windows_family:

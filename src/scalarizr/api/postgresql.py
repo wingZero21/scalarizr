@@ -6,6 +6,7 @@ Created on Feb 25, 2013
 
 import os
 import re
+import sys
 import logging
 import time
 import tarfile
@@ -17,11 +18,12 @@ from scalarizr.node import __node__
 from scalarizr.util import PopenError, system2
 from scalarizr.util.cryptotool import pwgen
 from scalarizr.services import postgresql as postgresql_svc
-from scalarizr import rpc
+from scalarizr import rpc, storage2
 from scalarizr import linux
 from scalarizr.services import backup
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.handlers import DbMsrMessages, HandlerError
+from scalarizr.handlers import transfer_result_to_backup_result
 from scalarizr.api import operation
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services.postgresql import PSQL, PG_DUMP, SU_EXEC
@@ -30,6 +32,7 @@ from scalarizr.util import Singleton
 from scalarizr.linux import pkgmgr
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
+from scalarizr.api import SoftwareDependencyError
 
 
 LOG = logging.getLogger(__name__)
@@ -78,7 +81,7 @@ class PostgreSQLAPI(BehaviorAPI):
         self.service.start()
 
     @rpc.command_method
-    def stop_service(self):
+    def stop_service(self, reason=None):
         """
         Stops PostgreSQL service.
 
@@ -86,7 +89,7 @@ class PostgreSQLAPI(BehaviorAPI):
 
             api.postgresql.stop_service()
         """
-        self.service.stop()
+        self.service.stop(reason)
 
     @rpc.command_method
     def reload_service(self):
@@ -175,12 +178,14 @@ class PostgreSQLAPI(BehaviorAPI):
             result['error'] = error_match.group()
             return result
 
-        diff_match = re.search(r'xlog_delay.+-\n *\d+', out, re.DOTALL)
-        if not diff_match:
-            #if no error and query returns nothing
-            return result
+        split = out.split()  # [SCALARIZR-1642]
+        if split and "xlog_delay" in split[0] and len(split) > 2:
+            lag = split[2]
+            try:
+                result['xlog_delay'] = int(float(lag))
+            except ValueError:
+                pass
 
-        result['xlog_delay'] = diff_match.group().splitlines()[-1].strip()
         return result
 
     @rpc.query_method
@@ -218,7 +223,7 @@ class PostgreSQLAPI(BehaviorAPI):
 
         is_master = int(__postgresql__[OPT_REPLICATION_MASTER])
 
-        if not query_result['xlog_delay']:
+        if query_result['xlog_delay'] is None:
             if is_master:
                 return {'master': {'status': 'up'}}
             return {'slave': {'status': 'down',
@@ -326,11 +331,9 @@ class PostgreSQLAPI(BehaviorAPI):
                 trn = LargeTransfer(dumps, cloud_storage_path, tags=backup_tags)
                 manifest = trn.run()
                 LOG.info("Postgresql backup uploaded to cloud storage under %s", cloud_storage_path)
-                
-                result = list(dict(path=os.path.join(os.path.dirname(manifest.cloudfs_path), c[0]), size=c[2]) for c in
-                                manifest['files'][0]['chunks'])
                     
                 # Notify Scalr
+                result = transfer_result_to_backup_result(manifest)
                 __node__.messaging.send(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT,
                                         dict(db_type=BEHAVIOUR,
                                              status='ok',
@@ -359,19 +362,20 @@ class PostgreSQLAPI(BehaviorAPI):
 
                             
     @classmethod
-    def do_check_software(cls, installed_packages=None):
+    def do_check_software(cls, system_packages=None):
+        system_packages = system_packages or pkgmgr.package_mgr().list()
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         if os_name == 'ubuntu':
             if os_vers >= '12':
-                required_list = [
+                requirements = [
                     ['postgresql-9.1', 'postgresql-client-9.1'],
                     ['postgresql-9.2', 'postgresql-client-9.2'],
                     ['postgresql-9.3', 'postgresql-client-9.3'],
                     ['postgresql>=9.1,<9.4', 'postgresql-client>=9.1,<9.4'],
                 ]
             elif os_vers >= '10':
-                required_list = [
+                requirements = [
                     ['postgresql-9.0', 'postgresql-client-9.0'],
                     ['postgresql-9.1', 'postgresql-client-9.1'],
                     ['postgresql-9.2', 'postgresql-client-9.2'],
@@ -379,61 +383,104 @@ class PostgreSQLAPI(BehaviorAPI):
                     ['postgresql>=9.0,<9.4', 'postgresql-client>=9.0,<9.4'],
                 ]
         elif os_name == 'debian':
-                required_list = [
-                    ['postgresql-9.2', 'postgresql-client-9.2'],
-                    ['postgresql-9.3', 'postgresql-client-9.3'],
-                    ['postgresql>=9.2,<9.4', 'postgresql-client>=9.2,<9.4'],
-                ]
+            requirements = [
+                ['postgresql-9.2', 'postgresql-client-9.2'],
+                ['postgresql-9.3', 'postgresql-client-9.3'],
+                ['postgresql>=9.2,<9.4', 'postgresql-client>=9.2,<9.4'],
+            ]
         elif linux.os.redhat_family:
             if os_vers >= '6':
-                required_list = [
-                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
-                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                    ['postgresql93', 'postgresql93-server', 'postgresql93-devel'],
-                    [
-                        'postgresql>=9.1,<9.4',
-                        'postgresql-server>=9.1,<9.4',
-                        'postgresql-devel>=9.1,<9.4'
-                    ]
+                requirements = [
+                    ['postgresql91-server', 'postgresql91', 'postgresql91-devel'],
+                    ['postgresql92-server', 'postgresql92', 'postgresql92-devel'],
+                    ['postgresql93-server', 'postgresql93', 'postgresql93-devel'],
+                    ['postgresql-server>=9.1,<9.4', 'postgresql>=9.1,<9.4', 'postgresql-devel>=9.1,<9.4'],
                 ]
             elif os_vers >= '5':
-                required_list = [
-                    ['postgresql90', 'postgresql90-server', 'postgresql90-devel'],
-                    ['postgresql91', 'postgresql91-server', 'postgresql91-devel'],
-                    ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                    ['postgresql93', 'postgresql93-server', 'postgresql93-devel'],
-                    [
-                        'postgresql>=9.0,<9.4',
-                        'postgresql-server>=9.0,<9.4',
-                        'postgresql-devel>=9.0,<9.4'
-                    ]
+                requirements = [
+                    ['postgresql90-server', 'postgresql90', 'postgresql90-devel'],
+                    ['postgresql91-server', 'postgresql91', 'postgresql91-devel'],
+                    ['postgresql92-server', 'postgresql92', 'postgresql92-devel'],
+                    ['postgresql93-server', 'postgresql93', 'postgresql93-devel'],
+                    ['postgresql-server>=9.0,<9.4', 'postgresql>=9.0,<9.4', 'postgresql-devel>=9.0,<9.4'],
                 ]
         elif linux.os.oracle_family:
-            required_list = [
-                ['postgresql92', 'postgresql92-server', 'postgresql92-devel'],
-                [
-                    'postgresql>=9.2,<9.3',
-                    'postgresql-server>=9.2,<9.3',
-                    'postgresql-devel>=9.2,<9.3'
-                ]
+            requirements = [
+                ['postgresql92-server', 'postgresql92', 'postgresql92-devel'],
+                ['postgresql-server>=9.2,<9.3', 'postgresql>=9.2,<9.3', 'postgresql-devel>=9.2,<9.3'],
             ]
         else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, (
-                "Unsupported operating system '{os}'").format(os=linux.os['name'])
-            )
-        pkgmgr.check_any_dependency(required_list, installed_packages)
+            raise exceptions.UnsupportedBehavior(
+                    cls.behavior,
+                    "Not supported on {0} os family".format(linux.os['family']))
+        errors = list()
+        for requirement in requirements:
+            try:
+                installed = pkgmgr.check_software(requirement[0], system_packages)[0]
+                try:
+                    pkgmgr.check_software(requirement[1:], system_packages)
+                    return installed
+                except pkgmgr.NotInstalledError:
+                    e = sys.exc_info()[1]
+                    raise SoftwareDependencyError(e.args[0])
+            except:
+                e = sys.exc_info()[1]
+                errors.append(e)
+        for cls in [pkgmgr.VersionMismatchError, SoftwareDependencyError, pkgmgr.NotInstalledError]:
+            for error in errors:
+                if isinstance(error, cls):
+                    raise error
 
-    @classmethod
-    def do_handle_check_software_error(cls, e):
-        if isinstance(e, pkgmgr.VersionMismatchError):
-            pkg, ver, req_ver = e.args[0], e.args[1], e.args[2]
-            msg = (
-                '{pkg}-{ver} is not supported on {os}. Supported:\n'
-                '\tUbuntu 10.04, CentOS 5: >=9.0,<9.4\n'
-                '\tUbuntu 12.04, Debian, CentOS 6, RedHat, Amazon: >=9.1,<9.4\n'
-                '\tOracle: >=9.2,<9.3').format(
-                        pkg=pkg, ver=ver, os=linux.os['name'])
-            raise exceptions.UnsupportedBehavior(cls.behavior, msg)
-        else:
-            raise exceptions.UnsupportedBehavior(cls.behavior, e)
+    @rpc.command_method
+    def grow_volume(self, volume, growth, async=False):
+        """
+        Stops PostgreSQL service, Extends volume capacity and starts PostgreSQL service again.
+        Depending on volume type growth parameter can be size in GB or number of disks (e.g. for RAID volumes)
+
+        :type volume: dict
+        :param volume: Volume configuration object
+
+        :type growth: dict
+        :param growth: size in GB for regular disks or number of volumes for RAID configuration.
+
+        Growth keys:
+
+            - size (Type: int, Availability: ebs, csvol, cinder, gce_persistent) -- A new size for persistent volume.
+            - iops (Type: int, Availability: ebs) -- A new IOPS value for EBS volume.
+            - volume_type (Type: string, Availability: ebs) -- A new volume type for EBS volume. Values: "standard" | "io1".
+            - disks (Type: Growth, Availability: raid) -- A growth dict for underlying RAID volumes.
+            - disks_count (Type: int, Availability: raid) - number of disks.
+
+        :type async: bool
+        :param async: Execute method in a separate thread and report status
+                        with Operation/Steps mechanism.
+
+        Example:
+
+        Grow EBS volume to 50Gb::
+
+            new_vol = api.postgresql.grow_volume(
+                volume={
+                    'id': 'vol-e13aa63ef',
+                },
+                growth={
+                    'size': 50
+                }
+            )
+        """
+
+        assert isinstance(volume, dict), "volume configuration is invalid, 'dict' type expected"
+        assert volume.get('id'), "volume.id can't be blank"
+
+        def do_grow(op):
+            vol = storage2.volume(volume)
+            self.stop_service(reason='Growing data volume')
+            try:
+                grown_vol = vol.grow(**growth)
+                postgresql_svc.__postgresql__['volume'] = dict(grown_vol)
+                return dict(grown_vol)
+            finally:
+                self.start_service()
+
+        return self._op_api.run('postgresql.grow-volume', do_grow, exclusive=True, async=async)
 

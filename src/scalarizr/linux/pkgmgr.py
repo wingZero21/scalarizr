@@ -8,6 +8,7 @@ import logging
 import glob
 import re
 import os
+import sys
 import string
 import time
 import urllib2
@@ -18,6 +19,7 @@ import distutils.version
 
 from scalarizr import linux, util
 from scalarizr.linux import coreutils
+from scalarizr.bus import bus
 from urlparse import urlparse
 
 from pkg_resources import parse_requirements
@@ -113,11 +115,11 @@ class PackageMgr(object):
             download_dir = tempfile.mkdtemp()
             try:
                 self._install_download_only(name_version, download_dir, **kwds)
-                self._install_package(name_version, **kwds)
-
-                # create backup
                 files = (os.path.join(download_dir, name) 
                         for name in os.listdir(download_dir))
+                self._install_file(*files)                
+
+                # create backup
                 if not version:
                     version = self._installed_and_candidate(name)[0]
                 self._create_backup(name, version, files)
@@ -213,6 +215,9 @@ class PackageMgr(object):
         raise NotImplementedError()
 
 
+    def _install_file(self, *files):
+        raise NotImplementedError()
+
     def _install_download_only(self, name_version, download_dir, **kwds):
         raise NotImplementedError()
 
@@ -246,7 +251,13 @@ class PackageMgr(object):
 
 
     def restore_backup(self, name, backup_id):
-        raise NotImplementedError()
+        backup_dir = os.path.join(self.backup_dir, name, backup_id)
+        msg = 'Failed to restore package {0} from backup {1}'.format(name, backup_id)
+        try:
+            files = [os.path.join(backup_dir, f) for f in os.listdir(backup_dir)]
+            self._install_file(*files)
+        except:
+            raise Exception('%s. %s' % (msg, sys.exc_info()[1]))
 
 
 class AptPackageMgr(PackageMgr):
@@ -263,9 +274,10 @@ class AptPackageMgr(PackageMgr):
         cmd = ''
         if kwds.get('apt_repository'):
             cmd += ('--no-list-cleanup '
-                    '-o Dir::Etc::sourcelist=sources.list.d/{0}.list '
+                    '-c {0}/updclient/apt-preserve-update-success-stamp.conf '
+                    '-o Dir::Etc::sourcelist=sources.list.d/{1}.list '
                     '-o Dir::Etc::sourceparts=- '
-                    ).format(kwds['apt_repository'])
+                    ).format(bus.share_path, kwds['apt_repository'])
         cmd += 'update'
         try:
             self.apt_get_command(cmd)
@@ -296,7 +308,7 @@ class AptPackageMgr(PackageMgr):
         if err:
             raise Exception("'dpkg-query -W' command failed. Out: %s \nErrors: %s" % (out, err))
         pkgs = dict([(line.split('|')[1], line.split('|')[2].split(':')[-1]) \
-                for line in out.split('\n') if line.split('|')[0]=='install ok installed'])
+                for line in out.split('\n') if line.split('|')[0] in ('install ok installed', 'hold ok installed')])
         return pkgs
 
 
@@ -324,10 +336,7 @@ class AptPackageMgr(PackageMgr):
 
         dpkg_configure(raise_exc=True)
 
-        # forcefully install backuped packages
-        backup_dir = os.path.join(self.backup_dir, name, backup_id)
-        cmd = ['dpkg', '-i', '--force-downgrade'] + os.listdir(backup_dir)
-        linux.system(cmd, cwd=backup_dir, raise_exc=True)
+        return super(AptPackageMgr, self).restore_backup(name, backup_id)
 
 
     def version_cmp(self, name_1, name_2):
@@ -381,6 +390,11 @@ class AptPackageMgr(PackageMgr):
     def _install_package(self, name_version, **kwds):
         cmd = 'install {0}'.format(name_version)
         self.apt_get_command(cmd, raise_exc=True) 
+
+
+    def _install_file(self, *files):
+        cmd = ['dpkg', '-i', '--force-downgrade'] + list(files)
+        linux.system(cmd, raise_exc=True)
 
 
     def apt_get_command(self, command, **kwds):
@@ -507,11 +521,7 @@ class YumPackageMgr(PackageMgr):
         return pkgs
 
 
-    def restore_backup(self, name, backup_id):
-        backup_dir = os.path.join(self.backup_dir, name, backup_id)
-        msg = 'Failed to restore package {0} from backup {1}'.format(name, backup_id)
-        linux.system(['/usr/bin/rpm', '-i', '--force', '--nodeps'] + os.listdir(backup_dir), 
-                cwd=backup_dir, error_text=msg)
+
 
 
     def version_cmp(self, name_1, name_2):
@@ -556,6 +566,10 @@ class YumPackageMgr(PackageMgr):
         if kwds.get('rpm_raise_scriptlet_errors') \
             and re.search(r'(Non-fatal|Error in) (PREIN|PRERM|POSTIN|POSTRM) scriptlet', err):
             raise Exception(out)
+
+
+    def _install_file(self, *files):
+        linux.system(['/usr/bin/rpm', '-i', '--force', '--nodeps'] + list(files))
 
 
     def _install_download_only(self, name_version, download_dir, version=None, **kwds):
@@ -861,23 +875,19 @@ def removed(name, purge=False):
     return package_mgr().removed(name, purge)
 
 
-class DependencyError(Exception):
+class SoftwareError(Exception):
     pass
 
 
-class NotInstalledError(DependencyError):
+class NotInstalledError(SoftwareError):
     pass
 
 
-class ConflictError(DependencyError):
+class VersionMismatchError(SoftwareError):
     pass
 
 
-class VersionMismatchError(DependencyError):
-    pass
-
-
-def check_dependency(required, installed_packages=None, conflicted_packages=None):
+def check_software(required, system_packages=None):
     '''
     :param required: list
         The syntax of a requirement specifier can be defined in EBNF as follows:
@@ -894,39 +904,50 @@ def check_dependency(required, installed_packages=None, conflicted_packages=None
             ['FooProject >= 1.2', 'BarProject <= 1.2']
             ['PickyThing<1.6,>1.9,!=1.9.6,<2.0a0,==2.4c1']
             ['SomethingWhoseVersionIDontCareAbout']
-    :param installed_packages: dict
+    :param system_packages: dict
         Example:
             {
                 'python':'2.6.7-ubuntu1',
             }
-    :param conflicted_packages: list
-        Same as required
     '''
-    installed_packages = installed_packages or package_mgr().list()
-    conflicted_packages = conflicted_packages or list()
-    for conflict in parse_requirements(conflicted_packages):
-        name = conflict.project_name
-        if name in installed_packages:
-            vers = installed_packages[name]
-            if vers in conflict:
-                raise ConflictError(name, vers)
+    if not required:
+        return
+    system_packages = system_packages or package_mgr().list()
+    installed, not_installed, vers_mismatched = list(), list(), list()
     for requirement in parse_requirements(required):
         name = requirement.project_name
         required_vers = ','.join([''.join(_) for _ in requirement.specs])
-        if name not in installed_packages:
-            raise NotInstalledError(name, required_vers)
-        vers = installed_packages[name]
+        if name not in system_packages:
+            not_installed.append((name, required_vers))
+            continue
+        vers = system_packages[name]
         if vers not in requirement:
-            raise VersionMismatchError(name, vers, required_vers)
+            vers_mismatched.append((name, vers))
+            continue
+        installed.append((name, vers))
+    if not_installed:
+        raise NotInstalledError(not_installed)
+    if vers_mismatched:
+        raise VersionMismatchError(vers_mismatched)
+    return installed
 
 
-def check_any_dependency(required_list, installed_packages=None, conflicted_packages=None):
+def check_any_software(required_list, system_packages=None):
+    not_installed = list()
+    vers_mismatched = list()
     for required in required_list:
         try:
-            check_dependency(required, installed_packages, conflicted_packages)
-            break
-        except:
+            return check_software(required, system_packages)
+        except NotInstalledError:
+            not_installed += sys.exc_info()[1][0]
+            continue
+        except VersionMismatchError:
+            vers_mismatched += sys.exc_info()[1][0]
             continue
     else:
+        if vers_mismatched:
+            raise VersionMismatchError(vers_mismatched)
+        if not_installed:
+            raise NotInstalledError(not_installed)
         raise
 

@@ -220,6 +220,16 @@ class ScriptExecutor(Handler):
             LOG.debug('sending exec script result message')
             self.send_message(Messages.EXEC_SCRIPT_RESULT, script_result, queue=Queues.LOG)
             self.in_progress.remove(script)
+            if not exc_info \
+                    and script_result['return_code'] != 0 \
+                    and script.event_name == 'BeforeHostUp' \
+                    and int(__node__['base'].get('abort_init_on_script_fail', False)):
+                msg = ('Script {0} exited with code {1}, '
+                        'and the option to abort initialization when a Blocking BeforeHostUp Script fails was enabled. '
+                        'Update the script, or disable the option in the Advanced Tab.').format(
+                        script.name, script_result['return_code'])
+                raise HandlerError(msg)
+
 
     def execute_scripts(self, scripts, event_name, scripts_qty):
         """
@@ -334,7 +344,8 @@ class ScriptExecutor(Handler):
             LOG.debug('Fetched %d scripts', scripts_qty)
             self.execute_scripts(scripts, event_name, scripts_qty)
         except:
-            if event_name == 'BeforeHostUp':
+            if event_name == 'BeforeHostUp' \
+                    and int(__node__['base'].get('abort_init_on_script_fail', False)):
                 raise
             else:
                 LOG.warn('Scripts execution failed', exc_info=sys.exc_info())
@@ -663,11 +674,11 @@ class BaseChefScript(Script):
                 'exec_timeout': self.exec_timeout,
                 'run_as': self.run_as}
 
-
     def _get_body(self):
         shebang = "#!%s" % ("cmd" if linux.os.windows_family else "/bin/bash")
-        return shebang + "\n" + " ".join(self.chef.get_cmd())
-
+        cmd = self.chef.get_cmd()
+        LOG.debug("Chef script cmd: {0}".format(cmd))
+        return shebang + "\n" + " ".join(cmd)
 
     def wait(self):
         try:
@@ -689,7 +700,8 @@ class ChefClientScript(BaseChefScript):
                                self.chef_params.get('validator_name'),
                                self.chef_params.get('validator_key'),
                                self.chef_params.get('environment'),
-                               kwds.get("environ"))
+                               kwds.get("environ"),
+                               override_runlist=bool(self.with_json_attributes))
 
         self.body = self._get_body()
         super(ChefClientScript, self).__init__(**kwds)

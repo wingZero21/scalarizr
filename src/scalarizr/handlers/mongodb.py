@@ -22,24 +22,6 @@ import threading
 
 mgr = pkgmgr.package_mgr()
 
-if linux.os.redhat_family:
-    version = map(int, str(linux.os['release']).split('.'))
-    if version[0] >= 6:
-        if mgr.info('python-pymongo').get('installed'):
-            system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo',
-                             'python-bson'))
-        if not mgr.info('pymongo').get('installed'):
-            mgr.install('pymongo', mgr.info('pymongo')['candidate'])
-    elif version[0] == 5:
-        if not mgr.info('python26-pymongo').get('installed'):
-            mgr.install('python26-pymongo', mgr.info('python26-pymongo')['candidate'])
-else:
-    if not mgr.info('python-pymongo').get('installed'):
-        # without python-bson explicit version won't work
-        ver = mgr.info('python-pymongo')['candidate']
-        mgr.install('python-pymongo', ver)
-        mgr.install('python-bson', ver)
-
 import pymongo
 
 from scalarizr.bus import bus
@@ -262,7 +244,7 @@ class MongoDBHandler(ServiceCtlHandler):
             if self.rs_id in (0,1):
                 self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
                 self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-                self.mongodb.start_router(1)
+                self.mongodb.start_router(0)
 
 
     def on_start(self):
@@ -527,7 +509,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
             log.info('Start Router')
-            self.mongodb.start_router(1)
+            self.mongodb.start_router(0)
             hostup_msg.mongodb['router'] = 1
 
             if self.rs_id == 0 and self.shard_index == 0:
