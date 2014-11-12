@@ -92,7 +92,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                 return initdv2.Status.RUNNING
             return initdv2.Status.UNKNOWN
         else:
-            args = [self.initd_script, 'status']
+            args = self.initd_script + ['status']
             _, _, returncode = system2(args, raise_exc=False)
             if returncode == 0:
                 return initdv2.Status.RUNNING
