@@ -745,7 +745,7 @@ class UpdClientAPI(object):
         self.update_server.report(
             ok=ok, package=self.package, version=self.candidate or self.installed,
             server_id=self.server_id, scalr_id=self.scalr_id, scalr_version=self.scalr_version,
-            phase=self.state, dist=self.dist, error=error, package_type=package_type)
+            phase=self.state, dist=self.dist, error=error, package_type=self.package_type)
 
     @rpc.command_method
     def restart(self, force=False):
