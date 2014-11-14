@@ -106,8 +106,14 @@ class __os(dict):
                 self['lsb_%s' % key.lower()] = value  # override /etc/lsb-release
         except ImportError:
             pass
-        if 'lsb_codename' in self:
+        if 'lsb_distrib_codename' in self:
+            self['codename'] = self['lsb_distrib_codename']
+        elif 'lsb_codename' in self:
             self['codename'] = self['lsb_codename']
+        if 'lsb_distrib_release' in self:
+            self['release'] = self['lsb_distrib_release']
+        elif 'lsb_release' in self:
+            self['release'] = self['lsb_release']
 
         if osmod.path.isfile('/etc/arch-release'):
             self['name'] = 'Arch'
@@ -191,7 +197,8 @@ class __os(dict):
         if not 'name' in self:
             self['name'] = name
         if not 'release' in self:
-            self['release'] = Version(release)
+            self['release'] = release
+        self['release'] = Version(self['release'])
         self['version'] = self['release']
         if not 'codename' in self:
             self['codename'] = codename
