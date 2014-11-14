@@ -151,6 +151,10 @@ class UpdClientAPI(object):
     def is_client_mode(self):
         return self.client_mode == 'client'
 
+    @property
+    def package_type(self):
+        return 'omnibus' if os.path.isdir('/opt/scalarizr/embedded') else 'fogyish'
+
     def state():
         # pylint: disable=E0211, E0202
         def fget(self):
@@ -741,7 +745,7 @@ class UpdClientAPI(object):
         self.update_server.report(
             ok=ok, package=self.package, version=self.candidate or self.installed,
             server_id=self.server_id, scalr_id=self.scalr_id, scalr_version=self.scalr_version,
-            phase=self.state, dist=self.dist, error=error)
+            phase=self.state, dist=self.dist, error=error, package_type=package_type)
 
     @rpc.command_method
     def restart(self, force=False):
@@ -757,7 +761,7 @@ class UpdClientAPI(object):
             'messaging_url', 'scalr_id', 'scalr_version',
             'repository', 'repo_url', 'package', 'downgrades_enabled', 'executed_at',
             'ps_script_pid', 'ps_attempt',
-            'state', 'prev_state', 'error', 'dist'
+            'state', 'prev_state', 'error', 'dist', 'package_type'
         ]
 
         pkginfo_keys = ['candidate', 'installed']
