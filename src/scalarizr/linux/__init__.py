@@ -181,7 +181,7 @@ class __os(dict):
             data = open('/etc/system-release', 'r').read().strip()
             if data.lower().startswith('amazon'):
                 self['name'] = 'Amazon'
-                self['release'] = Version(data[-7:])
+                self['release'] = data[-7:]
         elif osmod.path.isfile('/etc/SuSE-release'):
             self['family'] = 'Suse'
             data = open('/etc/SuSE-release', 'r').read()
