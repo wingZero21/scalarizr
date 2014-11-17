@@ -107,7 +107,6 @@ def _create_swift_connection():
 
 
 class NovaConnectionProxy(platform.ConnectionProxy):
-    max_retries = 3
 
     def invoke(self, *args, **kwds):
         try:
@@ -117,7 +116,6 @@ class NovaConnectionProxy(platform.ConnectionProxy):
 
 
 class CinderConnectionProxy(platform.ConnectionProxy):
-    max_retries = 3
 
     def invoke(self, *args, **kwds):
         try:
@@ -127,7 +125,6 @@ class CinderConnectionProxy(platform.ConnectionProxy):
 
 
 class SwiftConnectionProxy(platform.ConnectionProxy):
-    max_retries = 3
 
     def invoke(self, *args, **kwds):
         try:
