@@ -1007,10 +1007,18 @@ class Service(object):
             upd_svs = ScalrUpdClientScript()
             if not upd_svs.running:
                 upd_svs.start()
-            upd_state = [None]
+            upd_state = [None, 0]
             def upd_ready():
                 try:
                     upd_state[0] = upd.status()['state']
+                    if upd_state[0].startswith('in-progress'):
+                        # For in-progress state skip 1 attempt, to handle situation when
+                        # UpdateClient is installing new Scalarizr, 
+                        # and at the end of postinst script Scalarizr is restarted, 
+                        # and then new process is asked for status before package installation command is finished, 
+                        # and UpdateClient changed it's state to completed
+                        upd_state[1] += 1
+                        return upd_state[1] >= 2
                     return upd_state[0] != 'noop'
                 except (IOError, socket.error), exc:
                     self._logger.debug('Failed to get UpdateClient status: %s', exc)
