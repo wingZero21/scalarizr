@@ -50,6 +50,7 @@ class BehaviorAPI(object):
                     "'{beh}' behavior is only supported on "
                     "Linux operation systems").format(beh=cls.behavior)
                 )
+            system_packages = system_packages or pkgmgr.package_mgr().list()
             installed = cls.do_check_software(system_packages=system_packages)
             cls.software_supported = True
             return installed

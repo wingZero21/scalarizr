@@ -24,7 +24,7 @@ class MariaDBAPI(mysql.MySQLAPI):
 
     @classmethod
     def do_check_software(cls, system_packages=None):
-        system_packages = system_packages or pkgmgr.package_mgr().list()
+        requirements = None
         if linux.os.debian_family:
             requirements = [
                 ['mariadb-server>=5.5,<5.6', 'mariadb-client>=5.5,<5.6'],
@@ -34,7 +34,7 @@ class MariaDBAPI(mysql.MySQLAPI):
             requirements = [
                 ['MariaDB-server>=5.5,<5.6', 'MariaDB-client>=5.5,<5.6'],
             ]
-        else:
+        if requirements is None:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))
