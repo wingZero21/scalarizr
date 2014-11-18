@@ -365,32 +365,7 @@ class UpdClientAPI(object):
                     return
         if not system_matches:
             LOG.info('Initializing UpdateClient...')
-            LOG.info('Getting user-data')
-            try:
-                user_data = self.meta['user_data']
-            except metadata.NoUserDataError:
-                if 'NoData' in str(self.meta.provider_for_capability['instance_id']):
-                    retry_int = 5
-                    num_attempts = 10
-                    LOG.info('Found no user-data and no instance-id, '
-                             'this mean that all data providers failed. I should '
-                             'wait {0} seconds and retry'.format(retry_int))
-                    for attempt in range(0, num_attempts):
-                        time.sleep(retry_int)
-                        self.meta = metadata.Metadata()
-                        try:
-                            user_data = self.meta['user_data']
-                            break
-                        except metadata.NoUserDataError:
-                            if attempt == num_attempts - 1:
-                                LOG.error(('Still no user-data, '
-                                           'check why $ETC_DIR/.scalr-user-data not exists. '))
-                                raise
-                            else:
-                                LOG.debug(('Still no user-data, '
-                                           'retrying after {0} seconds...').format(retry_int))
-                else:
-                    raise
+            user_data = self.meta.user_data()
             norm_user_data(user_data)
             LOG.info('Applying configuration from user-data')
             self._update_self_dict(user_data)
