@@ -6,6 +6,7 @@ Created on Jul 7, 2011
 '''
 
 import os
+import re
 import time
 import glob
 import shlex
@@ -712,6 +713,9 @@ class ConfigDir(object):
         
     
     def move_to(self, dst):
+        datadir = os.path.join(__postgresql__['storage_dir'], STORAGE_DATA_DIR)
+        centos7 = "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7
+
         if not os.path.exists(dst):
             LOG.debug("creating %s" % dst)
             os.makedirs(dst)
@@ -727,11 +731,17 @@ class ConfigDir(object):
             else:
                 raise BaseException('Postgresql config file not found: %s' % old_config)
             chown_r(new_config, DEFAULT_USER)
+            if centos7:
+                new_link = os.path.join(datadir, config)
+                os.symlink(new_config, new_link)
+                chown_r(new_link, DEFAULT_USER)
 
         #the following block needs revision
-        
-        #self._make_symlinks(dst)
-        self._patch_sysconfig(dst)
+        if centos7:
+            self._systemd_change_pgdata(datadir)
+            system2([software.which("systemctl"), "daemon-reload"])  # [SCALARIZR-1627]
+        else:
+            self._patch_sysconfig(dst)
         
         self.path = dst
         
@@ -766,6 +776,35 @@ class ConfigDir(object):
             if s and len(s)>7:
                 pgdata = s[7:]
         return pgdata
+
+
+    def _systemd_change_pgdata(self, pg_data):
+        lib_units = glob.glob("/lib/systemd/system/postgresql-9.*.service")
+        if not lib_units:
+            return
+        lib_unit = lib_units[0]
+        etc_unit = os.path.join("/etc/systemd/system", os.path.basename(lib_unit))
+        text = ".include %s" % lib_unit
+        section = "\n[Service]"
+        option = "\nEnvironment=PGDATA="
+
+        if os.path.exists(etc_unit):
+            with open(etc_unit, "r") as fp:
+                unit_content = fp.read()
+                if unit_content and unit_content.strip():
+                    text = unit_content
+
+        if not section in text:
+            text += "%s" % section
+
+        if not option in text:
+            text += "%s%s" % (option, pg_data)
+
+        else:
+            text = re.sub(r'(.*%s)([^\n]*)' % option, r'\1%s' % pg_data, text, flags=re.DOTALL)
+
+        with open(etc_unit, "w") as fp:
+            fp.write(text)
 
 
 class PidFile(object):
