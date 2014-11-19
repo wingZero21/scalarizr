@@ -733,6 +733,9 @@ class ConfigDir(object):
             chown_r(new_config, DEFAULT_USER)
             if centos7:
                 new_link = os.path.join(datadir, config)
+                if os.path.exists(new_link) and os.path.isfile(new_link):
+                    os.remove(new_link)
+                    LOG.debug("Duplicate config %s removed." % new_link)
                 os.symlink(new_config, new_link)
                 chown_r(new_link, DEFAULT_USER)
 
