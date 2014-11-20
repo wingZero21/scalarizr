@@ -456,20 +456,9 @@ def enabled():
     if int(__node__['base'].get('disable_firewall_management', 0)):
         LOG.debug('base.disable_firewall_management: 1, skipping')
         return False
-    # amazon linux doesn't have iptables service installed by default,
-    # which makes "chkconfig --list iptables" fail
-    # update: amzn >= 6.4 doesn't allow installing iptables-services;
-    # however, the latest version of iptables itself suits all our needs
-    if linux.os["name"] == "Amazon" and linux.os["release"] < (2013, 3):
-        pkgmgr.installed("iptables-services")
 
     if linux.os["name"] == "CentOS" and linux.os["release"] > (7, 0):
         SYSTEMCTL = software.which("systemctl")
-        returncode = system2((SYSTEMCTL, "status", "firewalld"), raise_exc=False)[2]
-        if returncode == 0:
-            # Use firewalld if it's running
-            return False
-        pkgmgr.installed("iptables-services")
         system2((SYSTEMCTL, "enable", "iptables"))
         returncode = system2((SYSTEMCTL, "status", "iptables"), raise_exc=False)[2]
         return True if (returncode == 0) else False
