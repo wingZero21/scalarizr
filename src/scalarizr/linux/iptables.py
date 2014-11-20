@@ -456,24 +456,7 @@ def enabled():
     if int(__node__['base'].get('disable_firewall_management', 0)):
         LOG.debug('base.disable_firewall_management: 1, skipping')
         return False
-
-    if linux.os["name"] == "CentOS" and linux.os["release"] > (7, 0):
-        SYSTEMCTL = software.which("systemctl")
-        system2((SYSTEMCTL, "enable", "iptables"))
-        returncode = system2((SYSTEMCTL, "status", "iptables"), raise_exc=False)[2]
-        return True if (returncode == 0) else False
-
-    if linux.os['family'] in ('RedHat', 'Oracle'):
-        try:
-            out = redhat.chkconfig(list="iptables")[0]
-            return bool(re.search(r"iptables.*?\s\d:on", out))
-        except linux.LinuxError, e:
-            if 'not referenced in any runlevel' in str(e):
-                return False
-            else:
-                raise
-    else:
-        return os.access(IPTABLES_BIN, os.X_OK)
+    return os.access(IPTABLES_BIN, os.X_OK)
 
 
 def redhat_input_chain():
