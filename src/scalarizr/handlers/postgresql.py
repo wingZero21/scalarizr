@@ -17,7 +17,8 @@ from scalarizr.messaging import Messages
 from scalarizr.config import ScalarizrState
 from scalarizr.handlers import ServiceCtlHandler, HandlerError, DbMsrMessages
 from scalarizr.linux.coreutils import chown_r
-from scalarizr.util import system2, disttool, software, cryptotool, initdv2
+from scalarizr import linux
+from scalarizr.util import system2, software, cryptotool, initdv2
 from scalarizr.linux import iptables
 from scalarizr.handlers import build_tags
 from scalarizr.api import service as preset_service
@@ -57,7 +58,7 @@ __postgresql__.update({
 
 
 def get_handlers():
-    return PostgreSqlHander(),
+    return [PostgreSqlHander()]
 
 
 SSH_KEYGEN_SELINUX_MODULE = """
@@ -124,8 +125,9 @@ class PostgreSqlHander(ServiceCtlHandler):
             'before_slave_promote_to_master',
             
             'slave_promote_to_master'
-        )   
+        )
 
+        self._hir_volume_growth = None
         self._postgresql_api = postgresql_api.PostgreSQLAPI()
 
         self.on_reload()        
@@ -145,7 +147,7 @@ class PostgreSqlHander(ServiceCtlHandler):
 
         if __node__['state'] == ScalarizrState.BOOTSTRAPPING:
             
-            if disttool.is_redhat_based():      
+            if linux.os.redhat_family:      
                     
                 checkmodule_path = software.which('checkmodule')
                 semodule_package_path = software.which('semodule_package')
@@ -202,8 +204,7 @@ class PostgreSqlHander(ServiceCtlHandler):
         self._queryenv = bus.queryenv_service
         self._platform = bus.platform
         self.postgresql = PostgreSql()
-        self.preset_provider = PgSQLPresetProvider(self.postgresql.postgresql_conf)
-        preset_service.services[BEHAVIOUR] = self.preset_provider
+        self.preset_provider = PgSQLPresetProvider()
 
     
     def on_HostInit(self, message):
@@ -323,6 +324,7 @@ class PostgreSqlHander(ServiceCtlHandler):
             # New format
             postgresql_data['compat_prior_backup_restore'] = False
             postgresql_data['volume'] = storage2.volume(postgresql_data['volume'])
+
             LOG.debug("message.pg['volume']: %s", postgresql_data['volume'])
             if 'backup' in postgresql_data:
                 postgresql_data['backup'] = backup.backup(postgresql_data['backup'])
@@ -351,7 +353,7 @@ class PostgreSqlHander(ServiceCtlHandler):
                 raise HandlerError('No volume config or snapshot config provided')
 
             if postgresql_data['volume'].device and \
-                            postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+                            postgresql_data['volume'].type in ('ebs', 'csvol', 'cinder', 'raid', 'gce_persistent'):
                 LOG.debug("Master n'th start detected. Removing snapshot config from message")
                 postgresql_data.pop(OPT_SNAPSHOT_CNF, None)
 
@@ -365,6 +367,8 @@ class PostgreSqlHander(ServiceCtlHandler):
                 postgresql_data['backup'] = backup.backup(
                     type='snap_postgresql',
                     volume=postgresql_data['volume'])
+
+        self._hir_volume_growth = postgresql_data.pop('volume_growth', None)
 
         LOG.debug("Update postgresql config with %s", postgresql_data)
         __postgresql__.update(postgresql_data)
@@ -593,7 +597,14 @@ class PostgreSqlHander(ServiceCtlHandler):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __postgresql__['volume'].snap = __postgresql__['volume'].snapshot()
 
-            __postgresql__['volume'].ensure(mount=True, mkfs=True)
+            if self._hir_volume_growth:
+                #Growing maser storage if HIR message contained "growth" data
+                LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
+                grown_volume = __postgresql__['volume'].grow(**self._hir_volume_growth)
+                grown_volume.mount()
+                __postgresql__['volume'] = grown_volume
+            else:
+                __postgresql__['volume'].ensure(mount=True, mkfs=True)
             LOG.debug('Postgres volume config after ensure: %s', dict(__postgresql__['volume']))
 
         log.info('Initialize Master')
@@ -611,6 +622,9 @@ class PostgreSqlHander(ServiceCtlHandler):
                         OPT_ROOT_SSH_PRIVATE_KEY: self.postgresql.root_user.private_key,
                         OPT_ROOT_SSH_PUBLIC_KEY: self.postgresql.root_user.public_key,
                         OPT_CURRENT_XLOG_LOCATION: None})
+
+        if self._hir_volume_growth:
+            msg_data['volume_template'] = dict(__postgresql__['volume'].clone())
 
         if __postgresql__['compat_prior_backup_restore']:
             if 'restore' in __postgresql__:

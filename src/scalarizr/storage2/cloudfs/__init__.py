@@ -188,11 +188,11 @@ class FileTransfer(BaseTransfer):
                 Download both generators
                         def src():
                                 yield 's3://backups/mysql/daily.tar.gz'
-                                yield 'rackspace-cloudfiles://backups/mysql/daily.tar.gz'
+                                yield 'swift://backups/mysql/daily.tar.gz'
 
                         def dst():
                                 yield '/backups/daily-from-s3.tar.gz'
-                                yield '/backups/daily-from-cloudfiles.tar.gz'
+                                yield '/backups/daily-from-swift.tar.gz'
 
 
         Usage:
@@ -493,24 +493,16 @@ class LargeTransfer(bases.Task):
 
     def _gzip_bin(self):
         if self.try_pigz:
-            try:
-                pkgmgr.installed("pigz")
-            except LinuxError, e:
-                if "No matching Packages to list" in e.err:
-                    try:
-                        pkgmgr.epel_repository()
-                        pkgmgr.installed("pigz")
-                    except:
-                        LOG.debug("PIGZ install with epel failed, using gzip."\
-                                          " Caught %s", repr(sys.exc_info()[1]))
-                    else:
-                        return self.pigz_bin
+            mgr = pkgmgr.package_mgr()
+            if not mgr.info('pigz')['installed']:
+                try:
+                    pkgmgr.epel_repository()
+                    mgr.installed("pigz")
+                except:
+                    LOG.debug("PIGZ install with epel failed, using gzip."\
+                                      " Caught %s", repr(sys.exc_info()[1]))
                 else:
-                    LOG.debug("PIGZ install failed, using gzip. Caught %s",
-                                      repr(sys.exc_info()[1]))
-            except:
-                LOG.debug("PIGZ install failed, using gzip. Caught %s",
-                                  repr(sys.exc_info()[1]))
+                    return self.pigz_bin
             else:
                 return self.pigz_bin
         return self.gzip_bin

@@ -22,7 +22,7 @@ from scalarizr.service import CnfController, _CnfManifest
 from scalarizr.services import ServiceError
 from scalarizr.platform import UserDataOptions
 from scalarizr.libs import metaconf
-from scalarizr.util import system2, disttool, firstmatched, initdv2, software, cryptotool
+from scalarizr.util import system2, firstmatched, initdv2, software, cryptotool, software
 
 
 from scalarizr import storage2, linux
@@ -32,6 +32,8 @@ from scalarizr.services import mysql2 as mysql2_svc  # backup/restore providers
 from scalarizr.node import __node__
 from scalarizr.api import service as preset_service
 from scalarizr.api import mysql as mysql_api
+from scalarizr.api import percona as percona_api
+from scalarizr.api import mariadb as mariadb_api
 from scalarizr.api import operation as operation_api
 
 # Libs
@@ -245,7 +247,6 @@ class MysqlHandler(DBMSRHandler):
                         cnf_ctl)
 
         self.preset_provider = mysql_svc.MySQLPresetProvider()
-        preset_service.services[__mysql__['behavior']] = self.preset_provider
 
         bus.on(init=self.on_init, reload=self.on_reload)
         bus.define_events(
@@ -265,6 +266,7 @@ class MysqlHandler(DBMSRHandler):
         self._op_api = operation_api.OperationAPI()
         self._backup_id = None
         self._data_bundle_id = None
+        self._hir_volume_growth = None
         self.on_reload()
 
 
@@ -359,7 +361,7 @@ class MysqlHandler(DBMSRHandler):
             # Initialized persistent disk have latest data.
             # Next statement prevents restore from snapshot
             if md['volume'].device and \
-                                    md['volume'].type in ('ebs', 'csvol', 'cinder', 'raid'):
+                                    md['volume'].type in ('gce_persistent', 'ebs', 'csvol', 'cinder', 'raid'):
                 md.pop('snapshot_config', None)
 
             if md.get('snapshot_config'):
@@ -374,6 +376,8 @@ class MysqlHandler(DBMSRHandler):
                 md['backup'] = backup.backup(
                                 type='snap_mysql',
                                 volume=md['volume'])
+
+        self._hir_volume_growth = md.pop('volume_growth', None)
 
         __mysql__.update(md)
 
@@ -464,7 +468,7 @@ class MysqlHandler(DBMSRHandler):
             # Notify Scalr
             self.send_message(MysqlMessages.CREATE_PMA_USER_RESULT, dict(
                     status       = 'ok',
-                    pma_user         = __mysql__['pma_user'],
+                    pma_user     = __mysql__['pma_user'],
                     pma_password = pma_password,
                     farm_role_id = farm_role_id,
             ))
@@ -481,9 +485,17 @@ class MysqlHandler(DBMSRHandler):
 
     def on_DbMsr_CreateBackup(self, message):
         LOG.debug("on_DbMsr_CreateBackup")
-        self._backup_id = self._mysql_api.create_backup(
-                backup={'type': 'mysqldump'}, 
-                async=True)
+        try:
+            self._backup_id = self._mysql_api.create_backup(
+                    backup={'type': 'mysqldump'}, 
+                    async=True)
+        except:
+            self.send_message(DbMsrMessages.DBMSR_CREATE_BACKUP_RESULT, dict(
+                status='error',
+                last_error=str(sys.exc_info()[1]),
+                db_type=__mysql__.behavior
+            ))
+            raise 
 
 
     def on_DbMsr_CancelBackup(self, message):
@@ -493,12 +505,19 @@ class MysqlHandler(DBMSRHandler):
 
     def on_DbMsr_CreateDataBundle(self, message):
         LOG.debug("on_DbMsr_CreateDataBundle")
-        backup = message.body.get(__mysql__.behavior, {}).get('backup', {})
-        if not backup:
-            backup = {"type": "snap_mysql"}
-        self._data_bundle_id = self._mysql_api.create_backup(
-                backup=backup, 
-                async=True)
+        try:
+            backup = message.body.get(__mysql__.behavior, {}).get('backup', {})
+            if not backup:
+                backup = {"type": "snap_mysql"}
+            self._data_bundle_id = self._mysql_api.create_backup(
+                    backup=backup, 
+                    async=True)
+        except:
+            self.send_message(DbMsrMessages.DBMSR_CREATE_DATA_BUNDLE_RESULT, dict(
+                status='error',
+                last_error=str(sys.exc_info()[1]),
+                db_type=__mysql__.behavior
+            ))
 
 
     def on_DbMsr_CancelDataBundle(self, message):
@@ -531,6 +550,7 @@ class MysqlHandler(DBMSRHandler):
             new_vol = storage2.volume(mysql2.get('volume_config'))
 
 
+
         try:
             if new_vol and new_vol.type not in ('eph', 'lvm'):
                 if self.mysql.service.running:
@@ -555,7 +575,8 @@ class MysqlHandler(DBMSRHandler):
                         # Set read_only option
                         #self.mysql.my_cnf.read_only = False
                         self.mysql.my_cnf.set('mysqld/sync_binlog', '1')
-                        self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
+                        if mysql2_svc.innodb_enabled():
+                            self.mysql.my_cnf.set('mysqld/innodb_flush_log_at_trx_commit', '1')
                         self.mysql.my_cnf.delete_options(['mysqld/read_only'])
                         self.mysql.service.start()
                         # Update __mysql__['behavior'] configuration
@@ -677,8 +698,6 @@ class MysqlHandler(DBMSRHandler):
 
             # Start MySQL
             self.mysql.service.start()
-
-
 
 
     def on_DbMsr_NewMasterUp(self, message):
@@ -825,7 +844,7 @@ class MysqlHandler(DBMSRHandler):
             chcon = software.which('chcon')
         except LookupError:
             return
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             LOG.debug('Changing SELinux file security context for new mysql datadir')
             system2((chcon, '-R', '-u', 'system_u', '-r',
                      'object_r', '-t', 'mysqld_db_t', os.path.dirname(__mysql__['storage_dir'])), raise_exc=False)
@@ -844,6 +863,36 @@ class MysqlHandler(DBMSRHandler):
             debian_cnf.write(__mysql__['debian.cnf'])
 
 
+    def _change_my_cnf(self, slave=False):
+        # Patch configuration
+        options = {
+            'bind-address': '0.0.0.0',
+            'datadir': __mysql__['data_dir'],
+            'log_bin': os.path.join(__mysql__['binlog_dir'], 'binlog'),
+            'log-bin-index': os.path.join(__mysql__['binlog_dir'], 'binlog.index'),  # MariaDB
+            'sync_binlog': '1',
+            'expire_logs_days': '10'
+        }
+        if slave:
+            options['read_only'] = True
+        if mysql2_svc.innodb_enabled():
+            options['innodb_flush_log_at_trx_commit'] = '1'
+            if __node__['platform'].name == 'ec2' \
+                    and __node__['platform'].get_instance_type() == 't1.micro':
+                options['innodb_buffer_pool_size'] = '16M'  # Default 128M is too much
+            if not self.mysql.my_cnf.get('mysqld/innodb_log_file_size'):
+                # Percona Xtrabackup 2.2.x default value for innodb_log_file_size is 50331648
+                # this leads to ib_logfile size mismatch error on MySQL/Percona < 5.6.8
+                if software.mysql_software_info().version >= (5, 6, 8):
+                    val = '50331648'
+                else:
+                    val = '5242880'
+                options['innodb_log_file_size'] = val
+
+        for key, value in options.items():
+            self.mysql.my_cnf.set('mysqld/' + key, value)
+
+
     def _init_master(self, message):
         """
         Initialize MySQL master
@@ -856,6 +905,7 @@ class MysqlHandler(DBMSRHandler):
         log.info('Create storage')
         if 'restore' in __mysql__ and \
                         __mysql__['restore'].type == 'snap_mysql':
+            LOG.debug("Starting restore process")
             __mysql__['restore'].run()
         else:
             if __node__['platform'].name == 'idcf':
@@ -863,7 +913,15 @@ class MysqlHandler(DBMSRHandler):
                     LOG.info('Cloning volume to workaround reattachment limitations of IDCF')
                     __mysql__['volume'].snap = __mysql__['volume'].snapshot()
 
-            __mysql__['volume'].ensure(mount=True, mkfs=True)
+            if self._hir_volume_growth:
+                #Growing maser storage if HIR message contained "growth" data
+                LOG.info("Attempting to grow data volume according to new data: %s" % str(self._hir_volume_growth))
+                grown_volume = __mysql__['volume'].grow(**self._hir_volume_growth)
+                grown_volume.mount()
+                __mysql__['volume'] = grown_volume
+            else:
+                __mysql__['volume'].ensure(mount=True, mkfs=True)
+
             LOG.debug('MySQL volume config after ensure: %s', dict(__mysql__['volume']))
 
         coreutils.clean_dir(__mysql__['defaults']['datadir'])
@@ -872,54 +930,23 @@ class MysqlHandler(DBMSRHandler):
         self._change_selinux_ctx()
 
         storage_valid = self._storage_valid()
+        if not storage_valid and 'backup' not in __mysql__:
+            __mysql__['backup'] = backup.backup(
+                            type='snap_mysql',
+                            volume=__mysql__['volume'])
         user_creds = self.get_user_creds()
         self._fix_percona_debian_cnf()
-        #datadir = mysql2_svc.my_print_defaults('mysqld').get('datadir', __mysql__['defaults']['datadir'])
-        #if not storage_valid and datadir.find(__mysql__['data_dir']) == 0:
-        #    # When role was created from another mysql role it contains modified my.cnf settings
-        #    #self.mysql.my_cnf.datadir = '/var/lib/mysql'
-        #    self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
 
-
+        self.mysql.my_cnf.delete_options(['mysqld/log_bin', 'mysqld/log-bin'])
 
         if not storage_valid:
-            '''
-            if linux.os['family'] == 'RedHat':
-                try:
-                    # Check if selinux enabled
-                    selinuxenabled_bin = software.which('selinuxenabled')
-                    if selinuxenabled_bin:
-                        se_enabled = not system2((selinuxenabled_bin, ), raise_exc=False)[2]
-                        if se_enabled:
-                            # Set selinux context for new mysql datadir
-                            semanage = mysql_svc.get_semanage()
-                            linux.system('%s fcontext -a -t mysqld_db_t "%s(/.*)?"'
-                                         % (semanage, __mysql__['storage_dir']), shell=True)
-                            # Restore selinux context
-                            restorecon = software.which('restorecon')
-                            linux.system('%s -R -v %s' % (restorecon, __mysql__['storage_dir']), shell=True)
-                except:
-                    LOG.debug('Selinux context setup failed', exc_info=sys.exc_info())
-                '''
-
-            self.mysql.my_cnf.delete_options(['mysqld/log_bin'])
             linux.system(['mysql_install_db', '--user=mysql', '--datadir=%s' % __mysql__['data_dir']])
 
-        # Patch configuration
-        options = {
-            'bind-address': '0.0.0.0',
-            'datadir': __mysql__['data_dir'],
-            'log_bin': os.path.join(__mysql__['binlog_dir'], 'binlog'),
-            'log-bin-index': os.path.join(__mysql__['binlog_dir'], 'binlog.index'),  # MariaDB
-            'sync_binlog': '1',
-            'innodb_flush_log_at_trx_commit': '1',
-            'expire_logs_days': '10'
-        }
-        for key, value in options.items():
-            self.mysql.my_cnf.set('mysqld/' + key, value)
+        self._change_my_cnf()
 
-        if not storage_valid:
-            if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
+        if linux.os.debian_family and os.path.exists(__mysql__['debian.cnf']):
+            try:
+                LOG.info('Ensuring debian-sys-maint user')
                 self.mysql.service.start()
                 debian_cnf = metaconf.Configuration('mysql')
                 debian_cnf.read(__mysql__['debian.cnf'])
@@ -927,9 +954,12 @@ class MysqlHandler(DBMSRHandler):
                         "TO 'debian-sys-maint'@'localhost' "
                         "IDENTIFIED BY '{0}'").format(debian_cnf.get('client/password'))
                 linux.system(['mysql', '-u', 'root', '-e', sql])
-                self.mysql.service.stop()
+            except:
+                LOG.warn('Failed to set password for debian-sys-maint: %s', sys.exc_info()[1])
+            self.mysql.service.stop()
 
-            coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+        coreutils.chown_r(__mysql__['data_dir'], 'mysql', 'mysql')
+
         if 'restore' in __mysql__ and \
                         __mysql__['restore'].type == 'xtrabackup':
             # XXX: when restoring data bundle on ephemeral storage, data dir should by empty
@@ -978,6 +1008,10 @@ class MysqlHandler(DBMSRHandler):
                 stat_password=__mysql__['stat_password'],
                 master_password=__mysql__['master_password']
         )
+
+        if self._hir_volume_growth:
+            md['volume_template'] = dict(__mysql__['volume'].clone())
+
         if __mysql__['compat_prior_backup_restore']:
             if 'restore' in __mysql__:
                 md.update(dict(
@@ -1024,17 +1058,8 @@ class MysqlHandler(DBMSRHandler):
         log.info('Patch my.cnf configuration file')
         self.mysql.service.stop('Required by Slave initialization process')
         self.mysql.flush_logs(__mysql__['data_dir'])
-
-        # Change configuration files
-        LOG.info("Changing configuration files")
-        self.mysql.my_cnf.datadir = __mysql__['data_dir']
-        self.mysql.my_cnf.expire_logs_days = 10
-        LOG.debug('bind-address pre: %s', self.mysql.my_cnf.bind_address)
-        self.mysql.my_cnf.bind_address = '0.0.0.0'
-        LOG.debug('bind-address post: %s', self.mysql.my_cnf.bind_address)
-        self.mysql.my_cnf.read_only = True
-        self.mysql.my_cnf.set('mysqld/log-bin-index', __mysql__['binlog_dir'] + '/binlog.index')  # MariaDB
         self._fix_percona_debian_cnf()
+        self._change_my_cnf(slave=True)
 
         log.info('Move data directory to storage')
         self.mysql.move_mysqldir_to(__mysql__['storage_dir'])
@@ -1045,6 +1070,10 @@ class MysqlHandler(DBMSRHandler):
         if 'restore' in __mysql__ and \
                         __mysql__['restore'].type == 'xtrabackup':
             __mysql__['restore'].run()
+
+        # MySQL 5.6 stores UUID into data_dir/auto.cnf, which leads to 
+        # 'Fatal error: The slave I/O thread stops because master and slave have equal MySQL server UUIDs'
+        coreutils.remove(os.path.join(__mysql__['data_dir'], 'auto.cnf'))
 
         log.info('InnoDB recovery')
         if 'restore' in __mysql__ \
@@ -1087,7 +1116,7 @@ class MysqlHandler(DBMSRHandler):
 
     def _copy_debian_cnf_back(self):
         debian_cnf = os.path.join(__mysql__['storage_dir'], 'debian.cnf')
-        if disttool.is_debian_based() and os.path.exists(debian_cnf):
+        if linux.os.debian_family and os.path.exists(debian_cnf):
             LOG.debug("Copying debian.cnf from storage to mysql configuration directory")
             shutil.copy(debian_cnf, '/etc/mysql/')
 

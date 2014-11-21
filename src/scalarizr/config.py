@@ -35,7 +35,6 @@ OPT_FARM_ID = 'farm_id'
 SECT_MESSAGING = "messaging"
 OPT_ADAPTER = "adapter"
 
-SECT_SNMP = "snmp"
 OPT_PORT = "port"
 OPT_SECURITY_NAME = "security_name"
 OPT_COMMUNITY_NAME = "community_name"
@@ -348,24 +347,6 @@ class ScalarizrOptions(Configurator.Container):
 
         value = property(Configurator.Option._get_value, _set_value)
 
-    class snmp_security_name(Configurator.Option):
-        '''
-        SNMP security name
-        '''
-        name = 'snmp/security_name'
-        private = True
-        required = True
-        default = 'notConfigUser'
-
-    class snmp_community_name(Configurator.Option):
-        '''
-        SNMP community name
-        '''
-        name = 'snmp/community_name'
-        private = True
-        required = True
-        default = 'public'
-
 
 class ini_property(property):
     _cfoption = None
@@ -424,17 +405,6 @@ class ScalarizrIni:
             self.queryenv_url = ini_property(self._ini, ScalarizrOptions.queryenv_url)
             self.scripts_path = ini_property(self._ini, self.section, 'scripts_path')
 
-    class snmp:
-        _ini = None
-        section = 'snmp'
-        port = security_name = community_name = None
-
-        def __init__(self, ini):
-            self._ini = ini
-            self.port = ini_property(self._ini, self.section, 'port')
-            self.security_name = ini_property(self._ini, self.section, 'security_name')
-            self.community_name = ini_property(self._ini, self.section, 'community_name')
-
     class handlers:
         _ini = None
         section = 'handlers'
@@ -455,7 +425,6 @@ class ScalarizrIni:
     def __init__(self, ini):
         self.ini = ini
         self.general = self.general(ini)
-        self.snmp = self.snmp(ini)
         self.handlers = self.handlers(ini)
 
 
@@ -1037,13 +1006,6 @@ class BuiltinBehaviours:
     CHEF = 'chef'
     TOMCAT = 'tomcat'
 
-    CF_ROUTER = 'cf_router'
-    CF_CLOUD_CONTROLLER = 'cf_cloud_controller'
-    CF_HEALTH_MANAGER = 'cf_health_manager'
-    CF_DEA = 'cf_dea'
-    CF_SERVICE = 'cf_service'
-
-
     CUSTOM = 'custom'
 
     @staticmethod
@@ -1055,9 +1017,6 @@ class BuiltinBehaviours:
 class BuiltinPlatforms:
     VPS             = 'vps'
     EC2             = 'ec2'
-    EUCA            = 'eucalyptus'
-    RACKSPACE       = 'rackspace'
-    NIMBULA         = 'nimbula'
     CLOUDSTACK      = 'cloudstack'
     IDCF            = 'idcf'
     UCLOUD          = 'ucloud'

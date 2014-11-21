@@ -98,10 +98,10 @@ Function .onInit
   Call CompareVersions
   Pop $R0
     
-  ${If} $R0 == 1
-    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} version ($installed_version-$installed_release) installed." /SD IDOK
-    Quit
-  ${EndIf}
+;  ${If} $R0 == 1
+;    MessageBox MB_OK|MB_ICONINFORMATION "You already have ${PRODUCT_NAME} version ($installed_version-$installed_release) installed." /SD IDOK
+;    Quit
+;  ${EndIf}
   
   ReadRegStr $0 ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "InstallDir"
   StrCmp $0 "" not_installed
@@ -133,12 +133,12 @@ Section "MainSection" SEC01
     RMDir /r $INSTDIR\scripts
     RMDir /r $INSTDIR\share
     Delete $INSTDIR\scalarizr.bat
+    Delete $INSTDIR\szradm.bat
   ${EndIf}
   
   SetOverwrite on
   SetOutPath "$INSTDIR\src"
   File /r /x *.svn* /x *.pyc /x *.pyo "${SZR_BASE_PATH}\src\scalarizr"
-  File /r /x *.svn* /x *.pyc /x *.pyo "${SZR_BASE_PATH}\src\upd"
   
   SetOutPath "$INSTDIR"
   File /r /x *.svn* "${SZR_BASE_PATH}\share"
@@ -271,9 +271,22 @@ Section -PostInstall
       ${EndIf}
 
       nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\Python27\scripts\pywin32_postinstall.py" -silent -install'
-      nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "--startup" "auto" "install"'
+      nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\scalarizr\updclient\app.py" "--startup" "auto" "install"'
       nsExec::ExecToStack '"$INSTDIR\scalarizr.bat" "--install-win-services"'
   ${EnableX64FSRedirection}
+
+  ${Unless} $installed_version == ""
+      Push $installed_version
+      Push "2.7.18"
+      Call CompareVersions
+      Pop $R0
+
+      ${If} $R0 == 1
+          nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" -m scalarizr.updclient.app --make-status-file --downgrades-disabled'
+      ${EndIf}
+
+  ${EndIf}
+
 
   ${If} $start_scalarizr == "1"
       services::SendServiceCommand 'start' 'Scalarizr'
@@ -297,7 +310,7 @@ Section Uninstall
   SetRegView 64
   services::SendServiceCommand 'stop' 'Scalarizr'
   services::SendServiceCommand 'stop' 'ScalrUpdClient'
-  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\upd\client\app.py" "remove"'
+  nsExec::ExecToStack '"$INSTDIR\Python27\python.exe" "$INSTDIR\src\scalarizr\updclient\app.py" "remove"'
   nsExec::ExecToLog '"$INSTDIR\scalarizr.bat" "--uninstall-win-services"'
 
   Rename $INSTDIR\etc $PLUGINSDIR\etc

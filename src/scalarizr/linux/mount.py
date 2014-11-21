@@ -10,7 +10,6 @@ import collections
 import itertools
 
 from scalarizr import linux
-from scalarizr.util import disttool
 
 
 class NoFileSystem(linux.LinuxError):
@@ -39,6 +38,8 @@ class _Mounts(object):
                 m = filter(None, self._entry_re.split(line))
                 if m:
                     m.extend(itertools.repeat('', 6-len(m)))
+                    if os.path.islink(m[0]):
+                        m[0] = os.path.realpath(m[0])
                     self._entries.append(_MountEntry(*m))
 
     def __getitem__(self, device_or_mpoint):
@@ -174,6 +175,6 @@ def mount_ex(device,
         _fstab = fstab()
         if not _fstab.contains(device, mpoint=mpoint, reload=True):
             opts = "defaults"
-            if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+            if linux.os.ubuntu and linux.os['version'] >= (10, 4):
                 opts += ',comment=cloudconfig,nobootwait'
             _fstab.append(device, mpoint, options=opts)

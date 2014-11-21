@@ -55,12 +55,20 @@ class CursorProxy(Proxy):
         self._execute_result = None
         self._call('cursor_create', [self])
 
-
     def execute(self, sql, parameters=None):
         args = [sql]
         if parameters:
             args += [parameters]
-        self._execute_result = self._call('cursor_execute', args)
+        for _ in range(0, GLOBAL_TIMEOUT):
+            try:
+                self._execute_result = self._call('cursor_execute', args)
+                break
+            except sqlite3.OperationalError, e:
+                if 'database is locked' in str(e):
+                    LOG.debug('Caught %s, retrying', e)
+                    time.sleep(1)
+                else:
+                    raise
 
         if not self._execute_result:
             self._execute_result = dict(data=[], rowcount=0)
@@ -71,13 +79,11 @@ class CursorProxy(Proxy):
         self._execute_result['iter'] = iter(self._execute_result['data'] or [None])
         return self
 
-
     def fetchone(self):
         try:
             return self._execute_result['iter'].next()
         except StopIteration:
             return None
-
 
     def fetchall(self):
         try:
@@ -89,11 +95,9 @@ class CursorProxy(Proxy):
     def rowcount(self):
         return self._execute_result['rowcount']
 
-
     def close(self):
         pass
         #self._call('cursor_delete', wait=False)
-
 
     __del__ = close
 
@@ -104,36 +108,26 @@ class ConnectionProxy(Proxy):
         cp = CursorProxy(self.tasks_queue)
         return cp
 
-
     def commit(self):
         # no worries, autocommit is set
         pass
 
-
     def executescript(self, sql):
         return self._call('conn_executescript', [sql])
-
-
-
 
     def _get_row_factory(self):
         return self._call('conn_get_row_factory')
 
-
-    def _set_row_factory(self,f):
+    def _set_row_factory(self, f):
         return self._call('conn_set_row_factory', [f])
 
-
     row_factory = property(_get_row_factory, _set_row_factory)
-
 
     def _get_text_factory(self):
         return self._call('conn_get_text_factory')
 
-
-    def _set_text_factory(self,f):
+    def _set_text_factory(self, f):
         return self._call('conn_set_text_factory', [f])
-
 
     text_factory = property(_get_text_factory, _set_text_factory)
 

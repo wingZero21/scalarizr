@@ -21,9 +21,12 @@ import threading
 import logging
 import sys
 import os
+import copy
 import time
 import socket
 import HTMLParser
+from copy import deepcopy
+
 
 class P2pMessageConsumer(MessageConsumer):
     endpoint = None
@@ -46,6 +49,7 @@ class P2pMessageConsumer(MessageConsumer):
         else:
             self._handler_thread = None
         self.message_to_ack = None
+        self.subhandler_exc_info = None
         self.ack_event = threading.Event()
         #self._not_empty = threading.Event()
 
@@ -56,7 +60,6 @@ class P2pMessageConsumer(MessageConsumer):
         r = urlparse(self.endpoint)
         try:
             if self._server is None:
-                #port = __node__['base']['messaging_port']
                 self._logger.info('Building message consumer server on %s:%s', r.hostname, r.port)
                 #server_class = HTTPServer if sys.version_info >= (2,6) else _HTTPServer25
                 self._server = HTTPServer((r.hostname, r.port), self._get_request_handler_class())
@@ -80,6 +83,32 @@ class P2pMessageConsumer(MessageConsumer):
             @cvar consumer: Message consumer instance
             @type consumer: P2pMessageConsumer
             '''
+
+            def _msg_without_sensitive_data(self, message):
+                msg_copy = P2pMessage(message.name, message.meta.copy(), deepcopy(message.body))
+                msg_copy.id = message.id
+
+                if 'platform_access_data' in msg_copy.body:
+                    del msg_copy.body['platform_access_data']
+
+                if 'global_variables' in msg_copy.body:
+                    glob_vars = msg_copy.body.get('global_variables', []) or []
+                    i = 0
+                    for v in list(glob_vars):
+                        if v.get('private'):
+                            del glob_vars[i]
+                            i -= 1
+                        elif 'private' in v:
+                            del glob_vars[i]['private']
+                        i += 1
+
+                if 'chef' in msg_copy.body:
+                    try:
+                        del msg_copy.body['chef']['validator_name']
+                        del msg_copy.body['chef']['validator_key']
+                    except (KeyError, TypeError):
+                        pass
+                return msg_copy
 
             def do_POST(self):
                 logger = logging.getLogger(__name__)
@@ -116,21 +145,7 @@ class P2pMessageConsumer(MessageConsumer):
                     else:
                         message.fromxml(rawmsg)
 
-                    # Create a message copy to log it without platform_access_data and with pretty identation  
-                    msg_copy = P2pMessage(message.name, message.meta.copy(), message.body.copy())
-                    msg_copy.id = message.id
-                    if 'platform_access_data' in msg_copy.body:
-                        del msg_copy.body['platform_access_data']
-                    if 'global_variables' in msg_copy.body:
-                        glob_vars = msg_copy.body.get('global_variables', []) or []
-                        i = 0
-                        for v in list(glob_vars):
-                            if v.get('private'):
-                                del glob_vars[i]
-                                i -= 1
-                            elif 'private' in v:
-                                del glob_vars[i]['private']
-                            i += 1
+                    msg_copy = self._msg_without_sensitive_data(message)
                     logger.debug('Decoding message: %s', msg_copy.tojson(indent=4))
 
 
@@ -206,6 +221,9 @@ class P2pMessageConsumer(MessageConsumer):
             for ln in list(self.listeners):
                 ln(message, queue)
         except (BaseException, Exception), e:
+            if message.name == 'BeforeHostUp' \
+                    and message.local_ip == __node__['private_ip']:
+                raise
             self._logger.exception(e)
         finally:
             self._logger.debug('Mark message (message_id: %s) as handled', message.id)
@@ -224,7 +242,7 @@ class P2pMessageConsumer(MessageConsumer):
     def wait_subhandler(self, message):
         pl = bus.platform
 
-        saved_access_data = pl._access_data
+        saved_access_data = pl.get_access_data()
         if saved_access_data:
             saved_access_data = dict(saved_access_data)
 
@@ -236,6 +254,11 @@ class P2pMessageConsumer(MessageConsumer):
         self._logger.debug('Waiting message subhandler thread: %s', thread.getName())
         thread.join()
         self._logger.debug('Completed message subhandler thread: %s', thread.getName())
+        if self.subhandler_exc_info:
+            self._logger.debug('Subhandler completed with exception')
+            exc_info = self.subhandler_exc_info
+            self.subhandler_exc_info = None
+            raise exc_info[0], exc_info[1], exc_info[2]
 
         if saved_access_data:
             pl.set_access_data(saved_access_data)
@@ -255,9 +278,13 @@ class P2pMessageConsumer(MessageConsumer):
                             if message.name == self.message_to_ack.name and \
                                             message.body.get('server_id', sid) == sid:
                                 self._logger.debug('Going to handle_one_message. Thread: %s', threading.currentThread().getName())
-                                self._handle_one_message(message, queue, store)
-                                self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
+                                try:
+                                    self._handle_one_message(message, queue, store)
+                                except:
+                                    self.subhandler_exc_info = sys.exc_info()
+                                    self._logger.debug('Caught exception from _handle_one_message: thread: %s', threading.currentThread())
 
+                                self._logger.debug('Completed handle_one_message. Thread: %s', threading.currentThread().getName())
                                 self.message_to_ack = None
                                 self.ack_event.set()
                                 if self.return_on_ack:

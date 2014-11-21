@@ -74,10 +74,6 @@ class _Bus(Observable):
 
     queryenv_version = None
 
-    snmp_server = None
-    """
-    @ivar scalarizr.snmpagent.SnmpServer: SNMP embed server
-    """
 
     platform = None
     """

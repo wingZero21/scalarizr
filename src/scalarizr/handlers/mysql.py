@@ -21,14 +21,16 @@ from scalarizr.platform import UserDataOptions
 # Libs
 from scalarizr.libs.metaconf import Configuration, MetaconfError, NoPathError, \
         ParseError
-from scalarizr.util import system2, disttool, \
+from scalarizr.util import system2, \
         firstmatched, initdv2, software, wait_until, cryptotool,\
         PopenError
 from scalarizr.util.software import which
+from scalarizr import linux
 from scalarizr.linux import iptables
 from scalarizr.linux import coreutils
 from scalarizr.linux.rsync import rsync
 from scalarizr.util.initdv2 import ParametrizedInitScript, wait_sock, InitdError
+from scalarizr.api import mysql as mysql_api
 
 # Stdlibs
 import logging, os, re, sys, tarfile, tempfile
@@ -55,7 +57,7 @@ LOG = logging.getLogger(__name__)
 MYSQLD = which('mysqld')
 MYSQL_CLI = which('mysql')
 MYSQLDUMP = which('mysqldump')
-MYCNF = '/etc/my.cnf' if disttool.is_redhat_based() else '/etc/mysql/my.cnf'
+MYCNF = '/etc/my.cnf' if linux.os.redhat_family else '/etc/mysql/my.cnf'
 
 change_master_timeout = 30
 
@@ -64,7 +66,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
     socket_file = None
     def __init__(self):
 
-        if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if linux.os.ubuntu and linux.os['version'] >= (10, 4):
             initd_script = ('/usr/sbin/service', 'mysql')
         else:
             initd_script = firstmatched(os.path.exists, ('/etc/init.d/mysqld', '/etc/init.d/mysql'))
@@ -112,7 +114,7 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
             if 'Job is already running' not in str(e):
                 raise InitdError("Popen failed with error %s" % (e,))
 
-        if action == 'start' and disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if action == 'start' and linux.os.ubuntu and linux.os['version'] >= (10, 4):
             try:
                 LOG.debug('waiting for mysql process')
                 wait_until(lambda: MYSQLD in system2(('ps', '-G', 'mysql', '-o', 'command', '--no-headers'))[0]
@@ -617,7 +619,7 @@ class MysqlHandler(ServiceCtlHandler):
 
     def __init__(self):
         if not os.path.exists(MYCNF):
-            if disttool.is_redhat_based() and os.path.exists('/usr/share/mysql/my-medium.cnf'):
+            if linux.os.redhat_family and os.path.exists('/usr/share/mysql/my-medium.cnf'):
                 shutil.copy('/usr/share/mysql/my-medium.cnf', MYCNF)
             else:
                 open(MYCNF, 'w').close()
@@ -1244,7 +1246,7 @@ class MysqlHandler(ServiceCtlHandler):
 
 
     def _change_selinux_ctx(self):
-        if disttool.is_rhel():
+        if linux.os.rhel:
             chcon_exec = software.which('chcon')
             if not chcon_exec:
                 return
@@ -1506,7 +1508,7 @@ class MysqlHandler(ServiceCtlHandler):
 
     def _copy_debian_cnf_back(self):
         debian_cnf = os.path.join(self._storage_path, 'debian.cnf')
-        if disttool.is_debian_based() and os.path.exists(debian_cnf):
+        if linux.os.debian_family and os.path.exists(debian_cnf):
             LOG.debug("Copying debian.cnf from storage to mysql configuration directory")
             shutil.copy(debian_cnf, '/etc/mysql/')
             self._fix_percona_debian_cnf()
@@ -1844,7 +1846,7 @@ class MysqlHandler(ServiceCtlHandler):
         LOG.debug('New permissions for mysql directory "%s" were successfully set.' % directory)
 
         # Adding rules to apparmor config
-        if disttool.is_debian_based() and self._apparmor_enabled:
+        if linux.os.debian_family and self._apparmor_enabled:
             _add_apparmor_rules(directory)
 
 

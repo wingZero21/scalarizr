@@ -449,23 +449,16 @@ def ensure(chain_rules, append=False):
 
 
 def enabled():
+    from scalarizr.node import __node__
+    if int(__node__['base'].get('disable_firewall_management', 0)):
+        LOG.debug('base.disable_firewall_management: 1, skipping')
+        return False
     # amazon linux doesn't have iptables service installed by default,
     # which makes "chkconfig --list iptables" fail
     # update: amzn >= 6.4 doesn't allow installing iptables-services;
     # however, the latest version of iptables itself suits all our needs
-    if linux.os["name"] == "Amazon":
-        if linux.os["release"] == "6.3":
-            pkgmgr.installed("iptables-services")
-        else:  # 6.4 and higher
-            # Upgrading iptables-1.4.18-1.16 to iptables-1.4.18-1.19 did
-            # the job
-
-            # Reverted: cannot reproduce the error
-            # # We need to remove iptables first because it can be i686 version
-            # # installed and installing x86_64 over it causes error
-            # pkgmgr.remove("iptables")
-
-            pkgmgr.latest("iptables")
+    if linux.os["name"] == "Amazon" and linux.os["release"] < (2013, 3):
+        pkgmgr.installed("iptables-services")
 
     if linux.os['family'] in ('RedHat', 'Oracle'):
         try:

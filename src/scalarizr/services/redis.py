@@ -14,7 +14,7 @@ from scalarizr import storage2, node
 from scalarizr.util import initdv2, system2, PopenError, wait_until, Singleton
 from scalarizr.services import backup
 from scalarizr.services import lazy, BaseConfig, BaseService, ServiceError, PresetProvider
-from scalarizr.util import disttool, cryptotool, firstmatched
+from scalarizr.util import cryptotool, firstmatched
 from scalarizr import linux
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.libs.metaconf import NoPathError
@@ -74,7 +74,7 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
 
     def __init__(self):
         initd_script = None
-        if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if linux.os.ubuntu and linux.os['version'] >= (10, 4):
             initd_script = ('/usr/sbin/service', 'redis-server')
         else:
             initd_script = firstmatched(os.path.exists, ('/etc/init.d/redis', '/etc/init.d/redis-server'))
@@ -102,10 +102,12 @@ class RedisInitScript(initdv2.ParametrizedInitScript):
     def start(self):
         initdv2.ParametrizedInitScript.start(self)
         wait_until(lambda: self._processes, timeout=10, sleep=1)
+        """
         redis_conf = RedisConf.find()
         password = redis_conf.requirepass
         cli = RedisCLI(password)
         wait_until(lambda: cli.test_connection(), timeout=10, sleep=1)
+        """
 
 
 class Redisd(object):
@@ -155,7 +157,7 @@ class Redisd(object):
                     __redis__['redis-server'], 
                     self.config_path), shell=True, close_fds=True, preexec_fn=os.setsid)
                 wait_until(lambda: self.running)
-                wait_until(lambda: self.cli.test_connection())
+                #wait_until(lambda: self.cli.test_connection())
                 LOG.debug('%s process has been started.' % SERVICE_NAME)
 
         except PopenError, e:
@@ -184,13 +186,12 @@ class Redisd(object):
 
     @property
     def running(self):
-        process_matches = False
         for config_path in get_redis_processes():
-            if config_path == self.config_path:
-                process_matches = True
-            elif config_path == __redis__['defaults']['redis.conf'] and int(self.port) == __redis__['defaults']['port']:
-                process_matches = True
-        return process_matches
+            is_default_conf = config_path == __redis__['defaults']['redis.conf']
+            is_default_port = int(self.port) == __redis__['defaults']['port']
+            if config_path == self.config_path or (is_default_conf and is_default_port):
+                return True
+        return False
 
     @property
     def pid(self):
@@ -708,14 +709,24 @@ class RedisCLI(object):
             full_query = query
         else:
             full_query = 'AUTH %s\n%s' % (self.password, query)
+
+        execute_query = lambda: system2([self.path, '-p', self.port], stdin=full_query,silent=True, warn_stderr=False)
         try:
-            out = system2([self.path, '-p', self.port], stdin=full_query,silent=True, warn_stderr=False)[0]
+            out = execute_query()[0]
 
             #fix for redis 2.4 AUTH
             if 'Client sent AUTH, but no password is set' in out:
-                out = system2([self.path], stdin=query,silent=True)[0]
+                execute_query = lambda: system2([self.path], stdin=query, silent=True)
+                out = execute_query()[0]
 
-            if out.startswith('ERR') or out.startswith('LOADING'):
+            if "Redis is loading the dataset in memory" in out:
+                #[SCALARIZR-1604]
+                #test until service becomes available:
+                wait_until(lambda: "LOADING" not in system2([self.path], stdin='ping', silent=True)[0])
+                #run query again:
+                out = execute_query()[0]
+
+            elif out.startswith('ERR'):
                 raise PopenError(out)
 
             elif out.startswith('OK\n'):
@@ -724,20 +735,9 @@ class RedisCLI(object):
                 out = out[:-1]
             return out
         except PopenError, e:
-            if 'LOADING' in str(e):
-                LOG.debug('Unable to execute query %s: Redis is loading the dataset in memory' % query)
-            elif not silent:
+            if not silent:
                 LOG.error('Unable to execute query %s with redis-cli: %s' % (query, e))
             raise
-
-
-    def test_connection(self):
-        try:
-            self.execute('select (1)', silent=True)
-        except PopenError, e:
-            if 'LOADING' in str(e):
-                return False
-        return True
 
 
     @property
@@ -858,6 +858,7 @@ class RedisCLI(object):
 
 class RedisPresetProvider(PresetProvider):
 
+    __metaclass__ = Singleton
 
     def __init__(self):
         pass
@@ -997,8 +998,9 @@ def get_busy_ports():
     for redis_process in p:
         for port in __redis__['ports_range']:
             conf_name = get_redis_conf_basename(port)
-            if conf_name in redis_process:
+            if conf_name in redis_process or str(port) in redis_process:
                 busy_ports.append(port)
+                break
             elif __redis__['defaults']['port'] == port and __redis__['defaults']['redis.conf'] in redis_process:
                 busy_ports.append(port)
     LOG.debug('busy_ports: %s' % busy_ports)

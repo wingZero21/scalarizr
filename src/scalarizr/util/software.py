@@ -5,7 +5,7 @@ Created on Sep 10, 2010
 @author: marat
 """
 
-from scalarizr.util import system2
+from scalarizr.util import system2, PopenError
 from scalarizr import linux
 from scalarizr.linux import coreutils, pkgmgr, which
 import os, re, zipfile, glob, platform
@@ -237,21 +237,26 @@ explore('mysql-proxy', mysqlproxy_software_info)
 
 def apache_software_info():
 
-    binary_name = "httpd" if linux.os.redhat_family else "apache2"
+    binary_name = "httpd" if linux.os.redhat_family else "apache2ctl"
     binary = which(binary_name)
     if not binary:
         raise SoftwareError("Can't find executable for apache http server")
 
-    out = system2((binary, '-V'))[0]
-    if not out:
-        raise SoftwareError
+    try:
+        out = system2((binary, '-V'))[0]
+    except PopenError, e:
+        pkg_mgr = pkgmgr.package_mgr()
+        version_string = pkg_mgr.info('apache2')['installed']
+    else:
+        if not out:
+            raise SoftwareError
+        version_string = out.splitlines()[0]
 
-    version_string = out.splitlines()[0]
     res = re.search('[\d\.]+', version_string)
     if res:
         version = res.group(0)
+        return SoftwareInfo('apache', version, version_string)
 
-        return SoftwareInfo('apache', version, out)
     raise SoftwareError
 
 
@@ -343,34 +348,10 @@ def rails_software_info():
 
 explore('rails', rails_software_info)
 
-def cassandra_software_info():
-    cassandra_path = '/usr/share/cassandra/apache-cassandra.jar'
-
-    if not os.path.exists(cassandra_path):
-        raise SoftwareError("Can't find apache-cassandra.jar file with Cassandra version info")
-
-    cassandra = zipfile.ZipFile(cassandra_path)
-
-    try:
-        properties_path = 'META-INF/MANIFEST.MF'
-
-        if not properties_path in cassandra.namelist():
-            raise SoftwareError("MANIFEST.MF file isn't in apache-cassandra.jar")
-
-        properties = cassandra.read(properties_path)
-
-        res = re.search('^Implementation-Version:\s*([\d\.]+)', properties, re.M)
-        if res:
-            version = res.group(1)
-            return SoftwareInfo('cassandra', version, '')
-        raise SoftwareError()
-    finally:
-        cassandra.close()
-
-explore('cassandra', cassandra_software_info)
-
 
 def rabbitmq_software_info():
+    if linux.os.windows_family:
+        raise SoftwareError()
 
     pkg_mgr = pkgmgr.package_mgr()
     version = pkg_mgr.info('rabbitmq-server')['installed']
@@ -442,7 +423,7 @@ def chef_software_info():
     if not binary:
         raise SoftwareError("Can't find executable for chef client")
 
-    version_string = linux.system((binary, '-v'))[0].strip()
+    version_string = linux.system((binary, '-v'), shell=bool(linux.os.windows))[0].strip()
     if not version_string:
         raise SoftwareError
 
@@ -479,3 +460,4 @@ def postgresql_software_info():
         raise SoftwareError
 
 explore('postgresql', postgresql_software_info)
+

@@ -6,8 +6,9 @@ Created on Sep 30, 2011
 '''
 from __future__ import with_statement
 
-from scalarizr.linux import iptables, pkgmgr
-from scalarizr.util import disttool, system2
+from scalarizr import linux
+from scalarizr.linux import iptables, pkgmgr, coreutils
+from scalarizr.util import system2
 
 import os
 import sys
@@ -20,23 +21,6 @@ import datetime
 import threading
 
 mgr = pkgmgr.package_mgr()
-
-if disttool.is_redhat_based():
-    if disttool.version_info()[0] >= 6:
-        if mgr.info('python-pymongo').get('installed'):
-            system2(('/usr/bin/yum', '-d0', '-y', 'erase', 'python-pymongo',
-                             'python-bson'))
-        if not mgr.info('pymongo').get('installed'):
-            mgr.install('pymongo', mgr.info('pymongo')['candidate'])
-    elif disttool.version_info()[0] == 5:
-        if not mgr.info('python26-pymongo').get('installed'):
-            mgr.install('python26-pymongo', mgr.info('python26-pymongo')['candidate'])
-else:
-    if not mgr.info('python-pymongo').get('installed'):
-        # without python-bson explicit version won't work
-        ver = mgr.info('python-pymongo')['candidate']
-        mgr.install('python-pymongo', ver)
-        mgr.install('python-bson', ver)
 
 import pymongo
 
@@ -80,7 +64,7 @@ MONGO_VOLUME_CREATED    = "mongodb_created_volume_id"
 
         
 def get_handlers():
-    return (MongoDBHandler(), )
+    return [MongoDBHandler()]
 
 
 class MongoDBClusterStates:
@@ -242,6 +226,9 @@ class MongoDBHandler(ServiceCtlHandler):
 
         if self._cnf.state in (ScalarizrState.INITIALIZING, ScalarizrState.BOOTSTRAPPING):
             self.mongodb.stop_default_init_script()
+            if not os.path.isdir(mongo_svc.LOG_DIR):
+                os.makedirs(mongo_svc.LOG_DIR)
+                coreutils.chown_r(mongo_svc.LOG_DIR, mongo_svc.DEFAULT_USER)
 
         if self._cnf.state == ScalarizrState.RUNNING:
             storage_vol = __mongodb__['volume']
@@ -257,7 +244,7 @@ class MongoDBHandler(ServiceCtlHandler):
             if self.rs_id in (0,1):
                 self.mongodb.router_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
                 self.mongodb.configsrv_cli.auth(mongo_svc.SCALR_USER, self.scalr_password)
-                self.mongodb.start_router(1)
+                self.mongodb.start_router(0)
 
 
     def on_start(self):
@@ -522,7 +509,7 @@ class MongoDBHandler(ServiceCtlHandler):
 
 
             log.info('Start Router')
-            self.mongodb.start_router(1)
+            self.mongodb.start_router(0)
             hostup_msg.mongodb['router'] = 1
 
             if self.rs_id == 0 and self.shard_index == 0:

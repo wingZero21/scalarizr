@@ -1,6 +1,5 @@
 import sys
 import os
-import glob
 import time
 import string
 import logging
@@ -13,6 +12,7 @@ import boto.exception
 from scalarizr import linux
 from scalarizr import storage2
 from scalarizr import util
+from scalarizr.platform import NoCredentialsError
 from scalarizr.node import __node__
 from scalarizr.storage2.volumes import base
 from scalarizr.linux import coreutils
@@ -42,11 +42,26 @@ def device2name(device):
 
 
 def get_free_name():
-    # Workaround: rhel 6 returns "Null body" when attach to /dev/sdf
-    s = 7 if linux.os['release'] and linux.os.redhat_family else 5
+    if linux.os.ubuntu and linux.os['release'] >= (14, 4):
+        # ubuntu 14.04 returns Attachment point /dev/sdf is already in used
+        s = 6
+    elif linux.os['release'] and linux.os.redhat_family:
+        # rhel 6 returns "Null body" when attach to /dev/sdf
+        s = 7
+    else:
+        s = 5
     available = set(string.ascii_lowercase[s:16])        
 
-    conn = __node__['ec2']['connect_ec2']()
+    conn = __node__['ec2'].connect_ec2()
+    if not linux.os.windows:
+        # Ubuntu 14.04 failed to attach volumes on device names mentioned in block device mapping, 
+        # even if this instance type doesn't support them and OS has not such devices
+        ephemerals = set(device[-1] for device in __node__['platform'].get_block_device_mapping().values())
+    else:
+        # Windows returns ephemeral[0-25] for all possible devices a-z, and makes ephemeral check senseless
+        ephemerals = set()
+    available = available - ephemerals
+
     filters = {
         'attachment.instance-id': __node__['ec2']['instance_id']
     }
@@ -104,11 +119,10 @@ class EbsMixin(object):
 
     def _connect_ec2(self):
         try:
-            return __node__['ec2']['connect_ec2']()
-        except:
-            if sys.exc_type.__name__ not \
-                    in ('AttributeError', 'NoAuthHandlerFound', 'PlatformError'):
-                raise
+            return __node__['ec2'].connect_ec2()
+        except NoCredentialsError:
+            return False
+
 
     def _avail_zone(self):
         return __node__['ec2']['avail_zone']
@@ -140,6 +154,7 @@ class EbsMixin(object):
             LOG.warn('Cannot apply tags to EBS volume %s. Error: %s',
                                 obj_id, sys.exc_info()[1])
 
+
     def _create_tags_async(self, obj_id, tags):
         if not tags:
             return
@@ -157,15 +172,17 @@ class EbsVolume(base.Volume, EbsMixin):
     _global_timeout = 3600
 
     def __init__(self,
-                            name=None,
-                            avail_zone=None,
-                            size=None,
-                            volume_type='standard',
-                            iops=None,
-                            **kwds):
+                 name=None,
+                 avail_zone=None,
+                 size=None,
+                 volume_type='standard',
+                 iops=None,
+                 encrypted=False,
+                 **kwds):
         base.Volume.__init__(self, name=name, avail_zone=avail_zone,
                         size=size and int(size) or None,
-                        volume_type=volume_type, iops=iops, **kwds)
+                        volume_type=volume_type, iops=iops, encrypted=encrypted,
+                        **kwds)
         EbsMixin.__init__(self)
         self.error_messages.update({
                 'no_id_or_conn': 'Volume has no ID and EC2 connection '
@@ -276,6 +293,7 @@ class EbsVolume(base.Volume, EbsMixin):
             zone = self._avail_zone()
             snap = name = None
             size = self.size() if callable(self.size) else self.size
+            encrypted = self.encrypted
 
             if self.id:
                 try:
@@ -304,8 +322,10 @@ class EbsVolume(base.Volume, EbsMixin):
                                 snapshot=snap,
                                 volume_type=self.volume_type,
                                 iops=self.iops,
-                                tags=self.tags)
+                                tags=self.tags,
+                                encrypted=self.encrypted)
                 size = ebs.size
+                encrypted = ebs.encrypted
 
             if not (ebs.volume_state() == 'in-use' and
                             ebs.attach_data.instance_id == self._instance_id()):
@@ -325,7 +345,8 @@ class EbsVolume(base.Volume, EbsMixin):
                     'device': device,
                     'avail_zone': zone,
                     'size': size,
-                    'snap': None
+                    'snap': None,
+                    'encrypted': encrypted
             })
 
 
@@ -355,18 +376,19 @@ class EbsVolume(base.Volume, EbsMixin):
 
     def _destroy(self, force, **kwds):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-status':'pending-delete'}, self._conn)
+        self.apply_tags({'scalr-status': 'pending-delete'})
         self._conn.delete_volume(self.id)
 
 
     def _create_volume(self, zone=None, size=None, snapshot=None,
-                                    volume_type=None, iops=None, tags=None):
+                       volume_type=None, iops=None, tags=None, encrypted=False):
         LOG.debug('Creating EBS volume (zone: %s size: %s snapshot: %s '
-                        'volume_type: %s iops: %s)', zone, size, snapshot,
-                        volume_type, iops)
+                  'volume_type: %s iops: %s encrypted: %s)', zone, size, snapshot,
+                        volume_type, iops, encrypted)
         if snapshot:
             self._wait_snapshot(snapshot)
-        ebs = self._conn.create_volume(size, zone, snapshot, volume_type, iops)
+        ebs = self._conn.create_volume(size, zone, snapshot, volume_type, iops,
+                                       encrypted)
         LOG.debug('EBS volume %s created', ebs.id)
 
         LOG.debug('Checking that EBS volume %s is available', ebs.id)
@@ -387,13 +409,25 @@ class EbsVolume(base.Volume, EbsMixin):
 
     def _create_snapshot(self, volume, description=None, tags=None, nowait=False):
         LOG.debug('Creating snapshot of EBS volume %s', volume)
-        coreutils.sync()
-        snapshot = self._conn.create_snapshot(volume, description)
-        LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
-        if tags:
-            self._create_tags_async(snapshot.id, tags)
-        if not nowait:
-            self._wait_snapshot(snapshot)
+        if not linux.os.windows:
+            coreutils.sync()
+
+        # conn.create_snapshot leaks snapshots when RequestLimitExceeded occured 
+        params = {'VolumeId': volume}
+        if description:
+            params['Description'] = description[0:255]
+        snapshot = self._conn.get_object('CreateSnapshot', params, 
+                    boto.ec2.snapshot.Snapshot, verb='POST')
+
+        try:
+            LOG.debug('Snapshot %s created for EBS volume %s', snapshot.id, volume)
+            if tags:
+                self._create_tags_async(snapshot.id, tags)
+            if not nowait:
+                self._wait_snapshot(snapshot)
+        except boto.exception.BotoServerError, e:
+            if e.code != 'RequestLimitExceeded':
+                raise
         return snapshot
 
 
@@ -416,7 +450,6 @@ class EbsVolume(base.Volume, EbsMixin):
                     error_text=msg
             )
             LOG.debug('EBS volume %s attached', volume_id)
-
 
             if not linux.os.windows:
                 util.wait_until(lambda: base.taken_devices() > taken_before,
@@ -484,6 +517,14 @@ class EbsVolume(base.Volume, EbsMixin):
             LOG.debug('Snapshot %s completed', snapshot.id)
 
 
+    def apply_tags(self, tags, async=True):
+        if self.id:
+            if async:
+                self._create_tags_async(self.id, tags)
+            else:
+                self._create_tags(self.id, tags)
+
+
 class EbsSnapshot(EbsMixin, base.Snapshot):
 
     #error_messages = base.Snapshot.error_messages.copy()
@@ -508,7 +549,7 @@ class EbsSnapshot(EbsMixin, base.Snapshot):
 
     def _destroy(self):
         self._check_ec2()
-        self._create_tags(self.id, {'scalr-status':'pending-delete'}, self._conn)
+        self._create_tags(self.id, {'scalr-status': 'pending-delete'}, self._conn)
         self._conn.delete_snapshot(self.id)
 
 

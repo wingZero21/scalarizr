@@ -11,6 +11,7 @@ except ImportError:
     import simplejson as json 
 
 from scalarizr import linux
+from scalarizr import util
 
 
 if linux.os.windows_family:
@@ -253,6 +254,14 @@ class BoolFile(Store):
                 os.remove(self.filename)
 
 
+class StateFile(File):
+    def __getitem__(self, key):
+        try:
+            return super(StateFile, self).__getitem__(key)
+        except KeyError:
+            return 'unknown'
+
+
 class State(Store):
     def __init__(self, key):
         self.key = key
@@ -314,23 +323,41 @@ class ScalrVersion(Store):
 
 
 node = {
-        'server_id,role_id,farm_id,farm_role_id,env_id,role_name,server_index':
+        'server_id,role_id,farm_id,farm_role_id,env_id,role_name,server_index,queryenv_url':
                                 Ini(os.path.join(private_dir, 'config.ini'), 'general'),
-        'message_format': Ini(os.path.join(private_dir, 'config.ini'), 'messaging_p2p'),
-        'platform_name': Ini(os.path.join(public_dir, 'config.ini'), 'general'),
+        'message_format,producer_url': Ini(os.path.join(private_dir, 'config.ini'), 'messaging_p2p'),
+        'platform_name,crypto_key_path': Ini(os.path.join(public_dir, 'config.ini'), 'general'),
         'platform': Attr('scalarizr.bus', 'bus.platform'),
-        'behavior': IniOption(
-                                                [public_dir + '/config.ini', private_dir + '/config.ini'], 
-                                                'general', 'behaviour',
-                                                lambda val: val.strip().split(','),
-                                                lambda val: ','.join(val)),
+        'behavior': IniOption([public_dir + '/config.ini', private_dir + '/config.ini'], 
+                              'general', 'behaviour',
+                              lambda val: val.strip().split(','),
+                              lambda val: ','.join(val)),
         'public_ip': Call('scalarizr.bus', 'bus.platform.get_public_ip'),
         'private_ip': Call('scalarizr.bus', 'bus.platform.get_private_ip'),
-        'state': File(private_dir + '/.state'),
+        'state': StateFile(private_dir + '/.state'),
         'rebooted': BoolFile(private_dir + '/.reboot'),
         'halted': BoolFile(private_dir + '/.halt'),
-        'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region')
+        'cloud_location' : IniOption(private_dir + '/config.ini', 'general', 'region'),
 }
+if linux.os.windows_family:
+    node['install_dir'] = r'C:\Program Files\Scalarizr' 
+    node['etc_dir'] = os.path.join(node['install_dir'], 'etc')
+    node['log_dir'] = os.path.join(node['install_dir'], r'var\log')
+else:
+    node['install_dir'] = '/opt/scalarizr'
+    node['etc_dir'] = '/etc/scalr'
+    node['log_dir'] = '/var/log'
+node['embedded_bin_dir'] = os.path.join(node['install_dir'], 'embedded', 'bin')
+
+node['share_dir'] = util.firstmatched(
+    lambda p: os.access(p, os.F_OK), [
+        os.path.join(node['install_dir'], 'share'),
+        '/usr/share/scalr',
+        '/usr/local/share/scalr'
+    ], 
+    os.path.join(node['install_dir'], 'share')
+)
+
 
 node['defaults'] = {
     'base': {
@@ -387,7 +414,7 @@ node['mongodb'] = Compound({
 })
 
 node['nginx'] = Compound({
-    'binary_path,app_include_path,https_include_path,app_port,upstream_app_role':
+    'app_port,upstream_app_role':
         Ini('%s/%s.ini' % (public_dir, 'www'), 'www')
 })
 
@@ -396,17 +423,13 @@ node['apache'] = Compound({
         Ini('%s/%s.ini' % (public_dir, 'app'), 'app')
 })
 
-node['cloudfoundry'] = Compound({
-        'volume,volume_config': Json('%s/storage/%s.json' % (private_dir, 'cloudfoundry'), 'scalarizr.storage2.volume')
-        })
 
 node['tomcat'] = {}
 
 
 node['ec2'] = Compound({
         't1micro_detached_ebs': State('ec2.t1micro_detached_ebs'),
-        'hostname_as_pubdns': 
-                                Ini('%s/%s.ini' % (public_dir, 'ec2'), 'ec2'),
+        'hostname_as_pubdns': Ini('%s/%s.ini' % (public_dir, 'ec2'), 'ec2'),
         'ami_id': Call('scalarizr.bus', 'bus.platform.get_ami_id'),
         'kernel_id': Call('scalarizr.bus', 'bus.platform.get_kernel_id'),
         'ramdisk_id': Call('scalarizr.bus', 'bus.platform.get_ramdisk_id'),
@@ -414,29 +437,25 @@ node['ec2'] = Compound({
         'instance_type': Call('scalarizr.bus', 'bus.platform.get_instance_type'),
         'avail_zone': Call('scalarizr.bus', 'bus.platform.get_avail_zone'),
         'region': Call('scalarizr.bus', 'bus.platform.get_region'),
-        'connect_ec2': Attr('scalarizr.bus', 'bus.platform.new_ec2_conn'),
-        'connect_s3': Attr('scalarizr.bus', 'bus.platform.new_s3_conn')
+        'connect_ec2': Attr('scalarizr.bus', 'bus.platform.get_ec2_conn'),
+        'connect_s3': Attr('scalarizr.bus', 'bus.platform.get_s3_conn')
 })
 node['cloudstack'] = Compound({
-        'new_conn': Call('scalarizr.bus', 'bus.platform.new_cloudstack_conn'),
+        'connect_cloudstack': Attr('scalarizr.bus', 'bus.platform.get_cloudstack_conn'),
         'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
         'zone_id': Call('scalarizr.bus', 'bus.platform.get_avail_zone_id'),
         'zone_name': Call('scalarizr.bus', 'bus.platform.get_avail_zone')
 })
 node['openstack'] = Compound({
-        'new_cinder_connection': Call('scalarizr.bus', 'bus.platform.new_cinder_connection'),
-        'new_nova_connection': Call('scalarizr.bus', 'bus.platform.new_nova_connection'),
-        'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
-        'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
-})
-node['rackspace'] = Compound({
-        'new_swift_connection': Call('scalarizr.bus', 'bus.platform.new_swift_connection'),
+        'connect_nova': Attr('scalarizr.bus', 'bus.platform.get_nova_conn'),
+        'connect_cinder': Attr('scalarizr.bus', 'bus.platform.get_cinder_conn'),
+        'connect_swift': Attr('scalarizr.bus', 'bus.platform.get_swift_conn'),
         'server_id': Call('scalarizr.bus', 'bus.platform.get_server_id')
 })
 
 node['gce'] = Compound({
-        'compute_connection': Call('scalarizr.bus', 'bus.platform.new_compute_client'),
-        'storage_connection': Call('scalarizr.bus', 'bus.platform.new_storage_client'),
+        'connect_compute': Attr('scalarizr.bus', 'bus.platform.get_compute_conn'),
+        'connect_storage': Attr('scalarizr.bus', 'bus.platform.get_storage_conn'),
         'project_id': Call('scalarizr.bus', 'bus.platform.get_project_id'),
         'instance_id': Call('scalarizr.bus', 'bus.platform.get_instance_id'),
         'zone': Call('scalarizr.bus', 'bus.platform.get_zone')
@@ -450,8 +469,8 @@ node['scalr'] = Compound({
 node['messaging'] = Compound({
     'send': Attr('scalarizr.bus', 'bus.messaging_service.send')
 })
+
+node['access_data'] = {}
+
 __node__ = Compound(node)
-
-
-
 

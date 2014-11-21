@@ -19,19 +19,18 @@ Priority: extra
 Depends: ${shlibs:Depends}, 
          ${misc:Depends}, 
          ${python:Depends},
-         scalr-upd-client,
          python-m2crypto (= 0.20.1-1ubuntu5) | python-m2crypto (>= 0.20),
-         python-pysnmp4 (>= 4.1.12a), 
-         python-pysnmp4-mibs (>= 0.0.5a), 
          python-pexpect (>= 2.1),
          python-prettytable,
+         python-docopt (>= 0.6.2),
          python-yaml, 
+         python-httplib2,
          python (>= 2.6) | python-simplejson,
          python (<< 2.6) | python-pychef,
          python (<< 2.6) | python-pymysql,
          rsync (>= 2.6.8)
 Provides: ${python:Provides}
-Replaces: scalarizr (<< 0.7)
+Replaces: scalarizr (<< 0.7), scalr-upd-client
 Breaks: scalarizr (<< 0.7)
 Description: Scalarizr agent common files
  Scalarizr base components common for all cloud platforms.
@@ -41,33 +40,12 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-         python-boto (>= 2.13.0)
+         python-boto (>= 2.34.0)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Amazon EC2
  Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
 
-Package: scalarizr-eucalyptus
-Architecture: all
-Section: net
-Priority: extra
-Depends: scalarizr-ec2 (= ${binary:Version}),
-         euca2ools (>= 3.0.2)
-Description: Scalarizr agent for Eucalyptus
- Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
-
-Package: scalarizr-rackspace
-Architecture: all
-Section: net
-Priority: extra
-Depends: scalarizr-base (= ${binary:Version}), 
-         python-rackspace-cloudfiles (>= 1.5.1),
-         python-rackspace-cloudservers (>= 1.0~a5),
-         python-swiftclient (>= 1.2.0)
-Provides: scalarizr-agent, scalarizr
-Conflicts: scalarizr-agent
-Description: Scalarizr agent for Rackspace cloud
- Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
 
 Package: scalarizr-openstack
 Architecture: all
@@ -77,8 +55,8 @@ Depends: scalarizr-base (= ${binary:Version}),
          python-novaclient (>= 2.15.0),
          python-rackspace-novaclient (>= 1.0),
          python-cinderclient (>= 1.0.5),
-         python-swiftclient (>= 1.2.0),
-         python-keystoneclient (>= 0.3.2)
+         python-swiftclient (>= 1.3.0),
+         python-keystoneclient (>= 1:0.3.2)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for Openstack cloud
@@ -89,7 +67,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack (>= 0.2.3)
+		python-cloudstack (>= 0.2.4)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for CloudStack (cloud.com) cloud
@@ -100,7 +78,7 @@ Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}),
-		python-cloudstack (>= 0.2.3) 
+		python-cloudstack (>= 0.2.4) 
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
 Description: Scalarizr agent for uCloud (Korea Telecom) cloud
@@ -118,22 +96,12 @@ Description: Scalarizr agent for IDCF cloud
  Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
 
 
-Package: scalarizr-nimbula
-Architecture: all
-Section: net
-Priority: extra
-Depends: scalarizr-base (= ${binary:Version})
-Provides: scalarizr-agent, scalarizr
-Conflicts: scalarizr-agent
-Description: Scalarizr agent for Nimbula cloud
- Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.
-
 Package: scalarizr-gce
 Architecture: all
 Section: net
 Priority: extra
 Depends: scalarizr-base (= ${binary:Version}), 
-		python-google-api-client,
+		python-google-api-client (>= 1.2),
 		python-openssl (>= 0.13)
 Provides: scalarizr-agent, scalarizr
 Conflicts: scalarizr-agent
@@ -144,6 +112,6 @@ Package: scalarizr
 Architecture: all
 Section: net
 Priority: extra
-Depends: scalarizr-ec2 (= ${binary:Version}) | scalarizr-rackspace (= ${binary:Version}) | scalarizr-nimbula (= ${binary:Version}) | scalarizr-openstack (= ${binary:Version}) | scalarizr-cloudstack (= ${binary:Version}) | scalarizr-gce (= ${binary:Version}) | scalarizr-ucloud (= ${binary:Version}) | scalarizr-idcf (= ${binary:Version})
+Depends: scalarizr-ec2 (= ${binary:Version}) | scalarizr-openstack (= ${binary:Version}) | scalarizr-cloudstack (= ${binary:Version}) | scalarizr-gce (= ${binary:Version}) | scalarizr-ucloud (= ${binary:Version}) | scalarizr-idcf (= ${binary:Version})
 Description: Scalarizr converts any server to Scalr-manageable node
  Need to scale? Scalr might be for you. Scalr is open source software that scales web infrastructure.

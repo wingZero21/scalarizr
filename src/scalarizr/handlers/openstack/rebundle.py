@@ -7,6 +7,7 @@ import shutil
 
 from scalarizr.node import __node__
 from scalarizr import linux, handlers
+from scalarizr.linux import coreutils
 from scalarizr.handlers import rebundle as rebundle_hdlr
 from scalarizr.util import software, system2, wait_until
 from scalarizr.messaging import Messages
@@ -58,8 +59,7 @@ class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
 
     def rebundle(self):
         image_name = self._role_name + "-" + time.strftime("%Y%m%d%H%M%S")
-        nova = __node__['openstack']['new_nova_connection']
-        nova.connect()
+        nova = __node__['openstack'].connect_nova()
 
         server_id = __node__['openstack']['server_id']
         system2("sync", shell=True)
@@ -71,26 +71,43 @@ class OpenstackRebundleLinuxHandler(rebundle_hdlr.RebundleHandler):
         def image_completed():
             try:
                 result[0] = nova.images.get(image_id)
-                return result[0].status in ('ACTIVE', 'FAILED')
+                return result[0].status in ('ACTIVE', 'FAILED', 'DELETED')
             except:
                 e = sys.exc_info()[1]
                 if 'Unhandled exception occurred during processing' in str(e):
                     return
                 raise
-        wait_until(image_completed, start_text='Polling image status', sleep=30)
+        def delete_image():
+            if not result[0]:
+                return
+            image_id = result[0].id
+            try:
+                LOG.info('Cleanup: deleting image %s', image_id)
+                nova.images.delete(image_id)
+            except:
+                LOG.warn('Cleanup failed: %s', exc_info=sys.exc_info())
 
-        image_id = result[0].id
-        if result[0].status == 'FAILED':
-            raise handlers.HandlerError('Image %s becomes FAILED', image_id)
-        LOG.info('Image %s completed and available for use!', image_id)
-        return image_id
+        try:
+            wait_until(image_completed, start_text='Polling image status', sleep=30)
+            image = result[0]
+            if image.status != 'ACTIVE':
+                raise handlers.HandlerError('Image %s becomes %s', image.id, image.status)
+            LOG.info('Image %s completed and available for use!', image.id)
+            return image.id
+        except:
+            exc = sys.exc_info()
+            delete_image()
+            raise exc[0], exc[1], exc[2]
 
 
     def before_rebundle(self):
-        if os.path.exists('/etc/udev/rules.d/70-persistent-net.rules'):
-            shutil.move('/etc/udev/rules.d/70-persistent-net.rules', '/tmp')
+        rulename = '70-persistent-net.rules'
+        coreutils.remove('/tmp/' + rulename)
+        if os.path.exists('/etc/udev/rules.d/' + rulename):
+            shutil.move('/etc/udev/rules.d/' + rulename, '/tmp')
 
 
     def after_rebundle(self):
-        if os.path.exists('/tmp/70-persistent-net.rules'):
-            shutil.move('/tmp/70-persistent-net.rules', '/etc/udev/rules.d')
+        rulename = '70-persistent-net.rules'
+        if os.path.exists('/tmp/' + rulename):
+            shutil.move('/tmp/' + rulename, '/etc/udev/rules.d')

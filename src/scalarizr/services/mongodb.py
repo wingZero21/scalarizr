@@ -12,15 +12,15 @@ import shutil
 import logging
 import functools
 import resource
-
+import pymongo
 
 from scalarizr.config import BuiltinBehaviours
 from scalarizr.services import BaseConfig, BaseService, lazy
-from scalarizr.util import disttool, system2, \
+from scalarizr.util import system2, \
                                 PopenError, wait_until, initdv2, software, \
                                 firstmatched
 from scalarizr.linux.coreutils import chown_r
-import pymongo
+from scalarizr import linux
 
 
 MONGOD = software.which('mongod')
@@ -36,11 +36,8 @@ CONFIG_SERVER_DEFAULT_PORT = 27019
 SERVICE_NAME = BuiltinBehaviours.MONGODB
 STORAGE_PATH = "/mnt/mongodb-storage"
 
-DEFAULT_USER = 'mongodb' if disttool.is_debian_based() else 'mongod'
+DEFAULT_USER = 'mongodb' if linux.os.debian_family else 'mongod'
 LOG_DIR = '/var/log/mongodb'
-if not os.path.isdir(LOG_DIR):
-    os.makedirs(LOG_DIR)
-chown_r(LOG_DIR, DEFAULT_USER)
 
 LOG_PATH_DEFAULT = os.path.join(LOG_DIR, 'mongodb.shardsrv.log') 
 DEFAULT_UBUNTU_DB_PATH = '/var/lib/mongodb'
@@ -78,11 +75,9 @@ class MongoDBDefaultInitScript(initdv2.ParametrizedInitScript):
         return obj
                 
     def __init__(self):
-        initd_script = None
-        if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
-            initd_script = ('/usr/sbin/service', 'mongodb')
-        else:
-            initd_script = firstmatched(os.path.exists, ('/etc/init.d/mongodb', '/etc/init.d/mongod'))
+        initd_script = firstmatched(os.path.exists, ('/etc/init.d/mongodb', '/etc/init.d/mongod'))
+        if linux.os.ubuntu and linux.os.release >= (10, 4):
+            initd_script = ('/usr/sbin/service', os.path.basename(initd_script))
         initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
                         initd_script=initd_script)
         
@@ -240,7 +235,7 @@ class MongoDB(BaseService):
         self.config_server.stop('Stopping mongo config server')
         
         
-    def start_router(self, verbose = 0):
+    def start_router(self, verbose=0):
         self.stop_default_init_script()
         Mongos.set_keyfile(self.keyfile.path)
         Mongos.verbose = verbose
@@ -380,7 +375,7 @@ class MongoDB(BaseService):
         '''
         path = '/etc/sudoers'
         self._logger.debug('Disabling requiretty in %s' % path)
-        if not disttool.is_debian_based():
+        if not linux.os.debian_family:
             orig = None
             with open(path, 'r') as fp:
                 orig = fp.read()
@@ -512,7 +507,7 @@ class WorkingDirectory(object):
     def find(cls, mongo_conf):
         dir = mongo_conf.dbpath
         if not dir:
-            dir = DEFAULT_UBUNTU_DB_PATH if disttool.is_debian_based() else DEFAULT_CENTOS_DB_PATH
+            dir = DEFAULT_UBUNTU_DB_PATH if linux.os.debian_family else DEFAULT_CENTOS_DB_PATH
         return cls(dir) 
 
     def is_initialized(self, path): 
@@ -554,7 +549,6 @@ class MongoDBConfig(BaseConfig):
     
     @classmethod
     def find(cls, config_dir=None):
-        #conf_path = UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
         return cls(os.path.join(config_dir, cls.config_name) if config_dir else CONFIG_PATH_DEFAULT)
 
     def set(self, option, value):
@@ -680,7 +674,7 @@ def mongo_preexec_fn():
 
 
 class Mongod(object):   
-    def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=1):
+    def __init__(self, configpath=None, keyfile=None, dbpath=None, port=None, cli=None, verbose=0):
         self._logger = logging.getLogger(__name__)
         self.configpath = configpath
         self.dbpath = dbpath
@@ -692,7 +686,6 @@ class Mongod(object):
         
     @classmethod
     def find(cls, mongo_conf=None, keyfile=None, cli=None):
-        #config_path = mongo_conf.path or UBUNTU_CONFIG_PATH if disttool.is_ubuntu() else CENTOS_CONFIG_PATH
         return cls(configpath=CONFIG_PATH_DEFAULT, keyfile=keyfile, cli=cli)
 
     @property
@@ -711,9 +704,6 @@ class Mongod(object):
             s.append('-'+'v'*self.verbose)
 
         return s
-
-
-
 
     def start(self):
         try:
@@ -944,17 +934,30 @@ class MongoCLI(object):
     @autoreconnect
     def initiate_rs(self):
         '''
-    initializes replica set
-    '''
+        initializes replica set
+        '''
         self._logger.info('Initializing replica set')
         if self.connection.local.system.replset.find_one():
-            self._logger.debug('Replica set already initialized. Nothing to do')
+            self._logger.warning('Replica set already initialized. Nothing to do')
             return
-    
-        res = self.connection.admin.command('replSetInitiate')
-        if int(res['ok']) == 0:
-            raise BaseException('Could not initialize replica set: %s' % res['errmsg'])
 
+        for i in range(5):
+            time.sleep(i)
+            try:
+                res = self.connection.admin.command('replSetInitiate')
+            except:
+                e = sys.exc_info()[1]
+                if 'all members and seeds must be reachable' in str(e):
+                    continue
+                else:
+                    raise
+
+            if int(res['ok']) != 0:
+                break
+            self._logger.warning('Replica set initiation failed: %s' % res['errmsg'])
+
+        else:
+            raise BaseException('Could not initialize replica set: %s' % res['errmsg'])
 
     @autoreconnect
     def add_shard(self, shard_name, rs_name, rs_members):
@@ -1008,18 +1011,29 @@ class MongoCLI(object):
     @autoreconnect
     def rs_reconfig(self, config, force=False):
         self._logger.debug('Reconfiguring replica set (config: %s)', config)
-        try:
-            ret = self.connection.admin.command("replSetReconfig", config)
-            self._logger.debug('Mongo replSetReconfig answer: %s', ret)
-        except:
-            if force:
-                self._logger.debug('Reconfiguring failed. Retrying with "force" argument')
-                ret = self.connection.admin.command("replSetReconfig", config, force=force)
-                self._logger.debug('Mongo replSetReconfig answer: %s', ret)
-            else:
-                raise
-        return ret
 
+        for i in range(4):
+            time.sleep(i)
+            try:
+                try:
+                    ret = self.connection.admin.command("replSetReconfig", config)
+                    self._logger.debug('Mongo replSetReconfig answer: %s', ret)
+                except:
+                    if force:
+                        self._logger.debug('Reconfiguring failed. Retrying with "force" argument')
+                        ret = self.connection.admin.command("replSetReconfig", config, force=force)
+                        self._logger.debug('Mongo replSetReconfig result: %s', ret)
+                    else:
+                        raise
+                return ret
+            except:
+                e = sys.exc_info()[1]
+                if 'need most members up to reconfigure' in str(e):
+                    self._logger.warning('Got "%s" error while reconfiguring replica set' % e)
+                else:
+                    raise
+        else:
+            raise Exception('Could not reconfigure replica set. See logs for details.')
 
     def add_arbiter(self,ip, port=None):
         self._logger.debug('Registering new arbiter %s' % ip)

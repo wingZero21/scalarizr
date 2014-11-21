@@ -13,11 +13,9 @@ import shutil
 import logging
 import subprocess
 
-from M2Crypto import RSA
-
-from scalarizr.util import disttool, firstmatched, wait_until
+from scalarizr.util import firstmatched, wait_until
 from scalarizr.config import BuiltinBehaviours
-from scalarizr.util import initdv2, system2, PopenError, software
+from scalarizr.util import initdv2, system2, PopenError, software, Singleton
 from scalarizr.linux.coreutils import chown_r
 from scalarizr.services import BaseService, BaseConfig, lazy, PresetProvider, backup
 from scalarizr.node import __node__, private_dir
@@ -51,11 +49,6 @@ OPT_REPLICATION_MASTER = "replication_master"
 LOG = logging.getLogger(__name__)
 __postgresql__ = __node__[SERVICE_NAME]
 
-if 'Amazon' == linux.os['name'] and software.postgresql_software_info().version[:2] == (9,2):
-    pg_pathname_pattern = '/var/lib/pgsql9/'
-else:
-    pg_pathname_pattern = '/var/lib/p*sql/9.*/'
-
 
 class PgSQLInitScript(initdv2.ParametrizedInitScript):
     socket_file = None
@@ -68,7 +61,6 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
             
     def __init__(self):
         initd_script = None
-        # if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
         if linux.os.debian_family:
             initd_script = ('/usr/sbin/service', 'postgresql')
         else:
@@ -76,6 +68,7 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
                         '/etc/init.d/postgresql-9.0', 
                         '/etc/init.d/postgresql-9.1',
                         '/etc/init.d/postgresql-9.2',
+                        '/etc/init.d/postgresql-9.3',
                         '/etc/init.d/postgresql'))
         assert initd_script is not None
         initdv2.ParametrizedInitScript.__init__(self, name=SERVICE_NAME, 
@@ -257,18 +250,19 @@ class PostgreSql(BaseService):
         if not wks or int(wks) < 32:
             self.postgresql_conf.wal_keep_segments = 32  # [TTM-8]
 
-        if disttool.is_ubuntu() and disttool.version_info() == (12, 4) and '9.1' == self.version:
+        if linux.os.ubuntu and linux.os['version'] == (12, 4) and '9.1' == self.version:
             #SEE: https://bugs.launchpad.net/ubuntu/+source/postgresql-9.1/+bug/1018307
             self.postgresql_conf.ssl_renegotiation_limit = 0
         
         self.cluster_dir.clean()
         
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
+            LOG.debug("Config dir before moving: %s" % self.postgresql_conf.path)
             self.config_dir.move_to(self.unified_etc_path)
             make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
             self.postgresql_conf = PostgresqlConf.find(self.config_dir)
             self.pg_hba_conf = PgHbaConf.find(self.config_dir)
-            
+            LOG.debug("Config dir after moving: %s" % self.postgresql_conf.path)
         self.pg_hba_conf.allow_local_connections()
         
 
@@ -394,9 +388,8 @@ class PgUser(object):
             self._store_key(pvt_key, private=True)
         
     def generate_private_ssh_key(self, key_length=1024):
-        public_exponent = 65337
-        key = RSA.gen_key(key_length, public_exponent)
-        key.save_key(self.private_key_path, cipher=None)
+        # TODO: rewrite with cryptography (current 0.5.4 doesn't support key serialization)  
+        linux.system('openssl genrsa -out {0} {1}'.format(self.private_key_path, key_length), shell=True)
         os.chmod(self.private_key_path, 0400)
         
     def extract_public_ssh_key(self):
@@ -622,8 +615,16 @@ class PSQL(object):
                     
     
 class ClusterDir(object):
-    base_path = glob.glob(pg_pathname_pattern)[0]
-    default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
+    #TODO: Rethink ClusterDir and ConfigDir
+    try:
+        if 'Amazon' == linux.os['name'] and software.postgresql_software_info().version[:2] == (9,2):
+            base_path = '/var/lib/pgsql9/'
+        else:
+            base_path = glob.glob('/var/lib/p*sql/9.*/')[0]
+        default_path = os.path.join(base_path, 'main' if linux.os.debian_family else 'data')
+    except (IndexError, software.SoftwareError):
+        base_path = None
+        default_path = None
     
     def __init__(self, path=None):
         self.path = path
@@ -652,7 +653,7 @@ class ClusterDir(object):
         chown_r(dst, self.user)
         
         LOG.debug("Changing postgres user`s home directory")
-        if disttool.is_redhat_based():
+        if linux.os.redhat_family:
             #looks like ubuntu doesn`t need this
             system2([USERMOD, '-d', new_cluster_dir, self.user]) 
             
@@ -701,8 +702,10 @@ class ConfigDir(object):
         if not path:
             if linux.os.debian_family:
                 path = '/etc/postgresql/%s/main' % version
+            elif 'Amazon' == linux.os['name'] and "9.2" == version:
+                path = '/var/lib/pgsql9/data'
             else:
-                path = os.path.join(glob.glob(pg_pathname_pattern)[0],'data')
+                path = os.path.join(glob.glob('/var/lib/p*sql/9.*/')[0], 'data')
         return cls(path, version)
         
     
@@ -1116,10 +1119,16 @@ def make_symlinks(source_dir, dst_dir, username='postgres'):
 
 class PgSQLPresetProvider(PresetProvider):
 
-    def __init__(self, config_object):
+    __metaclass__ = Singleton
+
+    def __init__(self):
+        self.postgresql = PostgreSql()
+        conf_path = os.path.join(self.postgresql.unified_etc_path, 'postgresql.conf')
+        config_object = PostgresqlConf(conf_path)
         service = initdv2.lookup(SERVICE_NAME)
-        config_mapping = {'postgresql.conf':config_object}
+        config_mapping = {'postgresql.conf': config_object}
         PresetProvider.__init__(self, service, config_mapping)
+        LOG.debug("Presets got config: %s" % conf_path)
 
 
 class PostgresqlSnapBackup(backup.SnapBackup):

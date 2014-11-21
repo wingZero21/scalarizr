@@ -283,10 +283,10 @@ class LinuxImage:
 
         # Create rsync excludes list
         self.excludes = set(self.SPECIAL_DIRS)  # Add special dirs
-        self.excludes.update(excludes or ())    # Add user input
-        self.excludes.add(self.mpoint)                  # Add image mount point
+        self.excludes.update(excludes or ())  # Add user input
+        self.excludes.add(self.mpoint)  # Add image mount point
         if self.path:
-            self.excludes.add(self.path)            # Add image path
+            self.excludes.add(self.path)  # Add image path
         # Add all mounted filesystems, except bundle volume
         self._excluded_mpoints = list(entry.mpoint
                         for entry in self._mtab.list_entries()
@@ -471,5 +471,5 @@ class LinuxLoopbackImage(LinuxImage):
 
     def cleanup(self):
         LinuxImage.cleanup(self)
-        if self.devname:
+        if self.devname and os.path.exists(self.devname):
             loop.rmloop(self.devname)

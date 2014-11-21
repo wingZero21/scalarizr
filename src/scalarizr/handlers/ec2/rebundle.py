@@ -5,12 +5,13 @@ Created on Mar 11, 2010
 '''
 
 import logging
+import platform
 
 import scalarizr
 from scalarizr.bus import bus
+from scalarizr.node import __node__
 from scalarizr.handlers import HandlerError, build_tags
-from scalarizr.util import system2, disttool, cryptotool,\
-        wait_until, firstmatched
+from scalarizr.util import system2, wait_until, firstmatched
 from scalarizr import linux
 from scalarizr.linux import mount
 
@@ -24,12 +25,12 @@ from scalarizr.storage2.cloudfs import FileTransfer
 from scalarizr.storage2 import volume, filesystem
 from scalarizr.libs.metaconf import Configuration
 
-from M2Crypto import X509, EVP, Rand, RSA
 from binascii import hexlify
 from xml.dom.minidom import Document
 from datetime import datetime
 import time, os, re, shutil, glob
 import string
+import hashlib
 
 from boto.exception import BotoServerError
 from boto.ec2.blockdevicemapping import EBSBlockDeviceType, BlockDeviceMapping
@@ -53,6 +54,7 @@ BUNDLER_RELEASE = "672"
 
 DIGEST_ALGO = "sha1"
 CRYPTO_ALGO = "aes-128-cbc"
+READ_BUF_SIZE = 1024 * 1024
 
 EPH_STORAGE_MAPPING = {
         'i386': {
@@ -67,6 +69,10 @@ EPH_STORAGE_MAPPING = {
 }
 
 NETWORK_FILESYSTEMS = ('nfs', 'glusterfs')
+
+MIN_IOPS_VALUE = 100
+MAX_IOPS_VALUE = 4000
+MAX_IOPS_TO_SIZE_RATIO = 30.0
 
 
 class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
@@ -83,6 +89,23 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
         self._strategy = None
         bus.on(rebundle=self.on_rebundle)
 
+    def _validate_rv_template(self, rv_template):
+        # Throws exception if rv_template do not pass validation, returns True instead
+        if rv_template.get('volume_type') == 'io1':
+            iops = rv_template.get('iops')
+            if iops is None:
+                raise HandlerError('No disk iops given for io1 type of disks')
+
+            iops = float(iops)
+            if iops < MIN_IOPS_VALUE or iops > MAX_IOPS_VALUE:
+                raise HandlerError('IOPS must be between %s and %s' % 
+                    (MIN_IOPS_VALUE, MAX_IOPS_VALUE))
+
+            size = float(rv_template['size'])
+            if iops > MAX_IOPS_TO_SIZE_RATIO * size:
+                raise HandlerError('Maximum raito of %.0f:1 is permitted between iops '
+                    'and volume size' % MAX_IOPS_TO_SIZE_RATIO)
+        return True
 
     def before_rebundle(self):
         '''
@@ -103,8 +126,8 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
             instance = ec2_conn.get_all_instances([instance_id])[0].instances[0]
         except IndexError:
             msg = 'Failed to find instance %s. ' \
-                            'If you are importing this server, check that you are doing it from the ' \
-                            'right Scalr environment' % instance_id
+                'If you are importing this server, check that you are doing it from the ' \
+                'right Scalr environment' % instance_id
             raise HandlerError(msg)
         self._instance = instance
 
@@ -119,44 +142,48 @@ class Ec2RebundleHandler(rebundle_hdlr.RebundleHandler):
 
         if instance.root_device_type == 'ebs':
             # EBS-root device instance
-            """ detecting root device like rdev=`sda` """
-            rdev = None
-            for el in os.listdir('/sys/block'):
-                if os.path.basename(root_disk.device) in os.listdir('/sys/block/%s'%el):
-                    rdev = el
+            rv_template = self._rebundle_message.body.get('root_volume_template')
+            if not rv_template:
+                rv_template = {}
+
+            vol_filters = {'attachment.instance-id': pl.get_instance_id()}
+            attached_vols = ec2_conn.get_all_volumes(filters=vol_filters)
+            root_vol = None
+            for vol in attached_vols:
+                if instance.root_device_name == vol.attach_data.device:
+                    root_vol = vol
                     break
-            if not rdev and os.path.exists('/sys/block/%s'%os.path.basename(root_disk.device)):
-                rdev = root_disk.device
-
-            """ list partition of root device """
-            list_rdevparts = [dev.device for dev in list_device
-                                                    if dev.device.startswith('/dev/%s' % rdev)]
-
-            if len(list(set(list_rdevparts))) > 1:
-                """ size of volume in KByte"""
-                volume_size = system2(('sfdisk', '-s', root_disk.device[:-1]),)
-                """ size of volume in GByte"""
-                volume_size = int(volume_size[0].strip()) / 1024 / 1024
-                #TODO: need set flag, which be for few partitions
-                #copy_partition_table = True
             else:
-                """ if one partition we use old method """
-                volume_size = self._rebundle_message.body.get('volume_size')
-                if not volume_size:
-                    volume_size = int(root_disk.size / 1000 / 1000)
+                raise HandlerError("Failed to find root volume")
 
-            self._strategy = self._ebs_strategy_cls(
-                    self, self._role_name, image_name, self._excludes,
-                    volume_size=volume_size,  # in Gb
-                    volume_id=self._rebundle_message.body.get('volume_id')
-            )
+            LOG.debug('Searching for partitions on root device %s' % root_disk.device)
+            rdevparts = [dev.device for dev in list_device
+                if dev.device.startswith('/dev/%s' % root_disk.device)]
+            if len(set(rdevparts)) > 1 or rv_template != {}:
+                rv_template['size'] = rv_template.get('size', root_vol.size)
+            else:
+                vol_size = self._rebundle_message.body.get('volume_size')
+                rv_template['size'] = vol_size or root_vol.size
+
+            rv_template['volume_type'] = rv_template.get('volume_type', root_vol.type)
+            rv_template['iops'] = rv_template.get('iops')
+
+            self._validate_rv_template(rv_template)
+
+            LOG.debug('Making rebundle with root volume template: %s' % rv_template)
+
+            self._strategy = self._ebs_strategy_cls(self,
+                self._role_name,
+                image_name,
+                self._excludes,
+                volume_id=self._rebundle_message.body.get('volume_id'),
+                ebs_type_template=rv_template)
         else:
             # Instance store
             self._strategy = self._instance_store_strategy_cls(
-                    self, self._role_name, image_name, self._excludes,
-                    image_size = root_disk.size / 1000,  # in Mb
-                    s3_bucket_name = self._s3_bucket_name
-            )
+                self, self._role_name, image_name, self._excludes,
+                image_size = root_disk.size / 1000,  # in Mb
+                s3_bucket_name = self._s3_bucket_name)
 
 
     def rebundle(self):
@@ -220,11 +247,11 @@ class RebundleStratery:
         for name in ("etc/motd", "etc/motd.tail"):
             motd_filename = os.path.join(image_mpoint, name)
             if os.path.exists(motd_filename):
-                dist = disttool.linux_dist()
+                dist = platform.dist()
                 motd = rebundle_hdlr.MOTD % dict(
                         dist_name = dist[0],
                         dist_version = dist[1],
-                        bits = 64 if disttool.uname()[4] == "x86_64" else 32,
+                        bits = 64 if platform.uname()[4] == "x86_64" else 32,
                         role_name = role_name,
                         bundle_date = datetime.today().strftime("%Y-%m-%d %H:%M")
                 )
@@ -245,9 +272,9 @@ class RebundleStratery:
         instance = ec2_conn.get_all_instances([pl.get_instance_id()])[0].instances[0]
 
         ebs_devs = list(vol.attach_data.device
-                                for vol in ec2_conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
-                                if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id()
-                                        and instance.root_device_name != vol.attach_data.device)
+            for vol in ec2_conn.get_all_volumes(filters={'attachment.instance-id': pl.get_instance_id()})
+            if vol.attach_data and vol.attach_data.instance_id == pl.get_instance_id()
+                    and instance.root_device_name != vol.attach_data.device)
 
         for device in ebs_devs:
             device = ebsvolume.name2device(device)
@@ -273,7 +300,7 @@ class RebundleStratery:
         # Ubuntu 10.04 mountall workaround
         # @see https://bugs.launchpad.net/ubuntu/+source/mountall/+bug/649591
         # @see http://alestic.com/2010/09/ec2-bug-mountall
-        if disttool.is_ubuntu() and disttool.version_info() >= (10, 4):
+        if linux.os.ubuntu and linux.os['version'] >= (10, 4):
             for entry in fstab:
                 if entry.device in pl.instance_store_devices:
                     options = entry.options
@@ -331,7 +358,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
         self._platform = bus.platform
 
     def _get_arch(self):
-        arch = disttool.uname()[4]
+        arch = platform.uname()[4]
         if re.search("^i\d86$", arch):
             arch = "i386"
         return arch
@@ -356,23 +383,27 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             name = os.path.basename(image_file)
             manifest_file = os.path.join(destination, name + '.manifest.xml')
             bundled_file_path = os.path.join(destination, name + '.tar.gz.enc')
-            try:
-                user_public_key = X509.load_cert_string(user_cert_string).get_pubkey()
-            except:
-                LOG.error("Cannot read user EC2 certificate")
-                raise
-            try:
-                user_private_key = RSA.load_key_string(user_private_key_string)
-            except:
-                LOG.error("Cannot read user EC2 private key")
-                raise
-            try:
-                ec2_public_key = X509.load_cert_string(ec2_cert_string).get_pubkey()
-            except:
-                LOG.error("Cannot read EC2 certificate")
-                raise
-            key = key or hexlify(Rand.rand_bytes(16))
-            iv = iv or hexlify(Rand.rand_bytes(8))
+            user_cert_path = bus.cnf.write_key('aws-cert.pem', user_cert_string)
+            user_private_key_path = bus.cnf.write_key('aws-pkey.pem', user_private_key_string)
+            ec2_cert_path = bus.cnf.write_key('aws-cloud-cert.pem', ec2_cert_string)
+
+            # try:
+            #     user_public_key = X509.load_cert_string(user_cert_string).get_pubkey()
+            # except:
+            #     LOG.error("Cannot read user EC2 certificate")
+            #     raise
+            # try:
+            #     user_private_key = RSA.load_key_string(user_private_key_string)
+            # except:
+            #     LOG.error("Cannot read user EC2 private key")
+            #     raise
+            # try:
+            #     ec2_public_key = X509.load_cert_string(ec2_cert_string).get_pubkey()
+            # except:
+            #     LOG.error("Cannot read EC2 certificate")
+            #     raise
+            key = key or hexlify(os.urandom(16))
+            iv = iv or hexlify(os.urandom(8))
             LOG.debug('Key: %s', key)
             LOG.debug('IV: %s', iv)
 
@@ -385,7 +416,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             # piped via several processes. The tee is used to allow a
             # digest of the file to be calculated without having to re-read
             # it from disk.
-            openssl = "/usr/sfw/bin/openssl" if disttool.is_sun() else "openssl"
+            openssl = "openssl"
             tar = Tar()
             tar.create().dereference().sparse()
             tar.add(os.path.basename(image_file), os.path.dirname(image_file))
@@ -436,11 +467,21 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 
             # Encrypt key and iv.
             LOG.info("Encrypting keys")
-            padding = RSA.pkcs1_padding
-            user_encrypted_key = hexlify(user_public_key.get_rsa().public_encrypt(key, padding))
-            ec2_encrypted_key = hexlify(ec2_public_key.get_rsa().public_encrypt(key, padding))
-            user_encrypted_iv = hexlify(user_public_key.get_rsa().public_encrypt(iv, padding))
-            ec2_encrypted_iv = hexlify(ec2_public_key.get_rsa().public_encrypt(iv, padding))
+
+            # padding = RSA.pkcs1_padding
+            # user_encrypted_key = hexlify(user_public_key.get_rsa().public_encrypt(key, padding))
+            # ec2_encrypted_key = hexlify(ec2_public_key.get_rsa().public_encrypt(key, padding))
+            # user_encrypted_iv = hexlify(user_public_key.get_rsa().public_encrypt(iv, padding))
+            # ec2_encrypted_iv = hexlify(ec2_public_key.get_rsa().public_encrypt(iv, padding))
+            def public_encrypt(cert_path, data):
+                return hexlify(system2(
+                        'openssl rsautl -encrypt -inkey {0} -certin -pkcs'.format(cert_path), 
+                        stdin=data, shell=True)[0])
+
+            user_encrypted_key = public_encrypt(user_cert_path, key)
+            ec2_encrypted_key = public_encrypt(ec2_cert_path, key)
+            user_encrypted_iv = public_encrypt(user_cert_path, iv)
+            ec2_encrypted_iv = public_encrypt(ec2_cert_path, iv)
             LOG.debug("Keys encrypted")
 
             # Digest parts.
@@ -449,7 +490,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             # Create bundle manifest
             bdm = list((name, device) for name, device in self._platform.block_devs_mapping()
                             if not name.startswith('ephemeral'))
-            bdm += EPH_STORAGE_MAPPING[disttool.arch()].items()
+            bdm += EPH_STORAGE_MAPPING[linux.os['arch']].items()
 
             manifest = AmiManifest(
                     name=name,
@@ -463,7 +504,7 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
                     user_encrypted_iv=user_encrypted_iv,
                     ec2_encrypted_iv=ec2_encrypted_iv,
                     image_digest=digest,
-                    user_private_key=user_private_key,
+                    user_private_key_path=user_private_key_path,
                     kernel_id=self._platform.get_kernel_id(),
                     ramdisk_id=self._platform.get_ramdisk_id(),
                     ancestor_ami_ids=self._platform.get_ancestor_ami_ids(),
@@ -486,8 +527,8 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
             f = None
             try:
                 f = open(part_filename)
-                digest = EVP.MessageDigest(DIGEST_ALGO)
-                part_digests.append((part_name, hexlify(cryptotool.digest_file(digest, f))))
+                digest = hashlib.sha1()
+                part_digests.append((part_name, hexlify(self._digest_file(digest, f))))
             except (Exception, BaseException):
                 LOG.error("Cannot generate digest for chunk '%s'", part_name)
                 raise
@@ -495,6 +536,15 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
                 if f is not None:
                     f.close()
         return part_digests
+
+
+    def _digest_file(self, digest, fp):
+        while 1:
+            buf = fp.read(READ_BUF_SIZE)
+            if not buf:
+                break;
+            digest.update(buf)
+        return digest.digest()
 
 
     def _upload_image(self, bucket_name, manifest_path, manifest, region=None, acl="aws-exec-read"):
@@ -542,7 +592,6 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
         manifest_path = os.path.join(self._platform.scalrfs.images(), os.path.basename(manifest_path))
         return manifest_path.split('s3://')[1]
 
-
     def _register_image(self, s3_manifest_path):
         try:
             LOG.info("Registering image '%s'", s3_manifest_path)
@@ -559,7 +608,6 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
         except (BaseException, Exception), e:
             LOG.error("Cannot register image on EC2. %s", e)
             raise
-
 
     def run(self):
         image_file = os.path.join(self._destination, self._image_name)
@@ -596,20 +644,24 @@ class RebundleInstanceStoreStrategy(RebundleStratery):
 
 
 class RebundleEbsStrategy(RebundleStratery):
-    _volsize = None
     _volume_id = None
     _platform = None
     _snap = None
 
     _succeed = None
 
-    def __init__(self, handler, role_name, image_name, excludes, volume='/',
-                            volume_id=None, volume_size=None):
+    def __init__(self,
+        handler,
+        role_name,
+        image_name,
+        excludes,
+        volume='/',
+        volume_id=None, 
+        ebs_type_template=None):
         RebundleStratery.__init__(self, handler, role_name, image_name, excludes, volume)
         self._volume_id = volume_id
-        self._volsize = volume_size
+        self._ebs_type_template = ebs_type_template.copy() if ebs_type_template else {}
         self._platform = bus.platform
-
 
     def _create_shapshot(self):
         self._image.umount()
@@ -631,14 +683,14 @@ class RebundleEbsStrategy(RebundleStratery):
     def _register_image(self):
         instance = self._ec2_conn.get_all_instances((self._platform.get_instance_id(), ))[0].instances[0]
 
-        root_device_type = EBSBlockDeviceType()
+        root_device_type = EBSBlockDeviceType(**self._ebs_type_template)
         root_device_type.snapshot_id = self._snap.id
         root_device_type.delete_on_termination = True
 
         bdmap = BlockDeviceMapping(self._ec2_conn)
 
         # Add ephemeral devices
-        for eph, device in EPH_STORAGE_MAPPING[disttool.arch()].items():
+        for eph, device in EPH_STORAGE_MAPPING[linux.os['arch']].items():
             bdt = EBSBlockDeviceType(self._ec2_conn)
             bdt.ephemeral_name = eph
             bdmap[device] = bdt
@@ -651,7 +703,7 @@ class RebundleEbsStrategy(RebundleStratery):
             bdmap[instance.root_device_name] = root_device_type
 
         LOG.info('Registering image')
-        ami_id = self._ec2_conn.register_image(self._image_name, architecture=disttool.arch(),
+        ami_id = self._ec2_conn.register_image(self._image_name, architecture=linux.os['arch'],
                         kernel_id=self._platform.get_kernel_id(), ramdisk_id=self._platform.get_ramdisk_id(),
                         root_device_name=instance.root_device_name, block_device_map=bdmap)
 
@@ -671,15 +723,18 @@ class RebundleEbsStrategy(RebundleStratery):
         LOG.info('Image registered and available for use!')
         return ami_id
 
-
     def run(self):
         self._succeed = False
 
         # Bundle image
         self._ec2_conn = self._platform.new_ec2_conn()
-        self._image = LinuxEbsImage(self._volume, self._ec2_conn,
-                                self._platform.get_avail_zone(), self._platform.get_instance_id(),
-                                self._volsize, self._volume_id, self._excludes)
+        self._image = LinuxEbsImage(self._volume,
+            self._ec2_conn,
+            self._platform.get_avail_zone(),
+            self._platform.get_instance_id(),
+            self._volume_id,
+            {'size': self._ebs_type_template['size']},
+            self._excludes)
 
         self._bundle_vol(self._image)
 
@@ -702,8 +757,6 @@ class RebundleEbsStrategy(RebundleStratery):
             self._snap.destroy()
 
 
-
-
 class LinuxEbsImage(rebundle_hdlr.LinuxImage):
     '''
     This class encapsulate functionality to create a EBS from a root volume
@@ -711,29 +764,33 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
     _ec2_conn = None
     _avail_zone = None
     _instance_id = None
-    _volume_size = None
     ebs_volume = None
 
     copy_partition_table = None
 
-    def __init__(self, volume, ec2_conn, avail_zone, instance_id,
-                            volume_size=None, volume_id=None, excludes=None):
+    def __init__(self,
+        volume,
+        ec2_conn,
+        avail_zone,
+        instance_id,
+        volume_id=None,
+        config_template=None,
+        excludes=None):
         rebundle_hdlr.LinuxImage.__init__(self, volume, excludes=excludes)
         self._ec2_conn = ec2_conn
         self._avail_zone = avail_zone
         self._instance_id = instance_id
-        self._ebs_config = dict(type='ebs')
+        self._ebs_config = config_template.copy() if config_template else {}
+        self._ebs_config['type'] = 'ebs'
 
         if volume_id:
             self._ebs_config['id'] = volume_id
-        else:
-            self._ebs_config['size'] = volume_size
 
 
     def _create_image(self):
         self._ebs_config['tags'] = build_tags(state='temporary')
         self.ebs_volume = volume(self._ebs_config)
-        self.ebs_volume.ensure()
+        self.ebs_volume.ensure(fstab=False)
         return self.ebs_volume.device
 
 
@@ -823,7 +880,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
                     raise HandlerError("Can't create fs on device %s:\n%s" %
                                                     (to_dev, err))
 
-
         """ mounting and copy partitions """
         for from_dev in from_devs:
             num = os.path.basename(from_dev.device)[-1]
@@ -870,7 +926,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
 
         return self.mpoint
 
-
     def make(self):
         LOG.info("Make EBS volume (size: %sGb) from volume %s (excludes: %s)",
                         self._ebs_config['size'], self._volume, ":".join(self.excludes))
@@ -905,7 +960,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
         else:
             rebundle_hdlr.LinuxImage.make(self)
 
-
     def umount(self):
         if self.copy_partition_table:
             """ self.mpoint like `/mnt/img-mnt/sda2' root partition copy
@@ -919,7 +973,6 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
                     system2("umount -d " + mpt, shell=True, raise_exc=False)
         else:
             rebundle_hdlr.LinuxImage.umount(self)
-
 
     def cleanup(self):
         self.umount()
@@ -939,6 +992,11 @@ class LinuxEbsImage(rebundle_hdlr.LinuxImage):
         if self.ebs_volume:
             self.ebs_volume.destroy()
             self.ebs_volume = None
+
+        keys_dir = os.path.join(__node__['etc_dir'], 'private.d/keys')
+        coreutils.remove(os.path.join(keys_dir, 'aws-cert.pem'))
+        coreutils.remove(os.path.join(keys_dir, 'aws-pkey.pem'))
+        coreutils.remove(os.path.join(keys_dir, 'aws-cloud-cert.pem'))
 
 
 class AmiManifest:
@@ -961,7 +1019,7 @@ class AmiManifest:
     image_digest = None
     digest_algo = None
     crypto_algo = None
-    user_private_key = None
+    user_private_key_path = None
     kernel_id = None
     ramdisk_id = None
     product_codes = None
@@ -974,7 +1032,7 @@ class AmiManifest:
                             ec2_encrypted_key=None, user_encrypted_iv=None, ec2_encrypted_iv=None,
                             image_digest=None, digest_algo=DIGEST_ALGO, crypto_algo=CRYPTO_ALGO,
                             bundler_name=BUNDLER_NAME, bundler_version=BUNDLER_VERSION, bundler_release=BUNDLER_RELEASE,
-                            user_private_key=None, kernel_id=None, ramdisk_id=None, product_codes=None,
+                            user_private_key_path=None, kernel_id=None, ramdisk_id=None, product_codes=None,
                             ancestor_ami_ids=None, block_device_mapping=None):
         for key, value in locals().items():
             if key != "self" and hasattr(self, key):
@@ -1200,10 +1258,12 @@ class AmiManifest:
         # Get the XML for <machine_configuration> and <image> elements and sign them.
         string_to_sign = machine_config_elem.toxml() + image_elem.toxml()
 
-        digest = EVP.MessageDigest(self.digest_algo.lower())
+        digest = hashlib.sha1()
         digest.update(string_to_sign)
-        sig = hexlify(self.user_private_key.sign(digest.final()))
-        del digest
+        dig = digest.digest()
+
+        sig = hexlify(system2('openssl rsautl -sign -inkey {0}'.format(self.user_private_key_path), 
+                        shell=True, stdin=dig)[0])
 
         # /manifest/signature
         signature_elem = el("signature")
@@ -1263,7 +1323,7 @@ class Ec2RebundleWindowsHandler(Handler):
                 ec2_conf.write(ec2config_cnf_path)
 
             os_info = {}
-            uname = disttool.uname()
+            uname = platform.uname()
             os_info['version'] = uname[2]
             os_info['string_version'] = ' '.join(uname).strip()
 

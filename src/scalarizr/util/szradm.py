@@ -295,7 +295,7 @@ class GetHttpsCertificateCommand(Command):
         (cert, pkey, cacert)=result
         yield [cert, pkey, cacert]
 
-
+# DEPRECATED
 class ListRoleParamsCommand(Command):
     name = "list-role-params"
     method = "list_role_params"
@@ -337,7 +337,7 @@ class ListVirtualhostsCommand(Command):
         for d in result:
             yield [d.hostname, d.https, d.type, d.raw]
 
-
+# DEPRECATED
 class ListScriptsCommand(Command):
     name = "list-scripts"
     method = "list_scripts"
@@ -688,19 +688,6 @@ def main():
 
             qe = new_queryenv()
             out = qe.fetch(*args, params=kv)
-            try:
-                xml = ET.XML(out)
-                glob_vars = xml[0]
-                i = 0
-                for _ in xrange(len(glob_vars)):
-                    var = glob_vars[i]
-                    if int(var.attrib.get('private', 0)) == 1:
-                        glob_vars.remove(var)
-                        continue
-                    i += 1
-                out = ET.tostring(xml)
-            except:
-                pass
             print minidom.parseString(out).toprettyxml(encoding='utf-8')
 
         if options.msgsnd:

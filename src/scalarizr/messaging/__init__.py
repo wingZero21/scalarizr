@@ -373,6 +373,8 @@ class Messages:
 
     UPDATE_SERVICE_CONFIGURATION_RESULT = "UpdateServiceConfigurationResult"
 
+    SSL_CERTIFICATE_UPDATE = "SSLCertificateUpdate"
+
     ###
     # Internal events
     ###
