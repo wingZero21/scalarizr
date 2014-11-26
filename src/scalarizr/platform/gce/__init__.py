@@ -190,7 +190,7 @@ class GcePlatform(platform.Platform):
         self.compute_svc_mgr = GoogleServiceManager(
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
-                self, 'storage', 'v1beta2', *STORAGE_FULL_SCOPE)
+                self, 'storage', 'v1', *STORAGE_FULL_SCOPE)
         self._compute_conn_pool = GCEConnectionPool(
                 'compute', 'v1', COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
         self._storage_conn_pool = GCEConnectionPool(
