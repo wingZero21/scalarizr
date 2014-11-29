@@ -673,7 +673,8 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
         self.mysql_cli = MySQLClient()
 
 
-        if linux.os.ubuntu and linux.os['version'] >= (10, 4):
+        if (linux.os.ubuntu and linux.os['release'] >= (10, 4)) or \
+            (linux.os.redhat_family and linux.os['release'] >= (7, 0)):
             initd_script = ('/usr/sbin/service', 'mysql')
         else:
             initd_script = firstmatched(os.path.exists, ('/etc/init.d/mysqld', '/etc/init.d/mysql'))

@@ -117,7 +117,7 @@ else:
         }
         """})
 
-    if "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
+    if linux.os.redhat_family and linux.os["release"] >= (7, 0):
         initd_script = {"initd_script": ("/usr/sbin/service", "httpd")}
     else:
         initd_script = {"initd_script": "/etc/init.d/httpd"}
