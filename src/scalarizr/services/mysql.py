@@ -672,10 +672,14 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
         self.mysql_cli = MySQLClient()
 
-
-        if (linux.os.ubuntu and linux.os['release'] >= (10, 4)) or \
-            (linux.os.redhat_family and linux.os['release'] >= (7, 0)):
-            initd_script = ('/usr/sbin/service', 'mysql')
+        rhel_7_gte = linux.os.redhat_family and linux.os['release'] >= (7, 0)
+        if (linux.os.ubuntu and linux.os['release'] >= (10, 4)) or rhel_7_gte:
+            if rhel_7_gte and \
+                    system2('systemctl list-unit-files | grep mariadb', raise_exc=False, shell=True)[2] == 0:
+                service_name = 'mariadb'
+            else:
+                service_name = 'mysql'
+            initd_script = ('/usr/sbin/service', service_name)
         else:
             initd_script = firstmatched(os.path.exists, ('/etc/init.d/mysqld', '/etc/init.d/mysql'))
 
