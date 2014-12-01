@@ -165,7 +165,7 @@ class UpdClient(util.Server):
             self._start_api()  
             # Starting API before bootstrap is important for situation, when 
             # Scalarizr daemon is started in a parallel and required to know that 
-            # update is in-progress to shutdown
+            # update is in-progress
 
             self.running = True  
             # It should be here, cause self.api.bootstrap() on Windows

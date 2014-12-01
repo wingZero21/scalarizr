@@ -498,8 +498,8 @@ def release():
 
     # Sync rpm, apt(plain) and win repos
     includes = ('rpm/', 'rpm/latest**', 'rpm/stable**',
-                'apt-plain/', 'apt-plain/latest**', 'apt-plain/stable**',
-                'win/', 'win/latest**', 'win/stable**')
+                'apt-plain/', 'apt-plain/latest**', 'apt-plain/stable**')
+    #            'win/', 'win/latest**', 'win/stable**')
     includes_cmd = []
     for include in includes:
         includes_cmd.append('--include')

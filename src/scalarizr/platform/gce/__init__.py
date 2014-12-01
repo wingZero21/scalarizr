@@ -164,19 +164,7 @@ class GCEConnectionPool(LocalPool):
 
 
 class GCEConnectionProxy(platform.ConnectionProxy):
-
-    def __call__(self, *args, **kwds):
-        for retry in range(2):
-            try:
-                return self.obj(*args, **kwds)
-            except:
-                e = sys.exc_info()[1]
-                if isinstance(e, ConnectionError):
-                    self.conn_pool.dispose_local()
-                    raise
-                continue
-        self.conn_pool.dispose_local()
-        raise ConnectionError(e)
+    pass
 
 
 class GcePlatform(platform.Platform):
@@ -190,7 +178,7 @@ class GcePlatform(platform.Platform):
         self.compute_svc_mgr = GoogleServiceManager(
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
-                self, 'storage', 'v1', *STORAGE_FULL_SCOPE)
+                self, 'storage', 'v1beta2', *STORAGE_FULL_SCOPE)
         self._compute_conn_pool = GCEConnectionPool(
                 'compute', 'v1', COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
         self._storage_conn_pool = GCEConnectionPool(
@@ -267,13 +255,11 @@ class GcePlatform(platform.Platform):
 
 
     def get_compute_conn(self):
-        conn = self._compute_conn_pool.get()
-        return GCEConnectionProxy(conn, self._compute_conn_pool) 
+        return GCEConnectionProxy(self._compute_conn_pool)
 
 
     def get_storage_conn(self):
-        conn = self._storage_conn_pool.get()
-        return GCEConnectionProxy(conn, self._storage_conn_pool) 
+        return GCEConnectionProxy(self._storage_conn_pool)
 
 
     def new_compute_client(self):

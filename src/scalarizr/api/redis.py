@@ -453,6 +453,7 @@ class RedisAPI(BehaviorAPI):
     def do_check_software(cls, system_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
+        requirements = None
         if os_name == 'ubuntu':
             if os_vers >= '14':
                 requirements = ['redis-server>=2.6,<2.9']
@@ -470,7 +471,7 @@ class RedisAPI(BehaviorAPI):
         elif os_name == 'amazon':
             if os_vers >= '2014':
                 requirements = ['redis>=2.8,<2.9']
-        else:
+        if requirements is None:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))

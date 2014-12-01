@@ -603,6 +603,9 @@ class PerconaExec(Exec):
             if linux.os['family'] in ('RedHat', 'Oracle'):
                 url = 'http://www.percona.com/downloads/percona-release/percona-release-0.0-1.%s.rpm' % linux.os['arch']
                 pkgmgr.YumPackageMgr().localinstall(url)
+                if linux.os.amazon:
+                    linux.system(("sed -i 's/\$releasever/latest/g' "
+                                    "/etc/yum.repos.d/Percona.repo"), shell=True)
             else:
                 try:
                     codename = linux.os['lsb_codename']

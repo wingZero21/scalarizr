@@ -857,11 +857,12 @@ class ApacheAPI(BehaviorAPI):
 
     @classmethod
     def do_check_software(cls, system_packages=None):
+        requirements = None
         if linux.os.debian_family:
             requirements = [['apache2>=2.2,<2.5'], ['apache2.2-common>=2.2,<2.3']]
         elif linux.os.redhat_family or linux.os.oracle_family:
             requirements = [['httpd>=2.2,<2.5'], ['httpd24']]
-        else:
+        if requirements is None:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))
