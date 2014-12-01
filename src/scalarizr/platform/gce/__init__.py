@@ -169,6 +169,8 @@ class GCEConnectionProxy(platform.ConnectionProxy):
 
 class GcePlatform(platform.Platform):
     compute_api_version = 'v1'
+    storage_api_version = 'v1'
+
     metadata_url = 'http://metadata/computeMetadata/v1/'
     _metadata = None
     name = BuiltinPlatforms.GCE
@@ -178,7 +180,7 @@ class GcePlatform(platform.Platform):
         self.compute_svc_mgr = GoogleServiceManager(
                 self, 'compute', self.compute_api_version, *(COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE))
         self.storage_svs_mgr = GoogleServiceManager(
-                self, 'storage', 'v1beta2', *STORAGE_FULL_SCOPE)
+                self, 'storage', self.storage_api_version, *STORAGE_FULL_SCOPE)
         self._compute_conn_pool = GCEConnectionPool(
                 'compute', 'v1', COMPUTE_RW_SCOPE + STORAGE_FULL_SCOPE)
         self._storage_conn_pool = GCEConnectionPool(
