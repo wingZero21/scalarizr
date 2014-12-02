@@ -24,9 +24,9 @@ class PerconaAPI(mysql.MySQLAPI):
 
     @classmethod
     def do_check_software(cls, system_packages=None):
-        system_packages = system_packages or pkgmgr.package_mgr().list()
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
+        requirements = None
         if os_name == 'ubuntu' and os_vers >= '14':
             requirements = [
                 ['percona-server-server-5.1', 'percona-server-client-5.1' ],
@@ -48,7 +48,8 @@ class PerconaAPI(mysql.MySQLAPI):
                     ['Percona-Server-server-51', 'Percona-Server-client-51'],
                     ['Percona-Server-server-55', 'Percona-Server-client-55']
                 ]
-        else:
+
+        if requirements is None:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))

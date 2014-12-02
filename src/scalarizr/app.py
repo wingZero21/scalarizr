@@ -10,7 +10,7 @@ except ImportError:
 # Core
 from scalarizr import __version__
 from scalarizr import config, rpc, linux, api
-from scalarizr import node
+from scalarizr.node import __node__
 from scalarizr.linux import coreutils
 
 from scalarizr.bus import bus
@@ -193,7 +193,7 @@ def _init():
     
     # Initialize configuration
     if not bus.etc_path:
-        bus.etc_path = node.__node__['etc_dir']
+        bus.etc_path = __node__['etc_dir']
     cnf = ScalarizrCnf(bus.etc_path)
     if not os.path.exists(cnf.private_path()):
         os.makedirs(cnf.private_path())
@@ -201,7 +201,7 @@ def _init():
     
     # Find shared resources dir
     if not bus.share_path:
-        bus.share_path = node.__node__['share_dir']
+        bus.share_path = __node__['share_dir']
     
     # Registering in init.d
     initdv2.explore("scalarizr", ScalarizrInitScript)
@@ -332,7 +332,7 @@ def _apply_user_data(from_scalr=True):
         logger.debug('User-data (QueryEnv):\n%s', pprint.pformat(user_data))
     else:
         meta = metadata.Metadata()
-        user_data = meta['user_data']
+        user_data = meta.user_data()
         logger.debug('User-data (Instance):\n%s', pprint.pformat(user_data))
  
     def g(key):
@@ -382,7 +382,7 @@ def _apply_user_data(from_scalr=True):
 def _detect_scalr_version():
     pl = bus.platform
     cnf = bus.cnf
-    if pl and cnf.state != ScalarizrState.IMPORTING:
+    if pl and __node__['state'] != 'importing':
         if pl.get_user_data('cloud_storage_path'):
             if pl.get_user_data('env_id'):
                 return (3, 5, 3)
@@ -573,7 +573,7 @@ class Service(object):
         # Starting scalarizr daemon initialization
         globals()['_pid'] = pid = os.getpid()
         self._logger.info('[pid: %d] Starting scalarizr %s', pid, __version__)
-        node.__node__['start_time'] = time.time()
+        __node__['start_time'] = time.time()
 
         if not 'Windows' == linux.os['family']:
             # Check for another running scalarzir
@@ -603,7 +603,7 @@ class Service(object):
         elif optparser and optparser.values.import_server:
             print "Starting import process..."
             print "Don't terminate Scalarizr until Scalr will create the new role"
-            cnf.state = ScalarizrState.IMPORTING
+            __node__['state'] = 'importing'
             # Load Command-line configuration options and auto-configure Scalarizr
 
             values = CmdLineIni.to_kvals(optparser.values.cnf)
@@ -612,8 +612,23 @@ class Service(object):
             self._logger.info('Configuring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
+        try:
+            server_id = __node__['server_id']
+        except KeyError:
+            server_id = None
+        if optparser and not optparser.values.import_server and server_id \
+                and __node__['state'] in ('importing', 'rebundling'):
+            # This role was bundled with Cloud API call (i.e. CreateImage)
+            # Now we're starting with a new server and should reset it's state
+            self._logger.info(('This image was bundled with cloud API call. '
+                    'Cleauping ancestor server data'))
+            _cleanup_after_rebundle()
+            __node__['state'] = 'bootstrapping'
 
-        if not os.path.exists(cnf.private_path('.state')):
+        if __node__['state'] == 'unknown':
+            __node__['state'] = 'bootstrapping'
+
+        if __node__['state'] == 'bootstrapping':
             _apply_user_data(from_scalr=False)
 
         # Load INI files configuration
@@ -624,50 +639,6 @@ class Service(object):
         _init_platform()
         pl = bus.platform
 
-        # Check that service started after dirty bundle
-        if not optparser.values.import_server and \
-            ini.has_option(config.SECT_GENERAL, config.OPT_SERVER_ID):
-
-            server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-            if pl.name == 'openstack' and cnf.state != ScalarizrState.IMPORTING:
-                if cnf.state == ScalarizrState.REBUNDLING:
-                    # XXX: temporary workaround
-                    # XXX: rackspace injects files and boots OS in a parallell. There were situations when
-                    # .user-data file was stale and new server started from rebundled image
-                    # toughts that he's an old server and continue rebundling
-                    time.sleep(30)
-
-                # locs = ['/etc/.scalr-user-data', cnf.private_path('.user-data')]
-                # wait_until(lambda: any(map(lambda x: os.path.exists(x), locs)),
-                #         timeout=60, error_text="user-data file not found in the following locations: %s" % locs)
-            
-            # When server bundled by Scalr, often new server are spawned in "importing" state
-            # and its important to query user-data first, to override server-id that was bundled.
-            try:
-                ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
-            except:
-                if cnf.state == ScalarizrState.IMPORTING:
-                    ud_server_id = None
-                else:
-                    raise
-
-            if server_id and ud_server_id and server_id != ud_server_id:
-                self._logger.info('Server was started after rebundle. Performing some cleanups')
-                _cleanup_after_rebundle()
-                _apply_user_data(from_scalr=False)
-                cnf.state = ScalarizrState.BOOTSTRAPPING
-
-        if cnf.state == ScalarizrState.UNKNOWN:
-            cnf.state = ScalarizrState.BOOTSTRAPPING
-        '''
-        if cnf.state == ScalarizrState.REBUNDLING:
-            server_id = ini.get(config.SECT_GENERAL, config.OPT_SERVER_ID)
-            ud_server_id = pl.get_user_data(UserDataOptions.SERVER_ID)
-            if server_id and ud_server_id and server_id != ud_server_id:
-                logger.info('Server was started after rebundle. Performing some cleanups')
-                _cleanup_after_rebundle()
-                cnf.state = ScalarizrState.BOOTSTRAPPING
-        '''
         if linux.os.windows:
             self._wait_sysprep_oobe()
 
@@ -676,14 +647,11 @@ class Service(object):
 
         STATE['global.start_after_update'] = int(bool(STATE['global.version'] and STATE['global.version'] != __version__))
         STATE['global.version'] = __version__
-
-        # At first startup platform user-data should be applied
-        #if cnf.state == ScalarizrState.BOOTSTRAPPING:
-        #    cnf.fire('apply_user_data', cnf)
             
-        if node.__node__['state'] != 'importing':
+        if __node__['state'] != 'importing':
             self._talk_to_updclient()
-        else:
+
+        if __node__['state'] == 'importing':
             try:
                 pkgmgr.updatedb()
             except:
@@ -714,16 +682,16 @@ class Service(object):
         # Initialize scalarizr services
         self._init_services()
         
-        if STATE['global.start_after_update'] and ScalarizrState.RUNNING:
+        if STATE['global.start_after_update'] and __node__['state'] == 'running':
             self._logger.info('Scalarizr was updated to %s', __version__)
-            node.__node__['messaging'].send(
+            __node__['messaging'].send(
                 'HostUpdate',
                 body={'scalarizr': {'version': __version__}}
             )
 
-        if node.__node__['state'] == 'running':
+        if __node__['state'] == 'running':
             # ReSync user-data
-            _apply_user_data()
+            _apply_user_data(from_scalr=True)
         try:
             bus.fire('init')
         except:
@@ -807,15 +775,15 @@ class Service(object):
 
 
     def _select_control_ports(self):
-        defaults = node.__node__['defaults']['base']
+        defaults = __node__['defaults']['base']
 
-        if node.__node__['state'] != 'importing':
+        if __node__['state'] != 'importing':
             try:
-                api_port = int(node.__node__['base']['api_port'])
+                api_port = int(__node__['base']['api_port'])
             except KeyError, ValueError:
                 api_port = defaults['api_port']
             try:
-                messaging_port = int(node.__node__['base']['messaging_port'])
+                messaging_port = int(__node__['base']['messaging_port'])
             except KeyError, ValueError:
                 messaging_port = defaults['messaging_port']
 
@@ -827,7 +795,7 @@ class Service(object):
             api_port = defaults['api_port']
             messaging_port = defaults['messaging_port']
 
-        node.__node__['base'].update({
+        __node__['base'].update({
             'api_port': api_port,
             'messaging_port': messaging_port
             })  
@@ -867,7 +835,7 @@ class Service(object):
         bus.scalr_url = urlunparse((pr.scheme, pr.netloc, '', '', '', ''))
         logger.debug("Got scalr url: '%s'" % bus.scalr_url)
 
-        if not linux.os.windows and node.__node__['platform'].name == 'openstack':
+        if not linux.os.windows and __node__['platform'].name == 'openstack':
             self._try_resolver(bus.scalr_url)
 
         # Create periodical executor for background tasks (cleanup, rotate, gc, etc...)
@@ -889,9 +857,9 @@ class Service(object):
         bus.queryenv_service = queryenv
         bus.queryenv_version = tuple(map(int, queryenv.api_version.split('-')))
 
-        if node.__node__['state'] != 'importing':
-            lfrp = bus.queryenv_service.list_farm_role_params(node.__node__['farm_role_id'])['params']
-            node.__node__['base'].update(lfrp.get('base', {}))
+        if __node__['state'] != 'importing':
+            lfrp = bus.queryenv_service.list_farm_role_params(__node__['farm_role_id'])['params']
+            __node__['base'].update(lfrp.get('base', {}))
         ports_non_default = self._select_control_ports()
 
         logger.debug("Initialize messaging")
@@ -900,7 +868,7 @@ class Service(object):
             params = dict(ini.items("messaging_" + messaging_adp))
             if ports_non_default:
                 consumer_url = list(urlparse(params[P2pConfigOptions.CONSUMER_URL]))
-                consumer_url[1] = ':'.join((consumer_url[1].split(':')[0], str(node.__node__['base']['messaging_port'])))
+                consumer_url[1] = ':'.join((consumer_url[1].split(':')[0], str(__node__['base']['messaging_port'])))
                 params[P2pConfigOptions.CONSUMER_URL] = urlunparse(consumer_url)
 
             params[P2pConfigOptions.SERVER_ID] = server_id
@@ -914,7 +882,7 @@ class Service(object):
         optparser = bus.optparser
         if optparser and not optparser.values.import_server and linux.os['family'] != 'Windows':
             system_packages = pkgmgr.package_mgr().list()
-            for behavior in node.__node__['behavior']:
+            for behavior in __node__['behavior']:
                 if behavior in ['base', 'mongodb'] or behavior not in api.api_routes.keys():
                     continue
                 try:
@@ -926,7 +894,7 @@ class Service(object):
                     if e.args[0] == 'chef':
                         # We pass it, cause a lot of roles has chef behavior without chef installed on them
                         continue
-                    node.__node__['messaging'].send(
+                    __node__['messaging'].send(
                         'RuntimeError',
                         body={
                             'code': 'UnsupportedBehavior',
@@ -967,15 +935,15 @@ class Service(object):
             class ThreadingWSGIServer(SocketServer.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
                 pass
             bus.api_server = wsgiref.simple_server.make_server('0.0.0.0',
-                                node.__node__['base']['api_port'], 
+                                __node__['base']['api_port'], 
                                 api_app, 
                                 server_class=ThreadingWSGIServer)
 
         if ports_non_default:
             msg = msg_service.new_message('HostUpdate', None, {
                 'base': {
-                    'api_port': node.__node__['base']['api_port'],
-                    'messaging_port': node.__node__['base']['messaging_port']
+                    'api_port': __node__['base']['api_port'],
+                    'messaging_port': __node__['base']['messaging_port']
                 }
             })
             msg_service.get_producer().send(Queues.CONTROL, msg)
@@ -993,7 +961,7 @@ class Service(object):
 
         # Start API server
         api_server = bus.api_server
-        self._logger.info('Starting API server on http://0.0.0.0:%s', node.__node__['base']['api_port'])
+        self._logger.info('Starting API server on http://0.0.0.0:%s', __node__['base']['api_port'])
         api_thread = threading.Thread(target=api_server.serve_forever, name='API server')
         api_thread.start()
 
@@ -1007,10 +975,18 @@ class Service(object):
             upd_svs = ScalrUpdClientScript()
             if not upd_svs.running:
                 upd_svs.start()
-            upd_state = [None]
+            upd_state = [None, 0]
             def upd_ready():
                 try:
                     upd_state[0] = upd.status()['state']
+                    if upd_state[0].startswith('in-progress'):
+                        # For in-progress state skip 1 attempt, to handle situation when
+                        # UpdateClient is installing new Scalarizr, 
+                        # and at the end of postinst script Scalarizr is restarted, 
+                        # and then new process is asked for status before package installation command is finished, 
+                        # and UpdateClient changed it's state to completed
+                        upd_state[1] += 1
+                        return upd_state[1] >= 2
                     return upd_state[0] != 'noop'
                 except (IOError, socket.error), exc:
                     self._logger.debug('Failed to get UpdateClient status: %s', exc)
@@ -1210,7 +1186,7 @@ if 'Windows' == linux.os['family']:
 
 
         def SvcShutdown(self):
-            if node.__node__['state'] != 'running':
+            if __node__['state'] != 'running':
                 return          
             Flag.set(Flag.REBOOT)
             srv = bus.messaging_service

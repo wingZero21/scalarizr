@@ -24,6 +24,7 @@ aptly_conf = None
 aptly_prefix = None
 gpg_key = '04B54A2A'
 remote_repo_host = 'sl6.scalr.net'
+remote_repo_user = 'root'
 remote_repo_port = 60022
 remote_repo_dir = '/var/www/repo'
 build_number_file = os.path.join(project_dir, '.build_number')
@@ -103,7 +104,7 @@ def init():
             if re.search(r'^[0-9a-f]{8,40}$', head):
                 revision = head
                 ref = local("git branch -r --contains HEAD", capture=True).strip()
-                ref = re.search(r'origin/(.*)', ref).group(1)
+                ref = re.search(r'origin/(.*)$', ref).group(1)
             else:
                 ref = re.search(r'ref: refs/heads/(.*)', head).group(1)
                 revision = local("git rev-parse HEAD", capture=True)
@@ -336,8 +337,11 @@ def publish_deb():
     time0 = time.time()
     try:
         init()
-        if '* [%s]' % repo not in local('aptly repo list', capture=True):
+        if '[%s]' % repo not in local('aptly repo list', capture=True):
             local('aptly repo create -distribution {0} {0}'.format(repo))
+        if '[%s]' % repo not in local('aptly publish list', capture=True):
+            local(('aptly publish repo -gpg-key={0} '
+                    '-architectures i386,amd64 {1} {2}').format(gpg_key, repo, aptly_prefix))
         for pkg_arch in ('i386', 'amd64'):
             # remove previous version
             local('aptly repo remove {0} "Architecture ({1}), Name (~ {2}.*)"'.format(repo, pkg_arch, project))
@@ -345,8 +349,7 @@ def publish_deb():
             packages = glob.glob(artifacts_dir + '/*_{0}.deb'.format(pkg_arch))
             if packages:
                 local('aptly repo add {0} {1}'.format(repo, ' '.join(packages)))
-        local('aptly publish drop {0} {1} || :'.format(repo, aptly_prefix))
-        local('aptly publish repo -gpg-key={0} {1} {2} || :'.format(gpg_key, repo, aptly_prefix))
+        local('aptly publish update -gpg-key={0} {1} {2}'.format(gpg_key, repo, aptly_prefix))
         local('aptly db cleanup')
     finally:
         time_delta = time.time() - time0
@@ -495,8 +498,8 @@ def release():
 
     # Sync rpm, apt(plain) and win repos
     includes = ('rpm/', 'rpm/latest**', 'rpm/stable**',
-                'apt-plain/', 'apt-plain/latest**', 'apt-plain/stable**',
-                'win/', 'win/latest**', 'win/stable**')
+                'apt-plain/', 'apt-plain/latest**', 'apt-plain/stable**')
+    #            'win/', 'win/latest**', 'win/stable**')
     includes_cmd = []
     for include in includes:
         includes_cmd.append('--include')

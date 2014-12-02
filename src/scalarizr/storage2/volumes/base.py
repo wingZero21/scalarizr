@@ -64,7 +64,7 @@ class Volume(Base):
         self.features.update({'restore': True, 'grow': False, 'detach': True})
 
 
-    def ensure(self, mount=False, mkfs=False, fstab=False, **updates):
+    def ensure(self, mount=False, mkfs=False, fstab=True, **updates):
         """
         Make sure that volume is attached and ready for use.
 
@@ -95,10 +95,11 @@ class Volume(Base):
         if mount:
             if not self.is_fs_created() and mkfs:
                 LOG.debug('Creating %s filesystem: %s', self.fstype, self.id)
-                self.mkfs()                
-            LOG.debug('Mounting: %s', self.id)
-            self.mount()
-            if fstab and self.device not in mod_mount.fstab():
+                self.mkfs()
+            in_fstab = os.path.realpath(self.device) in mod_mount.fstab()
+            if not in_fstab:
+                self.mount()
+            if fstab and not in_fstab:
                 LOG.debug('Adding to fstab: %s', self.id)
                 mod_mount.fstab().add(self.device, self.mpoint, self.fstype)
         return self.config()
@@ -123,6 +124,9 @@ class Volume(Base):
             LOG.debug('Volume %s has no device, nothing to detach', self.id)
             return
         self.umount()
+        fstab = mod_mount.fstab()
+        if self.device in fstab:
+            fstab.remove(self.device)
         self._detach(force, **kwds)
         if self.features['detach']:
             self.device = None
@@ -135,9 +139,11 @@ class Volume(Base):
         if mounted_to == self.mpoint:
             return
         elif mounted_to:
+            LOG.debug('Umounting %s from %s', self.id, mounted_to)
             self.umount()
         if not os.path.exists(self.mpoint):
             os.makedirs(self.mpoint)
+        LOG.debug('Mounting %s to %s', self.id, self.mpoint)
         mod_mount.mount(self.device, self.mpoint)
         bus.fire("block_device_mounted", volume=self)
 
@@ -158,7 +164,10 @@ class Volume(Base):
             return False
 
         try:
-            return mod_mount.mounts()[self.device].mpoint
+            # mounts() resolve symlinks in MountEntry (e.g. /dev/group/lvol becomes /dev/md-N)
+            # we need to do the same to prevent KeyError for mounted device
+            device = os.path.realpath(self.device)
+            return mod_mount.mounts()[device].mpoint
         except KeyError:
             return False
 

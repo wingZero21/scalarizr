@@ -1,7 +1,6 @@
 import logging
 import os
 import shutil
-import importlib
 
 from scalarizr import linux
 from scalarizr import rpc
@@ -46,7 +45,7 @@ class ImageAPI(object):
         if not delegate:
             LOG.debug('platform object: %s, class: %s' % (__node__['platform'], type(__node__['platform'])))
             raise ImageAPIError('unknown platform: %s' % __node__['platform'].name)
-        module = importlib.import_module(delegate[0])
+        module = __import__(delegate[0], globals(), locals(), [delegate[1]], -1)
         return module.__getattribute__(delegate[1])()
 
     def init_delegate(self):
@@ -98,11 +97,12 @@ class ImageAPI(object):
                      'you can terminate Scalarizr now.')
 
     @rpc.command_method
-    def create(self, name=None, async=True):
+    def create(self, name=None, async=False):
         """ Creates image """
         self.init_delegate()
         return self._op_api.run('api.image.create',
             func=self._create,
+            async=async,
             func_kwds={'name': name},
             exclusive=True)
 

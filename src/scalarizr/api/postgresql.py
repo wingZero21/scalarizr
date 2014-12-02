@@ -178,12 +178,14 @@ class PostgreSQLAPI(BehaviorAPI):
             result['error'] = error_match.group()
             return result
 
-        diff_match = re.search(r'xlog_delay.+-\n -*\d+', out, re.DOTALL)  # [SCALARIZR-1642]
-        if not diff_match:
-            #if no error and query returns nothing
-            return result
+        split = out.split()  # [SCALARIZR-1642]
+        if split and "xlog_delay" in split[0] and len(split) > 2:
+            lag = split[2]
+            try:
+                result['xlog_delay'] = int(float(lag))
+            except ValueError:
+                pass
 
-        result['xlog_delay'] = diff_match.group().splitlines()[-1].strip()
         return result
 
     @rpc.query_method
@@ -221,7 +223,7 @@ class PostgreSQLAPI(BehaviorAPI):
 
         is_master = int(__postgresql__[OPT_REPLICATION_MASTER])
 
-        if not query_result['xlog_delay']:
+        if query_result['xlog_delay'] is None:
             if is_master:
                 return {'master': {'status': 'up'}}
             return {'slave': {'status': 'down',
@@ -361,9 +363,9 @@ class PostgreSQLAPI(BehaviorAPI):
                             
     @classmethod
     def do_check_software(cls, system_packages=None):
-        system_packages = system_packages or pkgmgr.package_mgr().list()
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
+        requirements = None
         if os_name == 'ubuntu':
             if os_vers >= '12':
                 requirements = [
@@ -407,7 +409,7 @@ class PostgreSQLAPI(BehaviorAPI):
                 ['postgresql92-server', 'postgresql92', 'postgresql92-devel'],
                 ['postgresql-server>=9.2,<9.3', 'postgresql>=9.2,<9.3', 'postgresql-devel>=9.2,<9.3'],
             ]
-        else:
+        if requirements is None:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))

@@ -108,59 +108,35 @@ def _create_swift_connection():
 
 class NovaConnectionProxy(platform.ConnectionProxy):
 
-    def __call__(self, *args, **kwds):
-        for retry in range(5):
-            try:
-                return self.obj(*args, **kwds)
-            except:
-                e = sys.exc_info()[1]
-                if isinstance(e, (
-                        novaclient.exceptions.Unauthorized,
-                        novaclient.exceptions.Forbidden)):
-                    self.conn_pool.dispose_local()
-                    raise InvalidCredentialsError(e)
-                time.sleep(1)
-                continue
-        self.conn_pool.dispose_local()
-        raise ConnectionError(e)
+    def invoke(self, *args, **kwds):
+        try:
+            return super(NovaConnectionProxy, self).invoke(*args, **kwds)
+        except (novaclient.exceptions.Unauthorized, novaclient.exceptions.Forbidden), e:
+            raise InvalidCredentialsError(e)
 
 
 class CinderConnectionProxy(platform.ConnectionProxy):
 
-    def __call__(self, *args, **kwds):
-        for retry in range(5):
-            try:
-                return self.obj(*args, **kwds)
-            except:
-                e = sys.exc_info()[1]
-                if isinstance(e, (
-                        cinderclient.exceptions.Unauthorized,
-                        cinderclient.exceptions.Forbidden)):
-                    self.conn_pool.dispose_local()
-                    raise InvalidCredentialsError(e)
-                time.sleep(1)
-                continue
-        self.conn_pool.dispose_local()
-        raise ConnectionError(e)
+    def invoke(self, *args, **kwds):
+        try:
+            return super(CinderConnectionProxy, self).invoke(*args, **kwds)
+        except (cinderclient.exceptions.Unauthorized, cinderclient.exceptions.Forbidden), e:
+            raise InvalidCredentialsError(e)
 
 
 class SwiftConnectionProxy(platform.ConnectionProxy):
 
-    def __call__(self, *args, **kwds):
-        for retry in range(5):
-            try:
-                return self.obj(*args, **kwds)
-            except:
-                e = sys.exc_info()[1]
-                if isinstance(e, swiftclient.ClientException) and (
-                        re.search(r'.*Unauthorised.*', e.msg) or \
-                        re.search(r'.*Authorization Failure.*', e.msg)):
-                    self.conn_pool.dispose_local()
-                    raise InvalidCredentialsError(e)
-                time.sleep(1)
-                continue
-        self.conn_pool.dispose_local()
-        raise ConnectionError(e)
+    def invoke(self, *args, **kwds):
+        try:
+            return super(SwiftConnectionProxy, self).invoke(*args, **kwds)
+        except:
+            e = sys.exc_info()[1]
+            if isinstance(e, swiftclient.ClientException) and (
+                    re.search(r'.*Unauthorised.*', e.msg) or \
+                    re.search(r'.*Authorization Failure.*', e.msg)):
+                raise InvalidCredentialssError(e)
+            else:
+                raise
 
 
 class OpenstackPlatform(platform.Platform):
@@ -295,16 +271,13 @@ class OpenstackPlatform(platform.Platform):
 
 
     def get_nova_conn(self):
-        conn = self._nova_conn_pool.get()
-        return NovaConnectionProxy(conn, self._nova_conn_pool)
+        return NovaConnectionProxy(self._nova_conn_pool)
 
     def get_cinder_conn(self):
-        conn = self._cinder_conn_pool.get()
-        return CinderConnectionProxy(conn, self._cinder_conn_pool)
+        return CinderConnectionProxy(self._cinder_conn_pool)
 
     def get_swift_conn(self):
-        conn = self._swift_conn_pool.get()
-        return SwiftConnectionProxy(conn, self._swift_conn_pool)
+        return SwiftConnectionProxy(self._swift_conn_pool)
 
 
 def get_platform():

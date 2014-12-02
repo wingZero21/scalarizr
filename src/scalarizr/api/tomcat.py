@@ -186,12 +186,12 @@ class TomcatAPI(BehaviorAPI):
 
     @classmethod
     def do_check_software(cls, system_packages=None):
-        system_packages = system_packages or pkgmgr.package_mgr().list()
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
         if cls.catalina_home_dir():
             return
         if linux.os.debian_family:
+            requirements_main = None
             if os_name == 'ubuntu':
                 if os_vers >= '12':
                     requirements_main = ['tomcat7']
@@ -206,6 +206,10 @@ class TomcatAPI(BehaviorAPI):
                 elif os_vers >= '6':
                     requirements_main = ['tomcat6']
                     requirements_dependencies = ['tomcat6-admin']
+            if requirements_main is None:
+                raise exceptions.UnsupportedBehavior(
+                        cls.behavior,
+                        "Not supported on {0} os family".format(linux.os['family']))
             installed = pkgmgr.check_software(requirements_main, system_packages)[0]
             try:
                 pkgmgr.check_software(requirements_dependencies, system_packages)

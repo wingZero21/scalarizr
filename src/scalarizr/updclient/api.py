@@ -151,6 +151,10 @@ class UpdClientAPI(object):
     def is_client_mode(self):
         return self.client_mode == 'client'
 
+    @property
+    def package_type(self):
+        return 'omnibus' if os.path.isdir('/opt/scalarizr/embedded') else 'fogyish'
+
     def state():
         # pylint: disable=E0211, E0202
         def fget(self):
@@ -361,32 +365,7 @@ class UpdClientAPI(object):
                     return
         if not system_matches:
             LOG.info('Initializing UpdateClient...')
-            LOG.info('Getting user-data')
-            try:
-                user_data = self.meta['user_data']
-            except metadata.NoUserDataError:
-                if 'NoData' in str(self.meta.provider_for_capability['instance_id']):
-                    retry_int = 5
-                    num_attempts = 10
-                    LOG.info('Found no user-data and no instance-id, '
-                             'this mean that all data providers failed. I should '
-                             'wait {0} seconds and retry'.format(retry_int))
-                    for attempt in range(0, num_attempts):
-                        time.sleep(retry_int)
-                        self.meta = metadata.Metadata()
-                        try:
-                            user_data = self.meta['user_data']
-                            break
-                        except metadata.NoUserDataError:
-                            if attempt == num_attempts - 1:
-                                LOG.error(('Still no user-data, '
-                                           'check why $ETC_DIR/.scalr-user-data not exists. '))
-                                raise
-                            else:
-                                LOG.debug(('Still no user-data, '
-                                           'retrying after {0} seconds...').format(retry_int))
-                else:
-                    raise
+            user_data = self.meta.user_data()
             norm_user_data(user_data)
             LOG.info('Applying configuration from user-data')
             self._update_self_dict(user_data)
@@ -470,11 +449,22 @@ class UpdClientAPI(object):
         try:
             self.pkgmgr.removed(self.package)
             if not linux.os.windows:
-                self.pkgmgr.removed('scalarizr', purge=True)
+                if linux.os.redhat_family:
+                    installed_ver = self.pkgmgr.info('scalarizr')['installed']
+                    cmd = 'rpm -e scalarizr'
+                    if installed_ver and distutils.version.LooseVersion(installed_ver) < '0.7':      
+                        # On CentOS 5 there is a case when scalarizr-0.6.24-5 has error 
+                        # in preun scriplet and cannot be uninstalled
+                        cmd += ' --noscripts'
+                    linux.system(cmd, shell=True, raise_exc=False)
+                else:
+                    self.pkgmgr.removed('scalarizr', purge=True)
+                self.pkgmgr.removed('scalarizr-base', purge=True)  # Compatibility with BuildBot packaging
                 if self.pkgmgr.info('scalr-upd-client')['installed']:
                     # Only latest package don't stop scalr-upd-client in postrm script
                     self.pkgmgr.latest('scalr-upd-client')
                     self.pkgmgr.removed('scalr-upd-client', purge=True)
+
         finally:
             if pid:
                 with open(pid_file, 'w+') as fp:
@@ -730,7 +720,7 @@ class UpdClientAPI(object):
         self.update_server.report(
             ok=ok, package=self.package, version=self.candidate or self.installed,
             server_id=self.server_id, scalr_id=self.scalr_id, scalr_version=self.scalr_version,
-            phase=self.state, dist=self.dist, error=error)
+            phase=self.state, dist=self.dist, error=error, package_type=self.package_type)
 
     @rpc.command_method
     def restart(self, force=False):
@@ -746,7 +736,7 @@ class UpdClientAPI(object):
             'messaging_url', 'scalr_id', 'scalr_version',
             'repository', 'repo_url', 'package', 'downgrades_enabled', 'executed_at',
             'ps_script_pid', 'ps_attempt',
-            'state', 'prev_state', 'error', 'dist'
+            'state', 'prev_state', 'error', 'dist', 'package_type'
         ]
 
         pkginfo_keys = ['candidate', 'installed']

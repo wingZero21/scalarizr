@@ -309,20 +309,21 @@ class MySQLAPI(BehaviorAPI):
 
     @classmethod
     def do_check_software(cls, system_packages=None):
-        system_packages = system_packages or pkgmgr.package_mgr().list()
+        requirements = None
         if linux.os.debian_family:
             requirements = [
                 ['mysql-server>=5.0,<5.7', 'mysql-client>=5.0,<5.7'],
                 ['mysql-server-5.1', 'mysql-client-5.1'],
                 ['mysql-server-5.5', 'mysql-client-5.5'],
                 ['mysql-server-5.6', 'mysql-client-5.6'],
+                ['percona-server-server-5.1', 'percona-server-client-5.1']
             ]
         elif linux.os.redhat_family or linux.os.oracle_family:
             requirements = [
                 ['mysql-server>=5.0,<5.6', 'mysql>=5.0,<5.6'],
                 ['mysql-server>=5.0,<5.6', 'mysql55'],
             ]
-        else:
+        if requirements is None:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))
