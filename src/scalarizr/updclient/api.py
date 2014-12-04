@@ -130,7 +130,6 @@ class UpdClientAPI(object):
     meta = None
     shutdown_ev = None
 
-    system_matches = False
 
     etc_path = __node__['etc_dir']
     share_path = bus.share_path = __node__['share_dir']
@@ -288,7 +287,8 @@ class UpdClientAPI(object):
             raise NoSystemUUID('System UUID not detected')
         return ret
 
-    def bootstrap(self, dry_run=False):
+
+    def match_system(self):
         try:
             self.system_id = self.get_system_id()
         except:
@@ -314,8 +314,16 @@ class UpdClientAPI(object):
             else:
                 LOG.debug('Serial number in lock file matches machine one')
         else:
-            LOG.debug('Status file %s not exists', self.status_file)
+            LOG.debug('Status file %s not exists', self.status_file) 
+        return system_matches, status_data   
 
+
+    def system_matches(self):
+        return self.match_system()[0]    
+
+
+    def bootstrap(self, dry_run=False):
+        system_matches, status_data = self.match_system()
         if system_matches:
             LOG.info('Reading state from %s', self.status_file)
             self._update_self_dict(status_data)
@@ -400,8 +408,7 @@ class UpdClientAPI(object):
         if not linux.os.windows:
             self.package = 'scalarizr-' + self.platform
 
-        self.system_matches = system_matches
-        if not self.system_matches:
+        if not system_matches:
             if dry_run:
                 self._sync()
                 self._ensure_repos(updatedb=False)

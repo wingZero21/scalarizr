@@ -153,7 +153,7 @@ Scalarizr main process PID
 
 _logging_configured = False
 
-_meta = None
+_updclient = None
 
 
 class ScalarizrInitScript(initdv2.ParametrizedInitScript):
@@ -185,6 +185,10 @@ class ScalrUpdClientScript(initdv2.Daemon):
             self.start()
 
 def _init():
+    global _updclient
+    from scalarizr.updclient.api import UpdClientAPI
+    _updclient = UpdClientAPI()
+
     optparser = bus.optparser
     bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
     
@@ -202,6 +206,7 @@ def _init():
     # Find shared resources dir
     if not bus.share_path:
         bus.share_path = __node__['share_dir']
+
     
     # Registering in init.d
     initdv2.explore("scalarizr", ScalarizrInitScript)
@@ -331,8 +336,7 @@ def _apply_user_data(from_scalr=True):
         user_data = queryenv.get_server_user_data()
         logger.debug('User-data (QueryEnv):\n%s', pprint.pformat(user_data))
     else:
-        meta = metadata.Metadata()
-        user_data = meta.user_data()
+        user_data = _updclient.meta.user_data()
         logger.debug('User-data (Instance):\n%s', pprint.pformat(user_data))
  
     def g(key):
@@ -612,16 +616,11 @@ class Service(object):
             self._logger.info('Configuring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
-        try:
-            server_id = __node__['server_id']
-        except KeyError:
-            server_id = None
-        if optparser and not optparser.values.import_server and server_id \
-                and __node__['state'] in ('importing', 'rebundling'):
+        if not _updclient.system_matches():
             # This role was bundled with Cloud API call (i.e. CreateImage)
             # Now we're starting with a new server and should reset it's state
             self._logger.info(('This image was bundled with cloud API call. '
-                    'Cleauping ancestor server data'))
+                                'Cleauping ancestor server data'))
             _cleanup_after_rebundle()
             __node__['state'] = 'bootstrapping'
 
