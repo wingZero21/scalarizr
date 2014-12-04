@@ -975,19 +975,14 @@ class Service(object):
             upd_svs = ScalrUpdClientScript()
             if not upd_svs.running:
                 upd_svs.start()
-            upd_state = [None, 0]
+
+            upd_status = {}
             def upd_ready():
                 try:
-                    upd_state[0] = upd.status()['state']
-                    if upd_state[0].startswith('in-progress'):
-                        # For in-progress state skip 1 attempt, to handle situation when
-                        # UpdateClient is installing new Scalarizr, 
-                        # and at the end of postinst script Scalarizr is restarted, 
-                        # and then new process is asked for status before package installation command is finished, 
-                        # and UpdateClient changed it's state to completed
-                        upd_state[1] += 1
-                        return upd_state[1] >= 2
-                    return upd_state[0] != 'noop'
+                    self._logger.debug('Fetching UpdateClient status...')
+                    upd_status.update(upd.status(cached=True))
+                    self._logger.debug('UpdateClient status: %s', upd_status)
+                    return upd_status['state'] != 'noop'
                 except (IOError, socket.error), exc:
                     self._logger.debug('Failed to get UpdateClient status: %s', exc)
                 except:
@@ -1006,13 +1001,15 @@ class Service(object):
 
 
             wait_until(upd_ready, timeout=60, sleep=1)
-            upd_state = upd_state[0]
+            upd_state = upd_status['state']
             self._logger.info('UpdateClient state: %s', upd_state)
             if upd_state == 'in-progress/restart':
                 self._logger.info('Scalarizr was restarted by update process')
             elif upd_state.startswith('in-progress'):
-                self._logger.info('Update is in-progress, exiting')
-                sys.exit()
+                version = (upd_status['candidate'] or upd_status['installed']).split('-')[0]
+                if version != __version__:
+                    self._logger.info('Update is in-progress, exiting')
+                    sys.exit()
             elif upd_state == 'completed/wait-ack':
                 self._logger.info('UpdateClient completed update and should be restarted, restarting')
                 upd_svs.restart()
