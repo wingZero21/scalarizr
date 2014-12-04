@@ -980,7 +980,7 @@ class Service(object):
             def upd_ready():
                 try:
                     self._logger.debug('Fetching UpdateClient status...')
-                    upd_status.update(upd.status())
+                    upd_status.update(upd.status(cached=True))
                     self._logger.debug('UpdateClient status: %s', upd_status)
                     return upd_status['state'] != 'noop'
                 except (IOError, socket.error), exc:
@@ -1006,8 +1006,8 @@ class Service(object):
             if upd_state == 'in-progress/restart':
                 self._logger.info('Scalarizr was restarted by update process')
             elif upd_state.startswith('in-progress'):
-                candidate = upd_status['candidate'].split('-')[0]
-                if candidate != __version__:
+                version = (upd_status['candidate'] or upd_status['installed']).split('-')[0]
+                if version != __version__:
                     self._logger.info('Update is in-progress, exiting')
                     sys.exit()
             elif upd_state == 'completed/wait-ack':
