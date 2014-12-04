@@ -979,7 +979,9 @@ class Service(object):
             upd_status = {}
             def upd_ready():
                 try:
+                    self._logger.debug('Fetching UpdateClient status...')
                     upd_status.update(upd.status())
+                    self._logger.debug('UpdateClient status: %s', upd_status)
                     return upd_status['state'] != 'noop'
                 except (IOError, socket.error), exc:
                     self._logger.debug('Failed to get UpdateClient status: %s', exc)
