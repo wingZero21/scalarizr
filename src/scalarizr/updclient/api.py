@@ -476,7 +476,7 @@ class UpdClientAPI(object):
             self.repo_url = devel_repo_url_for_branch('master')
         repo = pkgmgr.repository('scalr-{0}'.format(self.repository), self.repo_url)
         # Delete previous repository
-        for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr-*'):
+        for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr*'):
             if os.path.isfile(filename):
                 os.remove(filename)
         if 'buildbot.scalr-labs.com' in self.repo_url and not linux.os.windows:
