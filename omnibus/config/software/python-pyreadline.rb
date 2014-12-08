@@ -1,4 +1,4 @@
-name "pyreadline"
+name "python-pyreadline"
 pypi_name = "pyreadline"
 default_version "2.0"
 

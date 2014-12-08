@@ -1,4 +1,4 @@
-name "ipython"
+name "python-ipython"
 pypi_name = "ipython"
 default_version "2.3.0"
 
