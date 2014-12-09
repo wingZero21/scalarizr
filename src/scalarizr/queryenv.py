@@ -688,5 +688,7 @@ def xml2dict(el):
             return list(xml2dict(ch) for ch in el)
         else:
             return dict((ch.tag, xml2dict(ch)) for ch in el)
+    elif el.tag in ('hosts',):  # TODO: add other list tags to return [] instead of None
+        return []
     else:
         return el.text
