@@ -701,7 +701,10 @@ class ConfigDir(object):
     @classmethod
     def find(cls, version=None):
         cls.version = version or '9.0'
-        path = cls.get_sysconfig_pgdata()
+        if "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
+            path = cls._systemd_get_pgdata()
+        else:
+            path = cls.get_sysconfig_pgdata()
         if not path:
             if linux.os.debian_family:
                 path = '/etc/postgresql/%s/main' % version
@@ -782,11 +785,8 @@ class ConfigDir(object):
 
 
     def _systemd_change_pgdata(self, pg_data):
-        lib_units = glob.glob("/lib/systemd/system/postgresql-9.*.service")
-        if not lib_units:
-            return
-        lib_unit = lib_units[0]
-        etc_unit = os.path.join("/etc/systemd/system", os.path.basename(lib_unit))
+        lib_unit = self._systemd_get_default_unitfile()
+        etc_unit = self._systemd_get_user_unitfile()
         text = ".include %s" % lib_unit
         section = "\n[Service]"
         option = "\nEnvironment=PGDATA="
@@ -794,8 +794,8 @@ class ConfigDir(object):
         if os.path.exists(etc_unit):
             with open(etc_unit, "r") as fp:
                 unit_content = fp.read()
-                if unit_content and unit_content.strip():
-                    text = unit_content
+            if unit_content and unit_content.strip():
+                text = unit_content
 
         if not section in text:
             text += "%s" % section
@@ -808,6 +808,29 @@ class ConfigDir(object):
 
         with open(etc_unit, "w") as fp:
             fp.write(text)
+
+    @classmethod
+    def _systemd_get_default_unitfile(cls):
+        lib_units = glob.glob("/lib/systemd/system/postgresql-9.*.service")
+        if lib_units:
+            lib_unit = lib_units[0]
+            return lib_unit
+
+    @classmethod
+    def _systemd_get_user_unitfile(cls):
+        lib_unit = cls.get_systemd_default_unitfile()
+        return os.path.join("/etc/systemd/system", os.path.basename(lib_unit))
+
+    @classmethod
+    def _systemd_get_pgdata(cls):
+        etc_unit = cls._systemd_get_user_unitfile()
+        if os.path.exists(etc_unit):
+            with open(etc_unit, "r") as fp:
+                text = fp.read()
+        r = re.search("^(?!#)Environment=PGDATA=(.*)", text, re.MULTILINE)
+        if r:
+            return r.group(1)
+
 
 
 class PidFile(object):
