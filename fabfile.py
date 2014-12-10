@@ -242,6 +242,8 @@ def build_meta_packages():
                 'scalarizr-%s' % platform,
                 version,
                 'scalarizr = %s-1' % version)
+    # for scalarizr < 2.x
+    build_meta_package(pkg_type, 'scalarizr-base', version)
 
 @task
 def build_source():
