@@ -29,18 +29,18 @@ function debian_init {
         insserv scalarizr
         insserv scalr-upd-client
     else
-        rm -f /etc/init.d/scalarizr_update
-        update-rc.d scalarizr_update remove || :
         update-rc.d -f scalarizr remove || :
-        if test -e /etc/issue.net && grep -q '10.04' /etc/issue.net; then
+        if test -e /etc/init.d/scalarizr_update; then
             # We've reverted back scalarizr autostart because 
             # some clients have scalarizr bundled without scalr-upd-client,
             # and Ubuntu 10.04 init doesn't execute new init scripts, 
             # that was installed during init
             update-rc.d scalarizr defaults 99 >/dev/null
         else
-            update-rc.d scalarizr stop 99 0 1 6 .
+            update-rc.d scalarizr stop 99 0 1 6 .            
         fi
+        rm -f /etc/init.d/scalarizr_update
+        update-rc.d scalarizr_update remove || :
         update-rc.d scalr-upd-client defaults 98 >/dev/null
     fi 
 }
