@@ -818,7 +818,7 @@ class ConfigDir(object):
 
     @classmethod
     def _systemd_get_user_unitfile(cls):
-        lib_unit = cls.get_systemd_default_unitfile()
+        lib_unit = cls._systemd_get_default_unitfile()
         return os.path.join("/etc/systemd/system", os.path.basename(lib_unit))
 
     @classmethod
