@@ -6,6 +6,7 @@ if windows?
   dependency "python-windows"
 end
 if linux?
+  dependency "augeas"
   dependency "rsync"
   dependency "sqlite3"
   dependency "bzip2"
