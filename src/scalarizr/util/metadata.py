@@ -70,12 +70,12 @@ class Metadata(object):
         def user_data(self):
             raise NoUserDataError()
 
+    _cache = None
+    _providers_resolved = False
+    provider_for_capability = None
 
     def __init__(self, providers=None, capabilities=None):
-        self._cache = {}
-        self.provider_for_capability = {}
         self._nodata_pvd = self.NoDataPvd(self)
-        self._providers_resolved = False
         if not providers:
             if linux.os.windows:
                 providers = [
@@ -95,7 +95,12 @@ class Metadata(object):
                 ]
         self.providers = providers
         self.capabilities = capabilities or ['instance_id', 'user_data']
+        self.reset()
 
+    def reset(self):
+        self._providers_resolved = False
+        self._cache = {}
+        self.provider_for_capability = {}
 
     def _resolve_once_providers(self):
         if self._providers_resolved:
@@ -135,6 +140,24 @@ class Metadata(object):
             else:
                 self._cache[capability] = getattr(pvd, capability)()
         return self._cache[capability]
+
+    def user_data(self, retry=True, num_retries=10):
+        '''
+        A facade function for getting user-data
+        '''
+        LOG.info('Getting user-data')
+        if not retry:
+            num_retries = 1
+        for r in range(0, num_retries):
+            try:
+                return self['user_data']
+            except NoUserDataError:
+                if r < num_retries:
+                    LOG.debug('Still no user-data, retrying (%d)...', r + 1)
+                    self.reset()
+                else:
+                    LOG.error('No user-data, exiting')
+                    raise    
 
 
 class Provider(object):

@@ -188,9 +188,9 @@ class MongoDBAPI(BehaviorAPI):
         """
         Asserts MongoDB version.
         """
-        system_packages = system_packages or pkgmgr.package_mgr().list()
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
+        requirements = None
         if os_name == 'ubuntu':
             if os_vers >= '14':
                 requirements = [
@@ -280,7 +280,7 @@ class MongoDBAPI(BehaviorAPI):
                 ['mongo20-10gen-server>=2.0,<3'],
                 ['mongodb-server>=2.0,<2.1']
             ]
-        else:
+        if requirements is None:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))

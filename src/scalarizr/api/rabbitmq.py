@@ -112,21 +112,22 @@ class RabbitMQAPI(BehaviorAPI):
     def do_check_software(cls, system_packages=None):
         os_name = linux.os['name'].lower()
         os_vers = linux.os['version']
+        requirements = None
         if os_name == 'ubuntu':
             if os_vers >= '12':
-                requirements = ['rabbitmq-server>=3.0,<3.4']
+                requirements = ['rabbitmq-server>=3.0,<3.5']
             elif os_vers >= '10':
-                requirements = ['rabbitmq-server>=2.6,<3.4']
+                requirements = ['rabbitmq-server>=2.6,<3.5']
         elif os_name == 'debian':
-            requirements = ['rabbitmq-server>=3.0,<3.4']
+            requirements = ['rabbitmq-server>=3.0,<3.5']
         elif linux.os.redhat_family:
             if os_vers >= '6':
-                requirements = ['rabbitmq-server>=3.1,<3.4']
+                requirements = ['rabbitmq-server>=3.1,<3.5']
             elif os_vers >= '5':
                 raise exceptions.UnsupportedBehavior(
                         cls.behavior,
                         "Not supported by Scalr on {0} {1}".format(linux.os['name'], linux.os['version']))
-        else:
+        if requirements is None:
             raise exceptions.UnsupportedBehavior(
                     cls.behavior,
                     "Not supported on {0} os family".format(linux.os['family']))

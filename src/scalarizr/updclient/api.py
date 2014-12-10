@@ -151,6 +151,10 @@ class UpdClientAPI(object):
     def is_client_mode(self):
         return self.client_mode == 'client'
 
+    @property
+    def package_type(self):
+        return 'omnibus' if os.path.isdir('/opt/scalarizr/embedded') else 'fogyish'
+
     def state():
         # pylint: disable=E0211, E0202
         def fget(self):
@@ -361,32 +365,7 @@ class UpdClientAPI(object):
                     return
         if not system_matches:
             LOG.info('Initializing UpdateClient...')
-            LOG.info('Getting user-data')
-            try:
-                user_data = self.meta['user_data']
-            except metadata.NoUserDataError:
-                if 'NoData' in str(self.meta.provider_for_capability['instance_id']):
-                    retry_int = 5
-                    num_attempts = 10
-                    LOG.info('Found no user-data and no instance-id, '
-                             'this mean that all data providers failed. I should '
-                             'wait {0} seconds and retry'.format(retry_int))
-                    for attempt in range(0, num_attempts):
-                        time.sleep(retry_int)
-                        self.meta = metadata.Metadata()
-                        try:
-                            user_data = self.meta['user_data']
-                            break
-                        except metadata.NoUserDataError:
-                            if attempt == num_attempts - 1:
-                                LOG.error(('Still no user-data, '
-                                           'check why $ETC_DIR/.scalr-user-data not exists. '))
-                                raise
-                            else:
-                                LOG.debug(('Still no user-data, '
-                                           'retrying after {0} seconds...').format(retry_int))
-                else:
-                    raise
+            user_data = self.meta.user_data()
             norm_user_data(user_data)
             LOG.info('Applying configuration from user-data')
             self._update_self_dict(user_data)
@@ -497,7 +476,7 @@ class UpdClientAPI(object):
             self.repo_url = devel_repo_url_for_branch('master')
         repo = pkgmgr.repository('scalr-{0}'.format(self.repository), self.repo_url)
         # Delete previous repository
-        for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr-*'):
+        for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr*'):
             if os.path.isfile(filename):
                 os.remove(filename)
         if 'buildbot.scalr-labs.com' in self.repo_url and not linux.os.windows:
@@ -741,7 +720,7 @@ class UpdClientAPI(object):
         self.update_server.report(
             ok=ok, package=self.package, version=self.candidate or self.installed,
             server_id=self.server_id, scalr_id=self.scalr_id, scalr_version=self.scalr_version,
-            phase=self.state, dist=self.dist, error=error)
+            phase=self.state, dist=self.dist, error=error, package_type=self.package_type)
 
     @rpc.command_method
     def restart(self, force=False):
@@ -757,7 +736,7 @@ class UpdClientAPI(object):
             'messaging_url', 'scalr_id', 'scalr_version',
             'repository', 'repo_url', 'package', 'downgrades_enabled', 'executed_at',
             'ps_script_pid', 'ps_attempt',
-            'state', 'prev_state', 'error', 'dist'
+            'state', 'prev_state', 'error', 'dist', 'package_type'
         ]
 
         pkginfo_keys = ['candidate', 'installed']

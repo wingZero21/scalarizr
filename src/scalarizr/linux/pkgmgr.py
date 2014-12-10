@@ -314,7 +314,11 @@ class AptPackageMgr(PackageMgr):
 
     def remove(self, name, purge=False):
         command = 'purge' if purge else 'remove'
-        self.apt_get_command('%s %s' % (command, name), raise_exc=True)
+        try:
+            self.apt_get_command('%s %s' % (command, name), raise_exc=True)
+        except linux.LinuxError, e:
+            if 'Unable to locate package {0}'.format(name) not in e.err:
+                raise
 
 
     def restore_backup(self, name, backup_id):

@@ -37,19 +37,7 @@ def _create_connection():
 
 
 class CloudStackConnectionProxy(platform.ConnectionProxy):
-
-    def __call__(self, *args, **kwargs):
-        for retry in range(2):
-            try:
-                return self.obj(*args, **kwargs)
-            except:
-                e = sys.exc_info()[1]
-                if isinstance(e, ConnectionError):
-                    self.conn_pool.dispose_local()
-                    raise
-                continue
-        self.conn_pool.dispose_local()
-        raise ConnectionError(e)
+    pass
 
 
 class CloudStackPlatform(Platform):
@@ -136,8 +124,7 @@ class CloudStackPlatform(Platform):
             return ''
 
     def get_cloudstack_conn(self):
-        conn = self._conn_pool.get()
-        return CloudStackConnectionProxy(conn, self._conn_pool) 
+        return CloudStackConnectionProxy(self._conn_pool) 
 
     def new_cloudstack_conn(self):
         access_data = self.get_access_data()
