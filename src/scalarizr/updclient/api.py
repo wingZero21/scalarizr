@@ -495,7 +495,7 @@ class UpdClientAPI(object):
                     return True
                 except:
                     LOG.warn('Package manager error', exc_info=sys.exc_info())
-            wait_until(do_updatedb, sleep=10, timeout=60)
+            wait_until(do_updatedb, sleep=10, timeout=120)
 
 
     def _configure_devel_repo(self, repo):
