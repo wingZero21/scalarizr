@@ -12,8 +12,8 @@ env = with_standard_compiler_flags(with_embedded_path)
 
 build do
     block do
-        env["LIBXML_CFLAGS"] = "#{install_dir}/embedded/bin/xml2-config --cflags"
-        env["LIBXML_LIBS"] = "#{install_dir}/embedded/bin/xml2-config --libs"
+        env["LIBXML_CFLAGS"] = `#{install_dir}/embedded/bin/xml2-config --cflags`.strip
+        env["LIBXML_LIBS"] = `#{install_dir}/embedded/bin/xml2-config --libs`.strip
     end
 
     command "./configure --prefix=#{install_dir}/embedded", :env => env
