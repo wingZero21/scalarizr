@@ -726,7 +726,7 @@ class ConfigDir(object):
         for config in ['postgresql.conf', 'pg_ident.conf', 'pg_hba.conf']:
             old_config = os.path.join(self.path, config)
             new_config = os.path.join(dst, config)
-            if os.path.exists(old_config):
+            if os.path.exists(old_config) and not os.path.islink(old_config): #???
                 LOG.debug('Moving %s' % config)
                 shutil.move(old_config, new_config)
             elif os.path.exists(new_config):
