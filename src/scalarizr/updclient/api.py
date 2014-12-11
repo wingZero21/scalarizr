@@ -489,7 +489,13 @@ class UpdClientAPI(object):
         repo.ensure()
         if updatedb:
             LOG.info('Updating packages cache')
-            self.pkgmgr.updatedb()
+            def do_updatedb():
+                try:
+                    self.pkgmgr.updatedb()
+                    return True
+                except:
+                    LOG.warn('Package manager error', exc_info=sys.exc_info())
+            wait_until(do_updatedb, sleep=10, timeout=60)
 
 
     def _configure_devel_repo(self, repo):
