@@ -99,8 +99,9 @@ cd $ETC_DIR/public.d
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini 
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini 
 popd
-find $ETC_DIR -type d | xargs chmod 755 
-find $ETC_DIR/private.d/keys -type f | xargs chmod 600
+find $ETC_DIR -type d -exec chmod 755 {} \;
+test -e $ETC_DIR/private.d/keys && find $ETC_DIR/private.d/keys -type f -exec chmod 600 {} \;
+
 
 # update init scripts symlinks
 if [ "$DIST" = 'debian' ]; then
