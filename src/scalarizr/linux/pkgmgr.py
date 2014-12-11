@@ -397,7 +397,7 @@ class AptPackageMgr(PackageMgr):
 
 
     def _install_file(self, *files):
-        cmd = ['dpkg', '-i', '--force-downgrade', '--no-force-depends'] + list(files)
+        cmd = ['dpkg', '-i', '--force-downgrade', '--no-force-depends', '--force-configure-any'] + list(files)
         linux.system(cmd, raise_exc=True)
 
 
