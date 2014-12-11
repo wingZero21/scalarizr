@@ -101,7 +101,7 @@ class Volume(Base):
                 self.mount()
             if fstab and not in_fstab:
                 LOG.debug('Adding to fstab: %s', self.id)
-                mod_mount.fstab().add(self.device, self.mpoint, self.fstype, 'defaults,nofail')
+                mod_mount.fstab().add(self.device, self.mpoint, self.fstype, 'defaults,comment=scalr,nofail')
         return self.config()
 
 

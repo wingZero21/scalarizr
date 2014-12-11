@@ -433,6 +433,12 @@ def _cleanup_after_rebundle():
         os.remove('/etc/chef/client.pem')
     if os.path.exists('/etc/chef/client.rb'):
         os.remove('/etc/chef/client.rb')
+
+    # remove storage devices from fstab
+    fstab = mount.fstab()
+    for entry in fstab:
+        if 'comment=scalr' in entry.options:
+            fstab.remove(entry.device)
     
     # Reset private configuration
     priv_path = cnf.private_path()
