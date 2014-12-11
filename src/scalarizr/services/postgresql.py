@@ -827,9 +827,9 @@ class ConfigDir(object):
         if os.path.exists(etc_unit):
             with open(etc_unit, "r") as fp:
                 text = fp.read()
-        r = re.search("^(?!#)Environment=PGDATA=(.*)", text, re.MULTILINE)
-        if r:
-            return r.group(1)
+            r = re.search("^(?!#)Environment=PGDATA=(.*)", text, re.MULTILINE)
+            if r:
+                return r.group(1)
 
 
 
