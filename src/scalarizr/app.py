@@ -11,7 +11,7 @@ except ImportError:
 from scalarizr import __version__
 from scalarizr import config, rpc, linux, api
 from scalarizr.node import __node__
-from scalarizr.linux import coreutils
+from scalarizr.linux import coreutils, mount
 
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
