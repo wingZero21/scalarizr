@@ -410,7 +410,7 @@ class AptPackageMgr(PackageMgr):
     def _install_file(self, *files):
         cmd = ['dpkg', '--install', 
                 '--force-downgrade', 
-                '-o', 'Dpkg::Options::=--force-confold'] + list(files)
+                '--force-confold'] + list(files)
         linux.system(cmd, raise_exc=True)
 
 
