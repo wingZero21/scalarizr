@@ -672,19 +672,19 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
 
         self.mysql_cli = MySQLClient()
 
-        rhel_7_gte = linux.os.redhat_family and linux.os['release'] >= (7, 0)
-        if (linux.os.ubuntu and linux.os['release'] >= (10, 4)) or rhel_7_gte:
-            if rhel_7_gte and \
+        service_exec = '/usr/sbin/service' if linux.os.debian_family else '/sbin/service'
+        service_name = 'mysql'
+        if linux.os.redhat_family:
+            if  linux.os['release'] >= (7, 0) and \
                     system2('systemctl list-unit-files | grep mariadb', raise_exc=False, shell=True)[2] == 0:
                 service_name = 'mariadb'
-            else:
-                service_name = 'mysql'
-            if linux.os.redhat_family:
-                initd_script = ('/sbin/service', service_name)
-            else:
-                initd_script = ('/usr/sbin/service', service_name)
+            elif 'percona' not in node.__node__['behavior']:
+                service_name = 'mysqld'
+
+        if linux.os.redhat_family or linux.os.ubuntu:
+            initd_script = (service_exec, service_name)
         else:
-            initd_script = firstmatched(os.path.exists, ('/etc/init.d/mysqld', '/etc/init.d/mysql'))
+            initd_script = '/etc/init.d/{0}'.format(service_name)
 
         pid_file = None
         try:
