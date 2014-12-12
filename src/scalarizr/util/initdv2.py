@@ -167,6 +167,7 @@ class ParametrizedInitScript(InitScript):
 
     def _start_stop_reload(self, action):
         try:
+
             args = [self.initd_script] \
                             if isinstance(self.initd_script, basestring) \
                             else list(self.initd_script)
