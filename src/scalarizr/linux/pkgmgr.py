@@ -129,7 +129,7 @@ class PackageMgr(object):
                 # for RedHat-based it should matter
 
                 self._install_download_only(name_version, backup_dir, **kwds)
-                files = (os.path.join(backup_dir, name) 
+                files = list(os.path.join(backup_dir, name) 
                         for name in os.listdir(backup_dir))
                 files.sort(lambda x, y: cmp(os.stat(x).st_ctime, os.stat(y).st_ctime))
                 self._install_file(*files)
