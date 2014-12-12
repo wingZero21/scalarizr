@@ -112,19 +112,30 @@ class PackageMgr(object):
             self.updatedb()
 
         if backup:
-            download_dir = tempfile.mkdtemp()
+            backup_id = self._create_backup(name, version, [])
+            backup_dir = os.path.join(self.backup_dir, name, backup_id)
             try:
-                self._install_download_only(name_version, download_dir, **kwds)
-                files = (os.path.join(download_dir, name) 
-                        for name in os.listdir(download_dir))
-                self._install_file(*files)                
+                # In some cases package installation order is important:
+                # when A depends from B it's better to install B first.
+                # high level managers like Apt/Yum does this, 
+                # but here we use lower level Dpkg/Rpm - they just install packages one by one.
+                # so we should get here installation order from Apt/Yum and use it with Dpkg/Rpm.
+                # 
+                # Apt downloads files in correct installation order, so we can use ctime
+                # to maintain order. 
+                # 
+                # We havn't checked Yum for download order, 
+                # but as problems with dependencies were only on Debian-based distros,
+                # for RedHat-based it should matter
 
-                # create backup
-                if not version:
-                    version = self._installed_and_candidate(name)[0]
-                self._create_backup(name, version, files)
-            finally:
-                shutil.rmtree(download_dir)
+                self._install_download_only(name_version, backup_dir, **kwds)
+                files = (os.path.join(backup_dir, name) 
+                        for name in os.listdir(backup_dir))
+                files.sort(lambda x, y: cmp(os.stat(x).st_ctime, os.stat(y).st_ctime))
+                self._install_file(*files)
+            except:
+                shutil.rmtree(backup_dir)
+                raise
         else:
             self._install_package(name_version, **kwds)
 
@@ -397,7 +408,9 @@ class AptPackageMgr(PackageMgr):
 
 
     def _install_file(self, *files):
-        cmd = ['dpkg', '-i', '--force-downgrade', '--no-force-depends', '--force-configure-any'] + list(files)
+        cmd = ['dpkg', '--install', 
+                '--force-downgrade', 
+                '-o', 'Dpkg::Options::=--force-confold'] + list(files)
         linux.system(cmd, raise_exc=True)
 
 
