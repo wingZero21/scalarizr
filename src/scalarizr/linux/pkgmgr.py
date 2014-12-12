@@ -794,6 +794,10 @@ if linux.os.windows_family:
                 distutils.version.LooseVersion(name_2))
 
 
+        def list(self):
+            return []
+
+
     class WinRepository(Repository):
         filename_tpl = os.path.join(WinPackageMgr.SOURCES_DIR, '{name}.winrepo')
         config_tpl = '{url}'
