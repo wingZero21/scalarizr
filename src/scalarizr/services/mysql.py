@@ -679,7 +679,10 @@ class MysqlInitScript(initdv2.ParametrizedInitScript):
                 service_name = 'mariadb'
             else:
                 service_name = 'mysql'
-            initd_script = ('/usr/sbin/service', service_name)
+            if linux.os.redhat_family:
+                initd_script = ('/sbin/service', service_name)
+            else:
+                initd_script = ('/usr/sbin/service', service_name)
         else:
             initd_script = firstmatched(os.path.exists, ('/etc/init.d/mysqld', '/etc/init.d/mysql'))
 

@@ -65,7 +65,7 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
         if linux.os.debian_family:
             initd_script = ('/usr/sbin/service', 'postgresql')
         elif "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
-            initd_script = ('/usr/sbin/service', 'postgresql-9.3')
+            initd_script = ('/sbin/service', 'postgresql-9.3')
         else:
             initd_script = firstmatched(os.path.exists, (
                         '/etc/init.d/postgresql-9.0', 

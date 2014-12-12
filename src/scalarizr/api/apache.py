@@ -118,7 +118,7 @@ else:
         """})
 
     if linux.os.redhat_family and linux.os["release"] >= (7, 0):
-        initd_script = {"initd_script": ("/usr/sbin/service", "httpd")}
+        initd_script = {"initd_script": ("/sbin/service", "httpd")}
     else:
         initd_script = {"initd_script": "/etc/init.d/httpd"}
     apache.update(initd_script)
