@@ -254,6 +254,7 @@ class OpenStackQueryPvd(Provider):
         self._cache = {}
 
     def vote(self, votes):
+        self._cache = {}
         meta = self.try_url(self.metadata_json_url)
         if meta:
             self.LOG.debug('matched meta_data.json')
