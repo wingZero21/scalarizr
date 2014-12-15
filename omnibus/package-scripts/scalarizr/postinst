@@ -92,6 +92,15 @@ for name in $(ls $INSTALL_DIR/init/$DIST); do
     link_to /etc/init.d/$name "$INSTALL_DIR/init/$DIST/$name"
     chmod +x /etc/init.d/$name
 done
+
+if [ "$DIST" = 'redhat' ]; then
+    UPDCLIENT_INIT='/etc/init.d/scalr-upd-client'
+    if [ -e $UPDCLIENT_INIT.rpmsave ] && \
+        [ $(readlink -f $UPDCLIENT_INIT.rpmsave) = $INSTALL_DIR/init/redhat/scalr-upd-client ]; then
+        mv -f $UPDCLIENT_INIT.rpmsave $UPDCLIENT_INIT
+    fi
+fi
+
 pushd .
 cd $ETC_DIR/public.d
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
