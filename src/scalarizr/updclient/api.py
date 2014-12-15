@@ -470,7 +470,13 @@ class UpdClientAPI(object):
                             self.pkgmgr.apt_get_command(cmd)
                         else:
                             self.pkgmgr.install('scalr-upd-client', updclient_pkginfo['candidate'])
-                    self.pkgmgr.removed('scalr-upd-client', purge=True)
+                    try:
+                        self.pkgmgr.removed('scalr-upd-client', purge=True)
+                    except:
+                        if linux.os.redhat_family:
+                            linux.system('rpm -e --noscripts scalr-upd-client', shell=True, raise_exc=False)
+                        else:
+                            raise
 
         finally:
             if pid:
