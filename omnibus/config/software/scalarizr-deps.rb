@@ -7,7 +7,6 @@ if windows?
 end
 if linux?
   dependency "rsync"
-  dependency "sqlite3"
   dependency "bzip2"
   dependency "python"
   if not rhel?
