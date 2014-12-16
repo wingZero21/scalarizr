@@ -4,11 +4,6 @@ default_version "1.2.0"
 dependency "libxml2"
 dependency "readline"
 
-if rhel?
-  whitelist_file(/libselinux\.so\.1/)
-  whitelist_file(/libsepol\.so\.1/)
-end
-
 source :url => "http://download.augeas.net/augeas-#{version}.tar.gz",
        :md5 => "dce2f52cbd20f72c7da48e014ad48076"
 
