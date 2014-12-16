@@ -6,13 +6,13 @@ if windows?
   dependency "python-windows"
 end
 if linux?
-  if not rhel?
-    dependency "python-augeas"
-  end
   dependency "rsync"
   dependency "sqlite3"
   dependency "bzip2"
   dependency "python"
+  if not rhel?
+    dependency "python-augeas"
+  end
 end
 
 dependency "pip"
