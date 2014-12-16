@@ -21,6 +21,7 @@ end
 dependency "preparation"
 dependency "scalarizr"
 dependency "version-manifest"
+conflict "scalr-upd-client"
 replace "scalr-upd-client"
 
 if ohai['platform_family'] == 'rhel'
