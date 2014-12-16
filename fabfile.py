@@ -219,7 +219,7 @@ def build_omnibus():
         fp.write(omnibus_md5sum())
 
 
-def build_meta_package(pkg_type, name, version, depends=None):
+def build_meta_package(pkg_type, name, version, depends=None, replaces=None):
     with cd('/var/cache/omnibus/pkg'):
         cmd = ('fpm -t {pkg_type} -s empty '
                 '--name {name} '
@@ -230,6 +230,8 @@ def build_meta_package(pkg_type, name, version, depends=None):
                 pkg_type=pkg_type, name=name, version=version)
         if depends:
             cmd += ' --depends "{0}"'.format(depends)
+        if replaces:
+            cmd += ' --replaces "{0}"'.format(replaces)
         run(cmd)
 
 
@@ -237,6 +239,7 @@ def build_meta_packages():
     print_green('building meta packages')
     pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
     for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud'.split():
+        replaces = 'scalr-upd-client' if pkg_type == 'rpm' else None
         build_meta_package(
                 pkg_type,
                 'scalarizr-%s' % platform,
@@ -291,9 +294,11 @@ def build_rpm_deps():
     run('rm -f /var/cache/omnibus/pkg/yum-*')
     build_meta_package('rpm', 'yum-downloadonly', '0.0.1', 'yum-plugin-downloadonly')
     build_meta_package('rpm', 'yum-plugin-downloadonly', '0.0.1')
-    local('curl -o %s/scalr-upd-client-0.4.17-1.el6.noarch.rpm '
-            'http://rpm.scalr.net/rpm/rhel/6/x86_64/scalr-upd-client-0.4.17-1.el6.noarch.rpm' % rpm_deps_dir)
+    build_meta_package('rpm', 'scalr-upd-client', '0.5.0')
+    #local('curl -o %s/scalr-upd-client-0.4.17-1.el6.noarch.rpm '
+    #        'http://rpm.scalr.net/rpm/rhel/6/x86_64/scalr-upd-client-0.4.17-1.el6.noarch.rpm' % rpm_deps_dir)
     import_artifact('/var/cache/omnibus/pkg/yum-*', rpm_deps_dir)
+    import_artifact('/var/cache/omnibus/pkg/scalr-*', rpm_deps_dir)
 
 
 
@@ -449,7 +454,7 @@ def publish_rpm():
             dst = os.path.join(repo_path, ver, arch)
             local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
             local('cp %s/*%s.rpm -u %s/' % (rpm_deps_dir, pkg_arch, dst))
-            local('cp %s/*noarch.rpm -u %s/' % (rpm_deps_dir, dst))
+            #local('cp %s/*noarch.rpm -u %s/' % (rpm_deps_dir, dst))
             local('createrepo %s' % dst)
 
     finally:
