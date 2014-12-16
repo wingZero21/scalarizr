@@ -451,7 +451,7 @@ def publish_rpm():
             dst = os.path.join(repo_path, ver, arch)
             local('cp %s/%s*%s.rpm %s/' % (artifacts_dir, project, pkg_arch, dst))
             local('cp %s/*%s.rpm -u %s/' % (rpm_deps_dir, pkg_arch, dst))
-            local('cp %s/*noarch.rpm -u %s/' % (rpm_deps_dir, dst))
+            #local('cp %s/*noarch.rpm -u %s/' % (rpm_deps_dir, dst))
             local('createrepo %s' % dst)
 
     finally:
