@@ -242,6 +242,8 @@ def build_meta_packages():
                 'scalarizr-%s' % platform,
                 version,
                 'scalarizr = %s-1' % version)
+    # for scalarizr < 2.x
+    build_meta_package(pkg_type, 'scalarizr-base', version)
 
 @task
 def build_source():
@@ -493,7 +495,7 @@ def release():
     '''
     init()
 
-    rsync_cmd = "rsync -av --delete --rsh 'ssh -l {0} -p {1}' ".format(remote_repo_user, remote_repo_port)
+    rsync_cmd = "rsync -av --rsh 'ssh -l {0} -p {1}' ".format(remote_repo_user, remote_repo_port)
     rsync_cmd += "{include} {exclude} {src} " + '{0}'.format(remote_repo_host) + ':{dest}'
 
     # Sync rpm, apt(plain) and win repos

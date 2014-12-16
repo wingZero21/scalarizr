@@ -29,18 +29,18 @@ function debian_init {
         insserv scalarizr
         insserv scalr-upd-client
     else
-        rm -f /etc/init.d/scalarizr_update
-        update-rc.d scalarizr_update remove || :
         update-rc.d -f scalarizr remove || :
-        if test -e /etc/issue.net && grep -q '10.04' /etc/issue.net; then
+        if test -e /etc/init.d/scalarizr_update; then
             # We've reverted back scalarizr autostart because 
             # some clients have scalarizr bundled without scalr-upd-client,
             # and Ubuntu 10.04 init doesn't execute new init scripts, 
             # that was installed during init
             update-rc.d scalarizr defaults 99 >/dev/null
         else
-            update-rc.d scalarizr stop 99 0 1 6 .
+            update-rc.d scalarizr stop 99 0 1 6 .            
         fi
+        rm -f /etc/init.d/scalarizr_update
+        update-rc.d scalarizr_update remove || :
         update-rc.d scalr-upd-client defaults 98 >/dev/null
     fi 
 }
@@ -92,6 +92,15 @@ for name in $(ls $INSTALL_DIR/init/$DIST); do
     link_to /etc/init.d/$name "$INSTALL_DIR/init/$DIST/$name"
     chmod +x /etc/init.d/$name
 done
+
+if [ "$DIST" = 'redhat' ]; then
+    UPDCLIENT_INIT='/etc/init.d/scalr-upd-client'
+    if [ -e $UPDCLIENT_INIT.rpmsave ] && \
+        [ $(readlink -f $UPDCLIENT_INIT.rpmsave) = $INSTALL_DIR/init/redhat/scalr-upd-client ]; then
+        mv -f $UPDCLIENT_INIT.rpmsave $UPDCLIENT_INIT
+    fi
+fi
+
 pushd .
 cd $ETC_DIR/public.d
 [ ! -f percona.ini ] && ln -s mysql2.ini percona.ini
@@ -99,6 +108,9 @@ cd $ETC_DIR/public.d
 [ ! -f idcf.ini ] && ln -s cloudstack.ini idcf.ini 
 [ ! -f ucloud.ini ] && ln -s cloudstack.ini ucloud.ini 
 popd
+find $ETC_DIR -type d -exec chmod 755 {} \;
+test -e $ETC_DIR/private.d/keys && find $ETC_DIR/private.d/keys -type f -exec chmod 600 {} \;
+
 
 # update init scripts symlinks
 if [ "$DIST" = 'debian' ]; then

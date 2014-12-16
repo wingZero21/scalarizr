@@ -8,6 +8,7 @@ from scalarizr.linux import pkgmgr
 from scalarizr.util import Singleton, initdv2
 from scalarizr import exceptions
 from scalarizr.api import BehaviorAPI
+from scalarizr.util import software
 
 
 LOG = logging.getLogger(__name__)
@@ -157,11 +158,16 @@ class ChefAPI(BehaviorAPI):
 
     @classmethod
     def do_check_software(cls, system_packages=None):
-        if linux.os.windows:
-            if not linux.which('chef-client'):
-                msg = ("Can't find chef-client in %PATH%, "
-                        "check that chef was properly installed")
-                raise Exception(msg)
-            return
-        return pkgmgr.check_software(['chef'], system_packages)[0]
+        try:
+            si = software.chef_software_info()
+            return ('chef', '.'.join(map(str, si.version)))
+        except software.SoftwareError:
+            raise pkgmgr.NotInstalledError('chef')
+        # if linux.os.windows:
+        #     if not linux.which('chef-client'):
+        #         msg = ("Can't find chef-client in %PATH%, "
+        #                 "check that chef was properly installed")
+        #         raise Exception(msg)
+        #     return (('chef', ))
+        # return pkgmgr.check_software(['chef'], system_packages)[0]
 
