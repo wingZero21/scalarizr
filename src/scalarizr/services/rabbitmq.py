@@ -191,8 +191,8 @@ class RabbitMQ(object):
 
 
     def list_users(self):
-        out = system2((RABBITMQCTL, 'list_users'), logger=self._logger)[0]
-        users_strings = out.splitlines()[1:-1]
+        out = system2((RABBITMQCTL, 'list_users', '-q'), logger=self._logger)[0]
+        users_strings = out.splitlines()
         return [user_str.split()[0] for user_str in users_strings]
 
     @property
