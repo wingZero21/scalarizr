@@ -219,7 +219,7 @@ def build_omnibus():
         fp.write(omnibus_md5sum())
 
 
-def build_meta_package(pkg_type, name, version, depends=None):
+def build_meta_package(pkg_type, name, version, depends=None, replaces=None):
     with cd('/var/cache/omnibus/pkg'):
         cmd = ('fpm -t {pkg_type} -s empty '
                 '--name {name} '
@@ -230,6 +230,8 @@ def build_meta_package(pkg_type, name, version, depends=None):
                 pkg_type=pkg_type, name=name, version=version)
         if depends:
             cmd += ' --depends "{0}"'.format(depends)
+        if replaces:
+            cmd += ' --replaces "{0}"'.format(replaces)
         run(cmd)
 
 
@@ -237,6 +239,7 @@ def build_meta_packages():
     print_green('building meta packages')
     pkg_type = 'rpm' if 'centos' in env.host_string else 'deb'
     for platform in 'ec2 gce openstack cloudstack ecs idcf ucloud'.split():
+        replaces = 'scalr-upd-client' if pkg_type == 'rpm' else None
         build_meta_package(
                 pkg_type,
                 'scalarizr-%s' % platform,

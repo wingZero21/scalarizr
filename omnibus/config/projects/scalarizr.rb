@@ -21,6 +21,7 @@ end
 dependency "preparation"
 dependency "scalarizr"
 dependency "version-manifest"
+replaces "scalr-upd-client"
 
 if ohai['platform_family'] == 'rhel'
     runtime_dependency "yum-downloadonly"
