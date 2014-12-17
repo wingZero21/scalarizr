@@ -753,8 +753,8 @@ class ConfigDir(object):
         
         LOG.debug("configuring pid")
         conf = PostgresqlConf.find(self)
-        conf.pid_file = os.path.join(dst, 'postmaster.pid')
-        chown_r(dst, DEFAULT_USER)  # [SCALARIZR-1685]
+        if not centos7:
+            conf.pid_file = os.path.join(dst, 'postmaster.pid')  # [SCALARIZR-1685]
 
 
     def _patch_sysconfig(self, config_dir):
