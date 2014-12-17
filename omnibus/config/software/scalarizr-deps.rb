@@ -9,9 +9,7 @@ if linux?
   dependency "rsync"
   dependency "bzip2"
   dependency "python"
-  if not rhel?
-    dependency "python-augeas"
-  end
+  dependency "python-augeas"
 end
 
 dependency "pip"
