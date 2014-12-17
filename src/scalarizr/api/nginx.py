@@ -58,27 +58,11 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
 
     def __init__(self):
         self._nginx_binary = __nginx__['binary_path']
-
-        pid_file = None
-        '''
-        Saw on 8.04:
-        --pid-path=/var/run/nginx
-        but actual pid-file is /var/run/nginx.pid
-        try:
-                nginx = software.whereis('nginx')
-                if nginx:
-                        out = system2((nginx[0], '-V'))[1]
-                        m = re.search("--pid-path=(.*?)\s", out)
-                        if m:
-                                        pid_file = m.group(1)
-        except:
-                pass
-        '''
-
+        service_call = ['service', 'nginx'] if __nginx__['service_name'] == 'nginx' \
+            else __nginx__['service_name']
         initdv2.ParametrizedInitScript.__init__(self,
                                                 'nginx',
-                                                os.path.join('/etc/init.d', __nginx__['service_name']),
-                                                pid_file=pid_file,
+                                                service_call,
                                                 socks=[])
 
     def _wait_workers(self):
@@ -108,7 +92,7 @@ class NginxInitScript(initdv2.ParametrizedInitScript):
                 return initdv2.Status.RUNNING
             return initdv2.Status.UNKNOWN
         else:
-            args = [self.initd_script, 'status']
+            args = self.initd_script + ['status']
             _, _, returncode = system2(args, raise_exc=False)
             if returncode == 0:
                 return initdv2.Status.RUNNING
