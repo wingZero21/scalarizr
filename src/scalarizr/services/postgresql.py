@@ -262,7 +262,9 @@ class PostgreSql(BaseService):
         if linux.os.redhat_family:
             LOG.debug("Config dir before moving: %s" % self.postgresql_conf.path)
             self.config_dir.move_to(self.unified_etc_path)
-            make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
+            centos7 = "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7
+            if not centos7:
+                make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
             self.postgresql_conf = PostgresqlConf.find(self.config_dir)
             self.pg_hba_conf = PgHbaConf.find(self.config_dir)
             LOG.debug("Config dir after moving: %s" % self.postgresql_conf.path)
@@ -753,8 +755,8 @@ class ConfigDir(object):
         
         LOG.debug("configuring pid")
         conf = PostgresqlConf.find(self)
-        conf.pid_file = os.path.join(dst, 'postmaster.pid')
-        chown_r(dst, DEFAULT_USER)  # [SCALARIZR-1685]
+        if not centos7:
+            conf.pid_file = os.path.join(dst, 'postmaster.pid')  # [SCALARIZR-1685]
 
 
     def _patch_sysconfig(self, config_dir):
@@ -1168,7 +1170,7 @@ class ParseError(BaseException):
 
         
 def make_symlinks(source_dir, dst_dir, username='postgres'):
-    #Vital hack for getting CentOS init script to work
+    #Vital hack to get init script to work on CentOS 5x/6x
     for obj in ['base', 'PG_VERSION', 'postmaster.pid']:
         
         src = os.path.join(source_dir, obj)
