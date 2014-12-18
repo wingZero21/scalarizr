@@ -7,9 +7,9 @@ if windows?
 end
 if linux?
   dependency "rsync"
-  dependency "sqlite3"
   dependency "bzip2"
   dependency "python"
+  dependency "python-augeas"
 end
 
 dependency "pip"
