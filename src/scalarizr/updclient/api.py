@@ -460,10 +460,23 @@ class UpdClientAPI(object):
                 else:
                     self.pkgmgr.removed('scalarizr', purge=True)
                 self.pkgmgr.removed('scalarizr-base', purge=True)  # Compatibility with BuildBot packaging
-                if self.pkgmgr.info('scalr-upd-client')['installed']:
+                updclient_pkginfo = self.pkgmgr.info('scalr-upd-client')
+                if updclient_pkginfo['installed']:
                     # Only latest package don't stop scalr-upd-client in postrm script
-                    self.pkgmgr.latest('scalr-upd-client')
-                    self.pkgmgr.removed('scalr-upd-client', purge=True)
+                    if updclient_pkginfo['candidate']:
+                        if linux.os.debian_family:
+                            cmd = ('-o Dpkg::Options::=--force-confmiss '
+                                    'install scalr-upd-client={0}').format(updclient_pkginfo['candidate'])
+                            self.pkgmgr.apt_get_command(cmd)
+                        else:
+                            self.pkgmgr.install('scalr-upd-client', updclient_pkginfo['candidate'])
+                    try:
+                        self.pkgmgr.removed('scalr-upd-client', purge=True)
+                    except:
+                        if linux.os.redhat_family:
+                            linux.system('rpm -e --noscripts scalr-upd-client', shell=True, raise_exc=False)
+                        else:
+                            raise
 
         finally:
             if pid:
@@ -489,7 +502,13 @@ class UpdClientAPI(object):
         repo.ensure()
         if updatedb:
             LOG.info('Updating packages cache')
-            self.pkgmgr.updatedb()
+            def do_updatedb():
+                try:
+                    self.pkgmgr.updatedb()
+                    return True
+                except:
+                    LOG.warn('Package manager error', exc_info=sys.exc_info())
+            wait_until(do_updatedb, sleep=10, timeout=120)
 
 
     def _configure_devel_repo(self, repo):

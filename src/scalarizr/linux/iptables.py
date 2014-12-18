@@ -23,6 +23,7 @@ import logging
 
 from scalarizr import linux
 from scalarizr.linux import redhat, pkgmgr
+from scalarizr.util import software, system2
 
 
 LOG = logging.getLogger(__name__)
@@ -134,8 +135,10 @@ def save():
             - iptables-save > /etc/iptables.rules
     '''
     if linux.os["family"] in ("RedHat", "Oracle"):
-        linux.system(linux.build_cmd_args(executable="service", short=['iptables',
-                                                                                                                                   'save']))
+        if linux.os["name"] == "CentOS" and linux.os["release"] > (7, 0):
+            system2(("/usr/libexec/iptables/iptables.init", "save"))
+        else:
+            linux.system(linux.build_cmd_args(executable="service", short=['iptables', 'save']))
     elif linux.os["family"] == "Debian":
         with open('/etc/network/if-pre-up.d/iptables.sh', 'w') as fp:
             fp.write('#!/bin/bash\n'
@@ -453,24 +456,7 @@ def enabled():
     if int(__node__['base'].get('disable_firewall_management', 0)):
         LOG.debug('base.disable_firewall_management: 1, skipping')
         return False
-    # amazon linux doesn't have iptables service installed by default,
-    # which makes "chkconfig --list iptables" fail
-    # update: amzn >= 6.4 doesn't allow installing iptables-services;
-    # however, the latest version of iptables itself suits all our needs
-    if linux.os["name"] == "Amazon" and linux.os["release"] < (2013, 3):
-        pkgmgr.installed("iptables-services")
-
-    if linux.os['family'] in ('RedHat', 'Oracle'):
-        try:
-            out = redhat.chkconfig(list="iptables")[0]
-            return bool(re.search(r"iptables.*?\s\d:on", out))
-        except linux.LinuxError, e:
-            if 'not referenced in any runlevel' in str(e):
-                return False
-            else:
-                raise
-    else:
-        return os.access(IPTABLES_BIN, os.X_OK)
+    return os.access(IPTABLES_BIN, os.X_OK)
 
 
 def redhat_input_chain():

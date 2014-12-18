@@ -62,6 +62,8 @@ if linux.os.debian_family:
         "ports_conf_deb":   "/etc/apache2/ports.conf",
         "ssl_load_deb":     "/etc/apache2/mods-enabled/ssl.load",
         "mod_rpaf_path":    "/etc/apache2/mods-available/rpaf.conf",
+        "mod_remoteip_conf": "/etc/apache2/mods-available/remoteip.conf",
+        "mod_remoteip_so_path": "/etc/apache2/mods-available/mod_remoteip.so",
         "default-ssl_path": "/etc/apache2/sites-enabled/default-ssl",
         "key_path_default": "/etc/ssl/private/ssl-cert-snakeoil.key",
         "crt_path_default": "/etc/ssl/certs/ssl-cert-snakeoil.pem",
@@ -96,11 +98,12 @@ else:
         "default_vhost":    "/etc/httpd/sites-enabled/000-default",  # Not used
         "mod_ssl_file":     "/etc/httpd/modules/mod_ssl.so",
         "mod_rpaf_path":    "/etc/httpd/conf.d/mod_rpaf.conf",
+        "mod_remoteip_conf": "/etc/httpd/conf.d/remoteip.conf",
+        "mod_remoteip_so_path": "/etc/httpd/modules/mod_remoteip.so",
         "key_path_default": "/etc/pki/tls/private/localhost.key",
         "crt_path_default": "/etc/pki/tls/certs/localhost.crt",
         "apachectl":        "/usr/sbin/apachectl",
         "bin_path": "/usr/sbin/httpd",
-        "initd_script":     "/etc/init.d/httpd",
         "group":            "apache",
 
         "logrotate_conf":   """/var/log/http-*.log {
@@ -113,6 +116,14 @@ else:
          endscript
         }
         """})
+
+    if linux.os.redhat_family and linux.os["release"] >= (7, 0):
+        initd_script = {"initd_script": ("/sbin/service", "httpd")}
+    else:
+        initd_script = {"initd_script": "/etc/init.d/httpd"}
+    apache.update(initd_script)
+
+
 
 __apache__ = __node__["apache"]
 __apache__.update(apache)
@@ -728,10 +739,10 @@ class ApacheAPI(BehaviorAPI):
 
         # self.mod_ssl.ensure()  # [SCALARIZR-1381]
 
-        if linux.os.debian_family:
-            mod_rpaf_path = __apache__["mod_rpaf_path"]
-            if os.path.exists(mod_rpaf_path):
+        mod_rpaf_path = __apache__["mod_rpaf_path"]
 
+        if ModRPAF.is_installed():
+            if linux.os.debian_family:
                 with open(mod_rpaf_path, "r") as fp:
                     body = fp.read()
 
@@ -741,7 +752,22 @@ class ApacheAPI(BehaviorAPI):
                 with open(mod_rpaf_path, "w") as fp:
                     fp.write(mod_rpaf.body)
 
-        ModRPAF.ensure_permissions()
+            ModRPAF.ensure_permissions()
+
+        #  [SCALARIZR-1610]
+        elif ModRemoteIP.is_installed():
+            body = ""
+            remoteip_conf_path = __apache__["mod_remoteip_conf"]
+            if os.path.exists(remoteip_conf_path):
+                with open(remoteip_conf_path, "r") as fp:
+                    body = fp.read()
+
+            mod_remoteip = ModRemoteIP(body)
+            mod_remoteip.fix_module()
+
+            with open(remoteip_conf_path, "w") as fp:
+                fp.write(mod_remoteip.body)
+
 
     def enable_virtual_hosts_directory(self):
         if not os.path.exists(__apache__["vhosts_dir"]):
@@ -881,7 +907,7 @@ class BasicApacheConfiguration(object):
         try:
             config.reads(str(body))
         except ParseError, e:
-            LOG.error("MetaConf failed to parse Apache VirtualHost body: \n%s" % body)
+            LOG.error("MetaConf failed to parse Apache configuration: \n%s" % body)
             e._err = body + "\n" + e._err
             raise
         self._cnf = config
@@ -999,24 +1025,30 @@ class VirtualHost(BasicApacheConfiguration):
 
 class ModRPAF(BasicApacheConfiguration):
 
+    proxy_section = ".//RPAFproxy_ips"
+
     def list_proxy_ips(self):
-        raw_value = self._cnf.get(".//RPAFproxy_ips")
-        ips = set(re.split(r"\s+", raw_value))
+        try:
+            raw_value = self._cnf.get(self.proxy_section)
+        except NoPathError:
+            ips = set()
+        else:
+            ips = set(re.split(r"\s+", raw_value))
         return ips
 
     def add(self, ips):
         proxy_ips = self.list_proxy_ips()
         proxy_ips |= set(ips)
-        self._cnf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+        self._cnf.set(self.proxy_section, " ".join(proxy_ips), force=True)
 
     def remove(self, ips):
         proxy_ips = self.list_proxy_ips()
         proxy_ips -= set(ips)
-        self._cnf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+        self._cnf.set(self.proxy_section, " ".join(proxy_ips))
 
     def update(self, ips):
         proxy_ips = set(ips)
-        self._cnf.set(".//RPAFproxy_ips", " ".join(proxy_ips))
+        self._cnf.set(self.proxy_section, " ".join(proxy_ips))
 
     def fix_module(self):
         """
@@ -1032,13 +1064,45 @@ class ModRPAF(BasicApacheConfiguration):
                 LOG.info("Patched IfModule value in rpaf.conf")
 
     @staticmethod
-    def ensure_permissions():
+    def ensure_permissions(path=None):
         httpd_conf_path = __apache__["httpd.conf"]
-        mod_rpaf_path = __apache__["mod_rpaf_path"]
+        mod_rpaf_path = path or __apache__["mod_rpaf_path"]
 
         if os.path.exists(httpd_conf_path) and os.path.exists(mod_rpaf_path):
             st = os.stat(httpd_conf_path)
             os.chown(mod_rpaf_path, st.st_uid, st.st_gid)
+
+    @staticmethod
+    def is_installed():
+        return os.path.exists(__apache__["mod_rpaf_path"])
+
+
+class ModRemoteIP(ModRPAF):
+
+    proxy_section = ".//RemoteIPInternalProxy"
+
+    def set_remote_header(self, header=None):
+        self._cnf.set(".//RemoteIPHeader", header or "X-Forwarded-For", force=True)
+
+    def fix_module(self):
+        self.set_remote_header("X-Forwarded-For")
+        self.add(["127.0.0.1", ])
+
+    @staticmethod
+    def ensure_permissions(path=None):
+        path = path or __apache__["mod_remoteip_so_path"]
+        ModRPAF.ensure_permissions(path)
+
+    @staticmethod
+    def is_installed():
+        return os.path.exists(__apache__["mod_remoteip_so_path"])
+
+
+def IPForwarding(*args, **kwds):
+    if os.path.exists(__apache__["mod_rpaf_path"]):
+        return ModRPAF(*args, **kwds)
+    elif os.path.exists(__apache__["mod_remoteip_so_path"]):
+        return ModRemoteIP(*args, **kwds)
 
 
 class ApacheConfigManager(object):
@@ -1343,6 +1407,8 @@ class ApacheInitScript(initdv2.ParametrizedInitScript):
         pid_file = None
         if linux.os.redhat_family:
             if linux.os["name"] == 'Amazon' or linux.os["release"].version[0] == 6:
+                pid_file = "/var/run/httpd/httpd.pid"
+            elif "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
                 pid_file = "/var/run/httpd/httpd.pid"
             else:
                 pid_file = "/var/run/httpd.pid"

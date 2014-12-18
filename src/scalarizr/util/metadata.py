@@ -141,7 +141,7 @@ class Metadata(object):
                 self._cache[capability] = getattr(pvd, capability)()
         return self._cache[capability]
 
-    def user_data(self, retry=True, num_retries=10):
+    def user_data(self, retry=True, num_retries=30):
         '''
         A facade function for getting user-data
         '''
@@ -152,9 +152,10 @@ class Metadata(object):
             try:
                 return self['user_data']
             except NoUserDataError:
-                if r < num_retries:
+                if r < num_retries - 1:
                     LOG.debug('Still no user-data, retrying (%d)...', r + 1)
                     self.reset()
+                    time.sleep(1)
                 else:
                     LOG.error('No user-data, exiting')
                     raise    
@@ -253,6 +254,7 @@ class OpenStackQueryPvd(Provider):
         self._cache = {}
 
     def vote(self, votes):
+        self._cache = {}
         meta = self.try_url(self.metadata_json_url)
         if meta:
             self.LOG.debug('matched meta_data.json')

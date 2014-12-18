@@ -45,13 +45,18 @@ if linux.os.debian_family:
         'redis.conf': '/etc/redis/redis.conf',
     })
 else:
+    redis_bin_path = '/usr/sbin/redis-server'
+    if "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
+        redis_bin_path = '/usr/bin/redis-server'  # [SCALARIZR-1624]
+
     __redis__.update({
-        'redis-server': '/usr/sbin/redis-server',
+        'redis-server': redis_bin_path,
         'pid_file': os.path.join(__redis__['pid_dir'], 'redis.pid')
     })
     __redis__['defaults'].update({
         'redis.conf': '/etc/redis.conf',
     })
+
 __redis__.update({
     'config_dir': os.path.dirname(__redis__['defaults']['redis.conf']),
     'ports_range': range(__redis__['defaults']['port'], 
