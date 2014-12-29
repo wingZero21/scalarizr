@@ -322,6 +322,7 @@ class MySQLAPI(BehaviorAPI):
             requirements = [
                 ['mysql-server>=5.0,<5.6', 'mysql>=5.0,<5.6'],
                 ['mysql-server>=5.0,<5.6', 'mysql55'],
+                ['Percona-Server-server-51', 'Percona-Server-client-51']
             ]
         if requirements is None:
             raise exceptions.UnsupportedBehavior(
