@@ -428,18 +428,21 @@ class Script(object):
     def check_runability(self):
         path_params = urlparse(self.path or '')
         if path_params.scheme != '':
-            try:
-                if path_params.scheme == 'https' and with_httplib2:
-                    # we are using httplib2 for opening https url because it
-                    # makes ssl certificate validation and urlopen doesn't
-                    h = httplib2.Http()
-                    _, self.body = h.request(self.path)
-                else:
+            if path_params.scheme == 'https':
+                # we are using httplib2 for opening https url because it
+                # makes ssl certificate validation and urlopen doesn't
+                h = httplib2.Http()
+                meta, self.body = h.request(self.path)
+                if meta['status'].startswith('4') or meta['status'].startswith('5'):
+                    raise HandlerError("Can't download script from URL '%s'. Status code: %s"
+                        % (self.path, meta['status']))
+            else:
+                try:
                     response = urlopen(self.path)
                     self.body = response.read()
-            except:
-                raise HandlerError("Can't download script from URL '%s'. Reason: "
-                    "%s" % (self.path, sys.exc_info()[1]))
+                except:
+                    raise HandlerError("Can't download script from URL '%s'. Reason: "
+                        "%s" % (self.path, sys.exc_info()[1]))
             self.path = None
             self.exec_path = self._generate_exec_path()
 
