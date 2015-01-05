@@ -39,7 +39,7 @@ class PerconaAPI(mysql.MySQLAPI):
                 ['percona-server-server-5.5', 'percona-server-client-5.5'],
             ]
         elif linux.os.redhat_family or linux.os.oracle_family:
-            if os_vers >= '7':
+            if os_vers >= '7' and not linux.os.amazon:
                 requirements = [
                     ['Percona-Server-server-56', 'Percona-Server-client-56']                    
                 ]
