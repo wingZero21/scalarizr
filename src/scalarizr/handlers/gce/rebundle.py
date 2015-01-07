@@ -48,13 +48,15 @@ class GceRebundleHandler(rebundle_hndlr.RebundleHandler):
 
             if os.path.exists('/dev/root'):
                 root_part_path = os.path.realpath('/dev/root')
-                root_part_sysblock_path = glob.glob('/sys/block/*/%s' % os.path.basename(root_part_path))[0]
-                root_device = '/dev/%s' % os.path.basename(os.path.dirname(root_part_sysblock_path))
             else:
                 rootfs_stat = os.stat('/')
                 root_device_minor = os.minor(rootfs_stat.st_dev)
                 root_device_major = os.major(rootfs_stat.st_dev)
-                root_device = os.path.realpath('/dev/block/{0}:{1}'.format(root_device_major, root_device_minor))
+                root_part_path = os.path.realpath('/dev/block/{0}:{1}'.format(root_device_major, root_device_minor))
+
+            root_part_sysblock_path = glob.glob('/sys/block/*/%s' % os.path.basename(root_part_path))[0]
+            root_device = '/dev/%s' % os.path.basename(os.path.dirname(root_part_sysblock_path))
+
 
             arch_name = '%s.tar.gz' % self._role_name.lower()
             arch_path = os.path.join(rebundle_dir, arch_name)
