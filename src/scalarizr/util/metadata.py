@@ -178,11 +178,15 @@ class Provider(object):
             self.LOG.debug('Try {0!r}: {1}'.format(url, sys.exc_info()[1]))
             return False
 
-    def get_url(self, url=None, rel=None, headers=None):
+    def get_url(self, url=None, rel=None, headers=None, raw=False):
         if rel:
             url = posixpath.join(url or self.base_url, rel)
-        return urllib2.urlopen(urllib2.Request(url, headers=headers or {}), 
-                timeout=self.HTTP_TIMEOUT).read().strip()
+        resp = urllib2.urlopen(urllib2.Request(url, headers=headers or {}), 
+                timeout=self.HTTP_TIMEOUT)
+        if raw:
+            return resp
+        else:
+            return resp.read().strip()
 
     def try_file(self, path):
         if not os.path.exists(path):
@@ -228,12 +232,13 @@ class GcePvd(Provider):
     def __init__(self):
         self.base_url = 'http://metadata/computeMetadata/v1'    
 
-    def get_url(self, url=None, rel=None, headers=None):
+    def get_url(self, url=None, rel=None, headers=None, raw=False):
         return super(GcePvd, self).get_url(url, rel, 
-                headers={'X-Google-Metadata-Request': 'True'})
+                headers={'X-Google-Metadata-Request': 'True'}, raw=raw)
 
     def vote(self, votes):
-        if self.try_url(self.base_url):
+        resp = self.get_url(self.base_url, raw=True)
+        if resp.info().getheader('Metadata-Flavor') == 'Google':
             self.LOG.debug('matched')
             votes[self].incr_each()
 
