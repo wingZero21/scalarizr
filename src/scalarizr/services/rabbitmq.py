@@ -77,7 +77,7 @@ class RabbitMQInitScript(initdv2.ParametrizedInitScript):
 
     reload = restart
 
-    def start(self, reason=None):
+    def start(self):
         log.debug('Starting RabbitMQ service ({0})'.format(reason or 'Reason unspecified'))
         hostname = RABBIT_HOSTNAME_TPL % __node__['server_index']
         nodename = NODE_HOSTNAME_TPL % hostname
