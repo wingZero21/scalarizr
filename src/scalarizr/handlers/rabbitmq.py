@@ -99,7 +99,7 @@ class RabbitMQHandler(ServiceCtlHandler):
             if not __rabbitmq__['volume'].mounted_to():
                 self.service.stop('Making sure volume is mounted')
                 rabbitmq_vol.ensure()
-            self.service.start('Scalarizr just started and server status is "RUNNING"')
+            self.service.start()
 
             __rabbitmq__['volume'] = rabbitmq_vol
 
