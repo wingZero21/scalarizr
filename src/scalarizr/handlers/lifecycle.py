@@ -186,10 +186,13 @@ class LifeCycleHandler(scalarizr.handlers.Handler):
 
 
     def on_start(self):
+        optparser = bus.optparser
+
+        """
+        [SCALARIZR-1564]
         if iptables.enabled():
             iptables.save()
-
-        optparser = bus.optparser
+        """
         
         if os_dist['family'] != 'Windows':
             if os.path.exists(self.saved_boot_id_file):

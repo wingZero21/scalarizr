@@ -1,5 +1,5 @@
 name "cloudstack-python-client"
-default_version "0.2.3"
+default_version "0.2.4"
 
 dependency "pip"
 

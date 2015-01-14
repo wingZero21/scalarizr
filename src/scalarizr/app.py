@@ -11,7 +11,7 @@ except ImportError:
 from scalarizr import __version__
 from scalarizr import config, rpc, linux, api
 from scalarizr.node import __node__
-from scalarizr.linux import coreutils
+from scalarizr.linux import coreutils, mount
 
 from scalarizr.bus import bus
 from scalarizr.config import CmdLineIni, ScalarizrCnf, ScalarizrState, ScalarizrOptions, STATE
@@ -185,6 +185,9 @@ class ScalrUpdClientScript(initdv2.Daemon):
             self.start()
 
 def _init():
+    global _meta
+    _meta = metadata.Metadata()
+
     optparser = bus.optparser
     bus.base_path = os.path.realpath(os.path.dirname(__file__) + "/../..")
     
@@ -331,8 +334,7 @@ def _apply_user_data(from_scalr=True):
         user_data = queryenv.get_server_user_data()
         logger.debug('User-data (QueryEnv):\n%s', pprint.pformat(user_data))
     else:
-        meta = metadata.Metadata()
-        user_data = meta.user_data()
+        user_data = _meta.user_data()
         logger.debug('User-data (Instance):\n%s', pprint.pformat(user_data))
  
     def g(key):
@@ -431,6 +433,13 @@ def _cleanup_after_rebundle():
         os.remove('/etc/chef/client.pem')
     if os.path.exists('/etc/chef/client.rb'):
         os.remove('/etc/chef/client.rb')
+
+    # remove storage devices from fstab
+    if not linux.os.windows_family:
+        fstab = mount.fstab()
+        for entry in fstab:
+            if 'comment=scalr' in entry.options:
+                fstab.remove(entry.device)
     
     # Reset private configuration
     priv_path = cnf.private_path()
@@ -612,12 +621,13 @@ class Service(object):
             self._logger.info('Configuring Scalarizr. This can take a few minutes...')
             cnf.reconfigure(values=values, silent=True, yesall=True)
 
+
         try:
             server_id = __node__['server_id']
         except KeyError:
             server_id = None
-        if optparser and not optparser.values.import_server and server_id \
-                and __node__['state'] in ('importing', 'rebundling'):
+        if optparser and not optparser.values.import_server \
+                and server_id != _meta.user_data()['serverid']:
             # This role was bundled with Cloud API call (i.e. CreateImage)
             # Now we're starting with a new server and should reset it's state
             self._logger.info(('This image was bundled with cloud API call. '
@@ -975,19 +985,14 @@ class Service(object):
             upd_svs = ScalrUpdClientScript()
             if not upd_svs.running:
                 upd_svs.start()
-            upd_state = [None, 0]
+
+            upd_status = {}
             def upd_ready():
                 try:
-                    upd_state[0] = upd.status()['state']
-                    if upd_state[0].startswith('in-progress'):
-                        # For in-progress state skip 1 attempt, to handle situation when
-                        # UpdateClient is installing new Scalarizr, 
-                        # and at the end of postinst script Scalarizr is restarted, 
-                        # and then new process is asked for status before package installation command is finished, 
-                        # and UpdateClient changed it's state to completed
-                        upd_state[1] += 1
-                        return upd_state[1] >= 2
-                    return upd_state[0] != 'noop'
+                    self._logger.debug('Fetching UpdateClient status...')
+                    upd_status.update(upd.status(cached=True))
+                    self._logger.debug('UpdateClient status: %s', upd_status)
+                    return upd_status['state'] != 'noop'
                 except (IOError, socket.error), exc:
                     self._logger.debug('Failed to get UpdateClient status: %s', exc)
                 except:
@@ -1006,13 +1011,15 @@ class Service(object):
 
 
             wait_until(upd_ready, timeout=60, sleep=1)
-            upd_state = upd_state[0]
+            upd_state = upd_status['state']
             self._logger.info('UpdateClient state: %s', upd_state)
             if upd_state == 'in-progress/restart':
                 self._logger.info('Scalarizr was restarted by update process')
             elif upd_state.startswith('in-progress'):
-                self._logger.info('Update is in-progress, exiting')
-                sys.exit()
+                version = (upd_status['candidate'] or upd_status['installed']).split('-')[0]
+                if version != __version__:
+                    self._logger.info('Update is in-progress, exiting')
+                    sys.exit()
             elif upd_state == 'completed/wait-ack':
                 self._logger.info('UpdateClient completed update and should be restarted, restarting')
                 upd_svs.restart()

@@ -7,15 +7,16 @@ if windows?
 end
 if linux?
   dependency "rsync"
-  dependency "sqlite3"
   dependency "bzip2"
   dependency "python"
+  dependency "python-augeas"
 end
 
 dependency "pip"
 dependency "cloudstack-python-client"
 dependency "google-api-python-client"
 dependency "python-boto"
+dependency "python-ipython"
 dependency "python-cinderclient"
 dependency "python-cloudfiles"
 dependency "python-cloudservers"

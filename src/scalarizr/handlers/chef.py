@@ -236,7 +236,7 @@ class ChefHandler(Handler):
                                          validation_pem=self._chef_data['validator_key'],
                                          environment=self._chef_data['environment'],
                                          environment_variables=self._environ_variables,
-                                         log_level=self._chef_data['log_level'])
+                                         log_level=self._chef_data.get('log_level', 'auto'))
                 try:
                     chef_client.prepare()
                     self.send_message('HostUpdate', dict(chef=self._chef_data))

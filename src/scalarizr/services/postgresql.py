@@ -6,6 +6,7 @@ Created on Jul 7, 2011
 '''
 
 import os
+import re
 import time
 import glob
 import shlex
@@ -63,6 +64,8 @@ class PgSQLInitScript(initdv2.ParametrizedInitScript):
         initd_script = None
         if linux.os.debian_family:
             initd_script = ('/usr/sbin/service', 'postgresql')
+        elif "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
+            initd_script = ('/sbin/service', 'postgresql-9.3')
         else:
             initd_script = firstmatched(os.path.exists, (
                         '/etc/init.d/postgresql-9.0', 
@@ -259,7 +262,9 @@ class PostgreSql(BaseService):
         if linux.os.redhat_family:
             LOG.debug("Config dir before moving: %s" % self.postgresql_conf.path)
             self.config_dir.move_to(self.unified_etc_path)
-            make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
+            centos7 = "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7
+            if not centos7:
+                make_symlinks(os.path.join(mpoint, STORAGE_DATA_DIR), self.unified_etc_path)
             self.postgresql_conf = PostgresqlConf.find(self.config_dir)
             self.pg_hba_conf = PgHbaConf.find(self.config_dir)
             LOG.debug("Config dir after moving: %s" % self.postgresql_conf.path)
@@ -698,7 +703,10 @@ class ConfigDir(object):
     @classmethod
     def find(cls, version=None):
         cls.version = version or '9.0'
-        path = cls.get_sysconfig_pgdata()
+        if "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7:
+            path = cls._systemd_get_pgdata()
+        else:
+            path = cls.get_sysconfig_pgdata()
         if not path:
             if linux.os.debian_family:
                 path = '/etc/postgresql/%s/main' % version
@@ -710,6 +718,9 @@ class ConfigDir(object):
         
     
     def move_to(self, dst):
+        datadir = os.path.join(__postgresql__['storage_dir'], STORAGE_DATA_DIR)
+        centos7 = "centos" in linux.os['name'].lower() and linux.os["release"].version[0] == 7
+
         if not os.path.exists(dst):
             LOG.debug("creating %s" % dst)
             os.makedirs(dst)
@@ -717,7 +728,7 @@ class ConfigDir(object):
         for config in ['postgresql.conf', 'pg_ident.conf', 'pg_hba.conf']:
             old_config = os.path.join(self.path, config)
             new_config = os.path.join(dst, config)
-            if os.path.exists(old_config):
+            if os.path.exists(old_config) and not os.path.islink(old_config): #???
                 LOG.debug('Moving %s' % config)
                 shutil.move(old_config, new_config)
             elif os.path.exists(new_config):
@@ -725,17 +736,27 @@ class ConfigDir(object):
             else:
                 raise BaseException('Postgresql config file not found: %s' % old_config)
             chown_r(new_config, DEFAULT_USER)
+            if centos7:
+                new_link = os.path.join(datadir, config)
+                if os.path.exists(new_link) and os.path.isfile(new_link):
+                    os.remove(new_link)
+                    LOG.debug("Duplicate config %s removed." % new_link)
+                os.symlink(new_config, new_link)
+                chown_r(new_link, DEFAULT_USER)
 
         #the following block needs revision
-        
-        #self._make_symlinks(dst)
-        self._patch_sysconfig(dst)
+        if centos7:
+            self._systemd_change_pgdata(datadir)
+            system2([software.which("systemctl"), "daemon-reload"])  # [SCALARIZR-1627]
+        else:
+            self._patch_sysconfig(dst)
         
         self.path = dst
         
         LOG.debug("configuring pid")
         conf = PostgresqlConf.find(self)
-        conf.pid_file = os.path.join(dst, 'postmaster.pid')
+        if not centos7:
+            conf.pid_file = os.path.join(dst, 'postmaster.pid')  # [SCALARIZR-1685]
 
 
     def _patch_sysconfig(self, config_dir):
@@ -764,6 +785,55 @@ class ConfigDir(object):
             if s and len(s)>7:
                 pgdata = s[7:]
         return pgdata
+
+
+    def _systemd_change_pgdata(self, pg_data):
+        lib_unit = self._systemd_get_default_unitfile()
+        etc_unit = self._systemd_get_user_unitfile()
+        text = ".include %s" % lib_unit
+        section = "\n[Service]"
+        option = "\nEnvironment=PGDATA="
+
+        if os.path.exists(etc_unit):
+            with open(etc_unit, "r") as fp:
+                unit_content = fp.read()
+            if unit_content and unit_content.strip():
+                text = unit_content
+
+        if not section in text:
+            text += "%s" % section
+
+        if not option in text:
+            text += "%s%s" % (option, pg_data)
+
+        else:
+            text = re.sub(r'(.*%s)([^\n]*)' % option, r'\1%s' % pg_data, text, flags=re.DOTALL)
+
+        with open(etc_unit, "w") as fp:
+            fp.write(text)
+
+    @classmethod
+    def _systemd_get_default_unitfile(cls):
+        lib_units = glob.glob("/lib/systemd/system/postgresql-9.*.service")
+        if lib_units:
+            lib_unit = lib_units[0]
+            return lib_unit
+
+    @classmethod
+    def _systemd_get_user_unitfile(cls):
+        lib_unit = cls._systemd_get_default_unitfile()
+        return os.path.join("/etc/systemd/system", os.path.basename(lib_unit))
+
+    @classmethod
+    def _systemd_get_pgdata(cls):
+        etc_unit = cls._systemd_get_user_unitfile()
+        if os.path.exists(etc_unit):
+            with open(etc_unit, "r") as fp:
+                text = fp.read()
+            r = re.search("^(?!#)Environment=PGDATA=(.*)", text, re.MULTILINE)
+            if r:
+                return r.group(1)
+
 
 
 class PidFile(object):
@@ -1100,7 +1170,7 @@ class ParseError(BaseException):
 
         
 def make_symlinks(source_dir, dst_dir, username='postgres'):
-    #Vital hack for getting CentOS init script to work
+    #Vital hack to get init script to work on CentOS 5x/6x
     for obj in ['base', 'PG_VERSION', 'postmaster.pid']:
         
         src = os.path.join(source_dir, obj)

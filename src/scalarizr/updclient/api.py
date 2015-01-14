@@ -100,12 +100,19 @@ class UpdClientAPI(object):
      in-progress -> completed -> in-progress
      in-progress -> rollbacked -> in-progress
      in-progress -> error -> in-progress
+
+    In-progress transitions:
+     in-progress/prepare -> in-progress/uninstall (when bootstrapping & not windows)
+     in-progress/uninstall -> in-progress/check-allowed (when not force)
+     in-progress/check-allowed -> in-progress/install 
+     in-progress/install -> completed/wait-ack -> completed
+     in-progress/install -> in-progress/rollback -> rollbacked
     '''
 
     package = 'scalarizr'
     client_mode = 'client'
     api_port = 8008
-    win_update_timeout = 300
+    win_update_timeout = 300 
     server_url = 'http://update.scalr.net/'
     repository = 'latest'
     repo_url = value_for_repository(
@@ -460,10 +467,23 @@ class UpdClientAPI(object):
                 else:
                     self.pkgmgr.removed('scalarizr', purge=True)
                 self.pkgmgr.removed('scalarizr-base', purge=True)  # Compatibility with BuildBot packaging
-                if self.pkgmgr.info('scalr-upd-client')['installed']:
+                updclient_pkginfo = self.pkgmgr.info('scalr-upd-client')
+                if updclient_pkginfo['installed']:
                     # Only latest package don't stop scalr-upd-client in postrm script
-                    self.pkgmgr.latest('scalr-upd-client')
-                    self.pkgmgr.removed('scalr-upd-client', purge=True)
+                    if updclient_pkginfo['candidate']:
+                        if linux.os.debian_family:
+                            cmd = ('-o Dpkg::Options::=--force-confmiss '
+                                    'install scalr-upd-client={0}').format(updclient_pkginfo['candidate'])
+                            self.pkgmgr.apt_get_command(cmd)
+                        else:
+                            self.pkgmgr.install('scalr-upd-client', updclient_pkginfo['candidate'])
+                    try:
+                        self.pkgmgr.removed('scalr-upd-client', purge=True)
+                    except:
+                        if linux.os.redhat_family:
+                            linux.system('rpm -e --noscripts scalr-upd-client', shell=True, raise_exc=False)
+                        else:
+                            raise
 
         finally:
             if pid:
@@ -476,7 +496,7 @@ class UpdClientAPI(object):
             self.repo_url = devel_repo_url_for_branch('master')
         repo = pkgmgr.repository('scalr-{0}'.format(self.repository), self.repo_url)
         # Delete previous repository
-        for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr-*'):
+        for filename in glob.glob(os.path.dirname(repo.filename) + os.path.sep + 'scalr*'):
             if os.path.isfile(filename):
                 os.remove(filename)
         if 'buildbot.scalr-labs.com' in self.repo_url and not linux.os.windows:
@@ -489,7 +509,13 @@ class UpdClientAPI(object):
         repo.ensure()
         if updatedb:
             LOG.info('Updating packages cache')
-            self.pkgmgr.updatedb()
+            def do_updatedb():
+                try:
+                    self.pkgmgr.updatedb()
+                    return True
+                except:
+                    LOG.warn('Package manager error', exc_info=sys.exc_info())
+            wait_until(do_updatedb, sleep=10, timeout=120)
 
 
     def _configure_devel_repo(self, repo):
@@ -550,32 +576,31 @@ class UpdClientAPI(object):
         reports = self.is_client_mode and not bootstrap
 
         def check_allowed():
-            if not force:
-                self.state = 'in-progress/check-allowed'
+            self.state = 'in-progress/check-allowed'
 
-                if self.daemon.running and self.scalarizr.operation.has_in_progress():
-                    msg = ('Update denied ({0}={1}), '
-                           'cause Scalarizr is performing log-term operation').format(
+            if self.daemon.running and self.scalarizr.operation.has_in_progress():
+                msg = ('Update denied ({0}={1}), '
+                       'cause Scalarizr is performing log-term operation').format(
+                           self.package, self.candidate)
+                raise UpdateError(msg)
+
+            if self.is_client_mode:
+                try:
+                    ok = self.update_server.update_allowed(
+                        package=self.package,
+                        version=self.candidate,
+                        server_id=self.server_id,
+                        scalr_id=self.scalr_id,
+                        scalr_version=self.scalr_version)
+
+                except urllib2.URLError:
+                    raise UpdateError('Update server is down for maintenance')
+                if not ok:
+                    msg = ('Update denied ({0}={1}), possible issues detected in '
+                           'later version. Blocking all upgrades until Scalr support '
+                           'overrides.').format(
                                self.package, self.candidate)
                     raise UpdateError(msg)
-
-                if self.is_client_mode:
-                    try:
-                        ok = self.update_server.update_allowed(
-                            package=self.package,
-                            version=self.candidate,
-                            server_id=self.server_id,
-                            scalr_id=self.scalr_id,
-                            scalr_version=self.scalr_version)
-
-                    except urllib2.URLError:
-                        raise UpdateError('Update server is down for maintenance')
-                    if not ok:
-                        msg = ('Update denied ({0}={1}), possible issues detected in '
-                               'later version. Blocking all upgrades until Scalr support '
-                               'overrides.').format(
-                                   self.package, self.candidate)
-                        raise UpdateError(msg)
 
         def update_windows(pkginfo):
             package_url = self.pkgmgr.index[self.package]
@@ -597,8 +622,10 @@ class UpdClientAPI(object):
             )
             self.ps_script_pid = proc.pid
             self.ps_attempt += 1
+            self.store()
             LOG.debug('Started powershell process (pid: %s)', proc.pid)
             LOG.debug('Waiting for interruption (Timeout: %s)', self.win_update_timeout)
+
             self.shutdown_ev.wait(self.win_update_timeout)
             if self.shutdown_ev.is_set():
                 LOG.debug('Interrupting...')
@@ -664,7 +691,8 @@ class UpdClientAPI(object):
                     self.uninstall()
                     self.installed = None
 
-                check_allowed()
+                if not force:
+                    check_allowed()
                 try:
                     self.state = 'in-progress/install'
                     self.store()

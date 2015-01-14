@@ -291,6 +291,10 @@ function main {
         try {
             setSzrState "in-progress/download-package"
             $packageFile = downloadFile $url
+            if (-not $packageFile) {
+                stopAllSzrServices
+                throw "Download installer failed"
+            }
             setSzrState "in-progress/stop"
             stopAllSzrServices
             createSzrBackup

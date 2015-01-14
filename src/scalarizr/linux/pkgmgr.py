@@ -112,19 +112,30 @@ class PackageMgr(object):
             self.updatedb()
 
         if backup:
-            download_dir = tempfile.mkdtemp()
+            backup_id = self._create_backup(name, version, [])
+            backup_dir = os.path.join(self.backup_dir, name, backup_id)
             try:
-                self._install_download_only(name_version, download_dir, **kwds)
-                files = (os.path.join(download_dir, name) 
-                        for name in os.listdir(download_dir))
-                self._install_file(*files)                
+                # In some cases package installation order is important:
+                # when A depends from B it's better to install B first.
+                # high level managers like Apt/Yum does this, 
+                # but here we use lower level Dpkg/Rpm - they just install packages one by one.
+                # so we should get here installation order from Apt/Yum and use it with Dpkg/Rpm.
+                # 
+                # Apt downloads files in correct installation order, so we can use ctime
+                # to maintain order. 
+                # 
+                # We havn't checked Yum for download order, 
+                # but as problems with dependencies were only on Debian-based distros,
+                # for RedHat-based it should matter
 
-                # create backup
-                if not version:
-                    version = self._installed_and_candidate(name)[0]
-                self._create_backup(name, version, files)
-            finally:
-                shutil.rmtree(download_dir)
+                self._install_download_only(name_version, backup_dir, **kwds)
+                files = list(os.path.join(backup_dir, name) 
+                        for name in os.listdir(backup_dir))
+                files.sort(lambda x, y: cmp(os.stat(x).st_ctime, os.stat(y).st_ctime))
+                self._install_file(*files)
+            except:
+                shutil.rmtree(backup_dir)
+                raise
         else:
             self._install_package(name_version, **kwds)
 
@@ -314,7 +325,11 @@ class AptPackageMgr(PackageMgr):
 
     def remove(self, name, purge=False):
         command = 'purge' if purge else 'remove'
-        self.apt_get_command('%s %s' % (command, name), raise_exc=True)
+        try:
+            self.apt_get_command('%s %s' % (command, name), raise_exc=True)
+        except linux.LinuxError, e:
+            if 'Unable to locate package {0}'.format(name) not in e.err:
+                raise
 
 
     def restore_backup(self, name, backup_id):
@@ -393,7 +408,9 @@ class AptPackageMgr(PackageMgr):
 
 
     def _install_file(self, *files):
-        cmd = ['dpkg', '-i', '--force-downgrade'] + list(files)
+        cmd = ['dpkg', '--install', 
+                '--force-downgrade', 
+                '--force-confold'] + list(files)
         linux.system(cmd, raise_exc=True)
 
 
@@ -775,6 +792,10 @@ if linux.os.windows_family:
         def version_cmp(self, name_1, name_2):
             return cmp(distutils.version.LooseVersion(name_1), 
                 distutils.version.LooseVersion(name_2))
+
+
+        def list(self):
+            return []
 
 
     class WinRepository(Repository):

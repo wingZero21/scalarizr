@@ -12,7 +12,7 @@ PYTHON='/opt/scalarizr/embedded/bin/python'
 NAME='scalr-upd-client'
 PID_FILE='/var/run/scalr-upd-client.pid'
 LOG_FILE='/var/log/scalarizr_update.log'
-BINARY='/usr/bin/scalr-upd-client'
+BINARY='/opt/scalarizr/bin/scalr-upd-client'
 
 
 upd_start_daemon() {

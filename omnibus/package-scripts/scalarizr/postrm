@@ -9,6 +9,9 @@ if [ "$1" = '1' ] || [ "$1" = 'upgrade' ]; then
 else
     unlink /etc/init.d/scalarizr 
     unlink /etc/init.d/scalr-upd-client
+    # if ! dpkg -l scalr-upd-client; then  # scalarizr >= 0.9, <= 0.21
+    #     unlink /etc/init.d/scalr-upd-client
+    # fi
     echo "scalarizr has been uninstalled!"
 fi
 
