@@ -291,7 +291,7 @@ function main {
         try {
             setSzrState "in-progress/download-package"
             $packageFile = downloadFile $url
-            if (-not (test-path $packageFile)) {
+            if (-not $packageFile) {
                 stopAllSzrServices
                 throw "Download installer failed"
             }
