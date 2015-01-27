@@ -55,7 +55,7 @@ class CloudStackPlatform(Platform):
         self.refresh_virtual_router_addr()
 
     def refresh_virtual_router_addr(self):
-        leases_pattern = '/var/lib/dhc*/dhclient*.leases'
+        leases_pattern = '/var/lib/dhc*/dhclient*.lease*'
         if not self._dhcp_leases_path:
             LOG.debug('Lookuping DHCP leases file')
             try:
